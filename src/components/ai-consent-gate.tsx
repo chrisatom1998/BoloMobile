@@ -1,0 +1,65 @@
+import { ShieldCheck } from 'lucide-react-native';
+import { type PropsWithChildren, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { showAppAlert } from '@/lib/app-alert';
+import { openPublicPage } from '@/lib/public-pages';
+import { useAppState } from '@/state/app-state';
+import { colors, radius, spacing } from '@/theme';
+
+export function AiConsentGate({ children }: PropsWithChildren) {
+  const { aiConsent, setAiConsent } = useAppState();
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  if (aiConsent) return children;
+
+  function openPrivacyPolicy() {
+    void openPublicPage('privacy').catch((error: unknown) => {
+      showAppAlert('Could not open Privacy Policy', error instanceof Error ? error.message : 'Check your connection and try again.');
+    });
+  }
+
+  async function accept() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+      await setAiConsent(true);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={styles.card}>
+      <View style={styles.icon}><ShieldCheck color={colors.white} size={22} /></View>
+      <Text style={styles.title}>Before using Mira</Text>
+      <Text style={styles.body}>
+        After you agree, Bolo uses its service and OpenAI when you tap Listen, submit text, start a live voice turn, use Live Translate, or record pronunciation. Listen sends the selected lesson or Mira reply text and returns an AI-generated voice. Typed coaching includes a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. Tap the glowing orb to begin each turn, then tap the orb again to send the turn. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Mira&apos;s spoken reply travels directly from OpenAI to the app. Live Translate continuously segments microphone audio in memory and sends short Hindi audio segments through Bolo&apos;s service for English text without translated audio. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
+      </Text>
+      <Text style={styles.detail}>
+        Saved phrases, practice progress, and up to 100 recent Mira chat messages stay in unencrypted storage on this device. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
+      </Text>
+      <Pressable accessibilityRole="link" onPress={openPrivacyPolicy} style={styles.link}>
+        <Text style={styles.linkText}>Read the public Privacy Policy</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => void accept()} style={[styles.button, saving && styles.disabled]}>
+        <Text style={styles.buttonText}>{saving ? 'Saving privacy choice…' : 'I agree and want to continue'}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { backgroundColor: colors.paper, borderColor: colors.forest, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md },
+  icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' },
+  title: { color: colors.ink, fontSize: 22, fontWeight: '900' },
+  body: { color: colors.ink, fontSize: 15, lineHeight: 22 },
+  detail: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  link: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  linkText: { color: colors.forest, fontSize: 14, fontWeight: '800', textDecorationLine: 'underline' },
+  button: { minHeight: 50, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  buttonText: { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  disabled: { opacity: 0.5 },
+});

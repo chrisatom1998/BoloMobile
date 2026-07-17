@@ -1,0 +1,583 @@
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { ArrowLeft, Check, Flag, Languages, MessageCircle, Send, Trash2, Volume2 } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { AiConsentGate } from '@/components/ai-consent-gate';
+import { LiveTranslationRecorder, type LiveTranslationStatus } from '@/components/live-translation-recorder';
+import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
+import { useForegroundTimer } from '@/hooks/use-foreground-timer';
+import type { RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import { showAppAlert } from '@/lib/app-alert';
+import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
+import { useAppState } from '@/state/app-state';
+import type { ChatMessage, MiraResponseLanguage } from '@/state/app-state-types';
+import { colors, radius, spacing } from '@/theme';
+
+const welcome: ChatMessage = {
+  id: 'welcome',
+  role: 'mira',
+  text: 'Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.',
+};
+
+type PracticeMode = 'correct' | 'translate';
+
+const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
+
+function messageActionExcerpt(text: string) {
+  const normalized = text.replace(/\s+/gu, ' ').trim();
+  if (normalized.length <= MAX_ACCESSIBLE_REPLY_CHARACTERS) return normalized;
+  return `${normalized.slice(0, MAX_ACCESSIBLE_REPLY_CHARACTERS).trimEnd()}\u2026`;
+}
+
+function CaptionReveal({ children, style }: { children: ReactNode; style: StyleProp<ViewStyle> }) {
+  const [progress] = useState(() => new Animated.Value(0));
+
+  useEffect(() => {
+    Animated.timing(progress, { duration: 260, toValue: 1, useNativeDriver: true }).start();
+  }, [progress]);
+
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
+  return (
+    <Animated.View style={[style, { opacity: progress, transform: [{ translateY }] }]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+export default function LiveScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
+  const compactVoiceLayout = windowHeight < 760;
+  const { elapsedSeconds } = useForegroundTimer();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, markLiveTurn } = useAppState();
+  const [mode, setMode] = useState<PracticeMode>('correct');
+  const [responseLanguage, setResponseLanguage] = useState<MiraResponseLanguage>('en');
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
+  const [error, setError] = useState('');
+  const [translations, setTranslations] = useState<string[]>([]);
+  const [translationStatus, setTranslationStatus] = useState<LiveTranslationStatus>('idle');
+  const [liveCaption, setLiveCaption] = useState('');
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
+  const [reported, setReported] = useState<Set<string>>(new Set());
+  const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
+  const practiced = useRef(false);
+  const mountedRef = useRef(true);
+  const requestRef = useRef<AbortController | null>(null);
+  const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
+  const pendingReportIdsRef = useRef<Set<string>>(new Set());
+  const reportedIdsRef = useRef<Set<string>>(new Set());
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const scrollAfterContentChangeRef = useRef(false);
+  const persistedMessages = useMemo(() => [welcome, ...chatHistory], [chatHistory]);
+  const visibleMessages = useMemo(
+    () => pendingUserMessage ? [...persistedMessages, pendingUserMessage] : persistedMessages,
+    [pendingUserMessage, persistedMessages],
+  );
+  const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
+  const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
+  const languageControlLocked = busy || realtimeOwnsAudio;
+  const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
+  const voiceHeroTitle = {
+    disconnected: 'Start speaking',
+    connecting: 'Connecting to Mira',
+    ready: 'Ready when you are',
+    recording: 'Mira is listening',
+    responding: 'Mira is responding',
+  }[realtimeStatus];
+  const voiceHeroBody = {
+    disconnected: '',
+    connecting: 'Opening a private live voice session…',
+    ready: 'Tap the orb, then speak your Hindi naturally.',
+    recording: 'Tap the orb again when you finish your turn.',
+    responding: `Your ${responseLanguageName} reply is on the way.`,
+  }[realtimeStatus];
+  const liveCaptionText = realtimeStatus === 'connecting'
+    ? 'Connecting to Mira…'
+    : realtimeStatus === 'recording'
+      ? 'Listening to your Hindi…'
+      : realtimeStatus === 'responding'
+        ? `Mira is preparing your ${responseLanguageName} reply…`
+        : liveCaption || (realtimeStatus === 'ready' ? 'Captions appear after your first turn.' : '');
+
+  const scrollToChat = useCallback(() => {
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  const clearPendingUserMessage = useCallback((expectedId: string) => {
+    setPendingUserMessage((current) => current?.id === expectedId ? null : current);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (practiced.current) addPracticeSeconds(elapsedSeconds());
+    };
+  }, [addPracticeSeconds, elapsedSeconds]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      void stopSpeaking();
+    };
+  }, []);
+
+  const recordTurn = useCallback((result: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
+    if (!mountedRef.current) return;
+    scrollAfterContentChangeRef.current = true;
+    const now = Date.now();
+    void preloadSpeech(result.reply);
+    const additions: ChatMessage[] = [];
+    if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
+    additions.push({ id: `mira-${now}`, role: 'mira', text: result.reply.trim(), language: result.language });
+    appendChatMessages(additions);
+    if (!practiced.current) {
+      practiced.current = true;
+      markLiveTurn();
+    }
+  }, [appendChatMessages, markLiveTurn]);
+
+  const playReply = useCallback(async (text: string) => {
+    if (!aiConsent || realtimeOwnsAudio) return;
+    setError('');
+    try {
+      await speakText(text);
+    } catch (cause) {
+      if (mountedRef.current) setError(cause instanceof Error ? cause.message : 'Bolo could not play the AI voice.');
+    }
+  }, [aiConsent, realtimeOwnsAudio]);
+
+  const changeMode = useCallback((nextMode: PracticeMode) => {
+    if (nextMode === mode) return;
+    setPendingUserMessage(null);
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setBusy(false);
+    void stopSpeaking();
+    setError('');
+    if (nextMode !== 'translate') setTranslationStatus('idle');
+    setMode(nextMode);
+  }, [mode]);
+
+  const changeResponseLanguage = useCallback((nextLanguage: MiraResponseLanguage) => {
+    if (languageControlLocked || nextLanguage === responseLanguage) return;
+    void stopSpeaking();
+    setLiveCaption('');
+    setError('');
+    setResponseLanguage(nextLanguage);
+  }, [languageControlLocked, responseLanguage]);
+
+  const clearSavedChat = useCallback(() => {
+    void stopSpeaking();
+    setLiveCaption('');
+    clearChatHistory();
+  }, [clearChatHistory]);
+
+  const confirmClearChat = useCallback(() => {
+    if (busy || realtimeLocked || chatHistory.length === 0) return;
+    showAppAlert(
+      'Clear Mira chat?',
+      'This removes the saved typed and voice chat from this device. Reports you already submitted are not deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear chat', style: 'destructive', onPress: clearSavedChat },
+      ],
+    );
+  }, [busy, chatHistory.length, clearSavedChat, realtimeLocked]);
+
+  const sendText = useCallback(async (forced?: string) => {
+    const text = (forced ?? input).trim().slice(0, 500);
+    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return;
+    const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
+    scrollAfterContentChangeRef.current = true;
+    setInput('');
+    setPendingUserMessage(userMessage);
+    setBusy(true);
+    setError('');
+    const controller = new AbortController();
+    requestRef.current = controller;
+    try {
+      const result = await sendMobileChat({ text, messages: persistedMessages, clientId, responseLanguage }, controller.signal);
+      if (!mountedRef.current || controller.signal.aborted) {
+        if (mountedRef.current) clearPendingUserMessage(userMessage.id);
+        return;
+      }
+      clearPendingUserMessage(userMessage.id);
+      recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
+      if (realtimeStatusRef.current === 'disconnected') {
+        await speakText(result.reply, controller.signal);
+      }
+    } catch (cause) {
+      if (mountedRef.current) clearPendingUserMessage(userMessage.id);
+      if (mountedRef.current && !controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : 'Mira could not answer right now.');
+      }
+    } finally {
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        if (mountedRef.current) setBusy(false);
+      }
+    }
+  }, [aiConsent, busy, clearPendingUserMessage, clientId, input, persistedMessages, realtimeLocked, recordTurn, responseLanguage]);
+
+  const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
+    realtimeStatusRef.current = status;
+    setRealtimeStatus(status);
+  }, []);
+  const showRealtimeError = useCallback((message: string) => setError(message), []);
+  const completeRealtimeTurn = useCallback((turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
+    setError('');
+    setLiveCaption(turn.reply.trim());
+    recordTurn(turn);
+  }, [recordTurn]);
+
+  const recordTranslation = useCallback((english: string) => {
+    if (!mountedRef.current) return;
+    setError('');
+    setTranslations((current) => [...current, english]);
+    if (!practiced.current) {
+      practiced.current = true;
+      markLiveTurn();
+    }
+  }, [markLiveTurn]);
+
+  function report(message: ChatMessage) {
+    const submit = (reason: ReportReason) => void (async () => {
+      if (pendingReportIdsRef.current.has(message.id) || reportedIdsRef.current.has(message.id)) return;
+      const withPending = new Set(pendingReportIdsRef.current).add(message.id);
+      pendingReportIdsRef.current = withPending;
+      if (mountedRef.current) setPendingReports(withPending);
+      try {
+        await reportGeneratedMessage({ clientId, message: message.text, reason });
+        if (!mountedRef.current) return;
+        const withReported = new Set(reportedIdsRef.current).add(message.id);
+        reportedIdsRef.current = withReported;
+        setReported(withReported);
+        showAppAlert('Report received', 'Thank you. This reply was sent for review.');
+      } catch (cause) {
+        if (mountedRef.current) showAppAlert('Could not send report', cause instanceof Error ? cause.message : 'Please try again.');
+      } finally {
+        const withoutPending = new Set(pendingReportIdsRef.current);
+        withoutPending.delete(message.id);
+        pendingReportIdsRef.current = withoutPending;
+        if (mountedRef.current) setPendingReports(withoutPending);
+      }
+    })();
+    showAppAlert('Report Mira’s reply', 'Choose the main problem.', [
+      { text: 'Unsafe or inappropriate', onPress: () => submit('unsafe_or_inappropriate') },
+      { text: 'Incorrect or misleading', onPress: () => submit('incorrect_or_misleading') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
+      <StatusBar style="light" />
+      <FlatList
+        ref={listRef}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.listContent, { paddingBottom: mode === 'correct' ? 236 : 136 }]}
+        data={mode === 'correct' ? visibleMessages : []}
+        keyExtractor={(message) => message.id}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        style={styles.list}
+        testID="live-chat-list"
+        ListHeaderComponent={(
+          <View>
+            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, { paddingTop: insets.top + spacing.sm }]} testID="voice-conversation-hero">
+              <View style={[styles.topbar, { width: heroContentWidth }]}>
+                <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={router.back} style={styles.headerButton}>
+                  <ArrowLeft color={colors.white} size={25} />
+                </Pressable>
+                <View style={styles.headerCopy}>
+                  <Text style={styles.headerTitle}>Mira</Text>
+                  <Text numberOfLines={1} style={styles.headerSubtitle}>Conversational Hindi coach · {responseLanguageName} replies</Text>
+                </View>
+                {mode === 'correct' ? (
+                  <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                    <MessageCircle color={colors.ink} size={22} />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <View accessibilityRole="tablist" style={[styles.modeRow, { width: heroContentWidth }]}>
+                {([
+                  { icon: 'check', label: 'Correct me', value: 'correct' },
+                  { icon: 'translate', label: 'Live translate', value: 'translate' },
+                ] as const).map(({ icon, label, value }) => {
+                  const selected = mode === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      accessibilityHint={realtimeLocked ? 'End the live voice session to switch modes.' : undefined}
+                      accessibilityRole="tab"
+                      accessibilityState={{ disabled: realtimeLocked, selected }}
+                      disabled={realtimeLocked}
+                      onPress={() => changeMode(value)}
+                      style={[styles.modeButton, selected && styles.modeButtonSelected, realtimeLocked && !selected && styles.disabled]}
+                    >
+                      {icon === 'check'
+                        ? <Check color={selected ? colors.ink : stylesTokens.heroSegmentIdle} size={17} />
+                        : <Languages color={selected ? colors.ink : stylesTokens.heroSegmentIdle} size={17} />}
+                      <Text style={[styles.modeButtonText, selected && styles.modeButtonTextSelected]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {mode === 'correct' ? (
+                <>
+                  <View accessibilityLabel="Mira response language" style={[styles.languageSelector, { width: heroContentWidth }]}>
+                    <Text style={styles.languageSelectorLabel}>Mira speaks</Text>
+                    <View style={styles.languageOptions}>
+                      {([['en', 'English', 'English'], ['hi', 'हिन्दी', 'Hindi']] as const).map(([value, label, accessibleName]) => {
+                        const selected = responseLanguage === value;
+                        return (
+                          <Pressable
+                            key={value}
+                            accessibilityHint={languageControlLocked ? 'End the current request or live voice session to change Mira voice language.' : undefined}
+                            accessibilityLabel={`Mira voice language: ${accessibleName}`}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: languageControlLocked, selected }}
+                            disabled={languageControlLocked}
+                            onPress={() => changeResponseLanguage(value)}
+                            style={[styles.languageButton, selected && styles.languageButtonSelected, languageControlLocked && styles.disabled]}
+                          >
+                            <Text style={[styles.languageButtonText, selected && styles.languageButtonTextSelected]}>{label}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onStatusChange={updateRealtimeStatus} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} />
+                  <View style={[styles.heroCopy, { width: heroContentWidth }]}>
+                    <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
+                    {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
+                  </View>
+                  {realtimeOwnsAudio || liveCaptionText !== '' ? (
+                    <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
+                      <Text style={styles.captionLabel}>Live Mira caption</Text>
+                      <Text accessibilityLiveRegion="polite" style={styles.captionText}>{liveCaptionText}</Text>
+                    </CaptionReveal>
+                  ) : null}
+                  {!aiConsent ? <Text style={[styles.heroConsentHint, { width: Math.min(330, heroContentWidth) }]}>Review the consent card below to enable connected coaching.</Text> : null}
+                </>
+              ) : (
+                <View style={[styles.translateHero, { width: heroContentWidth }]}>
+                  <View style={styles.translateMark}><Languages color={colors.white} size={32} /></View>
+                  <Text style={styles.heroTitle}>Speak Hindi. Read English.</Text>
+                  <Text style={styles.heroBody}>Bolo listens only while translation is active and shows a natural English translation.</Text>
+                  {translationStatus !== 'idle' || translations.length > 0 ? (
+                    <CaptionReveal style={styles.translationCard}>
+                      <Text style={styles.translationLabel}>English live caption</Text>
+                      {translations.length > 0 ? (
+                        <View style={styles.translationHistory}>
+                          {translations.slice(0, -1).map((translation, index) => (
+                            <Text key={`${index}-${translation}`} style={styles.translationText} testID="translation-entry">
+                              {translation}
+                            </Text>
+                          ))}
+                          <Text key="latest-translation" accessibilityLiveRegion="polite" style={styles.translationText} testID="translation-entry">
+                            {translations[translations.length - 1]}
+                          </Text>
+                        </View>
+                      ) : (
+                        <Text accessibilityLiveRegion="polite" style={styles.translationText}>
+                          {translationStatus === 'starting' ? 'Opening the microphone…' : 'Listening for Hindi…'}
+                        </Text>
+                      )}
+                      <Text style={styles.translationNote}>Text only · audio output is off</Text>
+                    </CaptionReveal>
+                  ) : null}
+                </View>
+              )}
+            </View>
+
+            {mode === 'translate' && !aiConsent ? (
+              <View style={styles.translateConsentSection}>
+                <AiConsentGate><View /></AiConsentGate>
+              </View>
+            ) : null}
+            {mode === 'correct' ? (
+              <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact]} testID="ask-mira-sheet">
+                <View style={styles.sheetHandle} testID="ask-mira-sheet-handle" />
+                <View style={styles.askHeadingRow}>
+                  <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-mira-heading">
+                    <Text style={styles.askEyebrow}>Ask Mira</Text>
+                    <Text style={styles.askTitle}>How do I say…?</Text>
+                  </View>
+                  {chatHistory.length > 0 ? (
+                    <Pressable
+                      accessibilityHint="Removes typed and voice chat saved on this device."
+                      accessibilityLabel="Clear Mira chat history"
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: busy || realtimeLocked }}
+                      disabled={busy || realtimeLocked}
+                      onPress={confirmClearChat}
+                      style={[styles.clearChatButton, (busy || realtimeLocked) && styles.disabled]}
+                    >
+                      <Trash2 color={colors.danger} size={17} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <Text style={styles.askBody}>Your recent practice stays here on this device.</Text>
+                <AiConsentGate><View /></AiConsentGate>
+              </View>
+            ) : null}
+          </View>
+        )}
+        onContentSizeChange={() => {
+          if (!scrollAfterContentChangeRef.current || !aiConsent) return;
+          scrollAfterContentChangeRef.current = false;
+          listRef.current?.scrollToEnd({ animated: true });
+        }}
+        renderItem={({ item }) => (
+          <View style={[styles.messageRow, item.role === 'you' && styles.messageRowYou]}>
+            <View style={[styles.message, item.role === 'you' ? styles.userMessage : styles.miraMessage]}>
+              <Text style={[styles.messageLabel, item.role === 'you' && styles.userText]}>{item.role === 'you' ? 'You' : 'Mira'}</Text>
+              <Text
+                accessibilityLiveRegion={item.role === 'mira' && item.id !== welcome.id ? 'polite' : 'none'}
+                style={[styles.messageText, item.role === 'you' && styles.userText]}
+              >
+                {item.text}
+              </Text>
+              {item.role === 'mira' ? (
+                <View style={styles.messageActions}>
+                  <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
+                  {item.id !== 'welcome' && (
+                    <Pressable accessibilityLabel={`Report reply: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: reported.has(item.id) || pendingReports.has(item.id) }} disabled={reported.has(item.id) || pendingReports.has(item.id)} onPress={() => report(item)} style={[styles.smallAction, (reported.has(item.id) || pendingReports.has(item.id)) && styles.disabled]}><Flag color={reported.has(item.id) ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported.has(item.id) ? 'Reported' : pendingReports.has(item.id) ? 'Reporting\u2026' : 'Report'}</Text></Pressable>
+                  )}
+                </View>
+              ) : null}
+            </View>
+          </View>
+        )}
+      />
+
+      <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.xs) }]}>
+        {mode === 'correct' && busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Mira is thinking\u2026'}</Text> : null}
+        {mode === 'correct' && error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        {aiConsent ? (
+          mode === 'correct' ? <>
+            <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
+              {['Correct my Hindi', 'How do I say thank you?', 'Practice a short dialogue'].map((example) => <Pressable key={example} accessibilityRole="button" accessibilityState={{ disabled: busy || realtimeLocked }} disabled={busy || realtimeLocked} onPress={() => void sendText(example)} style={[styles.example, (busy || realtimeLocked) && styles.disabled]}><Text style={styles.exampleText}>{example}</Text></Pressable>)}
+            </ScrollView>
+            <View style={styles.inputRow}>
+              <TextInput
+                accessibilityLabel="Message Mira"
+                editable={!busy && !realtimeLocked}
+                maxLength={500}
+                multiline
+                onChangeText={setInput}
+                onSubmitEditing={() => void sendText()}
+                placeholder="Type a message…"
+                placeholderTextColor={colors.muted}
+                style={styles.input}
+                value={input}
+              />
+              <Pressable accessibilityLabel="Send message" accessibilityRole="button" accessibilityState={{ disabled: busy || realtimeLocked || !input.trim() }} disabled={busy || realtimeLocked || !input.trim()} onPress={() => void sendText()} style={[styles.sendButton, (busy || realtimeLocked || !input.trim()) && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
+            </View>
+          </> : <LiveTranslationRecorder disabled={busy} onStatusChange={setTranslationStatus} onTranslation={recordTranslation} />
+        ) : <Text style={styles.consentHint}>Review the consent card above to enable connected coaching.</Text>}
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+const stylesTokens = {
+  hero: '#0D1513',
+  heroRaised: '#18201E',
+  heroLine: 'rgba(255, 255, 255, 0.11)',
+  heroMuted: '#909B97',
+  heroSegmentIdle: '#C1C8C5',
+} as const;
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: stylesTokens.hero },
+  list: { flex: 1, backgroundColor: colors.background },
+  listContent: { backgroundColor: colors.background },
+  voiceHero: {
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.xxl + spacing.xl,
+    backgroundColor: stylesTokens.hero,
+    overflow: 'hidden',
+  },
+  voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.xxl + spacing.lg },
+  topbar: { position: 'relative', minHeight: 58, alignSelf: 'center', alignItems: 'stretch', justifyContent: 'center' },
+  headerButton: { position: 'absolute', left: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: stylesTokens.heroRaised, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  headerCopy: { minWidth: 0, alignSelf: 'stretch', justifyContent: 'center', gap: 2, overflow: 'hidden', marginHorizontal: 64 },
+  headerTitle: { color: colors.white, fontSize: 20, fontWeight: '900' },
+  headerSubtitle: { minWidth: 0, flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 12, lineHeight: 16 },
+  chatButton: { position: 'absolute', right: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  modeRow: { minHeight: 56, alignSelf: 'center', flexDirection: 'row', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, borderColor: stylesTokens.heroLine, borderWidth: StyleSheet.hairlineWidth, padding: spacing.xs },
+  modeButton: { minWidth: 0, minHeight: 48, flex: 1, borderRadius: radius.pill, borderCurve: 'continuous', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm },
+  modeButtonSelected: { backgroundColor: colors.paper, shadowColor: colors.black, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 2 },
+  modeButtonText: { color: stylesTokens.heroSegmentIdle, fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  modeButtonTextSelected: { color: colors.ink, fontWeight: '800' },
+  languageSelector: { minHeight: 50, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  languageSelectorLabel: { color: stylesTokens.heroMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
+  languageOptions: { flexDirection: 'row', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, padding: 4 },
+  languageButton: { minWidth: 86, minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  languageButtonSelected: { backgroundColor: colors.paper },
+  languageButtonText: { color: stylesTokens.heroMuted, fontSize: 14, fontWeight: '800' },
+  languageButtonTextSelected: { color: colors.ink },
+  heroCopy: { minWidth: 0, alignSelf: 'center', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
+  heroTitle: { minWidth: 0, flexShrink: 1, color: colors.white, fontSize: 24, lineHeight: 30, fontWeight: '900', textAlign: 'center' },
+  heroBody: { minWidth: 0, maxWidth: 350, flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  captionBlock: { alignSelf: 'center', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
+  captionLabel: { color: stylesTokens.heroMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
+  captionText: { color: colors.white, fontSize: 20, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
+  heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  translateHero: { minHeight: 490, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
+  translateMark: { width: 92, height: 92, borderRadius: 30, borderCurve: 'continuous', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 24, elevation: 6 },
+  translationCard: { minHeight: 184, alignSelf: 'stretch', borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: stylesTokens.heroLine, backgroundColor: stylesTokens.heroRaised, padding: spacing.xl, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  translationLabel: { color: stylesTokens.heroMuted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  translationHistory: { alignSelf: 'stretch', gap: spacing.sm },
+  translationText: { color: colors.white, fontSize: 22, lineHeight: 29, fontWeight: '800', textAlign: 'center' },
+  translationNote: { color: stylesTokens.heroMuted, fontSize: 12 },
+  translateConsentSection: { backgroundColor: colors.background, padding: spacing.lg },
+  askSection: { minHeight: 176, alignSelf: 'stretch', gap: spacing.md, marginTop: -(spacing.xxl + spacing.lg), position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
+  sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: colors.lineStrong },
+  askHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  askHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.sm },
+  askHeadingCopyCompact: { gap: 0 },
+  askEyebrow: { color: colors.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  askTitle: { color: colors.ink, fontSize: 31, lineHeight: 37, fontWeight: '500' },
+  askBody: { maxWidth: 520, color: colors.muted, fontSize: 14, lineHeight: 21 },
+  clearChatButton: { width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  messageRow: { alignItems: 'flex-start', backgroundColor: colors.background, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  messageRowYou: { alignItems: 'flex-end' },
+  message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.xs, shadowColor: colors.black, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 1 },
+  miraMessage: { backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth },
+  userMessage: { backgroundColor: colors.night },
+  messageLabel: { color: colors.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  messageText: { color: colors.ink, fontSize: 16, lineHeight: 23 },
+  userText: { color: colors.white },
+  messageActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
+  smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
+  smallActionText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  composer: { backgroundColor: colors.paperRaised, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, padding: spacing.md, gap: spacing.sm, shadowColor: colors.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 8 },
+  examples: { gap: spacing.sm, paddingRight: spacing.md },
+  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: colors.backgroundWarm, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
+  exampleText: { color: colors.ink, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.backgroundWarm, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, color: colors.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 16 },
+  sendButton: { width: 52, height: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  disabled: { opacity: 0.45 },
+  requestStatus: { color: colors.forest, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  consentHint: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: colors.muted, fontSize: 13, lineHeight: 18, textAlign: 'center', padding: spacing.md },
+});

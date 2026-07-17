@@ -1,0 +1,246 @@
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Bookmark, Check, ChevronRight, Heart, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+
+import { AiConsentGate } from '@/components/ai-consent-gate';
+import { PronunciationRecorder } from '@/components/pronunciation-recorder';
+import { getScene } from '@/data/scenes';
+import { useForegroundTimer } from '@/hooks/use-foreground-timer';
+import { speakText, stopSpeaking } from '@/lib/speech';
+import { useAppState } from '@/state/app-state';
+import { colors, radius, sharedStyles, spacing } from '@/theme';
+
+export default function SceneScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const scene = useMemo(() => getScene(id), [id]);
+  const { aiConsent, markSceneComplete, phrases, togglePhrase } = useAppState();
+  const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
+  const [beatIndex, setBeatIndex] = useState(0);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+  const [hearts, setHearts] = useState(3);
+  const [done, setDone] = useState(false);
+  const [audioError, setAudioError] = useState('');
+  const [pronunciationBusy, setPronunciationBusy] = useState(false);
+
+  useEffect(() => () => {
+    void stopSpeaking();
+  }, []);
+
+  if (!scene) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.finishTitle}>Scene not found</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to scenes</Text></Pressable>
+      </View>
+    );
+  }
+
+  const activeScene = scene;
+  const beat = activeScene.beats[beatIndex];
+  const correctIndex = beat.choices.findIndex((choice) => choice.correct);
+  const target = beat.choices[correctIndex];
+  const saved = phrases.some((phrase) => phrase.hi === target.hi);
+  const correct = picked !== null && beat.choices[picked].correct;
+
+  async function play(text: string) {
+    if (!aiConsent || pronunciationBusy) return;
+    setAudioError('');
+    try {
+      await speakText(text);
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : 'Bolo could not play the AI voice.');
+    }
+  }
+
+  function choose(index: number) {
+    if (picked !== null || pronunciationBusy) return;
+    setPicked(index);
+    if (beat.choices[index].correct) setScore((value) => value + 50);
+    else setHearts((value) => Math.max(0, value - 1));
+    if (aiConsent) void play(beat.choices[index].reply);
+  }
+
+  function next() {
+    void stopSpeaking();
+    setAudioError('');
+    if (beatIndex === activeScene.beats.length - 1) {
+      markSceneComplete(activeScene.id, elapsedSeconds());
+      setDone(true);
+      return;
+    }
+    setBeatIndex((value) => value + 1);
+    setPicked(null);
+  }
+
+  function replay() {
+    void stopSpeaking();
+    setAudioError('');
+    resetTimer();
+    setBeatIndex(0);
+    setPicked(null);
+    setScore(0);
+    setHearts(3);
+    setDone(false);
+  }
+
+  if (done) {
+    return (
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen}>
+        <Stack.Screen options={{ title: activeScene.title }} />
+        <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
+        <Text style={sharedStyles.eyebrow}>Scene complete</Text>
+        <Text style={styles.finishHindi}>आपने कर दिखाया!</Text>
+        <Text style={styles.finishTitle}>You navigated {activeScene.title} in Hindi.</Text>
+        <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>
+        <View style={styles.finishStats}>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>XP earned</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{hearts}/3</Text><Text style={styles.finishLabel}>confidence</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{activeScene.beats.length}</Text><Text style={styles.finishLabel}>turns</Text></View>
+        </View>
+        <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton}><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Replay scene</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose another scene</Text><ChevronRight color={colors.white} size={18} /></Pressable>
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" style={sharedStyles.screen}>
+      <Stack.Screen options={{ title: activeScene.title }} />
+      <View style={styles.progressHeader}>
+        <View style={styles.hud}><Heart color={colors.danger} fill={colors.danger} size={17} /><Text style={styles.hudText}>{hearts}</Text></View>
+        <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
+        <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={17} /><Text style={styles.hudText}>{score}</Text></View>
+      </View>
+      <View style={styles.track}><View style={[styles.trackFill, { width: `${(beatIndex + Number(picked !== null)) / activeScene.beats.length * 100}%`, backgroundColor: activeScene.color }]} /></View>
+
+      {!aiConsent ? <AiConsentGate><View /></AiConsentGate> : null}
+      {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
+
+      <View style={[styles.world, { borderColor: activeScene.color }]}> 
+        <View style={styles.worldTop}><Text style={styles.emoji}>{activeScene.emoji}</Text><Text style={styles.place}>{activeScene.place}</Text></View>
+        <View style={styles.miraRow}>
+          <View style={styles.mira}><Text style={styles.miraText}>मि</Text></View>
+          <View style={styles.bubble}>
+            <Pressable
+              accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : pronunciationBusy ? 'Finish pronunciation practice before playing another voice.' : undefined}
+              accessibilityLabel="Hear Mira"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !aiConsent || pronunciationBusy }}
+              disabled={!aiConsent || pronunciationBusy}
+              onPress={() => void play(beat.npc)}
+              style={[styles.speaker, (!aiConsent || pronunciationBusy) && styles.disabled]}
+            ><Volume2 color={colors.ink} size={18} /></Pressable>
+            <Text style={styles.npc}>{beat.npc}</Text>
+            <Text style={styles.translation}>{beat.translation}</Text>
+          </View>
+        </View>
+        <Text style={styles.prompt}>{beat.prompt}</Text>
+      </View>
+
+      <View style={styles.answerHeader}><View><Text style={sharedStyles.eyebrow}>Your response</Text><Text style={styles.answerTitle}>What do you say?</Text></View></View>
+      <View style={styles.choices}>
+        {beat.choices.map((choice, index) => {
+          const selected = picked === index;
+          const revealed = picked !== null && choice.correct;
+          return (
+            <Pressable
+              key={choice.hi}
+              accessibilityLabel={`${choice.hi}. ${choice.latin}. ${choice.en}`}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: picked !== null || pronunciationBusy, selected }}
+              disabled={picked !== null || pronunciationBusy}
+              onPress={() => choose(index)}
+              style={[styles.choice, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
+            >
+              <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{index + 1}</Text></View>
+              <View style={styles.choiceCopy}><Text style={styles.choiceHindi}>{choice.hi}</Text><Text style={styles.choiceMeaning}>{choice.latin} · {choice.en}</Text></View>
+              {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {picked === null ? (
+        <View style={styles.hint}><Text style={styles.hintTitle}>Mira’s hint</Text><Text style={styles.hintBody}>{beat.tip}</Text></View>
+      ) : (
+        <View style={styles.result}>
+          <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked].reply}</Text></View>
+          <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton}><Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
+        </View>
+      )}
+
+      <View style={styles.saveRow}>
+        <View style={styles.saveCopy}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+        <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, saved && styles.saveButtonActive]}>
+          <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
+        </Pressable>
+      </View>
+
+      {aiConsent ? <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} /> : null}
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
+  center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  hud: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  hudText: { color: colors.ink, fontWeight: '900' },
+  turn: { color: colors.muted, fontSize: 13, fontWeight: '800' },
+  track: { height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: colors.line },
+  trackFill: { height: '100%', borderRadius: radius.pill },
+  world: { ...sharedStyles.card, borderWidth: 2, gap: spacing.lg },
+  worldTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  emoji: { fontSize: 30 },
+  place: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  miraRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  mira: { width: 52, height: 52, borderRadius: 18, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  miraText: { color: colors.white, fontSize: 24, fontWeight: '900' },
+  bubble: { flex: 1, backgroundColor: colors.background, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, gap: spacing.xs },
+  speaker: { position: 'absolute', zIndex: 1, right: spacing.sm, top: spacing.sm, width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
+  disabled: { opacity: 0.4 },
+  audioError: { color: colors.danger, fontSize: 13, lineHeight: 18 },
+  npc: { color: colors.ink, fontSize: 21, lineHeight: 29, fontWeight: '800', paddingRight: 48 },
+  translation: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  prompt: { color: colors.ink, fontSize: 18, lineHeight: 25, fontWeight: '800' },
+  answerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  answerTitle: { color: colors.ink, fontSize: 26, fontWeight: '900', marginTop: spacing.xs },
+  choices: { gap: spacing.sm },
+  choice: { minHeight: 82, backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  choiceCorrect: { borderColor: colors.success, backgroundColor: '#EBF6F1' },
+  choiceWrong: { borderColor: colors.danger, backgroundColor: '#FBEDEA' },
+  choiceNumber: { minWidth: 30, minHeight: 30, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xs },
+  choiceNumberText: { color: colors.muted, fontWeight: '800' },
+  choiceCopy: { flex: 1, gap: 3 },
+  choiceHindi: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  choiceMeaning: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  hint: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: '#FFF2D9', padding: spacing.lg, gap: spacing.xs },
+  hintTitle: { color: colors.ink, fontSize: 14, fontWeight: '900' },
+  hintBody: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.ink, padding: spacing.lg, gap: spacing.lg },
+  resultCopy: { gap: spacing.xs },
+  resultTitle: { color: colors.white, fontSize: 17, fontWeight: '900' },
+  resultHindi: { color: '#D5E5E1', fontSize: 18, lineHeight: 25, fontWeight: '700' },
+  nextButton: { alignSelf: 'flex-end', minHeight: 44, borderRadius: radius.pill, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  nextText: { color: colors.white, fontWeight: '900' },
+  saveRow: { ...sharedStyles.card, flexDirection: 'row', alignItems: 'center' },
+  saveCopy: { flex: 1, gap: spacing.xs },
+  saveTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
+  saveMeaning: { color: colors.muted, fontSize: 13 },
+  saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
+  saveButtonActive: { backgroundColor: colors.brand },
+  finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
+  finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
+  finishHindi: { color: colors.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },
+  finishTitle: { color: colors.ink, fontSize: 26, lineHeight: 32, fontWeight: '900', textAlign: 'center' },
+  finishStats: { flexDirection: 'row', gap: spacing.sm },
+  finishStat: { flex: 1, backgroundColor: colors.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
+  finishValue: { color: colors.ink, fontSize: 20, fontWeight: '900' },
+  finishLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
+  secondaryButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
+});

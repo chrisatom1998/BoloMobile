@@ -1,0 +1,50 @@
+# Dependencies and generated output
+node_modules/
+.expo/
+dist/
+web-build/
+.acceptance-web*/
+ios/
+android/
+*.tsbuildinfo
+
+# Local tooling and editor state
+.agents/
+.bridgespace/
+.claude/
+.vscode/
+.playwright-mcp/
+artifacts/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Local credentials and environment files
+.env
+.env.*
+google-service-account.json
+AuthKey_*.p8
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.pem
+
+# Source-only project material not needed by the native build
+__tests__/
+store/
+scripts/
+README.md
+LICENSE
+AGENTS.md
+CLAUDE.md
+codex-review-fixes.md
+eslint.config.js
+store.config.js
+store.config.json
+
+# OS metadata
+.DS_Store
+desktop.ini

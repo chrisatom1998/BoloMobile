@@ -1,0 +1,113 @@
+import { StyleSheet } from 'react-native';
+
+export const colors = {
+  background: '#F7F4EE',
+  backgroundWarm: '#FBF1E4',
+  paper: '#FFFCF6',
+  paperRaised: '#FFFFFF',
+  ink: '#172523',
+  muted: '#535D5A',
+  mutedSoft: '#8B9691',
+  line: '#E3DBCF',
+  lineStrong: '#D0C5B6',
+  brand: '#AC4828',
+  brandDark: '#9C3F25',
+  brandSoft: '#F8E1D3',
+  forest: '#167366',
+  forestDark: '#15594F',
+  forestSoft: '#DDECE8',
+  night: '#10201E',
+  blue: '#315A8E',
+  blueSoft: '#DFE9F5',
+  gold: '#E7AC3D',
+  goldSoft: '#FFF1C9',
+  danger: '#B84737',
+  success: '#23745E',
+  sky: '#DDEBFA',
+  plum: '#5E4B7A',
+  white: '#FFFFFF',
+  black: '#000000',
+} as const;
+
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+  xxl: 32,
+} as const;
+
+export const radius = {
+  sm: 10,
+  md: 16,
+  lg: 24,
+  pill: 999,
+} as const;
+
+export const sharedStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  card: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    padding: spacing.lg,
+    gap: spacing.md,
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  elevatedCard: {
+    backgroundColor: colors.paperRaised,
+    borderColor: colors.line,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.lg,
+    borderCurve: 'continuous',
+    shadowColor: colors.black,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.09,
+    shadowRadius: 22,
+    elevation: 3,
+  },
+  eyebrow: {
+    color: colors.brandDark,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0,
+    textTransform: 'uppercase',
+  },
+  heading: {
+    color: colors.ink,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '800',
+  },
+  body: {
+    color: colors.muted,
+    fontSize: 16,
+    lineHeight: 23,
+  },
+  primaryButton: {
+    minHeight: 52,
+    borderRadius: radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: colors.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  primaryButtonText: {
+    color: colors.white,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+});

@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "auditedOn": "2026-07-13",
+  "artwork": {
+    "appleMarketingIcon": {
+      "path": "assets/store/app-store-icon.png",
+      "width": 1024,
+      "height": 1024,
+      "format": "PNG",
+      "colorMode": "RGB",
+      "bytes": 26985
+    },
+    "googlePlayIcon": {
+      "path": "assets/store/play-store-icon.png",
+      "width": 512,
+      "height": 512,
+      "format": "PNG",
+      "colorMode": "RGBA",
+      "bytes": 15559,
+      "maximumBytes": 1048576
+    },
+    "googlePlayFeatureGraphic": {
+      "path": "assets/store/play-store-feature.png",
+      "width": 1024,
+      "height": 500,
+      "format": "PNG",
+      "colorMode": "RGB",
+      "bytes": 49283,
+      "altText": "Bolo branding with the Hindi letter ba and the message Hindi for real moments."
+    }
+  },
+  "screenshots": {
+    "captureRules": [
+      "Capture the shipping build on the platform shown; do not use mock UI.",
+      "Use clean status bars without notifications or personal information.",
+      "Do not add store badges, rankings, pricing, testimonials, or calls to action.",
+      "Use JPEG or PNG without transparency."
+    ],
+    "recommendedOrder": [
+      {
+        "id": "home",
+        "screen": "Home with daily practice and scene catalog",
+        "altText": "Bolo home screen with today's practice goal, streak, and a list of real-life Hindi scenes."
+      },
+      {
+        "id": "guided-scene",
+        "screen": "A guided scene before an answer is selected",
+        "altText": "A Hindi conversation scene showing Devanagari, transliteration, English meaning, and three response choices."
+      },
+      {
+        "id": "scene-result",
+        "screen": "A guided scene after a correct answer or scene completion",
+        "altText": "A completed Hindi practice turn with feedback, a score, and an option to save the natural answer."
+      },
+      {
+        "id": "mira",
+        "screen": "Mira connected coaching with a non-sensitive sample conversation",
+        "altText": "Mira practice chat explaining English-first replies, typed messages, voice turns, and reply reporting."
+      },
+      {
+        "id": "saved-phrases",
+        "screen": "Saved phrases",
+        "altText": "Saved Hindi phrases with transliteration, English meanings, playback, and remove controls."
+      }
+    ],
+    "apple": {
+      "count": {
+        "minimum": 1,
+        "maximum": 10,
+        "recommended": 5
+      },
+      "iphone69PortraitAcceptedPixels": [
+        "1260x2736",
+        "1290x2796",
+        "1320x2868"
+      ],
+      "ipadSupportAtAudit": false,
+      "notes": [
+        "One 6.9-inch iPhone set can scale down when the user interface is the same across iPhone sizes.",
+        "Bolo 1.0 is configured as phone-only, so an iPad screenshot set is not required."
+      ],
+      "source": "https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications"
+    },
+    "googlePlayPhone": {
+      "count": {
+        "minimumAcrossDeviceTypes": 2,
+        "recommendedPhone": 4,
+        "maximumPhone": 8
+      },
+      "required": {
+        "minimumDimensionPixels": 320,
+        "maximumDimensionPixels": 3840,
+        "maximumLongToShortDimensionRatio": 2,
+        "formats": [
+          "JPEG",
+          "24-bit PNG without alpha"
+        ]
+      },
+      "recommendedPortraitPixels": "1080x1920",
+      "recommendedAspectRatio": "9:16",
+      "source": "https://support.google.com/googleplay/android-developer/answer/9866151?hl=en"
+    }
+  }
+}
