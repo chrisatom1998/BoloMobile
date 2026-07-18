@@ -70,6 +70,7 @@ export async function createRealtimePeerSession({
     await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
     await new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) return reject(new Error('The live voice connection was canceled.'));
       if (dataChannel.readyState === 'open') return resolve();
       const timeout = setTimeout(() => reject(new Error('The live voice data channel took too long to open.')), 15_000);
       const abort = () => {

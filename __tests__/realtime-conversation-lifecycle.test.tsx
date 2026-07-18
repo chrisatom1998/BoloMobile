@@ -699,6 +699,116 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
+  it('unlocks the session without saving a turn when transcription completes empty', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_empty_transcript',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete,
+    }));
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await start;
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-empty-transcript' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Reply that should not be saved.' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe('responding');
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          item_id: 'input-empty-transcript',
+          transcript: '   ',
+        }));
+        await Promise.resolve();
+      });
+
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('could not hear'));
+      expect(onTurnComplete).not.toHaveBeenCalled();
+      expect(result.current.status).toBe('ready');
+    } finally {
+      await unmount();
+    }
+  });
+
+  it('unlocks the session without saving a turn when input transcription fails', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_failed_transcript',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete,
+    }));
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await start;
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-failed-transcript' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Reply that should not be saved.' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe('responding');
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.failed',
+          item_id: 'input-failed-transcript',
+          error: { message: 'Transcription failed.' },
+        }));
+        await Promise.resolve();
+      });
+
+      expect(onError).toHaveBeenCalledWith('Transcription failed.');
+      expect(onTurnComplete).not.toHaveBeenCalled();
+      expect(result.current.status).toBe('ready');
+    } finally {
+      await unmount();
+    }
+  });
+
   it('disconnects an active microphone session when the app leaves the foreground', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
