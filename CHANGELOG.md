@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Settled the AI voice playback promise before pausing the player so a decoder-invalidated native player can no longer leave the Listen flow hanging forever.
+- Rejected a pending live voice connection when the Realtime service reports an error during configuration, instead of showing a false "ready" state that a later timeout tore down.
+- Reported a text-to-speech failure after a successful typed chat turn as a distinct playback problem instead of presenting it as a failed send.
+- Blocked AI consent changes while "Delete my data" is clearing storage so a consent record can no longer be re-persisted immediately after a wipe.
+- Preserved the full 500-character learner message when the response-language instruction is prepended to a typed chat request.
+
 - Locked both practice-mode tabs during connecting, recording, and responding realtime voice states without blocking typed-request mode changes.
 - Offset the compact end-session button so its hit target no longer overlaps the voice orb.
 - Restored polite screen-reader announcements for realtime voice status changes.

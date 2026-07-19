@@ -145,9 +145,9 @@ export function buildMobileChatPayload(input: MobileChatInput) {
     : input.responseLanguage === 'en'
       ? 'Respond in English. '
       : '';
-  const text = input.text?.trim();
+  const text = input.text?.trim().slice(0, 500);
   return {
-    text: text ? `${responseInstruction}${text}`.slice(0, 500) : undefined,
+    text: text ? `${responseInstruction}${text}` : undefined,
     audioBase64: input.audioBase64,
     mimeType: input.mimeType,
     messages: input.messages.slice(-10).map(({ role, text }) => ({ role, text: text.slice(0, 600) })),

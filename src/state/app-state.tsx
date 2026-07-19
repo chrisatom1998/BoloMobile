@@ -259,6 +259,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [commit]);
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
+    if (clearingAllDataRef.current) return false;
     let nextConsent: PersistedState['aiConsent'];
     try {
       nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
@@ -270,7 +271,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       );
       return false;
     }
-    setState((current) => ({ ...current, aiConsent: nextConsent }));
+    setState((current) => clearingAllDataRef.current ? current : { ...current, aiConsent: nextConsent });
     return true;
   }, [enqueuePersistence]);
 

@@ -517,6 +517,46 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
+  it('fails the pending connection attempt when the service reports an error during configuration', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_configuration_error',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete: jest.fn(),
+    }));
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      expect(result.current.status).toBe('connecting');
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'error', error: { message: 'The session configuration was rejected.' } }));
+        await expect(start).rejects.toThrow('The session configuration was rejected.');
+      });
+
+      expect(result.current.status).toBe('disconnected');
+      expect(peer.close).toHaveBeenCalledTimes(1);
+      expect(peer.setMicrophoneEnabled).not.toHaveBeenCalledWith(true);
+      expect(onError).not.toHaveBeenCalled();
+    } finally {
+      await unmount();
+    }
+  });
+
   it('keeps controls locked while clearing partial output after a Realtime error', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;

@@ -215,7 +215,14 @@ export default function LiveScreen() {
       clearPendingUserMessage(userMessage.id);
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
       if (realtimeStatusRef.current === 'disconnected') {
-        await speakText(result.reply, controller.signal);
+        try {
+          await speakText(result.reply, controller.signal);
+        } catch (cause) {
+          if (mountedRef.current && !controller.signal.aborted) {
+            const reason = cause instanceof Error ? cause.message : 'Bolo could not play the AI voice.';
+            setError(`Mira replied, but the voice audio could not play. ${reason}`);
+          }
+        }
       }
     } catch (cause) {
       if (mountedRef.current) clearPendingUserMessage(userMessage.id);

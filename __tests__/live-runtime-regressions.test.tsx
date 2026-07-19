@@ -902,7 +902,8 @@ describe('typed live coaching request control', () => {
     ]);
     expect(view.getByText('Keep this completed turn.')).toBeTruthy();
     expect(view.getByText('The text reply succeeded.')).toBeTruthy();
-    expect(view.getByText('Voice playback failed.').props.accessibilityRole).toBe('alert');
+    const playbackError = view.getByText('Mira replied, but the voice audio could not play. Voice playback failed.');
+    expect(playbackError.props.accessibilityRole).toBe('alert');
     await view.unmount();
     await flushMicrotasks();
   });
