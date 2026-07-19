@@ -170,4 +170,124 @@ describe('Realtime peer setup cleanup', () => {
       await session;
     }
   });
+
+  it('rejects and closes the native peer when abort wins before an already-open data channel is awaited', async () => {
+    const remoteDescription = deferred<void>();
+    const microphone = { enabled: true, stop: jest.fn() };
+    const stream = {
+      getAudioTracks: jest.fn(() => [microphone]),
+      getTracks: jest.fn(() => [microphone]),
+    };
+    const dataChannel = {
+      addEventListener: jest.fn(),
+      close: jest.fn(),
+      readyState: 'open',
+      send: jest.fn(),
+    };
+    const peer = {
+      addTrack: jest.fn(),
+      close: jest.fn(),
+      connectionState: 'connecting',
+      createDataChannel: jest.fn(() => dataChannel),
+      createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
+      setLocalDescription: jest.fn(async () => undefined),
+      setRemoteDescription: jest.fn(() => remoteDescription.promise),
+      addEventListener: jest.fn(),
+    };
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockImplementation(() => peer);
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      text: async () => 'native-answer',
+    })) as unknown as typeof fetch;
+    const controller = new AbortController();
+    let rejection: unknown;
+    const session = createNativeSession({
+      ephemeralKey: 'ek_native',
+      onClose: jest.fn(),
+      onMessage: jest.fn(),
+      signal: controller.signal,
+    }).catch((error: unknown) => {
+      rejection = error;
+    });
+
+    await flushMicrotasks();
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
+    controller.abort();
+    remoteDescription.resolve();
+    await flushMicrotasks();
+
+    expect(rejection).toEqual(expect.objectContaining({ message: 'The live voice connection was canceled.' }));
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(dataChannel.close).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    await session;
+  });
+
+  it('rejects and closes the web peer when abort wins before an already-open data channel is awaited', async () => {
+    const remoteDescription = deferred<void>();
+    const microphone = { enabled: true, stop: jest.fn() };
+    const stream = {
+      getAudioTracks: jest.fn(() => [microphone]),
+      getTracks: jest.fn(() => [microphone]),
+    };
+    const dataChannel = {
+      addEventListener: jest.fn(),
+      close: jest.fn(),
+      onclose: null,
+      onmessage: null,
+      readyState: 'open',
+      send: jest.fn(),
+    };
+    const peer = {
+      addTrack: jest.fn(),
+      close: jest.fn(),
+      connectionState: 'connecting',
+      createDataChannel: jest.fn(() => dataChannel),
+      createOffer: jest.fn(async () => ({ sdp: 'web-offer', type: 'offer' })),
+      onconnectionstatechange: null,
+      ontrack: null,
+      setLocalDescription: jest.fn(async () => undefined),
+      setRemoteDescription: jest.fn(() => remoteDescription.promise),
+    };
+    const audio = {
+      autoplay: false,
+      pause: jest.fn(),
+      play: jest.fn(async () => undefined),
+      srcObject: null,
+    };
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia: jest.fn(async () => stream) } },
+    });
+    globalThis.RTCPeerConnection = jest.fn(() => peer) as unknown as typeof globalThis.RTCPeerConnection;
+    globalThis.Audio = jest.fn(() => audio) as unknown as typeof Audio;
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      text: async () => 'web-answer',
+    })) as unknown as typeof fetch;
+    const controller = new AbortController();
+    let rejection: unknown;
+    const session = createWebSession({
+      ephemeralKey: 'ek_web',
+      onClose: jest.fn(),
+      onMessage: jest.fn(),
+      signal: controller.signal,
+    }).catch((error: unknown) => {
+      rejection = error;
+    });
+
+    await flushMicrotasks();
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
+    controller.abort();
+    remoteDescription.resolve();
+    await flushMicrotasks();
+
+    expect(rejection).toEqual(expect.objectContaining({ message: 'The live voice connection was canceled.' }));
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(dataChannel.close).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    expect(audio.pause).toHaveBeenCalledTimes(1);
+    await session;
+  });
 });

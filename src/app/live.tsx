@@ -11,6 +11,7 @@ import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import type { RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
+import { MAX_CHAT_HISTORY_MESSAGES } from '@/lib/storage';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
@@ -243,7 +244,7 @@ export default function LiveScreen() {
   const recordTranslation = useCallback((english: string) => {
     if (!mountedRef.current) return;
     setError('');
-    setTranslations((current) => [...current, english]);
+    setTranslations((current) => [...current, english].slice(-MAX_CHAT_HISTORY_MESSAGES));
     if (!practiced.current) {
       practiced.current = true;
       markLiveTurn();

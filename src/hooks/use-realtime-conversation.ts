@@ -220,6 +220,28 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         if (event.transcript?.trim()) {
           transcriptRef.current = event.transcript.trim();
           if (completedReplyRef.current) finalizeTurn();
+        } else if (statusRef.current === 'responding') {
+          rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+          inputItemIdRef.current = null;
+          responseTextRef.current = '';
+          completedReplyRef.current = '';
+          transcriptRef.current = '';
+          callbacksRef.current.onError('Mira could not hear a readable voice turn. Please try again.');
+          finishTurnWithoutResult();
+        }
+        break;
+      case 'conversation.item.input_audio_transcription.failed':
+        if (event.item_id && completedInputItemIdsRef.current.has(event.item_id)) break;
+        if (event.item_id && inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
+        if (event.item_id && !inputItemIdRef.current) inputItemIdRef.current = event.item_id;
+        if (statusRef.current === 'responding') {
+          rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+          inputItemIdRef.current = null;
+          responseTextRef.current = '';
+          completedReplyRef.current = '';
+          transcriptRef.current = '';
+          callbacksRef.current.onError(event.error?.message || 'Mira could not transcribe that voice turn. Please try again.');
+          finishTurnWithoutResult();
         }
         break;
       case 'response.created':

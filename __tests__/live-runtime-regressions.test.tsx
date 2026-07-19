@@ -1073,6 +1073,30 @@ describe('live mode state separation', () => {
     await flushMicrotasks();
   });
 
+  it('caps live translation history to the chat history limit', async () => {
+    const segmentCount = 105;
+    for (let index = 1; index <= segmentCount; index += 1) {
+      boloApi.translateHindiAudio.mockResolvedValueOnce({ english: `Translated segment ${index}.` });
+    }
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByText('Live translate'));
+    await fireEvent.press(view.getByLabelText('Start live translation'));
+    await flushMicrotasks();
+
+    for (let index = 0; index < segmentCount; index += 1) {
+      expoAudio.__emitAudio();
+      await advance(3_600);
+    }
+
+    const entries = view.getAllByTestId('translation-entry').map((entry) => entry.props.children);
+    expect(entries).toHaveLength(100);
+    expect(entries[0]).toBe('Translated segment 6.');
+    expect(entries.at(-1)).toBe('Translated segment 105.');
+    await fireEvent.press(view.getByLabelText('Stop live translation'));
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('clears saved coaching history only after destructive confirmation', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
