@@ -68,7 +68,12 @@ export async function playAiVoiceAudio(audioData: AiVoiceAudio, signal: AbortSig
         signal.removeEventListener('abort', cancel);
         player.onended = null;
         player.onerror = null;
-        player.pause();
+        try {
+          player.pause();
+        } catch {
+          // The element may already be invalid after a decode error;
+          // the promise must still settle so playback callers never hang.
+        }
         if (error) reject(error);
         else resolve();
       };

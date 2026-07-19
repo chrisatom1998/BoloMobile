@@ -204,6 +204,23 @@ describe('AI voice native playback', () => {
     expect(expoFileSystem.__mockFiles[0].delete).toHaveBeenCalledTimes(1);
   });
 
+  it('still rejects when pausing an invalidated native player throws during error handling', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ error: 'decoder rejected the MP3' }));
+    native.player.pause.mockImplementation(() => {
+      throw new Error('the native player was already invalidated');
+    });
+
+    await expect(aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'SUQzBAAAAAA=',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal)).rejects.toThrow('AI voice playback failed: decoder rejected the MP3');
+
+    expect(native.player.release).toHaveBeenCalledTimes(1);
+    expect(native.subscription.remove).toHaveBeenCalledTimes(1);
+    expect(expoFileSystem.__mockFiles[0].delete).toHaveBeenCalledTimes(1);
+  });
+
   it('treats abort as cancellation while retaining the prepared clip for replay', async () => {
     const native = installPlayer();
     const controller = new AbortController();

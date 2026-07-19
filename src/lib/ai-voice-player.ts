@@ -106,7 +106,12 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal)
         if (timeout) clearTimeout(timeout);
         signal.removeEventListener('abort', cancel);
         subscription?.remove();
-        prepared.player.pause();
+        try {
+          prepared.player.pause();
+        } catch {
+          // The native player may already be invalid after a decoder error;
+          // the promise must still settle so playback callers never hang.
+        }
         if (error) reject(error);
         else resolve();
       };

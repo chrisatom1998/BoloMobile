@@ -35,6 +35,7 @@ const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage
 function StateHarness() {
   const state = useAppState();
   const [error, setError] = useState('');
+  const [consentResult, setConsentResult] = useState('');
   if (!state.hydrated) return <Text>Hydrating</Text>;
   const snapshot = {
     aiConsent: state.aiConsent,
@@ -49,11 +50,16 @@ function StateHarness() {
     <View>
       <Text testID="state-snapshot">{JSON.stringify(snapshot)}</Text>
       <Text testID="clear-error">{error}</Text>
+      <Text testID="consent-result">{consentResult}</Text>
       <Pressable
         accessibilityLabel="Clear all provider data"
         onPress={() => void state.clearAllData().catch((cause: unknown) => {
           setError(cause instanceof Error ? cause.message : 'Clear failed');
         })}
+      />
+      <Pressable
+        accessibilityLabel="Enable AI consent"
+        onPress={() => void state.setAiConsent(true).then((saved) => setConsentResult(saved ? 'saved' : 'rejected'))}
       />
     </View>
   );
@@ -118,6 +124,31 @@ describe('AppStateProvider clearAllData', () => {
     expect(asyncStorage.__store.get(storageKeys.phrases)).toBe('[]');
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.practice) ?? 'null')).toEqual(emptyPractice());
     expect(asyncStorage.__store.get(storageKeys.streakDays)).toBe('[]');
+    await view.unmount();
+  });
+
+  it('rejects a consent change made while a full data clear is in flight', async () => {
+    seedEveryStorageKey();
+    let releaseClear!: () => void;
+    const clearGate = new Promise<void>((resolve) => {
+      releaseClear = resolve;
+    });
+    asyncStorage.multiSet.mockImplementationOnce(async (entries: [string, string][]) => {
+      await clearGate;
+      entries.forEach(([key, value]) => asyncStorage.__store.set(key, value));
+    });
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).clientId).toBe('client-old-12345'));
+
+    await fireEvent.press(view.getByLabelText('Clear all provider data'));
+    await fireEvent.press(view.getByLabelText('Enable AI consent'));
+    await waitFor(() => expect(view.getByTestId('consent-result').props.children).toBe('rejected'));
+
+    releaseClear();
+    await waitFor(() => expect(readSnapshot(view).clientId).not.toBe('client-old-12345'));
+
+    expect(readSnapshot(view).aiConsent).toBe(false);
+    expect(asyncStorage.__store.get(storageKeys.aiConsent)).toBe('null');
     await view.unmount();
   });
 

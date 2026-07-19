@@ -102,6 +102,18 @@ describe('connected coaching contract', () => {
     expect(hindi.languageMode).toBe(MOBILE_LANGUAGE_MODE);
   });
 
+  it('keeps the full maximum-length learner message when a response-language instruction is added', () => {
+    const learnerText = 'x'.repeat(500);
+    const payload = buildMobileChatPayload({
+      text: `  ${learnerText}  `,
+      messages: [],
+      clientId: 'client-12345678',
+      responseLanguage: 'hi',
+    });
+
+    expect(payload.text).toBe(`Respond in Hindi using Devanagari script. ${learnerText}`);
+  });
+
   it('rejects a malformed successful response instead of passing it to the UI', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = jest.fn(async () => ({

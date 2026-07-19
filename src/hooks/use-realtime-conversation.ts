@@ -299,9 +299,15 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         }
         break;
       }
-      case 'error':
+      case 'error': {
         peerRef.current?.setMicrophoneEnabled(false);
-        callbacksRef.current.onError(event.error?.message || 'The live voice service reported an error.');
+        const message = event.error?.message || 'The live voice service reported an error.';
+        const rejectPendingConnect = connectRejectRef.current;
+        if (rejectPendingConnect) {
+          rejectPendingConnect(new Error(message));
+          break;
+        }
+        callbacksRef.current.onError(message);
         if (statusRef.current === 'responding') {
           responseTextRef.current = '';
           completedReplyRef.current = '';
@@ -320,6 +326,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           updateStatus('ready');
         }
         break;
+      }
     }
   }, [armTurnWatchdog, finalizeTurn, finishTurnWithoutResult, unlockCompletedTurn, updateStatus]);
 
