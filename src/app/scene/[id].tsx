@@ -7,7 +7,9 @@ import { AiConsentGate } from '@/components/ai-consent-gate';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { getScene } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
-import { speakText, stopSpeaking } from '@/lib/speech';
+import { observe } from '@/lib/observability';
+import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { colors, radius, sharedStyles, spacing } from '@/theme';
 
@@ -15,18 +17,21 @@ export default function SceneScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const scene = useMemo(() => getScene(id), [id]);
-  const { aiConsent, markSceneComplete, phrases, togglePhrase } = useAppState();
+  const { aiConsent, checkpointScene, learnerProfile, markSceneComplete, phrases, sceneProgress, togglePhrase } = useAppState();
   const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
-  const [beatIndex, setBeatIndex] = useState(0);
+  const savedBeatIndex = scene ? sceneProgress?.[scene.id]?.lastBeatIndex ?? 0 : 0;
+  const [beatIndex, setBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [done, setDone] = useState(false);
   const [audioError, setAudioError] = useState('');
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
+  const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
 
-  useEffect(() => () => {
-    void stopSpeaking();
+  useEffect(() => {
+    observe('scene_started');
+    return () => { void stopSpeaking(); };
   }, []);
 
   if (!scene) {
@@ -46,7 +51,7 @@ export default function SceneScreen() {
   const correct = picked !== null && beat.choices[picked].correct;
 
   async function play(text: string) {
-    if (!aiConsent || pronunciationBusy) return;
+    if ((!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) || pronunciationBusy) return;
     setAudioError('');
     try {
       await speakText(text);
@@ -58,19 +63,35 @@ export default function SceneScreen() {
   function choose(index: number) {
     if (picked !== null || pronunciationBusy) return;
     setPicked(index);
-    if (beat.choices[index].correct) setScore((value) => value + 50);
-    else setHearts((value) => Math.max(0, value - 1));
-    if (aiConsent) void play(beat.choices[index].reply);
+    if (beat.choices[index].correct) {
+      hapticSuccess();
+      setScore((value) => value + 50);
+    }
+    else {
+      hapticWarning();
+      setHearts((value) => Math.max(0, value - 1));
+      setWeakPhrases((current) => [...new Set([...current, target.hi])]);
+    }
+    void play(beat.choices[index].reply);
   }
 
   function next() {
     void stopSpeaking();
     setAudioError('');
     if (beatIndex === activeScene.beats.length - 1) {
-      markSceneComplete(activeScene.id, elapsedSeconds());
+      const correctAnswers = score / 50;
+      markSceneComplete(activeScene.id, elapsedSeconds(), {
+        score,
+        correct: correctAnswers,
+        total: activeScene.beats.length,
+        weakPhrases,
+      });
+      observe('scene_completed');
       setDone(true);
       return;
     }
+    hapticSelect();
+    checkpointScene?.(activeScene.id, beatIndex + 1);
     setBeatIndex((value) => value + 1);
     setPicked(null);
   }
@@ -83,6 +104,7 @@ export default function SceneScreen() {
     setPicked(null);
     setScore(0);
     setHearts(3);
+    setWeakPhrases([]);
     setDone(false);
   }
 
@@ -96,7 +118,7 @@ export default function SceneScreen() {
         <Text style={styles.finishTitle}>You navigated {activeScene.title} in Hindi.</Text>
         <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>
         <View style={styles.finishStats}>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>XP earned</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>scene score</Text></View>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{hearts}/3</Text><Text style={styles.finishLabel}>confidence</Text></View>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{activeScene.beats.length}</Text><Text style={styles.finishLabel}>turns</Text></View>
         </View>
@@ -125,13 +147,13 @@ export default function SceneScreen() {
           <View style={styles.mira}><Text style={styles.miraText}>मि</Text></View>
           <View style={styles.bubble}>
             <Pressable
-              accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : pronunciationBusy ? 'Finish pronunciation practice before playing another voice.' : undefined}
+              accessibilityHint={!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false) ? 'Agree to connected AI processing to enable this voice.' : pronunciationBusy ? 'Finish pronunciation practice before playing another voice.' : 'Bundled lesson audio works offline.'}
               accessibilityLabel="Hear Mira"
               accessibilityRole="button"
-              accessibilityState={{ disabled: !aiConsent || pronunciationBusy }}
-              disabled={!aiConsent || pronunciationBusy}
+              accessibilityState={{ disabled: (!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy }}
+              disabled={(!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy}
               onPress={() => void play(beat.npc)}
-              style={[styles.speaker, (!aiConsent || pronunciationBusy) && styles.disabled]}
+              style={[styles.speaker, ((!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy) && styles.disabled]}
             ><Volume2 color={colors.ink} size={18} /></Pressable>
             <Text style={styles.npc}>{beat.npc}</Text>
             <Text style={styles.translation}>{beat.translation}</Text>
@@ -156,7 +178,10 @@ export default function SceneScreen() {
               style={[styles.choice, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
             >
               <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{index + 1}</Text></View>
-              <View style={styles.choiceCopy}><Text style={styles.choiceHindi}>{choice.hi}</Text><Text style={styles.choiceMeaning}>{choice.latin} · {choice.en}</Text></View>
+              <View style={styles.choiceCopy}>
+                {learnerProfile?.scriptPreference !== 'latin' ? <Text style={styles.choiceHindi}>{choice.hi}</Text> : null}
+                <Text style={styles.choiceMeaning}>{learnerProfile?.scriptPreference === 'devanagari' ? choice.en : `${choice.latin} · ${choice.en}`}</Text>
+              </View>
               {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
             </Pressable>
           );
@@ -172,12 +197,14 @@ export default function SceneScreen() {
         </View>
       )}
 
-      <View style={styles.saveRow}>
-        <View style={styles.saveCopy}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-        <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, saved && styles.saveButtonActive]}>
-          <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
-        </Pressable>
-      </View>
+      {picked !== null ? (
+        <View style={styles.saveRow}>
+          <View style={styles.saveCopy}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+          <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, saved && styles.saveButtonActive]}>
+            <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
+          </Pressable>
+        </View>
+      ) : null}
 
       {aiConsent ? <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} /> : null}
     </ScrollView>
@@ -237,8 +264,8 @@ const styles = StyleSheet.create({
   finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   finishHindi: { color: colors.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },
   finishTitle: { color: colors.ink, fontSize: 26, lineHeight: 32, fontWeight: '900', textAlign: 'center' },
-  finishStats: { flexDirection: 'row', gap: spacing.sm },
-  finishStat: { flex: 1, backgroundColor: colors.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
+  finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: colors.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
   finishValue: { color: colors.ink, fontSize: 20, fontWeight: '900' },
   finishLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
   secondaryButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },

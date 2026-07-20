@@ -1,0 +1,38 @@
+appId: com.bolo.hindi
+name: Consent acceptance, microphone denial, withdrawal, and live cleanup
+tags:
+  - critical
+  - privacy
+  - voice
+---
+- launchApp:
+    clearState: true
+    permissions:
+      microphone: deny
+- runFlow: ../subflows/complete-onboarding.yaml
+- tapOn: "Practice live with Mira"
+- scrollUntilVisible:
+    element:
+      text: "I agree and want to continue"
+    direction: DOWN
+- tapOn: "I agree and want to continue"
+- tapOn: "Start a voice conversation"
+- assertVisible: "Microphone access is required for live voice practice."
+- setPermissions:
+    permissions:
+      microphone: allow
+- tapOn: "Go back"
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element:
+      text: "Withdraw consent"
+    direction: DOWN
+- tapOn: "Withdraw consent"
+- tapOn: "Withdraw"
+- assertVisible: "AI consent withdrawn"
+- tapOn: "OK"
+- assertVisible: "Before using Mira"
+- pressKey: Home
+- launchApp:
+    stopApp: false
+- assertVisible: "Settings"

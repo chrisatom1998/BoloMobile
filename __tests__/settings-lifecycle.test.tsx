@@ -9,12 +9,15 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('lucide-react-native', () => ({
+  Activity: () => null,
+  Bell: () => null,
   ChevronRight: () => null,
   DatabaseBackup: () => null,
   ExternalLink: () => null,
   FileText: () => null,
   LifeBuoy: () => null,
   LockKeyhole: () => null,
+  Languages: () => null,
   ShieldCheck: () => null,
   Trash2: () => null,
 }));
@@ -29,6 +32,16 @@ jest.mock('@/lib/app-alert', () => ({
 
 jest.mock('@/lib/public-pages', () => ({
   openPublicPage: jest.fn(async () => undefined),
+}));
+
+jest.mock('@/lib/practice-reminder', () => ({
+  cancelPracticeReminder: jest.fn(async (current) => ({ ...current, enabled: false, notificationId: null })),
+  schedulePracticeReminder: jest.fn(async (_current, hour, minute = 0) => ({
+    enabled: true,
+    hour,
+    minute,
+    notificationId: 'test-reminder',
+  })),
 }));
 
 jest.mock('@/services/bolo-api', () => ({

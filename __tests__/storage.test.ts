@@ -117,7 +117,7 @@ describe('local progress storage', () => {
   it('requires the current versioned AI consent record', () => {
     const current = createAiConsentRecord(new Date('2026-07-13T20:00:00.000Z'));
 
-    expect(AI_CONSENT_VERSION).toBe(5);
+    expect(AI_CONSENT_VERSION).toBe(6);
     expect(current).toEqual({ version: AI_CONSENT_VERSION, acceptedAt: '2026-07-13T20:00:00.000Z' });
     expect(sanitizeAiConsent(JSON.stringify(current))).toEqual(current);
     expect(sanitizeAiConsent('true')).toBeNull();

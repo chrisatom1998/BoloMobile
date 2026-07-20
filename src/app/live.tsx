@@ -9,9 +9,11 @@ import { AiConsentGate } from '@/components/ai-consent-gate';
 import { LiveTranslationRecorder, type LiveTranslationStatus } from '@/components/live-translation-recorder';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
+import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import type { RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
 import { MAX_CHAT_HISTORY_MESSAGES } from '@/lib/storage';
+import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
@@ -36,10 +38,12 @@ function messageActionExcerpt(text: string) {
 
 function CaptionReveal({ children, style }: { children: ReactNode; style: StyleProp<ViewStyle> }) {
   const [progress] = useState(() => new Animated.Value(0));
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    Animated.timing(progress, { duration: 260, toValue: 1, useNativeDriver: true }).start();
-  }, [progress]);
+    if (reducedMotion) progress.setValue(1);
+    else Animated.timing(progress, { duration: 260, toValue: 1, useNativeDriver: true }).start();
+  }, [progress, reducedMotion]);
 
   const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [14, 0] });
   return (
@@ -56,9 +60,9 @@ export default function LiveScreen() {
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
   const compactVoiceLayout = windowHeight < 760;
   const { elapsedSeconds } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, markLiveTurn } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn } = useAppState();
   const [mode, setMode] = useState<PracticeMode>('correct');
-  const [responseLanguage, setResponseLanguage] = useState<MiraResponseLanguage>('en');
+  const [responseLanguage, setResponseLanguage] = useState<MiraResponseLanguage>(learnerProfile?.responseLanguage ?? 'en');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
@@ -240,8 +244,12 @@ export default function LiveScreen() {
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     realtimeStatusRef.current = status;
     setRealtimeStatus(status);
+    if (status === 'ready') observe('voice_connection_succeeded');
   }, []);
-  const showRealtimeError = useCallback((message: string) => setError(message), []);
+  const showRealtimeError = useCallback((message: string) => {
+    observe('voice_connection_failed');
+    setError(message);
+  }, []);
   const completeRealtimeTurn = useCallback((turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
     setError('');
     setLiveCaption(turn.reply.trim());
@@ -534,9 +542,9 @@ const styles = StyleSheet.create({
   modeButtonSelected: { backgroundColor: colors.paper, shadowColor: colors.black, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 2 },
   modeButtonText: { color: stylesTokens.heroSegmentIdle, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   modeButtonTextSelected: { color: colors.ink, fontWeight: '800' },
-  languageSelector: { minHeight: 50, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  languageSelector: { minHeight: 50, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   languageSelectorLabel: { color: stylesTokens.heroMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
-  languageOptions: { flexDirection: 'row', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, padding: 4 },
+  languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, padding: 4 },
   languageButton: { minWidth: 86, minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   languageButtonSelected: { backgroundColor: colors.paper },
   languageButtonText: { color: stylesTokens.heroMuted, fontSize: 14, fontWeight: '800' },

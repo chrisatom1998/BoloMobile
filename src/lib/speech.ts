@@ -1,4 +1,5 @@
 import { playAiVoiceAudio } from '@/lib/ai-voice-player';
+import { hasOfflineSpeech, playOfflineSpeech } from '@/lib/offline-voice-player';
 import { splitAiVoiceText } from '@/lib/speech-text';
 import { requestAiVoiceAudio, type AiVoiceAudio } from '@/services/bolo-api';
 
@@ -60,6 +61,7 @@ function waitForPreload(pending: Promise<AiVoiceAudio>, signal: AbortSignal) {
 }
 
 export async function preloadSpeech(text: string) {
+  if (hasOfflineSpeech(text)) return;
   for (const rawChunk of splitAiVoiceText(text)) {
     const chunk = rawChunk.trim();
     if (!chunk || aiVoiceCache.has(chunk)) continue;
@@ -72,7 +74,7 @@ export async function preloadSpeech(text: string) {
   }
 }
 
-export async function speakText(text: string, signal?: AbortSignal) {
+export async function speakText(text: string, signal?: AbortSignal, playbackRate = 1) {
   const chunks = splitAiVoiceText(text);
   stopSpeaking();
   if (!chunks.length || signal?.aborted) return;
@@ -83,6 +85,10 @@ export async function speakText(text: string, signal?: AbortSignal) {
   signal?.addEventListener('abort', abort, { once: true });
 
   try {
+    if (hasOfflineSpeech(text)) {
+      await playOfflineSpeech(text, controller.signal, playbackRate);
+      return;
+    }
     for (const rawChunk of chunks) {
       if (controller.signal.aborted) return;
       const chunk = rawChunk.trim();
@@ -103,7 +109,8 @@ export async function speakText(text: string, signal?: AbortSignal) {
         }
       }
       if (controller.signal.aborted) return;
-      await playAiVoiceAudio(audio, controller.signal);
+      if (playbackRate === 1) await playAiVoiceAudio(audio, controller.signal);
+      else await playAiVoiceAudio(audio, controller.signal, playbackRate);
     }
   } catch (error) {
     if (!controller.signal.aborted) throw error;
@@ -112,6 +119,8 @@ export async function speakText(text: string, signal?: AbortSignal) {
     if (activeSpeechController === controller) activeSpeechController = null;
   }
 }
+
+export { hasOfflineSpeech } from '@/lib/offline-voice-player';
 
 export function stopSpeaking() {
   activeSpeechController?.abort();

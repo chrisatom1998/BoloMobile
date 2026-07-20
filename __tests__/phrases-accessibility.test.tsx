@@ -3,12 +3,13 @@ import { StyleSheet } from 'react-native';
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  Search: () => null,
   Trash2: () => null,
   Volume2: () => null,
 }));
 
 jest.mock('@/components/ai-consent-gate', () => ({ AiConsentGate: () => null }));
-jest.mock('@/lib/speech', () => ({ speakText: jest.fn(), stopSpeaking: jest.fn() }));
+jest.mock('@/lib/speech', () => ({ hasOfflineSpeech: jest.fn(() => false), speakText: jest.fn(), stopSpeaking: jest.fn() }));
 jest.mock('@/state/app-state', () => ({
   useAppState: () => ({
     aiConsent: false,
