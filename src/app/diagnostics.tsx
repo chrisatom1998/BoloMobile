@@ -24,7 +24,7 @@ export default function DiagnosticsScreen() {
         <View key={day} style={styles.card}>
           <Text style={styles.day}>{day}</Text>
           {Object.entries(events).map(([event, counter]) => (
-            <View key={event} style={styles.row}><Text style={styles.event}>{event.replaceAll('_', ' ')}</Text><Text style={styles.count}>{counter?.count ?? 0}{counter?.totalDurationMs ? ` · ${Math.round(counter.totalDurationMs / counter.count)} ms avg` : ''}</Text></View>
+            <View key={event} style={styles.row}><Text style={styles.event}>{event.replaceAll('_', ' ')}</Text><Text style={styles.count}>{counter?.count ?? 0}{counter?.totalDurationMs && counter.count > 0 ? ` · ${Math.round(counter.totalDurationMs / counter.count)} ms avg` : ''}</Text></View>
           ))}
         </View>
       )) : <Text style={styles.empty}>No diagnostics recorded yet.</Text>}

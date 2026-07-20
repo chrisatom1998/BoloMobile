@@ -1,5 +1,5 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
-import { BarChart3, BookOpen, ChevronRight, Flame, Mic, Settings, Sparkles, Target } from 'lucide-react-native';
+import { BarChart3, BookOpen, ChevronRight, Mic, Settings } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,103 +17,89 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const state = useAppState();
+  const { dailySteps, duePhrases, goal, learnerProfile, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const [filter, setFilter] = useState<Filter>('All');
-  const profile = useMemo(() => state.learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [state.learnerProfile]);
-  const sceneProgress = useMemo(() => state.sceneProgress ?? {}, [state.sceneProgress]);
-  const duePhrases = state.duePhrases ?? [];
+  const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
+  const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const recommendations = useMemo(() => recommendedScenes(profile, sceneProgress), [profile, sceneProgress]);
   const visibleScenes = useMemo(() => filter === 'All' ? scenes : scenes.filter((scene) => scene.category === filter), [filter]);
   const openScene = useCallback((scene: Scene) => router.push({ pathname: '/scene/[id]', params: { id: scene.id } }), [router]);
-  const goalPercent = Math.min(100, Math.round(state.practice.seconds / (state.goal * 60) * 100));
+  const goalPercent = Math.min(100, Math.round(practice.seconds / (goal * 60) * 100));
   const resumed = recommendations.find((scene) => (sceneProgress[scene.id]?.lastBeatIndex ?? 0) > 0);
   const recommended = resumed ?? recommendations[0] ?? scenes[0];
 
-  if (state.learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
-
-  const primary = duePhrases.length > 0
+  const primary = useMemo(() => duePhrases.length > 0
     ? { eyebrow: 'Ready to review', title: `Review ${duePhrases.length} phrase${duePhrases.length === 1 ? '' : 's'}`, body: 'A quick recall round keeps useful Hindi ready when you need it.', action: 'Start review', onPress: () => router.push('/review' as Href) }
-    : state.dailySteps === 1
-      ? state.practice.chaiDone
+    : dailySteps === 1
+      ? practice.chaiDone
         ? { eyebrow: 'Finish today’s challenge', title: 'Take one turn with Mira', body: 'One calm spoken or typed response completes today’s challenge.', action: 'Practice with Mira', onPress: () => router.push('/live') }
         : { eyebrow: 'Finish today’s challenge', title: 'Handle the chai stop', body: 'Complete the guided chai scene to finish your second step.', action: 'Open scene', onPress: () => openScene(scenes[0]) }
       : goalPercent >= 100
         ? { eyebrow: 'Daily goal complete', title: 'Use your Hindi live', body: 'Your lesson goal is done. Try one free-form conversation with Mira.', action: 'Talk with Mira', onPress: () => router.push('/live') }
-        : { eyebrow: resumed ? 'Continue your scene' : 'Your next step', title: recommended.title, body: recommended.subtitle, action: resumed ? 'Continue' : 'Start 3-minute scene', onPress: () => openScene(recommended) };
+        : { eyebrow: resumed ? 'Continue your scene' : 'Your next step', title: recommended.title, body: recommended.subtitle, action: resumed ? 'Continue' : 'Start 3-minute scene', onPress: () => openScene(recommended) },
+  [dailySteps, duePhrases.length, goalPercent, openScene, practice.chaiDone, recommended, resumed, router]);
 
-  const Header = (
+  const header = useMemo(() => (
     <View style={styles.headerContent}>
       <View style={styles.topbar}>
         <View style={styles.brand}>
           <View style={styles.brandMark}><Text style={styles.brandMarkText}>ब</Text></View>
-          <View style={styles.brandCopy}><Text style={styles.brandName}>Bolo</Text><Text style={styles.brandTagline}>Hindi, in the moment</Text></View>
+          <View style={styles.brandCopy}><Text style={styles.brandName}>Bolo</Text><Text style={styles.brandTagline}>Practical Hindi, one moment at a time</Text></View>
         </View>
-        <View style={styles.topActions}>
-          <Pressable accessibilityLabel="Progress" accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.roundButton}><BarChart3 color={colors.ink} size={18} /></Pressable>
-          <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.roundButton}><Settings color={colors.ink} size={18} /></Pressable>
-          <Pressable accessibilityLabel="Saved phrases" accessibilityRole="button" onPress={() => router.push('/phrases')} style={styles.phraseButton}>
-            <BookOpen color={colors.ink} size={18} /><Text style={styles.phraseButtonText}>{state.phrases.length}</Text>
-          </Pressable>
-        </View>
+        <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.roundButton}><Settings color={colors.ink} size={20} /></Pressable>
       </View>
 
       <View style={styles.nextCard}>
-        <View style={styles.nextTop}><Text style={styles.nextEyebrow}>{primary.eyebrow}</Text><Target color={colors.goldSoft} size={22} /></View>
+        <Text style={styles.nextEyebrow}>{primary.eyebrow}</Text>
         <Text style={styles.nextTitle}>{primary.title}</Text>
         <Text style={styles.nextBody}>{primary.body}</Text>
+        <View style={styles.todayRow}>
+          <Text style={styles.todayLabel}>Today · {goalPercent}% of {goal} min</Text>
+          <Text style={styles.streakLabel}>{streak} day streak</Text>
+        </View>
+        <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${goalPercent}%` }]} /></View>
         <Pressable accessibilityRole="button" onPress={primary.onPress} style={styles.nextButton}>
           <Text style={styles.nextButtonText}>{primary.action}</Text><ChevronRight color={colors.ink} size={19} />
         </Pressable>
       </View>
 
-      <View style={styles.statsRow}>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.stat}><Text style={styles.statValue}>{state.streak}</Text><Text style={styles.statLabel}>day streak</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.stat}><Text style={styles.statValue}>{Math.floor(state.practice.seconds / 60)}</Text><Text style={styles.statLabel}>min today</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.stat}><Text style={styles.statValue}>{Object.values(sceneProgress).filter((item) => item.completions > 0).length}</Text><Text style={styles.statLabel}>scenes learned</Text></Pressable>
+      <View style={styles.quickActions}>
+        <Pressable accessibilityLabel="Progress" accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.quickAction}>
+          <BarChart3 color={colors.forest} size={21} />
+          <Text style={styles.quickActionTitle}>Progress</Text>
+          <Text style={styles.quickActionMeta}>{Math.floor(practice.seconds / 60)} min today</Text>
+        </Pressable>
+        <Pressable accessibilityLabel="Saved phrases" accessibilityRole="button" onPress={() => router.push('/phrases')} style={styles.quickAction}>
+          <BookOpen color={colors.forest} size={21} />
+          <Text style={styles.quickActionTitle}>Phrases</Text>
+          <Text style={styles.quickActionMeta}>{phrases.length} saved</Text>
+        </Pressable>
+        <Pressable accessibilityLabel="Practice live with Mira" accessibilityRole="button" onPress={() => router.push('/live')} style={[styles.quickAction, styles.quickActionPrimary]}>
+          <Mic color={colors.white} size={21} />
+          <Text style={[styles.quickActionTitle, styles.quickActionTitlePrimary]}>Mira</Text>
+          <Text style={[styles.quickActionMeta, styles.quickActionMetaPrimary]}>Talk live</Text>
+        </Pressable>
       </View>
 
-      <View style={styles.challenge}>
-        <View style={styles.challengeTop}>
-          <View style={styles.challengeTitle}><Target color={colors.brandDark} size={16} /><Text style={styles.challengeTitleText}>Today · {goalPercent}% of {state.goal} min</Text></View>
-          <View style={styles.goalChoices}>
-            {([5, 10, 15] as const).map((minutes) => (
-              <Pressable key={minutes} accessibilityLabel={`${minutes} minute daily goal`} accessibilityRole="button" accessibilityState={{ selected: state.goal === minutes }} onPress={() => state.setGoal(minutes)} style={[styles.goalChoice, state.goal === minutes && styles.goalChoiceActive]}>
-                <Text style={[styles.goalChoiceText, state.goal === minutes && styles.goalChoiceTextActive]}>{minutes}m</Text>
-              </Pressable>
-            ))}
+      <View style={styles.goalRow}>
+        <View style={styles.goalCopy}>
+          <Text style={styles.goalTitle}>Daily goal</Text>
+          <View style={styles.challengeChecks}>
+            <Text style={styles.challengeCheck}>{practice.chaiDone ? '✓' : '○'} Chai scene</Text>
+            <Text style={styles.challengeCheck}>{practice.liveDone ? '✓' : '○'} Mira turn</Text>
           </View>
         </View>
-        <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${goalPercent}%` }]} /></View>
-        <View style={styles.challengeChecks}>
-          <Text style={styles.challengeCheck}>{state.practice.chaiDone ? '✓' : '○'} Chai scene</Text>
-          <Text style={styles.challengeCheck}>{state.practice.liveDone ? '✓' : '○'} Mira turn</Text>
+        <View style={styles.goalChoices}>
+          {([5, 10, 15] as const).map((minutes) => (
+            <Pressable key={minutes} accessibilityLabel={`${minutes} minute daily goal`} accessibilityRole="button" accessibilityState={{ selected: goal === minutes }} onPress={() => setGoal(minutes)} style={[styles.goalChoice, goal === minutes && styles.goalChoiceActive]}>
+              <Text style={[styles.goalChoiceText, goal === minutes && styles.goalChoiceTextActive]}>{minutes}m</Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
       <View style={styles.sectionHeading}>
-        <View><Text style={sharedStyles.eyebrow}>Recommended for you</Text><Text style={styles.sectionTitle}>Your practice path</Text></View>
-        <Flame color={colors.gold} fill={colors.gold} size={23} />
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recommendations}>
-        {recommendations.map((scene) => {
-          const progress = sceneProgress[scene.id];
-          return (
-            <Pressable key={scene.id} accessibilityRole="button" onPress={() => openScene(scene)} style={styles.recommendation}>
-              <Text style={styles.recommendationEmoji}>{scene.emoji}</Text>
-              <Text style={styles.recommendationTitle}>{scene.title}</Text>
-              <Text style={styles.recommendationMeta}>{progress?.lastBeatIndex ? `Continue at turn ${progress.lastBeatIndex + 1}` : `${scene.level} · ${scene.category}`}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      <Pressable accessibilityRole="button" onPress={() => router.push('/live')} style={styles.liveButton}>
-        <View style={styles.liveIcon}><Mic color={colors.white} size={21} /></View>
-        <View style={styles.liveCopy}><View style={styles.liveTitleRow}><Text style={styles.liveTitle}>Practice live with Mira</Text><Sparkles color={colors.gold} size={15} /></View><Text style={styles.liveSubtitle}>Free-form voice and coaching</Text></View>
-        <ChevronRight color={colors.white} size={20} />
-      </Pressable>
-
-      <View style={styles.sectionHeading}>
-        <View><Text style={sharedStyles.eyebrow}>All guided scenes</Text><Text style={styles.sectionTitle}>Where are you headed?</Text></View>
+        <View><Text style={sharedStyles.eyebrow}>Guided practice</Text><Text style={styles.sectionTitle}>Choose a moment</Text></View>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
         {sceneCategories.map((category) => {
@@ -127,7 +113,9 @@ export default function HomeScreen() {
         })}
       </ScrollView>
     </View>
-  );
+  ), [filter, goal, goalPercent, phrases.length, practice.chaiDone, practice.liveDone, practice.seconds, primary, router, setGoal, streak]);
+
+  if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
   return (
     <FlatList
@@ -136,7 +124,7 @@ export default function HomeScreen() {
       data={visibleScenes}
       keyExtractor={(scene) => scene.id}
       renderItem={({ item }) => <SceneCard progress={sceneProgress[item.id]} scene={item} onPress={openScene} />}
-      ListHeaderComponent={Header}
+      ListHeaderComponent={header}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       style={sharedStyles.screen}
     />
@@ -154,49 +142,39 @@ const styles = StyleSheet.create({
   brandMarkText: { color: colors.white, fontSize: 25, fontWeight: '900' },
   brandName: { color: colors.ink, fontSize: 20, fontWeight: '900' },
   brandTagline: { color: colors.muted, fontSize: 12 },
-  topActions: { flexShrink: 0, flexDirection: 'row', gap: spacing.xs },
-  roundButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  phraseButton: { minHeight: 44, minWidth: 54, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  phraseButtonText: { color: colors.ink, fontWeight: '800' },
-  nextCard: { backgroundColor: colors.brand, borderRadius: 28, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md, overflow: 'hidden' },
-  nextTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  roundButton: { width: 48, height: 48, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  nextCard: { backgroundColor: colors.brand, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md, overflow: 'hidden' },
   nextEyebrow: { color: '#FFF0E8', fontSize: 12, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
-  nextTitle: { color: colors.white, fontSize: 30, lineHeight: 36, fontWeight: '900' },
+  nextTitle: { color: colors.white, fontSize: 28, lineHeight: 34, fontWeight: '900' },
   nextBody: { color: '#FFF2EA', fontSize: 16, lineHeight: 23 },
+  todayRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
+  todayLabel: { color: colors.white, fontSize: 13, fontWeight: '800' },
+  streakLabel: { color: '#FFF0E8', fontSize: 13, fontWeight: '700' },
+  progressTrack: { height: 6, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.25)' },
+  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.white },
   nextButton: { minHeight: 50, alignSelf: 'stretch', backgroundColor: colors.white, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   nextButtonText: { color: colors.ink, fontSize: 16, fontWeight: '900' },
-  statsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  stat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: colors.paperRaised, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, padding: spacing.md, alignItems: 'center', gap: 2 },
-  statValue: { color: colors.ink, fontSize: 24, fontWeight: '900' },
-  statLabel: { color: colors.muted, fontSize: 12, lineHeight: 16, fontWeight: '700', textAlign: 'center' },
-  challenge: { ...sharedStyles.card, gap: spacing.md },
-  challengeTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  challengeTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  challengeTitleText: { color: colors.ink, fontSize: 14, fontWeight: '900' },
+  quickActions: { flexDirection: 'row', gap: spacing.sm },
+  quickAction: { minWidth: 0, minHeight: 92, flex: 1, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, backgroundColor: colors.paperRaised, padding: spacing.md, justifyContent: 'center', gap: 3 },
+  quickActionPrimary: { backgroundColor: colors.ink, borderColor: colors.ink },
+  quickActionTitle: { color: colors.ink, fontSize: 14, fontWeight: '800', marginTop: spacing.xs },
+  quickActionTitlePrimary: { color: colors.white },
+  quickActionMeta: { color: colors.muted, fontSize: 11, lineHeight: 15 },
+  quickActionMetaPrimary: { color: '#BFC9C6' },
+  goalRow: { minHeight: 76, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.sm },
+  goalCopy: { minWidth: 150, flex: 1, gap: spacing.xs },
+  goalTitle: { color: colors.ink, fontSize: 15, fontWeight: '800' },
   goalChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  goalChoice: { minWidth: 44, minHeight: 44, borderRadius: radius.pill, backgroundColor: colors.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  goalChoice: { minWidth: 48, minHeight: 48, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
   goalChoiceActive: { backgroundColor: colors.ink },
   goalChoiceText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
   goalChoiceTextActive: { color: colors.white },
-  progressTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: colors.line },
-  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.forest },
   challengeChecks: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   challengeCheck: { color: colors.muted, fontSize: 13, fontWeight: '700' },
   sectionHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.sm },
   sectionTitle: { color: colors.ink, fontSize: 24, lineHeight: 30, fontWeight: '900', marginTop: spacing.xs },
-  recommendations: { gap: spacing.sm },
-  recommendation: { width: 180, minHeight: 120, backgroundColor: colors.paperRaised, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line, padding: spacing.md, gap: spacing.xs },
-  recommendationEmoji: { fontSize: 28 },
-  recommendationTitle: { color: colors.ink, fontSize: 16, lineHeight: 21, fontWeight: '900' },
-  recommendationMeta: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  liveButton: { minHeight: 76, backgroundColor: colors.ink, borderRadius: radius.lg, borderCurve: 'continuous', flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md },
-  liveIcon: { width: 46, height: 46, borderRadius: 16, backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' },
-  liveCopy: { minWidth: 0, flex: 1, gap: 3 },
-  liveTitleRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
-  liveTitle: { color: colors.white, fontSize: 16, lineHeight: 22, fontWeight: '800' },
-  liveSubtitle: { color: '#BFC9C6', fontSize: 12, lineHeight: 17 },
   filters: { gap: spacing.sm, paddingBottom: spacing.xs },
-  filter: { minHeight: 44, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  filter: { minHeight: 48, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   filterActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   filterText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
   filterTextActive: { color: colors.white },

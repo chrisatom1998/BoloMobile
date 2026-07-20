@@ -52,7 +52,7 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => mockUseAppState(),
 }));
 
-import SettingsScreen from '../src/app/settings';
+import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
 import { deleteMobileData } from '../src/services/bolo-api';
 
@@ -108,6 +108,11 @@ describe('SettingsScreen lifecycle and UI', () => {
       setAiConsent,
     });
     deleteMobileDataMock.mockResolvedValue({ deleted: true });
+  });
+
+  it('formats midnight and noon using twelve-hour clock labels', () => {
+    expect(formatReminderTime(0)).toBe('12:00 AM');
+    expect(formatReminderTime(12)).toBe('12:00 PM');
   });
 
   it('deletes remote reports before local data, then reports success', async () => {

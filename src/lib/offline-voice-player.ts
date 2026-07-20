@@ -3,6 +3,7 @@ import { createAudioPlayer, setAudioModeAsync, type AudioStatus } from 'expo-aud
 import { offlineHindiAudio } from '@/data/offline-hindi-audio';
 
 const PLAYBACK_TIMEOUT_MS = 60_000;
+const MAX_PLAYBACK_TIMEOUT_MS = 90_000;
 const MIN_PLAYBACK_RATE = 0.1;
 
 function normalizedPlaybackRate(playbackRate: number) {
@@ -48,7 +49,10 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
       };
       subscription = player.addListener('playbackStatusUpdate', update);
       signal.addEventListener('abort', cancel, { once: true });
-      timeout = setTimeout(() => finish(new Error('Offline lesson audio timed out. Please try again.')), PLAYBACK_TIMEOUT_MS / rate);
+      timeout = setTimeout(
+        () => finish(new Error('Offline lesson audio timed out. Please try again.')),
+        Math.min(MAX_PLAYBACK_TIMEOUT_MS, PLAYBACK_TIMEOUT_MS / rate),
+      );
       if (signal.aborted) cancel();
       else player.play();
     });

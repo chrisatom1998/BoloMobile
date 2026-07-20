@@ -17,7 +17,7 @@ import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, MiraResponseLanguage, SavedPhrase } from '@/state/app-state-types';
-import { colors, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -55,6 +55,8 @@ function CaptionReveal({ children, style }: { children: ReactNode; style: StyleP
 
 export default function LiveScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
@@ -77,12 +79,12 @@ export default function LiveScreen() {
   const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
   const pendingReportIdsRef = useRef<Set<string>>(new Set());
   const reportedIdsRef = useRef<Set<string>>(new Set());
+  const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
-  const persistedMessages = useMemo(() => [welcome, ...chatHistory], [chatHistory]);
   const visibleMessages = useMemo(
-    () => pendingUserMessage ? [...persistedMessages, pendingUserMessage] : persistedMessages,
-    [pendingUserMessage, persistedMessages],
+    () => pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
+    [chatHistory, pendingUserMessage],
   );
   const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
   const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
@@ -126,10 +128,13 @@ export default function LiveScreen() {
 
   useEffect(() => {
     mountedRef.current = true;
+    const reportControllers = reportControllersRef.current;
     return () => {
       mountedRef.current = false;
       requestRef.current?.abort();
       requestRef.current = null;
+      reportControllers.forEach((controller) => controller.abort());
+      reportControllers.clear();
       void stopSpeaking();
     };
   }, []);
@@ -197,7 +202,7 @@ export default function LiveScreen() {
     const controller = new AbortController();
     requestRef.current = controller;
     try {
-      const result = await sendMobileChat({ text, messages: persistedMessages, clientId, responseLanguage }, controller.signal);
+      const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) {
         if (mountedRef.current) clearPendingUserMessage(userMessage.id);
         return;
@@ -225,7 +230,7 @@ export default function LiveScreen() {
         if (mountedRef.current) setBusy(false);
       }
     }
-  }, [aiConsent, busy, clearPendingUserMessage, clientId, input, persistedMessages, realtimeLocked, recordTurn, responseLanguage]);
+  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, input, realtimeLocked, recordTurn, responseLanguage]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     realtimeStatusRef.current = status;
@@ -242,22 +247,25 @@ export default function LiveScreen() {
     recordTurn(turn);
   }, [recordTurn]);
 
-  function report(message: ChatMessage) {
+  const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
       if (pendingReportIdsRef.current.has(message.id) || reportedIdsRef.current.has(message.id)) return;
+      const controller = new AbortController();
+      reportControllersRef.current.set(message.id, controller);
       const withPending = new Set(pendingReportIdsRef.current).add(message.id);
       pendingReportIdsRef.current = withPending;
       if (mountedRef.current) setPendingReports(withPending);
       try {
-        await reportGeneratedMessage({ clientId, message: message.text, reason });
-        if (!mountedRef.current) return;
+        await reportGeneratedMessage({ clientId, message: message.text, reason }, controller.signal);
+        if (!mountedRef.current || controller.signal.aborted) return;
         const withReported = new Set(reportedIdsRef.current).add(message.id);
         reportedIdsRef.current = withReported;
         setReported(withReported);
         showAppAlert('Report received', 'Thank you. This reply was sent for review.');
       } catch (cause) {
-        if (mountedRef.current) showAppAlert('Could not send report', cause instanceof Error ? cause.message : 'Please try again.');
+        if (mountedRef.current && !controller.signal.aborted) showAppAlert('Could not send report', cause instanceof Error ? cause.message : 'Please try again.');
       } finally {
+        if (reportControllersRef.current.get(message.id) === controller) reportControllersRef.current.delete(message.id);
         const withoutPending = new Set(pendingReportIdsRef.current);
         withoutPending.delete(message.id);
         pendingReportIdsRef.current = withoutPending;
@@ -269,7 +277,7 @@ export default function LiveScreen() {
       { text: 'Incorrect or misleading', onPress: () => submit('incorrect_or_misleading') },
       { text: 'Cancel', style: 'cancel' },
     ]);
-  }
+  }, [clientId]);
 
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
@@ -284,7 +292,7 @@ export default function LiveScreen() {
       <FlatList
         ref={listRef}
         contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.listContent, { paddingBottom: 236 }]}
+        contentContainerStyle={styles.listContent}
         data={visibleMessages}
         keyExtractor={(message) => message.id}
         keyboardDismissMode="interactive"
@@ -308,7 +316,7 @@ export default function LiveScreen() {
               </View>
 
               <>
-                  <View accessibilityLabel="Mira response language" style={[styles.languageSelector, { width: heroContentWidth }]}>
+                  <View accessibilityLabel="Mira response language" accessibilityRole="radiogroup" style={[styles.languageSelector, { width: heroContentWidth }]}>
                     <Text style={styles.languageSelectorLabel}>Mira speaks</Text>
                     <View style={styles.languageOptions}>
                       {([['en', 'English', 'English'], ['hi', 'हिन्दी', 'Hindi']] as const).map(([value, label, accessibleName]) => {
@@ -318,8 +326,8 @@ export default function LiveScreen() {
                             key={value}
                             accessibilityHint={languageControlLocked ? 'End the current request or live voice session to change Mira voice language.' : undefined}
                             accessibilityLabel={`Mira voice language: ${accessibleName}`}
-                            accessibilityRole="button"
-                            accessibilityState={{ disabled: languageControlLocked, selected }}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: selected, disabled: languageControlLocked }}
                             disabled={languageControlLocked}
                             onPress={() => changeResponseLanguage(value)}
                             style={[styles.languageButton, selected && styles.languageButtonSelected, languageControlLocked && styles.disabled]}
@@ -434,75 +442,71 @@ export default function LiveScreen() {
   );
 }
 
-const stylesTokens = {
-  hero: '#0D1513',
-  heroRaised: '#18201E',
-  heroMuted: '#909B97',
-} as const;
-
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: stylesTokens.hero },
-  list: { flex: 1, backgroundColor: colors.background },
-  listContent: { backgroundColor: colors.background },
+export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
+  screen: { flex: 1, backgroundColor: c.heroBase },
+  list: { flex: 1, backgroundColor: c.background },
+  listContent: { backgroundColor: c.background, paddingBottom: spacing.lg },
   voiceHero: {
     alignItems: 'center',
     gap: spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xxl + spacing.xl,
-    backgroundColor: stylesTokens.hero,
+    backgroundColor: c.heroBase,
     overflow: 'hidden',
   },
   voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.xxl + spacing.lg },
   topbar: { position: 'relative', minHeight: 58, alignSelf: 'center', alignItems: 'stretch', justifyContent: 'center' },
-  headerButton: { position: 'absolute', left: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: stylesTokens.heroRaised, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  headerButton: { position: 'absolute', left: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   headerCopy: { minWidth: 0, alignSelf: 'stretch', justifyContent: 'center', gap: 2, overflow: 'hidden', marginHorizontal: 64 },
-  headerTitle: { color: colors.white, fontSize: 20, fontWeight: '900' },
-  headerSubtitle: { minWidth: 0, flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 12, lineHeight: 16 },
-  chatButton: { position: 'absolute', right: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  headerTitle: { color: c.white, fontSize: 20, fontWeight: '900' },
+  headerSubtitle: { minWidth: 0, flexShrink: 1, color: c.heroMuted, fontSize: 12, lineHeight: 16 },
+  chatButton: { position: 'absolute', right: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: c.paper, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { minHeight: 50, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  languageSelectorLabel: { color: stylesTokens.heroMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
-  languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, padding: 4 },
+  languageSelectorLabel: { color: c.heroMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
+  languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.heroRaised, padding: 4 },
   languageButton: { minWidth: 86, minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  languageButtonSelected: { backgroundColor: colors.paper },
-  languageButtonText: { color: stylesTokens.heroMuted, fontSize: 14, fontWeight: '800' },
-  languageButtonTextSelected: { color: colors.ink },
+  languageButtonSelected: { backgroundColor: c.paper },
+  languageButtonText: { color: c.heroMuted, fontSize: 14, fontWeight: '800' },
+  languageButtonTextSelected: { color: c.ink },
   heroCopy: { minWidth: 0, alignSelf: 'center', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
-  heroTitle: { minWidth: 0, flexShrink: 1, color: colors.white, fontSize: 24, lineHeight: 30, fontWeight: '900', textAlign: 'center' },
-  heroBody: { minWidth: 0, maxWidth: 350, flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  heroTitle: { minWidth: 0, flexShrink: 1, color: c.white, fontSize: 24, lineHeight: 30, fontWeight: '900', textAlign: 'center' },
+  heroBody: { minWidth: 0, maxWidth: 350, flexShrink: 1, color: c.heroMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   captionBlock: { alignSelf: 'center', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  captionLabel: { color: stylesTokens.heroMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
-  captionText: { color: colors.white, fontSize: 20, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
-  heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  askSection: { minHeight: 176, alignSelf: 'stretch', gap: spacing.md, marginTop: -(spacing.xxl + spacing.lg), position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  captionLabel: { color: c.heroMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
+  captionText: { color: c.white, fontSize: 20, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
+  heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: c.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  askSection: { minHeight: 176, alignSelf: 'stretch', gap: spacing.md, marginTop: -(spacing.xxl + spacing.lg), position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.background, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
-  sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: colors.lineStrong },
+  sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.lineStrong },
   askHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   askHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.sm },
   askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { color: colors.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  askTitle: { color: colors.ink, fontSize: 31, lineHeight: 37, fontWeight: '500' },
-  askBody: { maxWidth: 520, color: colors.muted, fontSize: 14, lineHeight: 21 },
-  clearChatButton: { width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  messageRow: { alignItems: 'flex-start', backgroundColor: colors.background, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  askEyebrow: { color: c.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  askTitle: { color: c.ink, fontSize: 31, lineHeight: 37, fontWeight: '500' },
+  askBody: { maxWidth: 520, color: c.muted, fontSize: 14, lineHeight: 21 },
+  clearChatButton: { width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  messageRow: { alignItems: 'flex-start', backgroundColor: c.background, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   messageRowYou: { alignItems: 'flex-end' },
-  message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.xs, shadowColor: colors.black, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.04, shadowRadius: 10, elevation: 1 },
-  miraMessage: { backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth },
-  userMessage: { backgroundColor: colors.night },
-  messageLabel: { color: colors.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  messageText: { color: colors.ink, fontSize: 16, lineHeight: 23 },
-  userText: { color: colors.white },
+  message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.xs, shadowColor: c.black, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.04 * c.shadowOpacityScale, shadowRadius: 10, elevation: 1 * c.shadowOpacityScale },
+  miraMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
+  userMessage: { backgroundColor: c.night },
+  messageLabel: { color: c.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  messageText: { color: c.ink, fontSize: 16, lineHeight: 23 },
+  userText: { color: c.white },
   messageActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
-  smallActionText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  composer: { backgroundColor: colors.paperRaised, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, padding: spacing.md, gap: spacing.sm, shadowColor: colors.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 8 },
+  smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
+  composer: { backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: StyleSheet.hairlineWidth, padding: spacing.md, gap: spacing.sm, shadowColor: c.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.08 * c.shadowOpacityScale, shadowRadius: 18, elevation: 8 * c.shadowOpacityScale },
   examples: { gap: spacing.sm, paddingRight: spacing.md },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: colors.backgroundWarm, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
-  exampleText: { color: colors.ink, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
+  exampleText: { color: c.ink, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.backgroundWarm, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, color: colors.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 16 },
-  sendButton: { width: 52, height: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 16 },
+  sendButton: { width: 52, height: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
-  requestStatus: { color: colors.forest, fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
-  consentHint: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: colors.muted, fontSize: 13, lineHeight: 18, textAlign: 'center', padding: spacing.md },
-});
+  requestStatus: { color: c.forest, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  consentHint: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'center', padding: spacing.md },
+} as const);
+
+const useStyles = makeStyles(createLiveStyles);

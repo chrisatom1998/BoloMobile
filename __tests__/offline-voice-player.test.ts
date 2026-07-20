@@ -38,4 +38,17 @@ describe('offline voice playback speed', () => {
 
     expect(mockPlayer.setPlaybackRate).toHaveBeenCalledWith(0.1);
   });
+
+  it('caps the slow-playback watchdog at ninety seconds', async () => {
+    mockPlayer.play.mockImplementation(() => undefined);
+    const timeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+    const controller = new AbortController();
+    const playback = playOfflineSpeech('saved phrase', controller.signal, 0.1);
+    for (let index = 0; index < 8 && mockPlayer.play.mock.calls.length === 0; index += 1) await Promise.resolve();
+
+    expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 90_000);
+    controller.abort();
+    await expect(playback).resolves.toBe(true);
+    timeoutSpy.mockRestore();
+  });
 });

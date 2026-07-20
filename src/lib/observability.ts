@@ -25,6 +25,7 @@ type EventCounter = { count: number; totalDurationMs: number };
 export type ObservabilitySnapshot = { days: Record<string, Partial<Record<ObservabilityEvent, EventCounter>>> };
 
 let writeTail: Promise<void> = Promise.resolve();
+const sessionEvents = new Set<ObservabilityEvent>();
 
 type LocalStorage = {
   getItem(key: string): Promise<string | null>;
@@ -95,6 +96,15 @@ export function observe(event: ObservabilityEvent, durationMs = 0) {
   }).catch(() => undefined);
 }
 
+export function observeOncePerSession(event: ObservabilityEvent) {
+  if (sessionEvents.has(event)) return;
+  sessionEvents.add(event);
+  observe(event);
+}
+
 export async function clearObservability() {
+  await writeTail;
   await storage().removeItem(OBSERVABILITY_KEY);
+  writeTail = Promise.resolve();
+  sessionEvents.clear();
 }

@@ -6,14 +6,21 @@ import {
 import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-peer.types';
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
+const DISCONNECTED_WATCHDOG_MS = 10_000;
 
 type NativeEventTarget = {
-  addEventListener: (
+  addEventListener(
     type: string,
     listener: (event: { data?: unknown }) => void,
     options?: { once?: boolean },
-  ) => void;
+  ): void;
 };
+
+// react-native-webrtc inherits these methods at runtime, but its public class
+// declarations currently omit them from the TypeScript surface.
+function withNativeEvents<T>(target: T) {
+  return target as T & NativeEventTarget;
+}
 
 export async function createRealtimePeerSession({
   ephemeralKey,
@@ -32,32 +39,55 @@ export async function createRealtimePeerSession({
   const peer = new RTCPeerConnection();
   peer.addTrack(microphone, stream);
   const dataChannel = peer.createDataChannel('oai-events');
+  const dataEvents = withNativeEvents(dataChannel);
+  const peerEvents = withNativeEvents(peer);
   let closed = false;
+  let disconnectedWatchdog: ReturnType<typeof setTimeout> | null = null;
 
   const close = () => {
     if (closed) return;
     closed = true;
+    if (disconnectedWatchdog) clearTimeout(disconnectedWatchdog);
+    disconnectedWatchdog = null;
     microphone.enabled = false;
     stream.getTracks().forEach((track) => track.stop());
     dataChannel.close();
     peer.close();
   };
 
-  const dataEvents = dataChannel as unknown as NativeEventTarget;
-  const peerEvents = peer as unknown as NativeEventTarget;
+  const closeFromRemote = () => {
+    if (closed) return;
+    close();
+    onClose();
+  };
+  const updateDisconnectedWatchdog = () => {
+    const disconnected = peer.connectionState === 'disconnected' || peer.iceConnectionState === 'disconnected';
+    const failed = peer.connectionState === 'failed'
+      || peer.connectionState === 'closed'
+      || peer.iceConnectionState === 'failed'
+      || peer.iceConnectionState === 'closed';
+    if (failed) {
+      closeFromRemote();
+      return;
+    }
+    if (!disconnected) {
+      if (disconnectedWatchdog) clearTimeout(disconnectedWatchdog);
+      disconnectedWatchdog = null;
+      return;
+    }
+    if (!disconnectedWatchdog) {
+      disconnectedWatchdog = setTimeout(closeFromRemote, DISCONNECTED_WATCHDOG_MS);
+    }
+  };
+
   dataEvents.addEventListener('message', (event) => onMessage(String(event.data)));
   dataEvents.addEventListener('close', () => {
     if (!closed) {
-      close();
-      onClose();
+      closeFromRemote();
     }
   });
-  peerEvents.addEventListener('connectionstatechange', () => {
-    if (peer.connectionState === 'failed' || peer.connectionState === 'closed') {
-      close();
-      onClose();
-    }
-  });
+  peerEvents.addEventListener('connectionstatechange', updateDisconnectedWatchdog);
+  peerEvents.addEventListener('iceconnectionstatechange', updateDisconnectedWatchdog);
 
   try {
     const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });

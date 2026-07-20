@@ -13,6 +13,7 @@ import {
   defaultLearnerProfile,
   defaultReminderSettings,
   emptyPractice,
+  MAX_DAILY_PRACTICE_SECONDS,
   sanitizeClientId,
   sanitizeAiConsent,
   sanitizeChatHistory,
@@ -92,6 +93,13 @@ function completedToday(practice: PersistedState['practice']) {
 function withRecordedDay(days: string[], practice: PersistedState['practice']) {
   if (!completedToday(practice)) return days;
   return [...new Set([...days, practice.date])].sort().slice(-400);
+}
+
+function cappedPracticeSeconds(currentSeconds: number, requestedSeconds: number) {
+  const current = Math.min(MAX_DAILY_PRACTICE_SECONDS, Math.max(0, Math.round(currentSeconds)));
+  const increment = Number.isFinite(requestedSeconds) ? Math.max(0, Math.round(requestedSeconds)) : 0;
+  const next = Math.min(MAX_DAILY_PRACTICE_SECONDS, current + increment);
+  return { added: next - current, total: next };
 }
 
 function updatePracticeHistory(
@@ -322,11 +330,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const markSceneComplete = useCallback((sceneId: string, seconds: number, result?: SceneCompletion) => {
     commit((current) => {
-      const elapsed = Math.max(1, Math.round(seconds));
+      const requestedSeconds = Number.isFinite(seconds) ? Math.max(1, Math.round(seconds)) : 1;
+      const elapsed = cappedPracticeSeconds(current.practice.seconds, requestedSeconds);
       const practice = {
         ...current.practice,
         chaiDone: current.practice.chaiDone || sceneId === 'chai',
-        seconds: current.practice.seconds + elapsed,
+        seconds: elapsed.total,
       };
       const previous = current.sceneProgress[sceneId] ?? {
         completions: 0, bestScore: 0, bestAccuracy: 0, totalCorrect: 0, totalAnswers: 0,
@@ -348,7 +357,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           weakPhrases: [...new Set([...(result?.weakPhrases ?? []), ...previous.weakPhrases])].slice(0, 50),
         },
       };
-      const practiceHistory = updatePracticeHistory(current.practiceHistory, { seconds: elapsed, correct, answers: total });
+      const practiceHistory = updatePracticeHistory(current.practiceHistory, { seconds: elapsed.added, correct, answers: total });
       return { ...current, practice, practiceHistory, sceneProgress, streakDays: withRecordedDay(current.streakDays, practice) };
     }, ['practice', 'practiceHistory', 'sceneProgress', 'streakDays']);
   }, [commit]);
@@ -385,20 +394,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const markLiveTurn = useCallback((seconds = 0) => {
     commit((current) => {
+      const elapsed = cappedPracticeSeconds(current.practice.seconds, seconds);
       const practice = {
         ...current.practice,
         liveDone: true,
-        seconds: current.practice.seconds + Math.max(0, Math.round(seconds)),
+        seconds: elapsed.total,
       };
-      return { ...current, practice, practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds }), streakDays: withRecordedDay(current.streakDays, practice) };
+      return { ...current, practice, practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds: elapsed.added }), streakDays: withRecordedDay(current.streakDays, practice) };
     }, ['practice', 'practiceHistory', 'streakDays']);
   }, [commit]);
 
   const addPracticeSeconds = useCallback((seconds: number) => {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
     commit((current) => {
-      const practice = { ...current.practice, seconds: current.practice.seconds + Math.round(seconds) };
-      return { ...current, practice, practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds }), streakDays: withRecordedDay(current.streakDays, practice) };
+      const elapsed = cappedPracticeSeconds(current.practice.seconds, seconds);
+      const practice = { ...current.practice, seconds: elapsed.total };
+      return { ...current, practice, practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds: elapsed.added }), streakDays: withRecordedDay(current.streakDays, practice) };
     }, ['practice', 'practiceHistory', 'streakDays']);
   }, [commit]);
 

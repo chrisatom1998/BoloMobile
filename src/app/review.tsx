@@ -5,17 +5,18 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { speakText, stopSpeaking } from '@/lib/speech';
+import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { colors, radius, sharedStyles, spacing } from '@/theme';
 
 export default function ReviewScreen() {
   const router = useRouter();
-  const { duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
+  const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
   const session = useMemo(() => (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5)), [duePhrases, phraseReviews, phrases]);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
+  const [audioError, setAudioError] = useState('');
   const phrase = session[index];
 
   useEffect(() => () => { void stopSpeaking(); }, []);
@@ -31,6 +32,16 @@ export default function ReviewScreen() {
     if (remembered) setCorrect((value) => value + 1);
     setRevealed(false);
     setIndex((value) => value + 1);
+  }
+
+  async function playPhrase(playbackRate = 1) {
+    if (!phrase || (!aiConsent && !hasOfflineSpeech(phrase.hi))) return;
+    setAudioError('');
+    try {
+      await speakText(phrase.hi, undefined, playbackRate);
+    } catch (error) {
+      setAudioError(error instanceof Error ? error.message : 'Bolo could not play the voice.');
+    }
   }
 
   if (session.length === 0) {
@@ -58,6 +69,7 @@ export default function ReviewScreen() {
   const showHindi = learnerProfile.scriptPreference !== 'latin';
   const showLatin = learnerProfile.scriptPreference !== 'devanagari';
   const mastery = phraseReviews[phrase.hi]?.mastery ?? 0;
+  const canListen = aiConsent || hasOfflineSpeech(phrase.hi);
 
   return (
     <View style={styles.screen}>
@@ -71,9 +83,10 @@ export default function ReviewScreen() {
             {showHindi ? <Text style={styles.hindi}>{phrase.hi}</Text> : null}
             {showLatin ? <Text style={styles.latin}>{phrase.latin}</Text> : null}
             <View style={styles.audioRow}>
-              <Pressable accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" onPress={() => void speakText(phrase.hi)} style={styles.audioButton}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
-              <Pressable accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" onPress={() => void speakText(phrase.hi, undefined, 0.72)} style={styles.audioButton}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase()} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase(0.72)} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
+            {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
         ) : (
           <Pressable accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
@@ -105,6 +118,8 @@ const styles = StyleSheet.create({
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
   audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: colors.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   audioText: { color: colors.forest, fontSize: 14, fontWeight: '800' },
+  error: { color: colors.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  disabled: { opacity: 0.4 },
   revealButton: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   revealText: { color: colors.white, fontSize: 16, fontWeight: '900' },
   grades: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },

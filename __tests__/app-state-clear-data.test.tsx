@@ -24,7 +24,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 
-import { createAiConsentRecord, dateKey, emptyPractice, storageKeys } from '../src/lib/storage';
+import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
 const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default as {
@@ -61,6 +61,9 @@ function StateHarness() {
         accessibilityLabel="Enable AI consent"
         onPress={() => void state.setAiConsent(true).then((saved) => setConsentResult(saved ? 'saved' : 'rejected'))}
       />
+      <Pressable accessibilityLabel="Add practice seconds" onPress={() => state.addPracticeSeconds(10)} />
+      <Pressable accessibilityLabel="Mark live turn" onPress={() => state.markLiveTurn(10)} />
+      <Pressable accessibilityLabel="Mark scene complete" onPress={() => state.markSceneComplete('chai', 10)} />
     </View>
   );
 }
@@ -167,5 +170,22 @@ describe('AppStateProvider clearAllData', () => {
     expect(Object.fromEntries(asyncStorage.__store)).toEqual(original);
     await view.unmount();
     warning.mockRestore();
+  });
+
+  it('caps every runtime practice update at the daily maximum', async () => {
+    asyncStorage.__store.set(storageKeys.practice, JSON.stringify({
+      ...emptyPractice(),
+      seconds: MAX_DAILY_PRACTICE_SECONDS - 5,
+    }));
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).practice.seconds).toBe(MAX_DAILY_PRACTICE_SECONDS - 5));
+
+    await fireEvent.press(view.getByLabelText('Add practice seconds'));
+    await fireEvent.press(view.getByLabelText('Mark live turn'));
+    await fireEvent.press(view.getByLabelText('Mark scene complete'));
+    await waitFor(() => expect(readSnapshot(view).practice.seconds).toBe(MAX_DAILY_PRACTICE_SECONDS));
+    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.practice) ?? 'null').seconds)
+      .toBe(MAX_DAILY_PRACTICE_SECONDS));
+    await view.unmount();
   });
 });

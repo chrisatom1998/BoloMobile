@@ -1,11 +1,11 @@
 import { additionalScenes } from './additional-scenes';
 
-export type Choice={hi:string;latin:string;en:string;correct:boolean;reply:string};
-export type Beat={npc:string;translation:string;prompt:string;choices:Choice[];tip:string};
+export type Choice = { hi: string; latin: string; en: string; correct: boolean; reply: string };
+export type Beat = { npc: string; translation: string; prompt: string; choices: Choice[]; tip: string };
 
-export const sceneCategories = ['All','Food','Travel','Everyday','Health','Social','Work'] as const;
-export type SceneCategory = Exclude<(typeof sceneCategories)[number],'All'>;
-export type Scene = {id:string;category:SceneCategory;words:[string,string,string];place:string;title:string;subtitle:string;level:string;emoji:string;color:string;beats:Beat[]};
+export const sceneCategories = ['All', 'Food', 'Travel', 'Everyday', 'Health', 'Social', 'Work'] as const;
+export type SceneCategory = Exclude<(typeof sceneCategories)[number], 'All'>;
+export type Scene = { id: string; category: SceneCategory; words: [string, string, string]; place: string; title: string; subtitle: string; level: string; emoji: string; color: string; beats: Beat[] };
 
 const coreScenes: Scene[] = [
 {id:'chai',category:'Food',words:['चाय','गरम','स्वागत'],place:'Delhi · 8:10 AM',title:'The chai stop',subtitle:'Order tea like a local',level:'Beginner',emoji:'☕',color:'#e66d3f',beats:[

@@ -4,6 +4,7 @@ import { File, Paths } from 'expo-file-system';
 import type { AiVoiceAudio } from '@/services/bolo-api';
 
 const PLAYBACK_TIMEOUT_MS = 90_000;
+const MAX_PLAYBACK_TIMEOUT_MS = 120_000;
 const MIN_PLAYBACK_RATE = 0.1;
 const PREPARED_AUDIO_CACHE_LIMIT = 4;
 const AI_VOICE_PLAYBACK_MODE = {
@@ -131,7 +132,10 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal,
 
       subscription = prepared.player.addListener('playbackStatusUpdate', update);
       signal.addEventListener('abort', cancel, { once: true });
-      timeout = setTimeout(() => finish(new Error('AI voice playback timed out. Please try again.')), PLAYBACK_TIMEOUT_MS / rate);
+      timeout = setTimeout(
+        () => finish(new Error('AI voice playback timed out. Please try again.')),
+        Math.min(MAX_PLAYBACK_TIMEOUT_MS, PLAYBACK_TIMEOUT_MS / rate),
+      );
       if (signal.aborted) cancel();
       else {
         prepared.hasStarted = true;

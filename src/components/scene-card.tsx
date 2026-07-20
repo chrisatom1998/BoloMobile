@@ -1,4 +1,4 @@
-import { ChevronRight, MapPin } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -25,28 +25,20 @@ export const SceneCard = memo(function SceneCard({ scene, onPress, progress }: P
       onPress={() => onPress(scene)}
       style={styles.card}
     >
-      <View style={[styles.accent, { backgroundColor: scene.color }]} />
-      <View style={styles.iconWrap}>
+      <View style={[styles.iconWrap, { backgroundColor: `${scene.color}20` }]}>
         <Text style={styles.emoji}>{scene.emoji}</Text>
       </View>
       <View style={styles.copy}>
-        <View style={styles.placeRow}>
-          <MapPin color={colors.muted} size={13} />
-          <Text style={styles.place}>{scene.place}</Text>
+        <View style={styles.titleRow}>
+          <Text numberOfLines={1} style={styles.title}>{scene.title}</Text>
+          <View style={[styles.chevron, { backgroundColor: `${scene.color}20` }]}><ChevronRight color={colors.ink} size={18} /></View>
         </View>
-        <Text style={styles.title}>{scene.title}</Text>
-        <Text style={styles.subtitle}>{scene.subtitle}</Text>
-        <View accessibilityLabel={`Practice words: ${scene.words.join(', ')}`} style={styles.wordRow}>
-          {scene.words.map((word) => (
-            <View key={word} style={[styles.wordChip, { borderColor: scene.color }]}>
-              <Text style={styles.wordText}>{word}</Text>
-            </View>
-          ))}
-        </View>
+        <Text numberOfLines={2} style={styles.subtitle}>{scene.subtitle}</Text>
         <View style={styles.meta}>
-          <View style={[styles.levelPill, progress?.completions ? styles.levelPillDone : null]}><Text style={styles.level}>{progress?.lastBeatIndex ? 'Continue' : progress?.completions ? 'Completed' : scene.level}</Text></View>
-          <View style={[styles.chevron, { backgroundColor: scene.color }]}><ChevronRight color={colors.white} size={18} /></View>
+          <Text style={styles.place}>{scene.place} · {scene.category}</Text>
+          <Text style={[styles.status, progress?.completions ? styles.statusDone : null]}>{progress?.lastBeatIndex ? 'Continue' : progress?.completions ? 'Completed' : scene.level}</Text>
         </View>
+        <Text accessibilityLabel={`Practice words: ${scene.words.join(', ')}`} numberOfLines={1} style={styles.words}>{scene.words.join('  ·  ')}</Text>
       </View>
     </Pressable>
   );
@@ -54,34 +46,27 @@ export const SceneCard = memo(function SceneCard({ scene, onPress, progress }: P
 
 const styles = StyleSheet.create({
   card: {
-    minHeight: 184,
-    overflow: 'hidden',
+    minHeight: 132,
     backgroundColor: colors.paperRaised,
     borderColor: colors.line,
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.lg,
+    borderRadius: radius.md,
     borderCurve: 'continuous',
     flexDirection: 'row',
-    shadowColor: colors.black,
-    shadowOffset: { width: 0, height: 7 },
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 2,
+    alignItems: 'center',
+    padding: spacing.md,
+    gap: spacing.md,
   },
-  accent: { width: 7 },
-  iconWrap: { width: 72, alignItems: 'center', paddingTop: spacing.xl },
-  emoji: { fontSize: 34 },
-  copy: { flex: 1, padding: spacing.lg, paddingLeft: 0, gap: spacing.xs },
-  placeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  place: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  title: { color: colors.ink, fontSize: 20, lineHeight: 24, fontWeight: '800' },
-  subtitle: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  wordRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingTop: spacing.xs },
-  wordChip: { minHeight: 30, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.pill, backgroundColor: colors.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  wordText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
-  meta: { marginTop: 'auto', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  levelPill: { minHeight: 30, borderRadius: radius.pill, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  levelPillDone: { backgroundColor: '#DDEFE9' },
-  level: { color: colors.brandDark, fontSize: 12, fontWeight: '900' },
-  chevron: { width: 34, height: 34, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  iconWrap: { width: 54, height: 54, flexShrink: 0, borderRadius: 18, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center' },
+  emoji: { fontSize: 28 },
+  copy: { minWidth: 0, flex: 1, gap: 4 },
+  titleRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  title: { minWidth: 0, flex: 1, color: colors.ink, fontSize: 18, lineHeight: 23, fontWeight: '800' },
+  subtitle: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  place: { color: colors.muted, fontSize: 11, fontWeight: '700' },
+  status: { color: colors.brandText, fontSize: 11, fontWeight: '900' },
+  statusDone: { color: colors.forestText },
+  words: { color: colors.mutedSoft, fontSize: 11, lineHeight: 15 },
+  chevron: { width: 36, height: 36, flexShrink: 0, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
 });
