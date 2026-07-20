@@ -8,6 +8,7 @@ class MockWebAudio {
   onerror: (() => void) | null = null;
   pause = jest.fn();
   playStarts: number[] = [];
+  playbackRate = 1;
   preload = '';
   removeAttribute = jest.fn();
 
@@ -63,5 +64,13 @@ describe('AI voice web replay', () => {
     webAiVoicePlayer.clearAiVoicePlaybackCache();
     expect(players[0].removeAttribute).toHaveBeenCalledWith('src');
     expect(players[0].load).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies one tenth playback speed', async () => {
+    const audio: AiVoiceAudio = { audioBase64: 'c2xvdy13ZWI=', mimeType: 'audio/mpeg' };
+
+    await webAiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal, 0.1);
+
+    expect(players[0].playbackRate).toBe(0.1);
   });
 });

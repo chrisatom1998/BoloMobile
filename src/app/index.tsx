@@ -108,7 +108,7 @@ export default function HomeScreen() {
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/live')} style={styles.liveButton}>
         <View style={styles.liveIcon}><Mic color={colors.white} size={21} /></View>
-        <View style={styles.liveCopy}><View style={styles.liveTitleRow}><Text style={styles.liveTitle}>Practice live with Mira</Text><Sparkles color={colors.gold} size={15} /></View><Text style={styles.liveSubtitle}>Free-form voice, translation, and coaching</Text></View>
+        <View style={styles.liveCopy}><View style={styles.liveTitleRow}><Text style={styles.liveTitle}>Practice live with Mira</Text><Sparkles color={colors.gold} size={15} /></View><Text style={styles.liveSubtitle}>Free-form voice and coaching</Text></View>
         <ChevronRight color={colors.white} size={20} />
       </Pressable>
 

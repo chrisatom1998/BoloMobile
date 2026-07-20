@@ -13,6 +13,12 @@ import { colors, radius, sharedStyles, spacing } from '@/theme';
 
 type Filter = 'All' | 'Due' | SceneCategory;
 
+const replaySpeeds = [
+  { label: '0.10×', rate: 0.1 },
+  { label: '0.25×', rate: 0.25 },
+  { label: '0.50×', rate: 0.5 },
+] as const;
+
 const phraseCategories = new Map<string, SceneCategory>();
 for (const scene of scenes) {
   for (const beat of scene.beats) {
@@ -41,12 +47,12 @@ export default function PhrasesScreen() {
 
   useEffect(() => () => { void stopSpeaking(); }, []);
 
-  async function playPhrase(text: string, slow = false) {
+  async function playPhrase(text: string, playbackRate = 1) {
     if (!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) return;
     setAudioError('');
     try {
-      if (slow) await speakText(text, undefined, 0.72);
-      else await speakText(text);
+      if (playbackRate === 1) await speakText(text);
+      else await speakText(text, undefined, playbackRate);
     } catch (error) {
       setAudioError(error instanceof Error ? error.message : 'Bolo could not play the voice.');
     }
@@ -94,14 +100,16 @@ export default function PhrasesScreen() {
         return (
           <View style={styles.card}>
             <View style={styles.copy}>
-              {profile.scriptPreference !== 'latin' ? <Text style={styles.hindi}>{item.hi}</Text> : null}
-              {profile.scriptPreference !== 'devanagari' ? <Text style={styles.latin}>{item.latin}</Text> : null}
+              {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text style={styles.hindi}>{item.hi}</Text> : null}
+              <Text style={styles.latin}>{item.latin}</Text>
               <Text style={styles.english}>{item.en}</Text>
               <Text style={styles.mastery}>{dueSet.has(item.hi) ? 'Due now' : `Mastery ${review?.mastery ?? 0}/5`}{phraseCategories.get(item.hi) ? ` · ${phraseCategories.get(item.hi)}` : ''}</Text>
             </View>
             <View style={styles.actions}>
               <Pressable accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase(item.hi)} style={[styles.iconButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={20} /></Pressable>
-              <Pressable accessibilityLabel={`Hear ${item.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase(item.hi, true)} style={[styles.slowButton, !canListen && styles.disabled]}><Text style={styles.slowText}>0.7×</Text></Pressable>
+              {replaySpeeds.map(({ label, rate }) => (
+                <Pressable key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase(item.hi, rate)} style={[styles.speedButton, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></Pressable>
+              ))}
               <Pressable accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.iconButton}><Trash2 color={colors.danger} size={19} /></Pressable>
             </View>
           </View>
@@ -140,8 +148,8 @@ const styles = StyleSheet.create({
   mastery: { color: colors.brandDark, fontSize: 11, lineHeight: 16, fontWeight: '800', textTransform: 'uppercase' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   iconButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
-  slowButton: { minWidth: 48, height: 44, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
-  slowText: { color: colors.forest, fontSize: 12, fontWeight: '900' },
+  speedButton: { minWidth: 54, height: 44, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  speedText: { color: colors.forest, fontSize: 12, fontWeight: '900' },
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl },
   emptyIcon: { width: 64, height: 64, borderRadius: 22, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },

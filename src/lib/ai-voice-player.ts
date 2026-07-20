@@ -4,6 +4,7 @@ import { File, Paths } from 'expo-file-system';
 import type { AiVoiceAudio } from '@/services/bolo-api';
 
 const PLAYBACK_TIMEOUT_MS = 90_000;
+const MIN_PLAYBACK_RATE = 0.1;
 const PREPARED_AUDIO_CACHE_LIMIT = 4;
 const AI_VOICE_PLAYBACK_MODE = {
   allowsRecording: false,
@@ -21,6 +22,11 @@ type PreparedAudio = {
 };
 
 const preparedAudioCache = new Map<AiVoiceAudio, PreparedAudio>();
+
+function normalizedPlaybackRate(playbackRate: number) {
+  if (!Number.isFinite(playbackRate)) return 1;
+  return Math.min(2, Math.max(MIN_PLAYBACK_RATE, playbackRate));
+}
 
 function deletePreparedFile(file: File) {
   try {
@@ -86,6 +92,7 @@ export function clearAiVoicePlaybackCache() {
 export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1): Promise<void> {
   if (signal.aborted) return;
   const prepared = getPreparedAudio(audio);
+  const rate = normalizedPlaybackRate(playbackRate);
   prepared.inUse += 1;
   evictPreparedAudio();
   try {
@@ -93,7 +100,7 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal,
       setAudioModeAsync(AI_VOICE_PLAYBACK_MODE),
       prepared.hasStarted ? prepared.player.seekTo(0) : Promise.resolve(),
     ]);
-    prepared.player.setPlaybackRate?.(Math.min(2, Math.max(0.5, playbackRate)));
+    prepared.player.setPlaybackRate?.(rate);
     if (signal.aborted) return;
 
     await new Promise<void>((resolve, reject) => {
@@ -124,7 +131,7 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal,
 
       subscription = prepared.player.addListener('playbackStatusUpdate', update);
       signal.addEventListener('abort', cancel, { once: true });
-      timeout = setTimeout(() => finish(new Error('AI voice playback timed out. Please try again.')), PLAYBACK_TIMEOUT_MS);
+      timeout = setTimeout(() => finish(new Error('AI voice playback timed out. Please try again.')), PLAYBACK_TIMEOUT_MS / rate);
       if (signal.aborted) cancel();
       else {
         prepared.hasStarted = true;

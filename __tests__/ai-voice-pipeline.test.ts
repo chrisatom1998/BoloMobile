@@ -9,6 +9,7 @@ type MockPlayer = {
   play: jest.Mock;
   release: jest.Mock;
   seekTo: jest.Mock;
+  setPlaybackRate: jest.Mock;
   volume: number;
 };
 
@@ -88,6 +89,7 @@ function installPlayer() {
     play: jest.fn(),
     release: jest.fn(),
     seekTo: jest.fn(async () => undefined),
+    setPlaybackRate: jest.fn(),
     volume: 0.25,
   };
   expoAudio.createAudioPlayer.mockReturnValue(player);
@@ -168,6 +170,18 @@ describe('AI voice native playback', () => {
     expect(native.player.play).toHaveBeenCalledTimes(2);
     expect(native.player.release).not.toHaveBeenCalled();
     expect(expoFileSystem.__mockFiles[0].delete).not.toHaveBeenCalled();
+  });
+
+  it('applies playback rates down to one tenth speed', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
+
+    await aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'c2xvdy1wbGF5YmFjaw==',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal, 0.1);
+
+    expect(native.player.setPlaybackRate).toHaveBeenCalledWith(0.1);
   });
 
   it('evicts the least-recently-used prepared clip after four entries', async () => {

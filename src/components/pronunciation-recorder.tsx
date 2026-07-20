@@ -25,14 +25,19 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
   const [reported, setReported] = useState(false);
   const [reporting, setReporting] = useState(false);
   const { clientId } = useAppState();
+  const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
   const reportRef = useRef<AbortController | null>(null);
 
-  useEffect(() => () => {
-    requestRef.current?.abort();
-    requestRef.current = null;
-    reportRef.current?.abort();
-    reportRef.current = null;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      requestRef.current?.abort();
+      requestRef.current = null;
+      reportRef.current?.abort();
+      reportRef.current = null;
+    };
   }, []);
 
   async function submitReport(reason: ReportReason) {
@@ -42,16 +47,16 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
     reportRef.current = controller;
     try {
       await reportGeneratedMessage({ clientId, message: `Pronunciation feedback: ${feedback}`, reason }, controller.signal);
-      if (controller.signal.aborted) return;
+      if (!mountedRef.current || controller.signal.aborted) return;
       setReported(true);
       showAppAlert('Report received', 'Thank you. This pronunciation feedback was sent for review.');
     } catch (error) {
-      if (!controller.signal.aborted) {
+      if (mountedRef.current && !controller.signal.aborted) {
         showAppAlert('Could not send report', error instanceof Error ? error.message : 'Please try again.');
       }
     } finally {
       if (reportRef.current === controller) reportRef.current = null;
-      if (!controller.signal.aborted) setReporting(false);
+      if (mountedRef.current && !controller.signal.aborted) setReporting(false);
     }
   }
 
@@ -81,7 +86,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
             requestRef.current = controller;
             try {
               const result = await checkPronunciation({ audioBase64, clientId, mimeType, target, lessonTitle }, controller.signal);
-              if (controller.signal.aborted) return;
+              if (!mountedRef.current || controller.signal.aborted) return;
               const pendingReport = reportRef.current;
               pendingReport?.abort();
               if (reportRef.current === pendingReport) reportRef.current = null;

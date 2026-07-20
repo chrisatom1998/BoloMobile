@@ -33,7 +33,7 @@ type RealtimeEvent = {
 
 const MINIMUM_TURN_MS = 250;
 const RESPONSE_WATCHDOG_MS = 45_000;
-const TURN_SETTLEMENT_WATCHDOG_MS = 15_000;
+const TURN_SETTLEMENT_WATCHDOG_MS = 45_000;
 const REALTIME_SPEAKER_AUDIO_MODE = {
   allowsRecording: true,
   interruptionMode: 'doNotMix',
@@ -433,12 +433,6 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         },
       });
       attemptPeer = peer;
-      if (!isCurrentAttempt()) {
-        closeStaleAttemptPeer();
-        attemptPeer = null;
-        return;
-      }
-      await setAudioModeAsync(REALTIME_SPEAKER_AUDIO_MODE);
       if (!isCurrentAttempt()) {
         closeStaleAttemptPeer();
         attemptPeer = null;

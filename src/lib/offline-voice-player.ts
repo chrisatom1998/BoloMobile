@@ -3,6 +3,12 @@ import { createAudioPlayer, setAudioModeAsync, type AudioStatus } from 'expo-aud
 import { offlineHindiAudio } from '@/data/offline-hindi-audio';
 
 const PLAYBACK_TIMEOUT_MS = 60_000;
+const MIN_PLAYBACK_RATE = 0.1;
+
+function normalizedPlaybackRate(playbackRate: number) {
+  if (!Number.isFinite(playbackRate)) return 1;
+  return Math.min(2, Math.max(MIN_PLAYBACK_RATE, playbackRate));
+}
 
 export function hasOfflineSpeech(text: string) {
   return offlineHindiAudio[text.trim()] !== undefined;
@@ -13,6 +19,7 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
   if (source === undefined) return false;
   if (signal.aborted) return true;
   const player = createAudioPlayer(source, { updateInterval: 100 });
+  const rate = normalizedPlaybackRate(playbackRate);
   try {
     await setAudioModeAsync({
       allowsRecording: false,
@@ -20,7 +27,7 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
       playsInSilentMode: true,
       shouldRouteThroughEarpiece: false,
     });
-    player.setPlaybackRate?.(Math.min(2, Math.max(0.5, playbackRate)));
+    player.setPlaybackRate?.(rate);
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -41,7 +48,7 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
       };
       subscription = player.addListener('playbackStatusUpdate', update);
       signal.addEventListener('abort', cancel, { once: true });
-      timeout = setTimeout(() => finish(new Error('Offline lesson audio timed out. Please try again.')), PLAYBACK_TIMEOUT_MS);
+      timeout = setTimeout(() => finish(new Error('Offline lesson audio timed out. Please try again.')), PLAYBACK_TIMEOUT_MS / rate);
       if (signal.aborted) cancel();
       else player.play();
     });

@@ -159,8 +159,12 @@ export function sanitizePhrases(value: string | null): SavedPhrase[] {
   const parsed = parseJson(value);
   if (!Array.isArray(parsed)) return [];
   const seen = new Set<string>();
-  return parsed.filter(validPhrase).filter((phrase) => {
-    if (!phrase.hi.trim() || seen.has(phrase.hi)) return false;
+  return parsed.filter(validPhrase).map((phrase) => ({
+    hi: phrase.hi.trim(),
+    latin: phrase.latin.trim(),
+    en: phrase.en.trim(),
+  })).filter((phrase) => {
+    if (!phrase.hi || !phrase.latin || !phrase.en || seen.has(phrase.hi)) return false;
     seen.add(phrase.hi);
     return true;
   }).slice(0, 100);

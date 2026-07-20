@@ -5,6 +5,7 @@ const mockRemovePhrase = jest.fn();
 const mockPhrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
 const mockAppState = {
   aiConsent: true,
+  learnerProfile: { scriptPreference: 'devanagari' },
   phrases: [] as (typeof mockPhrase)[],
   removePhrase: mockRemovePhrase,
 };
@@ -58,11 +59,12 @@ describe('PhrasesScreen primary journey', () => {
     expect(view.queryByText('Saved phrases')).toBeNull();
   });
 
-  it('renders saved phrases, plays one, and stops playback on unmount', async () => {
+  it('always renders the Romanized phrase and English meaning on each saved card', async () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
     expect(view.getByText('Everything is reviewed for today.')).toBeTruthy();
+    expect(view.getByText('नमस्ते')).toBeTruthy();
     expect(view.getByText('namaste')).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Hear नमस्ते'));
@@ -70,6 +72,16 @@ describe('PhrasesScreen primary journey', () => {
 
     await view.unmount();
     expect(stopSpeakingMock).toHaveBeenCalled();
+  });
+
+  it('replays a saved phrase at each requested slower speed', async () => {
+    mockAppState.phrases = [mockPhrase];
+    const view = await render(<PhrasesScreen />);
+
+    for (const [label, rate] of [['0.10×', 0.1], ['0.25×', 0.25], ['0.50×', 0.5]] as const) {
+      await fireEvent.press(view.getByLabelText(`Replay namaste at ${label} speed`));
+      expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, rate);
+    }
   });
 
   it('removes a phrase only after destructive confirmation', async () => {

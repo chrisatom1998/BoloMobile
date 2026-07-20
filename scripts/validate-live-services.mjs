@@ -189,17 +189,6 @@ async function runServicePass(pass) {
     }, (result) => `${result.elapsedMs} ms; ${result.bytes} decoded MP3 bytes`);
 
     if (phrase) {
-      await check(`live-caption-audio #${pass}`, async () => {
-        const result = await postJson(`live-caption-audio #${pass}`, '/api/live-caption-audio', {
-          audioBase64: phrase.audioBase64,
-          mimeType: phrase.mimeType,
-        });
-        const english = textValue(result.payload.english, `live-caption-audio #${pass} English`, 2_400);
-        assert(!containsDevanagari(english), `live-caption-audio #${pass}`, 'translation contained Devanagari');
-        assert(/water|drink|thirst/iu.test(english), `live-caption-audio #${pass}`, 'translation did not preserve the water meaning');
-        return { elapsedMs: result.elapsedMs, englishLength: english.length };
-      }, (result) => `${result.elapsedMs} ms; ${result.englishLength}-character English translation`);
-
       await check(`voice-coach #${pass}`, async () => {
         const result = await postJson(`voice-coach #${pass}`, '/api/voice-coach', {
           audioBase64: phrase.audioBase64,
@@ -221,9 +210,8 @@ async function runServicePass(pass) {
         return { elapsedMs: result.elapsedMs, feedbackLength: feedback.length, transcriptLength: transcript.length };
       }, (result) => `${result.elapsedMs} ms; transcript ${result.transcriptLength}, feedback ${result.feedbackLength} characters`);
     } else {
-      failures.push(`live-caption-audio #${pass}: blocked because phrase-audio did not provide generated Hindi MP3`);
       failures.push(`voice-coach #${pass}: blocked because phrase-audio did not provide generated target-phrase MP3`);
-      console.error('  BLOCKED live-caption-audio and voice-coach — generated Hindi MP3 unavailable');
+      console.error('  BLOCKED voice-coach — generated Hindi MP3 unavailable');
     }
 
     await check(`realtime-token #${pass}`, async () => {

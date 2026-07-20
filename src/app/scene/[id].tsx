@@ -23,6 +23,7 @@ export default function SceneScreen() {
   const [beatIndex, setBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [done, setDone] = useState(false);
   const [audioError, setAudioError] = useState('');
@@ -66,6 +67,7 @@ export default function SceneScreen() {
     if (beat.choices[index].correct) {
       hapticSuccess();
       setScore((value) => value + 50);
+      setCorrectCount((value) => value + 1);
     }
     else {
       hapticWarning();
@@ -79,10 +81,9 @@ export default function SceneScreen() {
     void stopSpeaking();
     setAudioError('');
     if (beatIndex === activeScene.beats.length - 1) {
-      const correctAnswers = score / 50;
       markSceneComplete(activeScene.id, elapsedSeconds(), {
         score,
-        correct: correctAnswers,
+        correct: correctCount,
         total: activeScene.beats.length,
         weakPhrases,
       });
@@ -103,6 +104,7 @@ export default function SceneScreen() {
     setBeatIndex(0);
     setPicked(null);
     setScore(0);
+    setCorrectCount(0);
     setHearts(3);
     setWeakPhrases([]);
     setDone(false);

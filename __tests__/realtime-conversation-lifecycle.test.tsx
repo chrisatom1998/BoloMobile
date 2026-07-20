@@ -85,7 +85,7 @@ describe('Realtime connection lifecycle', () => {
       await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
         type: 'session.update',
         session: expect.objectContaining({
-          instructions: expect.stringContaining('Reply in concise, natural Hindi'),
+          instructions: expect.stringContaining('Reply in concise, natural Hindi written only in Romanized Latin script'),
         }),
       })));
       await act(async () => {
@@ -97,7 +97,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('reasserts full-volume speaker routing after WebRTC setup and when response audio starts', async () => {
+  it('sets full-volume speaker routing before WebRTC setup and reasserts it when response audio starts', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     const speakerMode = {
@@ -128,7 +128,7 @@ describe('Realtime connection lifecycle', () => {
       await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
       expect(setAudioModeMock.mock.calls.filter(([mode]) => (
         mode.allowsRecording === true && mode.shouldRouteThroughEarpiece === false
-      ))).toHaveLength(2);
+      ))).toHaveLength(1);
 
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
@@ -141,7 +141,7 @@ describe('Realtime connection lifecycle', () => {
       expect(setAudioModeMock).toHaveBeenLastCalledWith(speakerMode);
       expect(setAudioModeMock.mock.calls.filter(([mode]) => (
         mode.allowsRecording === true && mode.shouldRouteThroughEarpiece === false
-      ))).toHaveLength(3);
+      ))).toHaveLength(2);
     } finally {
       await unmount();
     }
@@ -446,6 +446,14 @@ describe('Realtime connection lifecycle', () => {
 
       await act(async () => {
         jest.advanceTimersByTime(15_000);
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe('responding');
+      expect(peer.close).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(30_000);
         await Promise.resolve();
       });
       expect(result.current.status).toBe('disconnected');

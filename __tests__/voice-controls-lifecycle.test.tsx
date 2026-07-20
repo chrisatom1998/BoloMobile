@@ -71,10 +71,11 @@ import { requestRecordingPermissionsAsync } from 'expo-audio';
 
 import { PronunciationRecorder } from '../src/components/pronunciation-recorder';
 import { VoiceTurnButton } from '../src/components/voice-turn-button';
-import { stopSpeaking } from '../src/lib/speech';
+import { speakText, stopSpeaking } from '../src/lib/speech';
 import { checkPronunciation, reportGeneratedMessage } from '../src/services/bolo-api';
 
 const requestPermissionMock = requestRecordingPermissionsAsync as jest.MockedFunction<typeof requestRecordingPermissionsAsync>;
+const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
 const checkPronunciationMock = checkPronunciation as jest.MockedFunction<typeof checkPronunciation>;
 const reportGeneratedMessageMock = reportGeneratedMessage as jest.MockedFunction<typeof reportGeneratedMessage>;
@@ -217,6 +218,33 @@ describe('voice control lifecycle', () => {
     expect(expoAudio.__mockRecorder.record).not.toHaveBeenCalled();
     expect(view.getByText(/stopped when Bolo left the foreground/u)).toBeTruthy();
     await view.unmount();
+  });
+
+  it('ignores pronunciation feedback that resolves after unmount', async () => {
+    const request = deferred<{ transcript: string; feedback: string }>();
+    let requestSignal: AbortSignal | undefined;
+    checkPronunciationMock.mockImplementation((_input, signal) => {
+      requestSignal = signal;
+      return request.promise;
+    });
+    const view = await render(<PronunciationRecorder
+      lessonTitle="Order chai"
+      target={{ hi: 'Namaste', latin: 'Namaste', en: 'Hello' }}
+    />);
+
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
+    await fireEvent.press(view.getByLabelText('Stop recording'));
+    await waitFor(() => expect(checkPronunciationMock).toHaveBeenCalledTimes(1));
+
+    await view.unmount();
+    expect(requestSignal?.aborted).toBe(true);
+    await act(async () => {
+      request.resolve({ transcript: 'Namaste', feedback: 'Late feedback.' });
+      for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    });
+
+    expect(speakTextMock).not.toHaveBeenCalled();
   });
 
   it('submits at most one pronunciation report while the first request is pending', async () => {

@@ -1,23 +1,22 @@
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { ArrowLeft, Check, Flag, Languages, MessageCircle, Send, Trash2, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, BookmarkPlus, Flag, MessageCircle, Send, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
-import { LiveTranslationRecorder, type LiveTranslationStatus } from '@/components/live-translation-recorder';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
+import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import type { RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
-import { MAX_CHAT_HISTORY_MESSAGES } from '@/lib/storage';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
-import type { ChatMessage, MiraResponseLanguage } from '@/state/app-state-types';
+import type { ChatMessage, MiraResponseLanguage, SavedPhrase } from '@/state/app-state-types';
 import { colors, radius, spacing } from '@/theme';
 
 const welcome: ChatMessage = {
@@ -25,8 +24,6 @@ const welcome: ChatMessage = {
   role: 'mira',
   text: 'Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.',
 };
-
-type PracticeMode = 'correct' | 'translate';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
 
@@ -41,7 +38,10 @@ function CaptionReveal({ children, style }: { children: ReactNode; style: StyleP
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (reducedMotion) progress.setValue(1);
+    if (reducedMotion) {
+      progress.stopAnimation();
+      progress.setValue(1);
+    }
     else Animated.timing(progress, { duration: 260, toValue: 1, useNativeDriver: true }).start();
   }, [progress, reducedMotion]);
 
@@ -60,19 +60,17 @@ export default function LiveScreen() {
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
   const compactVoiceLayout = windowHeight < 760;
   const { elapsedSeconds } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn } = useAppState();
-  const [mode, setMode] = useState<PracticeMode>('correct');
+  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, phrases, togglePhrase } = useAppState();
   const [responseLanguage, setResponseLanguage] = useState<MiraResponseLanguage>(learnerProfile?.responseLanguage ?? 'en');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
-  const [translations, setTranslations] = useState<string[]>([]);
-  const [translationStatus, setTranslationStatus] = useState<LiveTranslationStatus>('idle');
   const [liveCaption, setLiveCaption] = useState('');
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
+  const [phraseMessage, setPhraseMessage] = useState<ChatMessage | null>(null);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
@@ -161,18 +159,6 @@ export default function LiveScreen() {
     }
   }, [aiConsent, realtimeOwnsAudio]);
 
-  const changeMode = useCallback((nextMode: PracticeMode) => {
-    if (nextMode === mode) return;
-    setPendingUserMessage(null);
-    requestRef.current?.abort();
-    requestRef.current = null;
-    setBusy(false);
-    void stopSpeaking();
-    setError('');
-    if (nextMode !== 'translate') setTranslationStatus('idle');
-    setMode(nextMode);
-  }, [mode]);
-
   const changeResponseLanguage = useCallback((nextLanguage: MiraResponseLanguage) => {
     if (languageControlLocked || nextLanguage === responseLanguage) return;
     void stopSpeaking();
@@ -256,16 +242,6 @@ export default function LiveScreen() {
     recordTurn(turn);
   }, [recordTurn]);
 
-  const recordTranslation = useCallback((english: string) => {
-    if (!mountedRef.current) return;
-    setError('');
-    setTranslations((current) => [...current, english].slice(-MAX_CHAT_HISTORY_MESSAGES));
-    if (!practiced.current) {
-      practiced.current = true;
-      markLiveTurn();
-    }
-  }, [markLiveTurn]);
-
   function report(message: ChatMessage) {
     const submit = (reason: ReportReason) => void (async () => {
       if (pendingReportIdsRef.current.has(message.id) || reportedIdsRef.current.has(message.id)) return;
@@ -295,14 +271,21 @@ export default function LiveScreen() {
     ]);
   }
 
+  const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
+    const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
+    if (!alreadySaved) togglePhrase(phrase);
+    setPhraseMessage(null);
+    showAppAlert(alreadySaved ? 'Phrase already saved' : 'Phrase saved', `${phrase.latin} — ${phrase.en}`);
+  }, [phrases, togglePhrase]);
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
       <StatusBar style="light" />
       <FlatList
         ref={listRef}
         contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.listContent, { paddingBottom: mode === 'correct' ? 236 : 136 }]}
-        data={mode === 'correct' ? visibleMessages : []}
+        contentContainerStyle={[styles.listContent, { paddingBottom: 236 }]}
+        data={visibleMessages}
         keyExtractor={(message) => message.id}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
@@ -319,40 +302,12 @@ export default function LiveScreen() {
                   <Text style={styles.headerTitle}>Mira</Text>
                   <Text numberOfLines={1} style={styles.headerSubtitle}>Conversational Hindi coach · {responseLanguageName} replies</Text>
                 </View>
-                {mode === 'correct' ? (
-                  <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                    <MessageCircle color={colors.ink} size={22} />
-                  </Pressable>
-                ) : null}
+                <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                  <MessageCircle color={colors.ink} size={22} />
+                </Pressable>
               </View>
 
-              <View accessibilityRole="tablist" style={[styles.modeRow, { width: heroContentWidth }]}>
-                {([
-                  { icon: 'check', label: 'Correct me', value: 'correct' },
-                  { icon: 'translate', label: 'Live translate', value: 'translate' },
-                ] as const).map(({ icon, label, value }) => {
-                  const selected = mode === value;
-                  return (
-                    <Pressable
-                      key={value}
-                      accessibilityHint={realtimeLocked ? 'End the live voice session to switch modes.' : undefined}
-                      accessibilityRole="tab"
-                      accessibilityState={{ disabled: realtimeLocked, selected }}
-                      disabled={realtimeLocked}
-                      onPress={() => changeMode(value)}
-                      style={[styles.modeButton, selected && styles.modeButtonSelected, realtimeLocked && !selected && styles.disabled]}
-                    >
-                      {icon === 'check'
-                        ? <Check color={selected ? colors.ink : stylesTokens.heroSegmentIdle} size={17} />
-                        : <Languages color={selected ? colors.ink : stylesTokens.heroSegmentIdle} size={17} />}
-                      <Text style={[styles.modeButtonText, selected && styles.modeButtonTextSelected]}>{label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {mode === 'correct' ? (
-                <>
+              <>
                   <View accessibilityLabel="Mira response language" style={[styles.languageSelector, { width: heroContentWidth }]}>
                     <Text style={styles.languageSelectorLabel}>Mira speaks</Text>
                     <View style={styles.languageOptions}>
@@ -387,45 +342,10 @@ export default function LiveScreen() {
                     </CaptionReveal>
                   ) : null}
                   {!aiConsent ? <Text style={[styles.heroConsentHint, { width: Math.min(330, heroContentWidth) }]}>Review the consent card below to enable connected coaching.</Text> : null}
-                </>
-              ) : (
-                <View style={[styles.translateHero, { width: heroContentWidth }]}>
-                  <View style={styles.translateMark}><Languages color={colors.white} size={32} /></View>
-                  <Text style={styles.heroTitle}>Speak Hindi. Read English.</Text>
-                  <Text style={styles.heroBody}>Bolo listens only while translation is active and shows a natural English translation.</Text>
-                  {translationStatus !== 'idle' || translations.length > 0 ? (
-                    <CaptionReveal style={styles.translationCard}>
-                      <Text style={styles.translationLabel}>English live caption</Text>
-                      {translations.length > 0 ? (
-                        <View style={styles.translationHistory}>
-                          {translations.slice(0, -1).map((translation, index) => (
-                            <Text key={`${index}-${translation}`} style={styles.translationText} testID="translation-entry">
-                              {translation}
-                            </Text>
-                          ))}
-                          <Text key="latest-translation" accessibilityLiveRegion="polite" style={styles.translationText} testID="translation-entry">
-                            {translations[translations.length - 1]}
-                          </Text>
-                        </View>
-                      ) : (
-                        <Text accessibilityLiveRegion="polite" style={styles.translationText}>
-                          {translationStatus === 'starting' ? 'Opening the microphone…' : 'Listening for Hindi…'}
-                        </Text>
-                      )}
-                      <Text style={styles.translationNote}>Text only · audio output is off</Text>
-                    </CaptionReveal>
-                  ) : null}
-                </View>
-              )}
+              </>
             </View>
 
-            {mode === 'translate' && !aiConsent ? (
-              <View style={styles.translateConsentSection}>
-                <AiConsentGate><View /></AiConsentGate>
-              </View>
-            ) : null}
-            {mode === 'correct' ? (
-              <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact]} testID="ask-mira-sheet">
+            <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact]} testID="ask-mira-sheet">
                 <View style={styles.sheetHandle} testID="ask-mira-sheet-handle" />
                 <View style={styles.askHeadingRow}>
                   <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-mira-heading">
@@ -448,8 +368,7 @@ export default function LiveScreen() {
                 </View>
                 <Text style={styles.askBody}>Your recent practice stays here on this device.</Text>
                 <AiConsentGate><View /></AiConsentGate>
-              </View>
-            ) : null}
+            </View>
           </View>
         )}
         onContentSizeChange={() => {
@@ -463,16 +382,20 @@ export default function LiveScreen() {
               <Text style={[styles.messageLabel, item.role === 'you' && styles.userText]}>{item.role === 'you' ? 'You' : 'Mira'}</Text>
               <Text
                 accessibilityLiveRegion={item.role === 'mira' && item.id !== welcome.id ? 'polite' : 'none'}
+                selectable
                 style={[styles.messageText, item.role === 'you' && styles.userText]}
               >
                 {item.text}
               </Text>
-              {item.role === 'mira' ? (
+              {item.role === 'mira' || item.id !== welcome.id ? (
                 <View style={styles.messageActions}>
-                  <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
-                  {item.id !== 'welcome' && (
-                    <Pressable accessibilityLabel={`Report reply: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: reported.has(item.id) || pendingReports.has(item.id) }} disabled={reported.has(item.id) || pendingReports.has(item.id)} onPress={() => report(item)} style={[styles.smallAction, (reported.has(item.id) || pendingReports.has(item.id)) && styles.disabled]}><Flag color={reported.has(item.id) ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported.has(item.id) ? 'Reported' : pendingReports.has(item.id) ? 'Reporting\u2026' : 'Report'}</Text></Pressable>
-                  )}
+                  {item.id !== welcome.id ? <Pressable accessibilityHint="Opens an editor where you can trim the selected transcript words before saving." accessibilityLabel={`Save transcript phrase: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" onPress={() => setPhraseMessage(item)} style={styles.smallAction}><BookmarkPlus color={item.role === 'you' ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, item.role === 'you' && styles.userText]}>Save</Text></Pressable> : null}
+                  {item.role === 'mira' ? (
+                    <>
+                      <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
+                      {item.id !== welcome.id ? <Pressable accessibilityLabel={`Report reply: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: reported.has(item.id) || pendingReports.has(item.id) }} disabled={reported.has(item.id) || pendingReports.has(item.id)} onPress={() => report(item)} style={[styles.smallAction, (reported.has(item.id) || pendingReports.has(item.id)) && styles.disabled]}><Flag color={reported.has(item.id) ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported.has(item.id) ? 'Reported' : pendingReports.has(item.id) ? 'Reporting\u2026' : 'Report'}</Text></Pressable> : null}
+                    </>
+                  ) : null}
                 </View>
               ) : null}
             </View>
@@ -481,10 +404,10 @@ export default function LiveScreen() {
       />
 
       <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.xs) }]}>
-        {mode === 'correct' && busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Mira is thinking\u2026'}</Text> : null}
-        {mode === 'correct' && error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        {busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Mira is thinking\u2026'}</Text> : null}
+        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
         {aiConsent ? (
-          mode === 'correct' ? <>
+          <>
             <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
               {['Correct my Hindi', 'How do I say thank you?', 'Practice a short dialogue'].map((example) => <Pressable key={example} accessibilityRole="button" accessibilityState={{ disabled: busy || realtimeLocked }} disabled={busy || realtimeLocked} onPress={() => void sendText(example)} style={[styles.example, (busy || realtimeLocked) && styles.disabled]}><Text style={styles.exampleText}>{example}</Text></Pressable>)}
             </ScrollView>
@@ -503,9 +426,10 @@ export default function LiveScreen() {
               />
               <Pressable accessibilityLabel="Send message" accessibilityRole="button" accessibilityState={{ disabled: busy || realtimeLocked || !input.trim() }} disabled={busy || realtimeLocked || !input.trim()} onPress={() => void sendText()} style={[styles.sendButton, (busy || realtimeLocked || !input.trim()) && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
             </View>
-          </> : <LiveTranslationRecorder disabled={busy} onStatusChange={setTranslationStatus} onTranslation={recordTranslation} />
+          </>
         ) : <Text style={styles.consentHint}>Review the consent card above to enable connected coaching.</Text>}
       </View>
+      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} /> : null}
     </KeyboardAvoidingView>
   );
 }
@@ -513,9 +437,7 @@ export default function LiveScreen() {
 const stylesTokens = {
   hero: '#0D1513',
   heroRaised: '#18201E',
-  heroLine: 'rgba(255, 255, 255, 0.11)',
   heroMuted: '#909B97',
-  heroSegmentIdle: '#C1C8C5',
 } as const;
 
 const styles = StyleSheet.create({
@@ -537,11 +459,6 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.white, fontSize: 20, fontWeight: '900' },
   headerSubtitle: { minWidth: 0, flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 12, lineHeight: 16 },
   chatButton: { position: 'absolute', right: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  modeRow: { minHeight: 56, alignSelf: 'center', flexDirection: 'row', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, borderColor: stylesTokens.heroLine, borderWidth: StyleSheet.hairlineWidth, padding: spacing.xs },
-  modeButton: { minWidth: 0, minHeight: 48, flex: 1, borderRadius: radius.pill, borderCurve: 'continuous', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm },
-  modeButtonSelected: { backgroundColor: colors.paper, shadowColor: colors.black, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 2 },
-  modeButtonText: { color: stylesTokens.heroSegmentIdle, fontSize: 15, fontWeight: '700', textAlign: 'center' },
-  modeButtonTextSelected: { color: colors.ink, fontWeight: '800' },
   languageSelector: { minHeight: 50, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   languageSelectorLabel: { color: stylesTokens.heroMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
   languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: stylesTokens.heroRaised, padding: 4 },
@@ -556,14 +473,6 @@ const styles = StyleSheet.create({
   captionLabel: { color: stylesTokens.heroMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
   captionText: { color: colors.white, fontSize: 20, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
   heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: stylesTokens.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  translateHero: { minHeight: 490, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
-  translateMark: { width: 92, height: 92, borderRadius: 30, borderCurve: 'continuous', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', shadowColor: colors.brand, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 24, elevation: 6 },
-  translationCard: { minHeight: 184, alignSelf: 'stretch', borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: stylesTokens.heroLine, backgroundColor: stylesTokens.heroRaised, padding: spacing.xl, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  translationLabel: { color: stylesTokens.heroMuted, fontSize: 11, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  translationHistory: { alignSelf: 'stretch', gap: spacing.sm },
-  translationText: { color: colors.white, fontSize: 22, lineHeight: 29, fontWeight: '800', textAlign: 'center' },
-  translationNote: { color: stylesTokens.heroMuted, fontSize: 12 },
-  translateConsentSection: { backgroundColor: colors.background, padding: spacing.lg },
   askSection: { minHeight: 176, alignSelf: 'stretch', gap: spacing.md, marginTop: -(spacing.xxl + spacing.lg), position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: colors.background, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: colors.lineStrong },

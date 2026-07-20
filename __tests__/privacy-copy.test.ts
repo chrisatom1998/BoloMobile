@@ -50,13 +50,6 @@ describe('live voice privacy copy', () => {
     expect(declarations).toMatch(/support form does collect the optional name and email address/iu);
   });
 
-  it('describes live translation as in-memory processing without a local recording file', () => {
-    const declarations = read('store/privacy-declarations.md');
-
-    expect(declarations).toMatch(/in-memory PCM segmentation without creating a local recording file/iu);
-    expect(declarations).not.toMatch(/short-segment recording, and local file cleanup/iu);
-  });
-
   it('discloses bounded local chat retention and deletion', () => {
     const consent = read('src/components/ai-consent-gate.tsx');
     const inAppPolicy = read('src/app/privacy.tsx');

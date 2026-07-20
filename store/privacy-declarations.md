@@ -1,6 +1,6 @@
 # Store privacy declarations
 
-Audited against the shipping client contract on July 16, 2026. These declarations cover consent-gated AI speech for selected lesson and reply text, optional typed coaching, GPT Realtime voice turns, Hindi-to-English text-only translation, pronunciation checks, automated text safety classification, a random installation identifier, optional AI-reply reports, and user-initiated report deletion. The production AI-speech and Realtime endpoints and OpenAI session handshake were verified on July 14, 2026; these declarations still do not assume unverified contractual service-provider status.
+Audited against the shipping client contract on July 16, 2026. These declarations cover consent-gated AI speech for selected lesson and reply text, optional typed coaching, GPT Realtime voice turns, pronunciation checks, automated text safety classification, a random installation identifier, optional AI-reply reports, and user-initiated report deletion. The production AI-speech and Realtime endpoints and OpenAI session handshake were verified on July 14, 2026; these declarations still do not assume unverified contractual service-provider status.
 
 ## Apple App Privacy
 
@@ -9,7 +9,7 @@ Select **Yes, data is collected**. Use the following conservative declarations f
 | Apple data type | What Bolo sends | Purpose | Linked to the user | Used for tracking |
 | --- | --- | --- | --- | --- |
 | User Content → Other User Content | Typed messages, recent chat context, voice transcripts, a reported AI reply, and the selected report reason | App Functionality | Yes — the payload includes a persistent random installation identifier | No |
-| User Content → Audio Data | Voice turns, live-translation segments, and pronunciation recordings submitted after consent | App Functionality | Translation segments do not include the installation identifier; the other connected audio paths do | No |
+| User Content → Audio Data | Voice turns and pronunciation recordings submitted after consent | App Functionality | Yes — the connected audio paths use the installation identifier | No |
 | Identifiers → Device ID | A random identifier generated for this app installation | App Functionality | Yes | No |
 | Usage Data → Product Interaction | An optional report action and its server-side report time | App Functionality | Yes — the report includes the installation identifier | No |
 | Contact Info → Name | A name entered voluntarily on the public support form | Developer Communications → Customer Support | Yes — it is submitted with the support request | No |
@@ -34,7 +34,7 @@ Answer **Yes** to “Does your app collect or share any of the required user dat
 
 Security-practice answers supported by the client:
 
-- AI-voice text, typed coaching, live-translation segments, pronunciation recordings, reports, deletion requests, and Realtime token requests are sent to the Bolo backend over HTTPS. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. The glowing orb begins each turn and sends it when tapped again. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when the user taps End (the close control), leaves the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Active Realtime microphone and response audio travel directly between the app and OpenAI over encrypted WebRTC using a short-lived client secret. Select “encrypted in transit” only after confirming every production leg.
+- AI-voice text, typed coaching, pronunciation recordings, reports, deletion requests, and Realtime token requests are sent to the Bolo backend over HTTPS. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. The glowing orb begins each turn and sends it when tapped again. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when the user taps End (the close control), leaves the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Active Realtime microphone and response audio travel directly between the app and OpenAI over encrypted WebRTC using a short-lived client secret. Select “encrypted in transit” only after confirming every production leg.
 - Users can withdraw connected-coaching consent. Clear chat removes only saved typed and voice chat from the device and does not delete submitted reports. Settings also deletes off-device reports associated with the current random installation identifier before clearing local data, including chat history, and rotating that identifier. Uninstalling alone removes only local data.
 - Scheduled cleanup keeps report records no longer than 90 days and support requests no longer than 180 days unless an active legal or safety matter requires longer retention. Rate events enforce a rolling one-hour limit and are deleted within 24 hours after they stop being active.
 - Do not claim an independent security review.
@@ -63,7 +63,6 @@ Security-practice answers supported by the client:
 - `src/lib/speech.ts` and `src/lib/ai-voice-player.ts`: bounded AI-speech requests, caching, cancellation, playback, and temporary-file cleanup.
 - `src/components/realtime-voice-button.tsx` and `src/hooks/use-realtime-conversation.ts`: explicit live-turn controls, short-lived credential use, and Realtime streaming lifecycle.
 - `src/components/voice-turn-button.tsx`: explicit, time-limited pronunciation recording behavior.
-- `src/components/live-translation-recorder.tsx`: explicit live-translation controls and in-memory PCM segmentation without creating a local recording file.
 - `src/app/live.tsx`: English-default AI conversation and in-app report control.
 - `src/app/privacy.tsx`: user-facing data-use explanation.
 - `src/state/app-state.tsx` and `src/lib/storage.ts`: on-device progress and consent storage.

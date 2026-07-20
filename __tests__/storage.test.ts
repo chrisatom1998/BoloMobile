@@ -43,6 +43,8 @@ describe('local progress storage', () => {
       { hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' },
       { hi: 'नमस्ते', latin: 'Duplicate', en: 'Duplicate' },
       { hi: '', latin: 'Blank', en: 'Blank' },
+      { hi: 'अधूरा', latin: '   ', en: 'Incomplete' },
+      { hi: 'अर्थहीन', latin: 'Arthheen', en: '   ' },
       { hi: 'धन्यवाद', latin: 'Dhanyavaad', en: 'Thank you' },
       { hi: 'invalid' },
     ]);

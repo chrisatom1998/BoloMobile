@@ -1,6 +1,7 @@
 import type { AiVoiceAudio } from '@/services/bolo-api';
 
 const PLAYBACK_TIMEOUT_MS = 90_000;
+const MIN_PLAYBACK_RATE = 0.1;
 const PREPARED_AUDIO_CACHE_LIMIT = 4;
 
 type PreparedAudio = {
@@ -11,6 +12,11 @@ type PreparedAudio = {
 };
 
 const preparedAudioCache = new Map<AiVoiceAudio, PreparedAudio>();
+
+function normalizedPlaybackRate(playbackRate: number) {
+  if (!Number.isFinite(playbackRate)) return 1;
+  return Math.min(2, Math.max(MIN_PLAYBACK_RATE, playbackRate));
+}
 
 function disposePreparedAudio(prepared: PreparedAudio) {
   if (preparedAudioCache.get(prepared.audio) === prepared) {
@@ -49,18 +55,20 @@ export function clearAiVoicePlaybackCache() {
   }
 }
 
-export async function playAiVoiceAudio(audioData: AiVoiceAudio, signal: AbortSignal): Promise<void> {
+export async function playAiVoiceAudio(audioData: AiVoiceAudio, signal: AbortSignal, playbackRate = 1): Promise<void> {
   if (signal.aborted) return;
   const prepared = getPreparedAudio(audioData);
   prepared.inUse += 1;
   evictPreparedAudio();
   const { player } = prepared;
+  const rate = normalizedPlaybackRate(playbackRate);
 
   try {
     if (prepared.hasStarted) player.currentTime = 0;
+    player.playbackRate = rate;
     await new Promise<void>((resolve, reject) => {
       let settled = false;
-      const timeout = setTimeout(() => finish(new Error('AI voice playback timed out. Please try again.')), PLAYBACK_TIMEOUT_MS);
+      const timeout = setTimeout(() => finish(new Error('AI voice playback timed out. Please try again.')), PLAYBACK_TIMEOUT_MS / rate);
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;

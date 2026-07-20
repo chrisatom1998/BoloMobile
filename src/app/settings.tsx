@@ -39,7 +39,7 @@ export default function SettingsScreen() {
     if (withdrawing) return;
     showAppAlert(
       'Withdraw AI processing consent?',
-      'AI Listen, typed coaching, live voice, Live Translate, and pronunciation feedback will stop working until you consent again. Written scenes and saved phrases still work offline.',
+      'AI Listen, typed coaching, live voice, and pronunciation feedback will stop working until you consent again. Written scenes and saved phrases still work offline.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Withdraw', style: 'destructive', onPress: () => void performWithdrawal() },
@@ -168,7 +168,7 @@ export default function SettingsScreen() {
             <View style={[styles.icon, { backgroundColor: colors.forest }]}><ShieldCheck color={colors.white} size={21} /></View>
             <View style={styles.copy}><Text style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
           </View>
-          <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, live-translation segments, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, translation, or coaching.</Text>
+          <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, or coaching.</Text>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
         </View>
       ) : (

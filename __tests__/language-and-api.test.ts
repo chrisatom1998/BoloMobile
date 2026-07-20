@@ -8,9 +8,9 @@ import {
   deleteMobileData,
   MOBILE_LANGUAGE_MODE,
   OPENAI_REALTIME_MODEL,
+  prepareSavedPhraseFromText,
   requestAiVoiceAudio,
   sendMobileChat,
-  translateHindiAudio,
 } from '../src/services/bolo-api';
 import type { ChatMessage } from '../src/state/app-state-types';
 
@@ -96,8 +96,8 @@ describe('connected coaching contract', () => {
       responseLanguage: 'hi',
     });
 
-    expect(english.text).toBe('Respond in English. How do I say thank you?');
-    expect(hindi.text).toBe('Respond in Hindi using Devanagari script. How do I say thank you?');
+    expect(english.text).toBe('Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. How do I say thank you?');
+    expect(hindi.text).toBe('Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. How do I say thank you?');
     expect(english.languageMode).toBe(MOBILE_LANGUAGE_MODE);
     expect(hindi.languageMode).toBe(MOBILE_LANGUAGE_MODE);
   });
@@ -111,7 +111,7 @@ describe('connected coaching contract', () => {
       responseLanguage: 'hi',
     });
 
-    expect(payload.text).toBe(`Respond in Hindi using Devanagari script. ${learnerText}`);
+    expect(payload.text).toBe(`Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. ${learnerText}`);
   });
 
   it('rejects a malformed successful response instead of passing it to the UI', async () => {
@@ -133,6 +133,91 @@ describe('connected coaching contract', () => {
     }
   });
 
+  it('accepts an empty transcript for text-only chat replies', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ transcript: '', reply: 'Hello!', language: 'en' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ transcript: '   ', reply: 'नमस्ते!', language: 'hi' }),
+      });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    try {
+      await expect(sendMobileChat({
+        text: 'Hello',
+        messages: [],
+        clientId: 'client-12345678',
+      })).resolves.toEqual({ transcript: '', reply: 'Hello!', language: 'en' });
+      await expect(sendMobileChat({
+        text: 'Namaste',
+        messages: [],
+        clientId: 'client-12345678',
+      })).resolves.toEqual({ transcript: '   ', reply: 'नमस्ते!', language: 'hi' });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('prepares a complete Romanized saved phrase from selected transcript text', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        transcript: '',
+        reply: '```json\n{"latin":"Aap kaise hain?","en":"How are you?"}\n```',
+        language: 'en',
+      }),
+    }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      await expect(prepareSavedPhraseFromText({
+        clientId: 'client-12345678',
+        text: 'How are you?',
+      })).resolves.toEqual({
+        hi: 'Aap kaise hain?',
+        latin: 'Aap kaise hain?',
+        en: 'How are you?',
+      });
+      const [, init] = fetchMock.mock.calls[0];
+      const payload = JSON.parse(String(init?.body)) as { messages: unknown[]; text: string };
+      expect(payload.messages).toEqual([]);
+      expect(payload.text).toContain('Never use Devanagari or Markdown.');
+      expect(payload.text).toContain('How are you?');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('rejects prepared phrases containing non-Romanized script', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        transcript: '',
+        reply: '{"latin":"नमस्ते","en":"Hello"}',
+        language: 'en',
+      }),
+    })) as unknown as typeof fetch;
+
+    try {
+      await expect(prepareSavedPhraseFromText({
+        clientId: 'client-12345678',
+        text: 'Hello',
+      })).rejects.toThrow('Bolo could not prepare that phrase.');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('rejects blank or oversized generated text before it reaches the UI or TTS', async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = jest.fn();
@@ -149,14 +234,6 @@ describe('connected coaching contract', () => {
         messages: [],
         clientId: 'client-12345678',
       })).rejects.toThrow('Bolo returned an invalid response.');
-
-      fetchMock.mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ english: 'x'.repeat(2_401) }),
-      });
-      await expect(translateHindiAudio({ audioBase64: 'audio', mimeType: 'audio/mp4' }))
-        .rejects.toThrow('Bolo returned an invalid response.');
 
       fetchMock.mockResolvedValueOnce({
         ok: true,
@@ -238,49 +315,9 @@ describe('connected coaching contract', () => {
       },
     });
     expect(englishSession.instructions).toContain('Reply in concise, natural English');
-    expect(hindiSession.instructions).toContain('Reply in concise, natural Hindi');
-    expect(hindiSession.instructions).toContain('Devanagari script');
-  });
-
-  it('requests text-only English translation for a bounded Hindi audio segment', async () => {
-    const originalFetch = globalThis.fetch;
-    const fetchMock = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ english: 'Please speak a little more slowly.' }),
-    }));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    try {
-      await expect(translateHindiAudio({ audioBase64: 'audio-data', mimeType: 'audio/mp4' })).resolves.toEqual({
-        english: 'Please speak a little more slowly.',
-      });
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://api-v2.appdeploy.ai/app/74e39779183cf78fed/api/live-caption-audio',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ audioBase64: 'audio-data', mimeType: 'audio/mp4' }),
-        }),
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it('accepts an empty live caption as a valid no-speech segment', async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ english: '' }),
-    })) as unknown as typeof fetch;
-
-    try {
-      await expect(translateHindiAudio({ audioBase64: 'quiet-audio', mimeType: 'audio/wav' }))
-        .resolves.toEqual({ english: '' });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    expect(hindiSession.instructions).toContain('Reply in concise, natural Hindi written only in Romanized Latin script');
+    expect(englishSession.instructions).toContain('Never use Devanagari');
+    expect(hindiSession.instructions).toContain('Never use Devanagari');
   });
 
   it('requests deletion using only the current random app identifier', async () => {
