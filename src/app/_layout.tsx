@@ -50,7 +50,7 @@ function AppNavigator() {
           <Stack.Screen name="scene/[id]" options={{ title: 'Practice scene' }} />
         </Stack>
       ) : (
-        <View accessibilityLabel="Loading Bolo" style={styles.loading} testID="app-hydration-loading">
+        <View accessibilityLabel="Loading Bolo" accessibilityLiveRegion="polite" accessibilityRole="progressbar" style={styles.loading} testID="app-hydration-loading">
           <Text style={styles.loadingMark}>ब</Text>
           <ActivityIndicator color={colors.brand} />
         </View>

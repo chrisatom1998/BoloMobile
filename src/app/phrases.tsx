@@ -22,7 +22,7 @@ const replaySpeeds = [
 const phraseCategories = new Map<string, SceneCategory>();
 for (const scene of scenes) {
   for (const beat of scene.beats) {
-    for (const choice of beat.choices) if (choice.correct) phraseCategories.set(choice.hi, scene.category);
+    for (const choice of beat.choices) phraseCategories.set(choice.hi, scene.category);
   }
 }
 
@@ -51,8 +51,7 @@ export default function PhrasesScreen() {
     if (!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) return;
     setAudioError('');
     try {
-      if (playbackRate === 1) await speakText(text);
-      else await speakText(text, undefined, playbackRate);
+      await speakText(text, undefined, playbackRate);
     } catch (error) {
       setAudioError(error instanceof Error ? error.message : 'Bolo could not play the voice.');
     }
@@ -97,13 +96,14 @@ export default function PhrasesScreen() {
         const offline = hasOfflineSpeech?.(item.hi) ?? false;
         const canListen = aiConsent || offline;
         const review = reviews[item.hi];
+        const category = phraseCategories.get(item.hi) ?? 'Mira';
         return (
           <View style={styles.card}>
             <View style={styles.copy}>
               {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text style={styles.hindi}>{item.hi}</Text> : null}
               <Text style={styles.latin}>{item.latin}</Text>
               <Text style={styles.english}>{item.en}</Text>
-              <Text style={styles.mastery}>{dueSet.has(item.hi) ? 'Due now' : `Mastery ${review?.mastery ?? 0}/5`}{phraseCategories.get(item.hi) ? ` · ${phraseCategories.get(item.hi)}` : ''}</Text>
+              <Text style={styles.mastery}>{dueSet.has(item.hi) ? 'Due now' : `Mastery ${review?.mastery ?? 0}/5`} · {category}</Text>
             </View>
             <View style={styles.actions}>
               <Pressable accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase(item.hi)} style={[styles.iconButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={20} /></Pressable>

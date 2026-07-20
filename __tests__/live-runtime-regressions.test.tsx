@@ -2,7 +2,8 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import * as mockReact from 'react';
 import { Alert, Animated, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText } from 'react-native';
 
-import LiveScreen from '../src/app/live';
+import LiveScreen, { createLiveStyles } from '../src/app/live';
+import { darkColors } from '../src/theme';
 
 const mockRouterBack = jest.fn();
 
@@ -233,6 +234,18 @@ describe('live consent layout', () => {
   }, 20_000);
 });
 
+describe('live theme styles', () => {
+  it('uses the dark palette for the chat list, bubbles, and composer', () => {
+    const styles = createLiveStyles(darkColors);
+
+    expect(styles.list.backgroundColor).toBe(darkColors.background);
+    expect(styles.miraMessage.backgroundColor).toBe(darkColors.paperRaised);
+    expect(styles.messageText.color).toBe(darkColors.ink);
+    expect(styles.composer.backgroundColor).toBe(darkColors.paperRaised);
+    expect(styles.input.backgroundColor).toBe(darkColors.backgroundWarm);
+  });
+});
+
 describe('immersive live conversation design', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -387,6 +400,31 @@ describe('generated-message reporting', () => {
     await flushMicrotasks();
     alert.mockRestore();
   }, 20_000);
+
+  it('aborts an in-flight report when the screen unmounts', async () => {
+    const request = deferred<{ reported: true }>();
+    let reportSignal: AbortSignal | undefined;
+    boloApi.reportGeneratedMessage.mockImplementation((_input: unknown, signal: AbortSignal) => {
+      reportSignal = signal;
+      return request.promise;
+    });
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText(/Report reply:/u));
+    const reason = (alert.mock.calls[0][2] as { onPress?: () => void }[])[0].onPress;
+    await act(async () => {
+      reason?.();
+      await Promise.resolve();
+    });
+
+    await view.unmount();
+    expect(reportSignal?.aborted).toBe(true);
+    request.resolve({ reported: true });
+    await flushMicrotasks();
+    expect(alert).not.toHaveBeenCalledWith('Report received', expect.any(String));
+    alert.mockRestore();
+  });
 });
 
 describe('typed live coaching request control', () => {
@@ -439,6 +477,7 @@ describe('typed live coaching request control', () => {
       await Promise.resolve();
     });
     expect(boloApi.sendMobileChat).toHaveBeenCalledTimes(1);
+    expect(boloApi.sendMobileChat.mock.calls[0][0]).toEqual(expect.objectContaining({ messages: [] }));
     expect(appState.__appendChatMessagesMock).not.toHaveBeenCalled();
     expect(view.getByText('Please correct this.')).toBeTruthy();
 
@@ -516,7 +555,7 @@ describe('live coaching state', () => {
 
   it('selects a transcript excerpt and saves Romanized text with its English meaning', async () => {
     boloApi.prepareSavedPhraseFromText.mockResolvedValueOnce({
-      hi: 'Aap kaise hain?',
+      hi: 'आप कैसे हैं?',
       latin: 'Aap kaise hain?',
       en: 'How are you?',
     });
@@ -535,11 +574,12 @@ describe('live coaching state', () => {
       text: 'Aap kaise hain?',
     }, expect.any(AbortSignal));
     expect(view.getByLabelText('Romanized Hindi phrase').props.value).toBe('Aap kaise hain?');
+    expect(view.getByLabelText('Hindi phrase').props.value).toBe('आप कैसे हैं?');
     expect(view.getByLabelText('English phrase meaning').props.value).toBe('How are you?');
     await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
 
     expect(appState.__togglePhraseMock).toHaveBeenCalledWith({
-      hi: 'Aap kaise hain?',
+      hi: 'आप कैसे हैं?',
       latin: 'Aap kaise hain?',
       en: 'How are you?',
     });
@@ -551,16 +591,16 @@ describe('live coaching state', () => {
   it('selects English or Hindi for typed and realtime Mira responses and locks the choice during a live session', async () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Dhanyavaad.', language: 'hi' });
     const view = await render(<LiveScreen />);
-    const english = view.getByRole('button', { name: 'Mira voice language: English' });
-    const hindi = view.getByRole('button', { name: 'Mira voice language: Hindi' });
+    const english = view.getByRole('radio', { name: 'Mira voice language: English' });
+    const hindi = view.getByRole('radio', { name: 'Mira voice language: Hindi' });
 
-    expect(english.props.accessibilityState).toEqual({ disabled: false, selected: true });
-    expect(hindi.props.accessibilityState).toEqual({ disabled: false, selected: false });
+    expect(english.props.accessibilityState).toEqual({ checked: true, disabled: false });
+    expect(hindi.props.accessibilityState).toEqual({ checked: false, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('en');
 
     await fireEvent.press(hindi);
-    expect(view.getByRole('button', { name: 'Mira voice language: Hindi' }).props.accessibilityState)
-      .toEqual({ disabled: false, selected: true });
+    expect(view.getByRole('radio', { name: 'Mira voice language: Hindi' }).props.accessibilityState)
+      .toEqual({ checked: true, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
     expect(view.getByText('Conversational Hindi coach · Hindi replies')).toBeTruthy();
 
@@ -577,9 +617,9 @@ describe('live coaching state', () => {
     ]);
 
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByRole('button', { name: 'Mira voice language: English' }).props.accessibilityState.disabled).toBe(true);
-    expect(view.getByRole('button', { name: 'Mira voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
-    await fireEvent.press(view.getByRole('button', { name: 'Mira voice language: English' }));
+    expect(view.getByRole('radio', { name: 'Mira voice language: English' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('radio', { name: 'Mira voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(view.getByRole('radio', { name: 'Mira voice language: English' }));
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
 
     await view.unmount();

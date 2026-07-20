@@ -16,6 +16,7 @@ type TranscriptPhrasePickerProps = {
 
 export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave }: TranscriptPhrasePickerProps) {
   const [selectedText, setSelectedText] = useState(message.text.trim());
+  const [hindi, setHindi] = useState('');
   const [latin, setLatin] = useState('');
   const [english, setEnglish] = useState('');
   const [busy, setBusy] = useState(false);
@@ -43,6 +44,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
       const phrase = await prepareSavedPhraseFromText({ clientId, text }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) return;
       setLatin(phrase.latin);
+      setHindi(phrase.hi);
       setEnglish(phrase.en);
       Keyboard.dismiss();
     } catch (cause) {
@@ -66,12 +68,13 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   function save() {
     const normalizedLatin = latin.trim();
     const normalizedEnglish = english.trim();
-    if (!normalizedLatin || !normalizedEnglish || busy) return;
-    onSave({ hi: normalizedLatin, latin: normalizedLatin, en: normalizedEnglish });
+    const normalizedHindi = hindi.trim();
+    if (!normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
+    onSave({ hi: normalizedHindi, latin: normalizedLatin, en: normalizedEnglish });
   }
 
   const canPrepare = aiConsent && selectedText.trim().length > 0 && !busy;
-  const canSave = latin.trim().length > 0 && english.trim().length > 0 && !busy;
+  const canSave = hindi.trim().length > 0 && latin.trim().length > 0 && english.trim().length > 0 && !busy;
 
   return (
     <Modal animationType="slide" onRequestClose={close} presentationStyle="pageSheet" visible>
@@ -97,6 +100,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
               multiline
               onChangeText={(value) => {
                 setSelectedText(value);
+                setHindi('');
                 setLatin('');
                 setEnglish('');
                 setError('');
@@ -113,6 +117,10 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
           {!aiConsent ? <Text style={styles.hint}>Connected AI consent is required to fill phrase details automatically.</Text> : null}
           {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Hindi</Text>
+            <TextInput accessibilityLabel="Hindi phrase" maxLength={500} onChangeText={setHindi} placeholder="उदाहरण: आप कैसे हैं?" placeholderTextColor={colors.muted} style={styles.input} value={hindi} />
+          </View>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Romanized Hindi</Text>
             <TextInput accessibilityLabel="Romanized Hindi phrase" maxLength={500} onChangeText={setLatin} placeholder="Example: Aap kaise hain?" placeholderTextColor={colors.muted} style={styles.input} value={latin} />

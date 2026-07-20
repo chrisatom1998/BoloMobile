@@ -2,21 +2,21 @@ import { useMemo } from 'react';
 import { StyleSheet, useColorScheme, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 
 export const lightColors = {
-  background: '#F7F4EE',
-  backgroundWarm: '#FBF1E4',
-  paper: '#FFFCF6',
+  background: '#F6F3ED',
+  backgroundWarm: '#F8EFE4',
+  paper: '#FCFAF6',
   paperRaised: '#FFFFFF',
-  line: '#E3DBCF',
-  lineStrong: '#D0C5B6',
+  line: '#E5DED4',
+  lineStrong: '#CEC4B7',
 
   ink: '#172523',
   muted: '#535D5A',
   mutedSoft: '#66716D',
 
-  brand: '#AC4828',
-  brandDark: '#9C3F25',
-  brandText: '#9C3F25',
-  brandSoft: '#F8E1D3',
+  brand: '#A84428',
+  brandDark: '#923A23',
+  brandText: '#923A23',
+  brandSoft: '#F6E2D7',
 
   forest: '#167366',
   forestDark: '#15594F',
@@ -134,8 +134,8 @@ export const spacing = {
 
 export const radius = {
   sm: 10,
-  md: 16,
-  lg: 24,
+  md: 14,
+  lg: 20,
   pill: 999,
 } as const;
 
@@ -191,23 +191,13 @@ export function createSharedStyles(c: ThemeColors) {
       borderCurve: 'continuous',
       padding: spacing.lg,
       gap: spacing.md,
-      shadowColor: c.black,
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.06 * c.shadowOpacityScale,
-      shadowRadius: 18,
-      elevation: 2 * c.shadowOpacityScale,
     },
     elevatedCard: {
       backgroundColor: c.paperRaised,
       borderColor: c.line,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderRadius: radius.lg,
       borderCurve: 'continuous',
-      shadowColor: c.black,
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.09 * c.shadowOpacityScale,
-      shadowRadius: 22,
-      elevation: 3 * c.shadowOpacityScale,
     },
     eyebrow: {
       color: c.brandText,

@@ -4,6 +4,7 @@ const mockRouterPush = jest.fn();
 const mockSetGoal = jest.fn();
 const mockAppState = {
   dailySteps: 1,
+  duePhrases: [],
   goal: 10 as 5 | 10 | 15,
   hydrated: true,
   phrases: [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }],
@@ -70,7 +71,7 @@ describe('HomeScreen primary journey', () => {
 
     await fireEvent.press(view.getByLabelText('Settings'));
     await fireEvent.press(view.getByLabelText('Saved phrases'));
-    await fireEvent.press(view.getByText('Practice live with Mira'));
+    await fireEvent.press(view.getByLabelText('Practice live with Mira'));
     await fireEvent.press(view.getByLabelText('Open scene chai'));
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/settings');

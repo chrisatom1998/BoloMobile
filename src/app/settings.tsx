@@ -14,14 +14,19 @@ import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import { colors, radius, sharedStyles, spacing } from '@/theme';
 
+export function formatReminderTime(hour: number, minute = 0) {
+  const normalizedHour = Math.min(23, Math.max(0, Math.round(hour)));
+  const normalizedMinute = Math.min(59, Math.max(0, Math.round(minute)));
+  return `${normalizedHour % 12 || 12}:${String(normalizedMinute).padStart(2, '0')} ${normalizedHour >= 12 ? 'PM' : 'AM'}`;
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
   const state = useAppState();
   const { aiConsent, clearAllData, clientId, setAiConsent } = state;
   const learnerProfile = state.learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const reminder = state.reminder ?? defaultReminderSettings();
-  const setReminder = state.setReminder ?? (() => undefined);
-  const updateLearnerProfile = state.updateLearnerProfile ?? (() => undefined);
+  const { setReminder, updateLearnerProfile } = state;
   const [deleting, setDeleting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [savingReminder, setSavingReminder] = useState(false);
@@ -152,11 +157,11 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={styles.row}>
           <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
-          <View style={styles.copy}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${reminder.hour > 12 ? reminder.hour - 12 : reminder.hour}:00 ${reminder.hour >= 12 ? 'PM' : 'AM'}` : 'Off · reminders stay on this device'}</Text></View>
+          <View style={styles.copy}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
         </View>
         <View style={styles.choiceRow}>
           {[9, 19, 20].map((hour) => (
-            <Pressable key={hour} accessibilityRole="button" accessibilityState={{ disabled: savingReminder, selected: reminder.enabled && reminder.hour === hour }} disabled={savingReminder} onPress={() => void changeReminder(hour)} style={[styles.choiceButton, reminder.enabled && reminder.hour === hour && styles.choiceButtonActive]}><Text style={[styles.choiceButtonText, reminder.enabled && reminder.hour === hour && styles.choiceButtonTextActive]}>{hour > 12 ? hour - 12 : hour} {hour >= 12 ? 'PM' : 'AM'}</Text></Pressable>
+            <Pressable key={hour} accessibilityRole="button" accessibilityState={{ disabled: savingReminder, selected: reminder.enabled && reminder.hour === hour }} disabled={savingReminder} onPress={() => void changeReminder(hour)} style={[styles.choiceButton, reminder.enabled && reminder.hour === hour && styles.choiceButtonActive]}><Text style={[styles.choiceButtonText, reminder.enabled && reminder.hour === hour && styles.choiceButtonTextActive]}>{formatReminderTime(hour)}</Text></Pressable>
           ))}
         </View>
         {reminder.enabled ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: savingReminder }} disabled={savingReminder} onPress={() => void changeReminder()} style={styles.secondaryButton}><Text style={styles.secondaryText}>Turn reminder off</Text></Pressable> : null}

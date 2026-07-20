@@ -9,7 +9,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-import { clearObservability, getObservabilitySnapshot, observe } from '../src/lib/observability';
+import { clearObservability, getObservabilitySnapshot, observe, observeOncePerSession } from '../src/lib/observability';
 
 describe('privacy-preserving observability', () => {
   beforeEach(async () => {
@@ -33,5 +33,17 @@ describe('privacy-preserving observability', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     await clearObservability();
     expect(await getObservabilitySnapshot()).toEqual({ days: {} });
+  });
+
+  it('records session-scoped events once and resets the session boundary when cleared', async () => {
+    observeOncePerSession('consent_viewed');
+    observeOncePerSession('consent_viewed');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(Object.values((await getObservabilitySnapshot()).days)[0]?.consent_viewed?.count).toBe(1);
+
+    await clearObservability();
+    observeOncePerSession('consent_viewed');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(Object.values((await getObservabilitySnapshot()).days)[0]?.consent_viewed?.count).toBe(1);
   });
 });

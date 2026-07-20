@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage } from '@/lib/public-pages';
-import { observe } from '@/lib/observability';
+import { observe, observeOncePerSession } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import { colors, radius, spacing } from '@/theme';
 
@@ -13,7 +13,7 @@ export function AiConsentGate({ children }: PropsWithChildren) {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   useEffect(() => {
-    if (!aiConsent) observe('consent_viewed');
+    if (!aiConsent) observeOncePerSession('consent_viewed');
   }, [aiConsent]);
   if (aiConsent) return children;
 

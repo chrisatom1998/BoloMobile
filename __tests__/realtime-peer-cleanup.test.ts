@@ -290,4 +290,52 @@ describe('Realtime peer setup cleanup', () => {
     expect(audio.pause).toHaveBeenCalledTimes(1);
     await session;
   });
+
+  it('closes a native peer that remains ICE-disconnected for ten seconds', async () => {
+    const microphone = { enabled: true, stop: jest.fn() };
+    const stream = {
+      getAudioTracks: jest.fn(() => [microphone]),
+      getTracks: jest.fn(() => [microphone]),
+    };
+    const dataHandlers = new Map<string, (event: { data?: unknown }) => void>();
+    const peerHandlers = new Map<string, () => void>();
+    const dataChannel = {
+      addEventListener: jest.fn((event: string, handler: (event: { data?: unknown }) => void) => dataHandlers.set(event, handler)),
+      close: jest.fn(),
+      readyState: 'open',
+      send: jest.fn(),
+    };
+    const peer = {
+      addTrack: jest.fn(),
+      close: jest.fn(),
+      connectionState: 'connected',
+      iceConnectionState: 'connected',
+      createDataChannel: jest.fn(() => dataChannel),
+      createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
+      setLocalDescription: jest.fn(async () => undefined),
+      setRemoteDescription: jest.fn(async () => undefined),
+      addEventListener: jest.fn((event: string, handler: () => void) => peerHandlers.set(event, handler)),
+    };
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockImplementation(() => peer);
+    globalThis.fetch = jest.fn(async () => ({ ok: true, text: async () => 'native-answer' })) as unknown as typeof fetch;
+    const onClose = jest.fn();
+
+    await createNativeSession({
+      ephemeralKey: 'temporary-client-secret',
+      onClose,
+      onMessage: jest.fn(),
+      signal: new AbortController().signal,
+    });
+    peer.iceConnectionState = 'disconnected';
+    peerHandlers.get('iceconnectionstatechange')?.();
+    jest.advanceTimersByTime(9_999);
+    expect(peer.close).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(dataChannel.close).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
 });

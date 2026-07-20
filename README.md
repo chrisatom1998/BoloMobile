@@ -14,7 +14,7 @@ npm run verify
 npx expo start
 ```
 
-Bolo uses its reviewed AppDeploy API in every build. The endpoint is fixed in source so a build environment cannot silently redirect conversations or audio to an undeclared service.
+Bolo defaults to its reviewed AppDeploy API. Development, preview, or production builds can explicitly override that endpoint with `EXPO_PUBLIC_BOLO_API_URL`; because Expo embeds `EXPO_PUBLIC_*` values in the client bundle, this value must be a public URL rather than a secret. Any release override must receive the same privacy and backend review as the default service.
 
 The audited AppDeploy backend source implements `POST /api/realtime-token`, validates and persistently rate-limits the random client identifier, and requests a `gpt-realtime-2.1` client secret from `POST /v1/realtime/client_secrets` with a privacy-preserving `OpenAI-Safety-Identifier`. It returns only OpenAI's short-lived `value` and `expires_at`; it never returns or embeds the standard `OPENAI_API_KEY`. Typed coaching uses the Responses API with `store: false`, moderation, bounded history, and a pinned model. Consent-gated Listen uses `/api/phrase-audio` and OpenAI `gpt-4o-mini-tts` with the `marin` AI voice; the client chunks generated replies at the verified 240-character endpoint boundary and keeps a bounded in-memory cache. The production backend and Realtime token configuration were verified on July 14, 2026.
 

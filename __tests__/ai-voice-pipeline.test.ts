@@ -184,6 +184,22 @@ describe('AI voice native playback', () => {
     expect(native.player.setPlaybackRate).toHaveBeenCalledWith(0.1);
   });
 
+  it('caps the slow-playback watchdog at two minutes', async () => {
+    const native = installPlayer();
+    const timeoutSpy = jest.spyOn(globalThis, 'setTimeout');
+    const controller = new AbortController();
+    const playback = aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'dGltZW91dA==',
+      mimeType: 'audio/mpeg',
+    }, controller.signal, 0.1);
+    await waitFor(() => native.player.play.mock.calls.length === 1);
+
+    expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 120_000);
+    controller.abort();
+    await expect(playback).resolves.toBeUndefined();
+    timeoutSpy.mockRestore();
+  });
+
   it('evicts the least-recently-used prepared clip after four entries', async () => {
     const players: ReturnType<typeof installPlayer>[] = [];
     for (let index = 0; index < 5; index += 1) {

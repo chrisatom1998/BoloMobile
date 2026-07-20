@@ -6,6 +6,7 @@ import {
   checkPronunciation,
   createRealtimeClientSecret,
   deleteMobileData,
+  getBoloApiUrl,
   MOBILE_LANGUAGE_MODE,
   OPENAI_REALTIME_MODEL,
   prepareSavedPhraseFromText,
@@ -15,6 +16,17 @@ import {
 import type { ChatMessage } from '../src/state/app-state-types';
 
 describe('connected coaching contract', () => {
+  it('uses the Expo public API URL override and normalizes a trailing slash', () => {
+    const previous = process.env.EXPO_PUBLIC_BOLO_API_URL;
+    process.env.EXPO_PUBLIC_BOLO_API_URL = ' https://staging.example.test/ ';
+    try {
+      expect(getBoloApiUrl()).toBe('https://staging.example.test');
+    } finally {
+      if (previous === undefined) delete process.env.EXPO_PUBLIC_BOLO_API_URL;
+      else process.env.EXPO_PUBLIC_BOLO_API_URL = previous;
+    }
+  });
+
   it('splits long mixed-language replies into bounded AI-voice requests', () => {
     const text = `${'A'.repeat(230)} sentence end. नमस्ते, आपका स्वागत है। ${'B'.repeat(260)}`;
     const chunks = splitAiVoiceText(text);
@@ -171,7 +183,7 @@ describe('connected coaching contract', () => {
       status: 200,
       json: async () => ({
         transcript: '',
-        reply: '```json\n{"latin":"Aap kaise hain?","en":"How are you?"}\n```',
+        reply: '```json\n{"hi":"आप कैसे हैं?","latin":"Aap kaise hain?","en":"How are you?"}\n```',
         language: 'en',
       }),
     }));
@@ -182,14 +194,15 @@ describe('connected coaching contract', () => {
         clientId: 'client-12345678',
         text: 'How are you?',
       })).resolves.toEqual({
-        hi: 'Aap kaise hain?',
+        hi: 'आप कैसे हैं?',
         latin: 'Aap kaise hain?',
         en: 'How are you?',
       });
       const [, init] = fetchMock.mock.calls[0];
       const payload = JSON.parse(String(init?.body)) as { messages: unknown[]; text: string };
       expect(payload.messages).toEqual([]);
-      expect(payload.text).toContain('Never use Devanagari or Markdown.');
+      expect(payload.text).not.toContain('Never use Devanagari.');
+      expect(payload.text).toContain('Use Devanagari only in "hi"');
       expect(payload.text).toContain('How are you?');
     } finally {
       globalThis.fetch = originalFetch;
@@ -203,7 +216,7 @@ describe('connected coaching contract', () => {
       status: 200,
       json: async () => ({
         transcript: '',
-        reply: '{"latin":"नमस्ते","en":"Hello"}',
+        reply: '{"hi":"नमस्ते","latin":"नमस्ते","en":"Hello"}',
         language: 'en',
       }),
     })) as unknown as typeof fetch;
@@ -258,13 +271,13 @@ describe('connected coaching contract', () => {
     const fetchMock = jest.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ value: 'ek_test_ephemeral', expires_at: expiresAt }),
+      json: async () => ({ value: 'temporary-client-secret', expires_at: expiresAt }),
     }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     try {
       await expect(createRealtimeClientSecret('client-12345678')).resolves.toEqual({
-        value: 'ek_test_ephemeral',
+        value: 'temporary-client-secret',
         expires_at: expiresAt,
       });
       expect(fetchMock).toHaveBeenCalledWith(

@@ -68,7 +68,7 @@ describe('PhrasesScreen primary journey', () => {
     expect(view.getByText('namaste')).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Hear नमस्ते'));
-    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते');
+    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते', undefined, 1);
 
     await view.unmount();
     expect(stopSpeakingMock).toHaveBeenCalled();

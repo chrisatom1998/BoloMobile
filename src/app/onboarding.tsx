@@ -9,9 +9,9 @@ import { observe } from '@/lib/observability';
 import type { LearnerLevel, LearningGoal, MiraResponseLanguage, ScriptPreference } from '@/state/app-state-types';
 import { colors, radius, sharedStyles, spacing } from '@/theme';
 
-type Choice<T extends string> = { label: string; value: T; detail?: string };
+type Choice<T extends string | number> = { label: string; value: T; detail?: string };
 
-function ChoiceRow<T extends string>({ choices, label, onChange, value }: {
+function ChoiceRow<T extends string | number>({ choices, label, onChange, value }: {
   choices: Choice<T>[];
   label: string;
   onChange: (value: T) => void;
@@ -113,10 +113,10 @@ export default function OnboardingScreen() {
 
       <View style={styles.section}>
         <Text style={styles.title}>Daily practice target</Text>
-        <ChoiceRow label="Daily practice target" value={String(goal) as '5' | '10' | '15'} onChange={(value) => setGoal(Number(value) as 5 | 10 | 15)} choices={[
-          { value: '5', label: '5 minutes' },
-          { value: '10', label: '10 minutes' },
-          { value: '15', label: '15 minutes' },
+        <ChoiceRow label="Daily practice target" value={goal} onChange={setGoal} choices={[
+          { value: 5, label: '5 minutes' },
+          { value: 10, label: '10 minutes' },
+          { value: 15, label: '15 minutes' },
         ]} />
       </View>
 
