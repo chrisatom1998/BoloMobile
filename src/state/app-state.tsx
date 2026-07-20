@@ -3,40 +3,63 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
+import { clearObservability } from '@/lib/observability';
+import { updatePracticeWidget } from '@/lib/practice-widget';
 import {
   appendChatHistory,
   calculateStreak,
   createAiConsentRecord,
   dateKey,
+  defaultLearnerProfile,
+  defaultReminderSettings,
   emptyPractice,
   sanitizeClientId,
   sanitizeAiConsent,
   sanitizeChatHistory,
   sanitizeGoal,
+  sanitizeLearnerProfile,
+  sanitizePhraseReviews,
   sanitizePhrases,
   sanitizePractice,
+  sanitizePracticeHistory,
+  sanitizeReminder,
+  sanitizeSceneProgress,
   sanitizeStreakDays,
   storageKeys,
   type PersistedState,
 } from '@/lib/storage';
-import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
+import type { ChatMessage, LearnerProfile, ReminderSettings, SavedPhrase } from '@/state/app-state-types';
 
 type PersistedKey = keyof typeof storageKeys;
+
+type SceneCompletion = {
+  score: number;
+  correct: number;
+  total: number;
+  weakPhrases: string[];
+};
 
 type AppStateValue = Omit<PersistedState, 'aiConsent'> & {
   aiConsent: boolean;
   hydrated: boolean;
   streak: number;
   dailySteps: number;
+  duePhrases: SavedPhrase[];
+  reviewStreak: number;
   setGoal: (goal: 5 | 10 | 15) => void;
+  completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
+  updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
   togglePhrase: (phrase: SavedPhrase) => void;
   removePhrase: (hi: string) => void;
-  markSceneComplete: (sceneId: string, seconds: number) => void;
+  checkpointScene: (sceneId: string, nextBeatIndex: number) => void;
+  markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
+  reviewPhrase: (hi: string, remembered: boolean) => void;
   markLiveTurn: (seconds?: number) => void;
   addPracticeSeconds: (seconds: number) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
   clearChatHistory: () => void;
   setAiConsent: (consent: boolean) => Promise<boolean>;
+  setReminder: (reminder: ReminderSettings) => void;
   clearAllData: () => Promise<void>;
 };
 
@@ -48,6 +71,12 @@ const initialState: PersistedState = {
   clientId: 'loading-client',
   aiConsent: null,
   chatHistory: [],
+  learnerProfile: defaultLearnerProfile(),
+  sceneProgress: {},
+  phraseReviews: {},
+  practiceHistory: [],
+  reviewStreakDays: [],
+  reminder: defaultReminderSettings(),
 };
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -63,6 +92,28 @@ function completedToday(practice: PersistedState['practice']) {
 function withRecordedDay(days: string[], practice: PersistedState['practice']) {
   if (!completedToday(practice)) return days;
   return [...new Set([...days, practice.date])].sort().slice(-400);
+}
+
+function updatePracticeHistory(
+  history: PersistedState['practiceHistory'],
+  updates: Partial<Omit<PersistedState['practiceHistory'][number], 'date'>>,
+) {
+  const today = dateKey();
+  const existing = history.find((day) => day.date === today) ?? { date: today, seconds: 0, correct: 0, answers: 0, reviews: 0 };
+  const next = {
+    ...existing,
+    seconds: Math.min(24 * 60 * 60, existing.seconds + Math.max(0, Math.round(updates.seconds ?? 0))),
+    correct: existing.correct + Math.max(0, Math.round(updates.correct ?? 0)),
+    answers: existing.answers + Math.max(0, Math.round(updates.answers ?? 0)),
+    reviews: existing.reviews + Math.max(0, Math.round(updates.reviews ?? 0)),
+  };
+  return [...history.filter((day) => day.date !== today), next].sort((a, b) => a.date.localeCompare(b.date)).slice(-90);
+}
+
+function addDays(key: string, days: number) {
+  const value = new Date(`${key}T12:00:00`);
+  value.setDate(value.getDate() + days);
+  return dateKey(value);
 }
 
 async function persistState(state: PersistedState, keys: PersistedKey[]) {
@@ -125,6 +176,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           clientId,
           aiConsent: sanitizeAiConsent(stored[storageKeys.aiConsent]),
           chatHistory: sanitizeChatHistory(stored[storageKeys.chatHistory]),
+          learnerProfile: sanitizeLearnerProfile(stored[storageKeys.learnerProfile]),
+          sceneProgress: sanitizeSceneProgress(stored[storageKeys.sceneProgress]),
+          phraseReviews: sanitizePhraseReviews(stored[storageKeys.phraseReviews]),
+          practiceHistory: sanitizePracticeHistory(stored[storageKeys.practiceHistory]),
+          reviewStreakDays: sanitizeStreakDays(stored[storageKeys.reviewStreakDays]),
+          reminder: sanitizeReminder(stored[storageKeys.reminder]),
         };
         if (active) {
           setState(next);
@@ -184,6 +241,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     };
   }, [enqueuePersistence, hydrated]);
 
+  useEffect(() => {
+    if (!hydrated) return;
+    updatePracticeWidget({
+      streak: calculateStreak(state.streakDays, completedToday(state.practice)),
+      dueReviews: state.phrases.filter((phrase) => (state.phraseReviews[phrase.hi]?.dueAt ?? dateKey()) <= dateKey()).length,
+      minutesToday: Math.floor(state.practice.seconds / 60),
+    });
+  }, [hydrated, state.phraseReviews, state.phrases, state.practice, state.streakDays]);
+
   const commit = useCallback((updater: (current: PersistedState) => PersistedState, keys: PersistedKey[]) => {
     if (clearingAllDataRef.current) return;
     setState((current) => {
@@ -202,29 +268,119 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     commit((current) => ({ ...current, goal }), ['goal']);
   }, [commit]);
 
+  const completeOnboarding = useCallback((profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => {
+    commit((current) => ({ ...current, goal, learnerProfile: { ...profile, completed: true } }), ['goal', 'learnerProfile']);
+  }, [commit]);
+
+  const updateLearnerProfile = useCallback((profile: Partial<Omit<LearnerProfile, 'completed'>>) => {
+    commit((current) => ({ ...current, learnerProfile: { ...current.learnerProfile, ...profile } }), ['learnerProfile']);
+  }, [commit]);
+
   const togglePhrase = useCallback((phrase: SavedPhrase) => {
     commit((current) => {
       const exists = current.phrases.some((saved) => saved.hi === phrase.hi);
       const phrases = exists
         ? current.phrases.filter((saved) => saved.hi !== phrase.hi)
         : [...current.phrases, phrase].slice(-100);
-      return { ...current, phrases };
-    }, ['phrases']);
+      const phraseReviews = { ...current.phraseReviews };
+      if (exists) delete phraseReviews[phrase.hi];
+      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? {
+        mastery: 0,
+        intervalDays: 0,
+        dueAt: dateKey(),
+        lastReviewedAt: null,
+        correctReviews: 0,
+        totalReviews: 0,
+      };
+      return { ...current, phrases, phraseReviews };
+    }, ['phrases', 'phraseReviews']);
   }, [commit]);
 
   const removePhrase = useCallback((hi: string) => {
-    commit((current) => ({ ...current, phrases: current.phrases.filter((phrase) => phrase.hi !== hi) }), ['phrases']);
+    commit((current) => {
+      const phraseReviews = { ...current.phraseReviews };
+      delete phraseReviews[hi];
+      return { ...current, phrases: current.phrases.filter((phrase) => phrase.hi !== hi), phraseReviews };
+    }, ['phrases', 'phraseReviews']);
   }, [commit]);
 
-  const markSceneComplete = useCallback((sceneId: string, seconds: number) => {
+  const checkpointScene = useCallback((sceneId: string, nextBeatIndex: number) => {
     commit((current) => {
+      const previous = current.sceneProgress[sceneId] ?? {
+        completions: 0, bestScore: 0, bestAccuracy: 0, totalCorrect: 0, totalAnswers: 0,
+        lastPracticedAt: null, lastBeatIndex: 0, weakPhrases: [],
+      };
+      return {
+        ...current,
+        sceneProgress: {
+          ...current.sceneProgress,
+          [sceneId]: { ...previous, lastBeatIndex: Math.max(0, Math.round(nextBeatIndex)), lastPracticedAt: new Date().toISOString() },
+        },
+      };
+    }, ['sceneProgress']);
+  }, [commit]);
+
+  const markSceneComplete = useCallback((sceneId: string, seconds: number, result?: SceneCompletion) => {
+    commit((current) => {
+      const elapsed = Math.max(1, Math.round(seconds));
       const practice = {
         ...current.practice,
         chaiDone: current.practice.chaiDone || sceneId === 'chai',
-        seconds: current.practice.seconds + Math.max(1, Math.round(seconds)),
+        seconds: current.practice.seconds + elapsed,
       };
-      return { ...current, practice, streakDays: withRecordedDay(current.streakDays, practice) };
-    }, ['practice', 'streakDays']);
+      const previous = current.sceneProgress[sceneId] ?? {
+        completions: 0, bestScore: 0, bestAccuracy: 0, totalCorrect: 0, totalAnswers: 0,
+        lastPracticedAt: null, lastBeatIndex: 0, weakPhrases: [],
+      };
+      const correct = Math.max(0, Math.round(result?.correct ?? 0));
+      const total = Math.max(correct, Math.round(result?.total ?? 0));
+      const accuracy = total > 0 ? Math.round(correct / total * 100) : 0;
+      const sceneProgress = {
+        ...current.sceneProgress,
+        [sceneId]: {
+          completions: previous.completions + 1,
+          bestScore: Math.max(previous.bestScore, Math.max(0, Math.round(result?.score ?? 0))),
+          bestAccuracy: Math.max(previous.bestAccuracy, accuracy),
+          totalCorrect: previous.totalCorrect + correct,
+          totalAnswers: previous.totalAnswers + total,
+          lastPracticedAt: new Date().toISOString(),
+          lastBeatIndex: 0,
+          weakPhrases: [...new Set([...(result?.weakPhrases ?? []), ...previous.weakPhrases])].slice(0, 50),
+        },
+      };
+      const practiceHistory = updatePracticeHistory(current.practiceHistory, { seconds: elapsed, correct, answers: total });
+      return { ...current, practice, practiceHistory, sceneProgress, streakDays: withRecordedDay(current.streakDays, practice) };
+    }, ['practice', 'practiceHistory', 'sceneProgress', 'streakDays']);
+  }, [commit]);
+
+  const reviewPhrase = useCallback((hi: string, remembered: boolean) => {
+    commit((current) => {
+      if (!current.phrases.some((phrase) => phrase.hi === hi)) return current;
+      const previous = current.phraseReviews[hi] ?? {
+        mastery: 0, intervalDays: 0, dueAt: dateKey(), lastReviewedAt: null, correctReviews: 0, totalReviews: 0,
+      };
+      const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
+      const intervals = [0, 1, 3, 7, 14, 30];
+      const intervalDays = remembered ? intervals[mastery] : 0;
+      const today = dateKey();
+      const reviewStreakDays = [...new Set([...current.reviewStreakDays, today])].sort().slice(-400);
+      return {
+        ...current,
+        phraseReviews: {
+          ...current.phraseReviews,
+          [hi]: {
+            mastery,
+            intervalDays,
+            dueAt: addDays(today, intervalDays),
+            lastReviewedAt: new Date().toISOString(),
+            correctReviews: previous.correctReviews + Number(remembered),
+            totalReviews: previous.totalReviews + 1,
+          },
+        },
+        practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
+        reviewStreakDays,
+      };
+    }, ['phraseReviews', 'practiceHistory', 'reviewStreakDays']);
   }, [commit]);
 
   const markLiveTurn = useCallback((seconds = 0) => {
@@ -234,16 +390,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         liveDone: true,
         seconds: current.practice.seconds + Math.max(0, Math.round(seconds)),
       };
-      return { ...current, practice, streakDays: withRecordedDay(current.streakDays, practice) };
-    }, ['practice', 'streakDays']);
+      return { ...current, practice, practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds }), streakDays: withRecordedDay(current.streakDays, practice) };
+    }, ['practice', 'practiceHistory', 'streakDays']);
   }, [commit]);
 
   const addPracticeSeconds = useCallback((seconds: number) => {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
     commit((current) => {
       const practice = { ...current.practice, seconds: current.practice.seconds + Math.round(seconds) };
-      return { ...current, practice, streakDays: withRecordedDay(current.streakDays, practice) };
-    }, ['practice', 'streakDays']);
+      return { ...current, practice, practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds }), streakDays: withRecordedDay(current.streakDays, practice) };
+    }, ['practice', 'practiceHistory', 'streakDays']);
   }, [commit]);
 
   const appendChatMessages = useCallback((messages: ChatMessage[]) => {
@@ -275,6 +431,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return true;
   }, [enqueuePersistence]);
 
+  const setReminder = useCallback((reminder: ReminderSettings) => {
+    commit((current) => ({ ...current, reminder }), ['reminder']);
+  }, [commit]);
+
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
@@ -289,6 +449,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     });
     try {
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
+      await clearObservability();
       setState(next);
     } catch (error) {
       console.warn('Bolo could not clear local data.', error);
@@ -304,17 +465,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     hydrated,
     streak: calculateStreak(state.streakDays, completedToday(state.practice)),
     dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
+    duePhrases: state.phrases.filter((phrase) => (state.phraseReviews[phrase.hi]?.dueAt ?? dateKey()) <= dateKey()).slice(0, 5),
+    reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
     setGoal,
+    completeOnboarding,
+    updateLearnerProfile,
     togglePhrase,
     removePhrase,
+    checkpointScene,
     markSceneComplete,
+    reviewPhrase,
     markLiveTurn,
     addPracticeSeconds,
     appendChatMessages,
     clearChatHistory,
     setAiConsent,
+    setReminder,
     clearAllData,
-  }), [state, hydrated, setGoal, togglePhrase, removePhrase, markSceneComplete, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, clearAllData]);
+  }), [state, hydrated, setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, clearAllData]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

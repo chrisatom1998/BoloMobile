@@ -7,6 +7,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  BarChart3: () => null,
   Check: () => null,
   ChevronRight: () => null,
   Flame: () => null,

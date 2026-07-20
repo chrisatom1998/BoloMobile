@@ -1,4 +1,5 @@
 import type { ChatMessage, MiraResponseLanguage, SavedPhrase } from '@/state/app-state-types';
+import { observe } from '@/lib/observability';
 
 const API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -109,6 +110,7 @@ async function post<T>(
   validate: (value: unknown) => value is T,
   signal?: AbortSignal,
 ): Promise<T> {
+  const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const abort = () => controller.abort();
@@ -125,8 +127,10 @@ async function post<T>(
     const message = isRecord(payload) && typeof payload.error === 'string' ? payload.error : undefined;
     if (!response.ok) throw new BoloApiError(message || 'Bolo could not complete that request.', response.status);
     if (!validate(payload)) throw new BoloApiError('Bolo returned an invalid response. Please try again.', response.status);
+    observe('ai_request_succeeded', Date.now() - startedAt);
     return payload;
   } catch (error) {
+    observe('ai_request_failed', Date.now() - startedAt);
     if (error instanceof BoloApiError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new BoloApiError('The request was canceled.');

@@ -6,11 +6,12 @@ import {
 } from 'expo-audio';
 import { Mic, Square } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, Text, View } from 'react-native';
 
+import { hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
 import { translateHindiAudio } from '@/services/bolo-api';
-import { colors, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const SEGMENT_MS = 3_600;
 const RETRY_BASE_MS = 500;
@@ -346,6 +347,7 @@ export function LiveTranslationRecorder({ disabled = false, onStatusChange, onTr
         return;
       }
       releaseRecordingMode = false;
+      hapticStartRecording();
       setActive(true);
       setPendingSegments(0);
       scheduleSegment(run);
@@ -395,6 +397,8 @@ export function LiveTranslationRecorder({ disabled = false, onStatusChange, onTr
   }, [stop]);
 
   const unavailable = disabled || starting;
+  const styles = useStyles();
+  const { colors } = useTheme();
 
   return (
     <View style={styles.wrapper}>
@@ -403,7 +407,7 @@ export function LiveTranslationRecorder({ disabled = false, onStatusChange, onTr
         accessibilityLabel={active ? 'Stop live translation' : starting ? 'Starting live translation' : 'Start live translation'}
         accessibilityState={{ busy: starting, disabled: unavailable }}
         disabled={unavailable}
-        onPress={active ? () => void stop() : () => void start()}
+        onPress={active ? () => { hapticTap(); void stop(); } : () => void start()}
         style={[styles.button, active && styles.stopButton, unavailable && styles.disabled]}
       >
         {active ? <Square color={colors.white} fill={colors.white} size={17} /> : <Mic color={colors.white} size={19} />}
@@ -419,12 +423,12 @@ export function LiveTranslationRecorder({ disabled = false, onStatusChange, onTr
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   wrapper: { gap: spacing.sm },
-  button: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.forest, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  stopButton: { backgroundColor: colors.danger },
+  button: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forest, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  stopButton: { backgroundColor: c.dangerSurface },
   disabled: { opacity: 0.5 },
-  label: { color: colors.white, fontSize: 15, fontWeight: '800' },
-  status: { color: colors.muted, fontSize: 13, textAlign: 'center' },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-});
+  label: { color: c.white, fontSize: 15, fontWeight: '800' },
+  status: { color: c.muted, fontSize: 13, textAlign: 'center' },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+}));

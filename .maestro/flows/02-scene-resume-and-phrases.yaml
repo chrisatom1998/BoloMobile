@@ -1,0 +1,31 @@
+appId: com.bolo.hindi
+name: Scene resume, completion, and saved phrase persistence
+tags:
+  - critical
+  - learning
+---
+- launchApp:
+    clearState: true
+- runFlow: ../subflows/complete-onboarding.yaml
+- scrollUntilVisible:
+    element:
+      text: "The chai stop"
+    direction: DOWN
+- tapOn: "The chai stop"
+- tapOn: ".*One tea, please.*"
+- tapOn: "Continue"
+- assertVisible: "Turn 2 of 2"
+- stopApp
+- launchApp
+- tapOn: "Continue"
+- assertVisible: "Turn 2 of 2"
+- tapOn: "Save phrase"
+- tapOn: ".*Less sugar, please.*"
+- tapOn: "Finish"
+- assertVisible: "Scene complete"
+- stopApp
+- launchApp
+- tapOn: "Saved phrases"
+- assertVisible: "Saved phrases"
+- assertVisible: "कम चीनी दीजिए।"
+

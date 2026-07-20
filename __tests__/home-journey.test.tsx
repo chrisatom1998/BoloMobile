@@ -18,6 +18,7 @@ jest.mock('expo-router', () => ({
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  BarChart3: () => null,
   Check: () => null,
   ChevronRight: () => null,
   Flame: () => null,
@@ -53,6 +54,7 @@ jest.mock('@/state/app-state', () => ({
 }));
 
 import HomeScreen from '../src/app/index';
+import { scenes } from '../src/data/scenes';
 
 describe('HomeScreen primary journey', () => {
   beforeEach(() => {
@@ -81,27 +83,29 @@ describe('HomeScreen primary journey', () => {
   });
 
   it('filters the catalog to the selected category', async () => {
+    const travelCount = scenes.filter((scene) => scene.category === 'Travel').length;
+    const travelFilter = `Travel scenes, ${travelCount}`;
     const view = await render(<HomeScreen />);
 
     expect(view.getByLabelText('Open scene chai')).toBeTruthy();
-    await fireEvent.press(view.getByLabelText('Travel scenes, 7'));
+    await fireEvent.press(view.getByLabelText(travelFilter));
 
-    expect(view.getByLabelText('Travel scenes, 7').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByLabelText(travelFilter).props.accessibilityState).toEqual({ selected: true });
     expect(view.queryByLabelText('Open scene chai')).toBeNull();
-    expect(view.getAllByTestId(/^scene-card-/u)).toHaveLength(7);
+    expect(view.getAllByTestId(/^scene-card-/u)).toHaveLength(travelCount);
   });
 
   it('updates the daily goal selection and renders progress from persisted practice', async () => {
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('1 / 2 challenge steps')).toBeTruthy();
-    expect(view.getByText('50% of daily goal')).toBeTruthy();
+    expect(view.getByText('✓ Chai scene')).toBeTruthy();
+    expect(view.getByText('Today · 50% of 10 min')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('15 minute daily goal'));
     expect(mockSetGoal).toHaveBeenCalledWith(15);
 
     mockAppState.goal = 15;
     await view.rerender(<HomeScreen />);
     expect(view.getByLabelText('15 minute daily goal').props.accessibilityState).toEqual({ selected: true });
-    expect(view.getByText('33% of daily goal')).toBeTruthy();
+    expect(view.getByText('Today · 33% of 15 min')).toBeTruthy();
   });
 });

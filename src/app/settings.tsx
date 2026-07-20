@@ -1,20 +1,30 @@
-import { useRouter } from 'expo-router';
-import { ChevronRight, DatabaseBackup, ExternalLink, FileText, LifeBuoy, LockKeyhole, ShieldCheck, Trash2 } from 'lucide-react-native';
+import Constants from 'expo-constants';
+import { useRouter, type Href } from 'expo-router';
+import { Activity, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
+import { observe } from '@/lib/observability';
+import { cancelPracticeReminder, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import { colors, radius, sharedStyles, spacing } from '@/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { aiConsent, clearAllData, clientId, setAiConsent } = useAppState();
+  const state = useAppState();
+  const { aiConsent, clearAllData, clientId, setAiConsent } = state;
+  const learnerProfile = state.learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
+  const reminder = state.reminder ?? defaultReminderSettings();
+  const setReminder = state.setReminder ?? (() => undefined);
+  const updateLearnerProfile = state.updateLearnerProfile ?? (() => undefined);
   const [deleting, setDeleting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [savingReminder, setSavingReminder] = useState(false);
   const mountedRef = useRef(true);
   const deletionRef = useRef<AbortController | null>(null);
   const deletionInFlightRef = useRef(false);
@@ -43,7 +53,10 @@ export default function SettingsScreen() {
     setWithdrawing(true);
     try {
       const saved = await setAiConsent(false);
-      if (saved && mountedRef.current) showAppAlert('AI consent withdrawn', 'Connected AI features are now disabled.');
+      if (saved && mountedRef.current) {
+        observe('consent_declined');
+        showAppAlert('AI consent withdrawn', 'Connected AI features are now disabled.');
+      }
     } finally {
       withdrawalInFlightRef.current = false;
       if (mountedRef.current) setWithdrawing(false);
@@ -95,8 +108,60 @@ export default function SettingsScreen() {
     );
   }
 
+  async function changeReminder(hour?: number) {
+    if (savingReminder) return;
+    setSavingReminder(true);
+    try {
+      const next = hour === undefined
+        ? await cancelPracticeReminder(reminder)
+        : await schedulePracticeReminder(reminder, hour);
+      setReminder(next);
+    } catch (error) {
+      showAppAlert('Could not update reminder', error instanceof Error ? error.message : 'Try again from system settings.');
+    } finally {
+      if (mountedRef.current) setSavingReminder(false);
+    }
+  }
+
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={styles.icon}><Languages color={colors.white} size={20} /></View>
+          <View style={styles.copy}><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Mira’s default reply language</Text></View>
+        </View>
+        <Text style={styles.choiceLabel}>Hindi display</Text>
+        <View accessibilityLabel="Hindi display preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
+          {(['both', 'devanagari', 'latin'] as const).map((value) => (
+            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: learnerProfile.scriptPreference === value }} onPress={() => updateLearnerProfile({ scriptPreference: value })} style={[styles.choiceButton, learnerProfile.scriptPreference === value && styles.choiceButtonActive]}>
+              <Text style={[styles.choiceButtonText, learnerProfile.scriptPreference === value && styles.choiceButtonTextActive]}>{value === 'both' ? 'Both' : value === 'devanagari' ? 'हिन्दी' : 'Latin'}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.choiceLabel}>Mira replies</Text>
+        <View accessibilityLabel="Mira reply language preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
+          {(['en', 'hi'] as const).map((value) => (
+            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: learnerProfile.responseLanguage === value }} onPress={() => updateLearnerProfile({ responseLanguage: value })} style={[styles.choiceButton, learnerProfile.responseLanguage === value && styles.choiceButtonActive]}>
+              <Text style={[styles.choiceButtonText, learnerProfile.responseLanguage === value && styles.choiceButtonTextActive]}>{value === 'en' ? 'English' : 'Hindi'}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/onboarding' as Href)} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
+          <View style={styles.copy}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${reminder.hour > 12 ? reminder.hour - 12 : reminder.hour}:00 ${reminder.hour >= 12 ? 'PM' : 'AM'}` : 'Off · reminders stay on this device'}</Text></View>
+        </View>
+        <View style={styles.choiceRow}>
+          {[9, 19, 20].map((hour) => (
+            <Pressable key={hour} accessibilityRole="button" accessibilityState={{ disabled: savingReminder, selected: reminder.enabled && reminder.hour === hour }} disabled={savingReminder} onPress={() => void changeReminder(hour)} style={[styles.choiceButton, reminder.enabled && reminder.hour === hour && styles.choiceButtonActive]}><Text style={[styles.choiceButtonText, reminder.enabled && reminder.hour === hour && styles.choiceButtonTextActive]}>{hour > 12 ? hour - 12 : hour} {hour >= 12 ? 'PM' : 'AM'}</Text></Pressable>
+          ))}
+        </View>
+        {reminder.enabled ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: savingReminder }} disabled={savingReminder} onPress={() => void changeReminder()} style={styles.secondaryButton}><Text style={styles.secondaryText}>Turn reminder off</Text></Pressable> : null}
+      </View>
+
       {aiConsent ? (
         <View style={styles.card}>
           <View style={styles.row}>
@@ -113,6 +178,12 @@ export default function SettingsScreen() {
       <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={styles.linkCard}>
         <View style={styles.icon}><LockKeyhole color={colors.white} size={20} /></View>
         <View style={styles.copy}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
+        <ChevronRight color={colors.muted} size={20} />
+      </Pressable>
+
+      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={styles.linkCard}>
+        <View style={styles.icon}><Activity color={colors.white} size={20} /></View>
+        <View style={styles.copy}><Text style={styles.title}>Private diagnostics</Text><Text style={styles.body}>View content-free reliability counters stored on this device</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
@@ -146,7 +217,7 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.about}>
-        <Text style={sharedStyles.eyebrow}>Bolo 1.0.0</Text>
+        <Text style={sharedStyles.eyebrow}>Bolo {Constants.expoConfig?.version ?? '1.0.0'}</Text>
         <Text style={styles.aboutText}>A practical Hindi learning app with offline scenarios and optional AI coaching.</Text>
       </View>
     </ScrollView>
@@ -166,6 +237,14 @@ const styles = StyleSheet.create({
   destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: '#E4B5AE', backgroundColor: '#FBEDEA', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   destructiveText: { color: colors.danger, fontSize: 15, fontWeight: '800' },
   disabled: { opacity: 0.5 },
+  choiceLabel: { color: colors.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
+  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  choiceButton: { minWidth: 78, minHeight: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  choiceButtonActive: { borderColor: colors.ink, backgroundColor: colors.ink },
+  choiceButtonText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
+  choiceButtonTextActive: { color: colors.white },
+  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  secondaryText: { color: colors.forest, fontSize: 14, fontWeight: '800', textAlign: 'center' },
   about: { padding: spacing.lg, gap: spacing.sm },
   aboutText: { color: colors.muted, fontSize: 13, lineHeight: 19 },
 });

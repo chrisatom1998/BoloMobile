@@ -83,7 +83,7 @@ export function clearAiVoicePlaybackCache() {
   }
 }
 
-export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal): Promise<void> {
+export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1): Promise<void> {
   if (signal.aborted) return;
   const prepared = getPreparedAudio(audio);
   prepared.inUse += 1;
@@ -93,6 +93,7 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal)
       setAudioModeAsync(AI_VOICE_PLAYBACK_MODE),
       prepared.hasStarted ? prepared.player.seekTo(0) : Promise.resolve(),
     ]);
+    prepared.player.setPlaybackRate?.(Math.min(2, Math.max(0.5, playbackRate)));
     if (signal.aborted) return;
 
     await new Promise<void>((resolve, reject) => {

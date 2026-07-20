@@ -1,9 +1,10 @@
 import { ShieldCheck } from 'lucide-react-native';
-import { type PropsWithChildren, useRef, useState } from 'react';
+import { type PropsWithChildren, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage } from '@/lib/public-pages';
+import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import { colors, radius, spacing } from '@/theme';
 
@@ -11,6 +12,9 @@ export function AiConsentGate({ children }: PropsWithChildren) {
   const { aiConsent, setAiConsent } = useAppState();
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
+  useEffect(() => {
+    if (!aiConsent) observe('consent_viewed');
+  }, [aiConsent]);
   if (aiConsent) return children;
 
   function openPrivacyPolicy() {
@@ -24,7 +28,8 @@ export function AiConsentGate({ children }: PropsWithChildren) {
     savingRef.current = true;
     setSaving(true);
     try {
-      await setAiConsent(true);
+      const saved = await setAiConsent(true);
+      if (saved) observe('consent_accepted');
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -36,10 +41,10 @@ export function AiConsentGate({ children }: PropsWithChildren) {
       <View style={styles.icon}><ShieldCheck color={colors.white} size={22} /></View>
       <Text style={styles.title}>Before using Mira</Text>
       <Text style={styles.body}>
-        After you agree, Bolo uses its service and OpenAI when you tap Listen, submit text, start a live voice turn, use Live Translate, or record pronunciation. Listen sends the selected lesson or Mira reply text and returns an AI-generated voice. Typed coaching includes a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. Tap the glowing orb to begin each turn, then tap the orb again to send the turn. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Mira&apos;s spoken reply travels directly from OpenAI to the app. Live Translate continuously segments microphone audio in memory and sends short Hindi audio segments through Bolo&apos;s service for English text without translated audio. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
+        Core lesson and saved-phrase audio is bundled with Bolo and works offline without sending text anywhere. After you agree, Bolo uses its service and OpenAI for generated Mira speech, submitted text, live voice turns, Live Translate, and pronunciation recordings. Typed coaching includes a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. Tap the glowing orb to begin each turn, then tap the orb again to send the turn. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Mira&apos;s spoken reply travels directly from OpenAI to the app. Live Translate continuously segments microphone audio in memory and sends short Hindi audio segments through Bolo&apos;s service for English text without translated audio. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
       </Text>
       <Text style={styles.detail}>
-        Saved phrases, practice progress, and up to 100 recent Mira chat messages stay in unencrypted storage on this device. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
+        Saved phrases, learning progress, preferences, reminder settings, content-free reliability counters, and up to 100 recent Mira chat messages stay in unencrypted storage on this device. Reliability counters contain no messages, transcripts, audio, phrases, identifiers, or error text and are never uploaded. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
       </Text>
       <Pressable accessibilityRole="link" onPress={openPrivacyPolicy} style={styles.link}>
         <Text style={styles.linkText}>Read the public Privacy Policy</Text>

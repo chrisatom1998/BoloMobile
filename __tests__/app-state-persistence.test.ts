@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { persistAiConsentChoice, restoreFailedPersistedState } from '../src/state/app-state';
-import { emptyPractice, storageKeys, type PersistedState } from '../src/lib/storage';
+import { defaultLearnerProfile, defaultReminderSettings, emptyPractice, storageKeys, type PersistedState } from '../src/lib/storage';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -23,6 +23,12 @@ function state(goal: 5 | 10 | 15): PersistedState {
     streakDays: [],
     clientId: 'client-12345678',
     aiConsent: null,
+    learnerProfile: defaultLearnerProfile(),
+    sceneProgress: {},
+    phraseReviews: {},
+    practiceHistory: [],
+    reviewStreakDays: [],
+    reminder: defaultReminderSettings(),
   };
 }
 

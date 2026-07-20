@@ -7,11 +7,12 @@ import {
 } from 'expo-audio';
 import { Mic, Square } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, Text, View } from 'react-native';
 
+import { hapticStartRecording, hapticTap, hapticWarning } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
 import { deleteRecordingUri, readRecordingUri } from '@/lib/recording-file';
-import { colors, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const MAX_RECORDING_MS = 15_000;
 const MAX_BASE64_CHARACTERS = 6_000_000;
@@ -77,6 +78,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
 
   const finish = useCallback(async () => {
     if (!recordingRef.current) return;
+    hapticTap();
     recordingRef.current = false;
     setRecording(false);
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -133,13 +135,17 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       recorder.record();
       releaseRecordingMode = false;
       recordingRef.current = true;
+      hapticStartRecording();
       setRecording(true);
       timerRef.current = setTimeout(() => void finish(), MAX_RECORDING_MS);
     } catch (cause) {
       recordingRef.current = false;
       if (mountedRef.current) setRecording(false);
       await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
-      if (mountedRef.current) setError(cause instanceof Error ? cause.message : 'Recording could not start.');
+      if (mountedRef.current) {
+        hapticWarning();
+        setError(cause instanceof Error ? cause.message : 'Recording could not start.');
+      }
     } finally {
       if (releaseRecordingMode) {
         await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
@@ -209,6 +215,8 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
 
   const label = starting ? 'Starting…' : busy ? 'Mira is thinking…' : isRecording ? `Stop · ${Math.max(1, Math.ceil(recorderState.durationMillis / 1000))}s` : idleLabel;
   const unavailable = disabled || busy || starting;
+  const styles = useStyles();
+  const { colors } = useTheme();
 
   return (
     <View style={styles.wrapper}>
@@ -228,21 +236,21 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   wrapper: { gap: spacing.sm },
   button: {
     minHeight: 50,
     borderRadius: radius.md,
     borderCurve: 'continuous',
-    backgroundColor: colors.forest,
+    backgroundColor: c.forest,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
-  recording: { backgroundColor: colors.danger },
+  recording: { backgroundColor: c.dangerSurface },
   disabled: { opacity: 0.5 },
-  label: { color: colors.white, fontSize: 15, fontWeight: '800' },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
-});
+  label: { color: c.white, fontSize: 15, fontWeight: '800' },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+}));

@@ -87,7 +87,12 @@ describe('SceneScreen primary journey', () => {
 
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
-    expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42);
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42, {
+      correct: 1,
+      score: 50,
+      total: 2,
+      weakPhrases: ['एक चाय दीजिए।'],
+    });
     expect(view.getByText('Scene complete')).toBeTruthy();
 
     await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
@@ -104,9 +109,20 @@ describe('SceneScreen primary journey', () => {
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
+  it('keeps the natural answer hidden until the learner answers', async () => {
+    const view = await render(<SceneScreen />);
+
+    expect(view.queryByLabelText('Save phrase')).toBeNull();
+    expect(view.queryByText('Keep the natural answer')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText(/Where is the tea\?/u));
+    expect(view.getByText('Keep the natural answer')).toBeTruthy();
+  });
+
   it('saves and removes the current natural answer', async () => {
     const target = scenes[0].beats[0].choices.find((choice) => choice.correct)!;
     const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(/One tea, please\./u));
 
     const save = view.getByLabelText('Save phrase');
     expect(save.props.accessibilityState).toEqual({ selected: false });

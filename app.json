@@ -68,7 +68,24 @@
       "expo-asset",
       "expo-image",
       "expo-status-bar",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications",
+      "./plugins/with-bolo-app-intents",
+      [
+        "expo-widgets",
+        {
+          "bundleIdentifier": "com.bolo.hindi.widgets",
+          "groupIdentifier": "group.com.bolo.hindi",
+          "widgets": [
+            {
+              "name": "BoloPracticeWidget",
+              "displayName": "Bolo Practice",
+              "description": "See your Hindi streak and next review.",
+              "supportedFamilies": ["systemSmall", "systemMedium", "accessoryRectangular", "accessoryInline"]
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

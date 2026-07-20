@@ -1,15 +1,16 @@
 import { Flag, Sparkles } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { VoiceTurnButton } from '@/components/voice-turn-button';
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { showAppAlert } from '@/lib/app-alert';
+import { hapticSuccess } from '@/lib/haptics';
 import { speakText } from '@/lib/speech';
 import { checkPronunciation, reportGeneratedMessage, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { colors, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type Props = {
   lessonTitle: string;
@@ -18,6 +19,8 @@ type Props = {
 };
 
 export function PronunciationRecorder({ lessonTitle, onActivityChange, target }: Props) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [feedback, setFeedback] = useState('');
   const [reported, setReported] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -63,7 +66,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
   return (
     <View style={styles.container}>
       <View style={styles.copy}>
-        <Sparkles color={colors.brandDark} size={18} />
+        <Sparkles color={colors.brandText} size={18} />
         <View style={styles.text}>
           <Text style={styles.title}>Practice this answer</Text>
           <Text style={styles.body}>Record up to 15 seconds. Mira will check one useful sound or rhythm detail.</Text>
@@ -83,6 +86,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
               pendingReport?.abort();
               if (reportRef.current === pendingReport) reportRef.current = null;
               setReporting(false);
+              hapticSuccess();
               setFeedback(result.feedback);
               setReported(false);
               await speakText(result.feedback, controller.signal);
@@ -105,9 +109,9 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   container: {
-    backgroundColor: colors.forestSoft,
+    backgroundColor: c.forestSoft,
     borderRadius: radius.lg,
     borderCurve: 'continuous',
     padding: spacing.lg,
@@ -115,10 +119,10 @@ const styles = StyleSheet.create({
   },
   copy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   text: { flex: 1, gap: spacing.xs },
-  title: { color: colors.ink, fontSize: 15, fontWeight: '800' },
-  body: { color: colors.muted, fontSize: 14, lineHeight: 20 },
+  title: { color: c.ink, fontSize: 15, fontWeight: '800' },
+  body: { color: c.muted, fontSize: 14, lineHeight: 20 },
   feedbackCard: { gap: spacing.sm },
-  feedback: { color: colors.ink, fontSize: 15, lineHeight: 22, fontWeight: '600' },
+  feedback: { color: c.ink, fontSize: 15, lineHeight: 22, fontWeight: '600' },
   reportButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  reportText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-});
+  reportText: { color: c.muted, fontSize: 12, fontWeight: '700' },
+}));

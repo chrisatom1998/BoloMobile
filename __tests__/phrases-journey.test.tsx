@@ -11,6 +11,7 @@ const mockAppState = {
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  Search: () => null,
   Trash2: () => null,
   Volume2: () => null,
 }));
@@ -24,6 +25,7 @@ jest.mock('@/lib/app-alert', () => ({
 }));
 
 jest.mock('@/lib/speech', () => ({
+  hasOfflineSpeech: jest.fn(() => false),
   speakText: jest.fn(async () => undefined),
   stopSpeaking: jest.fn(async () => undefined),
 }));
@@ -60,7 +62,7 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    expect(view.getByText('1 phrase ready for quick review.')).toBeTruthy();
+    expect(view.getByText('Everything is reviewed for today.')).toBeTruthy();
     expect(view.getByText('namaste')).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Hear नमस्ते'));

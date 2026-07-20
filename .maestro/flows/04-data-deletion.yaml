@@ -1,0 +1,24 @@
+appId: com.bolo.hindi
+name: Delete local learning data and remote reports
+tags:
+  - critical
+  - privacy
+---
+- launchApp:
+    clearState: true
+- runFlow: ../subflows/complete-onboarding.yaml
+- tapOn: "Settings"
+- scrollUntilVisible:
+    element:
+      text: "Delete my Bolo data"
+    direction: DOWN
+- tapOn: "Delete my Bolo data"
+- assertVisible: "Delete your Bolo data?"
+- tapOn: "Delete data"
+- extendedWaitUntil:
+    visible: "Bolo data deleted"
+    timeout: 35000
+- stopApp
+- launchApp
+- assertVisible: "Your Hindi plan in one minute"
+

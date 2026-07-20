@@ -3,18 +3,25 @@ import { memo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Scene } from '@/data/scenes';
+import type { SceneProgress } from '@/state/app-state-types';
 import { colors, radius, spacing } from '@/theme';
 
 type Props = {
   scene: Scene;
   onPress: (scene: Scene) => void;
+  progress?: SceneProgress;
 };
 
-export const SceneCard = memo(function SceneCard({ scene, onPress }: Props) {
+export const SceneCard = memo(function SceneCard({ scene, onPress, progress }: Props) {
+  const progressLabel = progress?.lastBeatIndex
+    ? `Continue at turn ${progress.lastBeatIndex + 1}`
+    : progress?.completions
+      ? `Completed ${progress.completions} time${progress.completions === 1 ? '' : 's'}, best accuracy ${progress.bestAccuracy} percent`
+      : scene.level;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${scene.title}. ${scene.subtitle}. ${scene.level}.`}
+      accessibilityLabel={`${scene.title}. ${scene.subtitle}. ${progressLabel}.`}
       onPress={() => onPress(scene)}
       style={styles.card}
     >
@@ -37,7 +44,7 @@ export const SceneCard = memo(function SceneCard({ scene, onPress }: Props) {
           ))}
         </View>
         <View style={styles.meta}>
-          <View style={styles.levelPill}><Text style={styles.level}>{scene.level}</Text></View>
+          <View style={[styles.levelPill, progress?.completions ? styles.levelPillDone : null]}><Text style={styles.level}>{progress?.lastBeatIndex ? 'Continue' : progress?.completions ? 'Completed' : scene.level}</Text></View>
           <View style={[styles.chevron, { backgroundColor: scene.color }]}><ChevronRight color={colors.white} size={18} /></View>
         </View>
       </View>
@@ -74,6 +81,7 @@ const styles = StyleSheet.create({
   wordText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
   meta: { marginTop: 'auto', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   levelPill: { minHeight: 30, borderRadius: radius.pill, backgroundColor: colors.brandSoft, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  levelPillDone: { backgroundColor: '#DDEFE9' },
   level: { color: colors.brandDark, fontSize: 12, fontWeight: '900' },
   chevron: { width: 34, height: 34, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
 });

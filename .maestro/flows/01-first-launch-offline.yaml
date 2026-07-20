@@ -1,0 +1,33 @@
+appId: com.bolo.hindi
+name: First launch, hydration, microphone denial, and offline lesson
+tags:
+  - critical
+  - offline
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      microphone: deny
+- assertVisible: "Your Hindi plan in one minute"
+- scrollUntilVisible:
+    element:
+      text: "Check microphone access"
+    direction: DOWN
+- tapOn: "Check microphone access"
+- assertVisible: "Microphone access is off. Typed and written practice still work."
+- runFlow: ../subflows/complete-onboarding.yaml
+- stopApp
+- launchApp
+- assertNotVisible: "Your Hindi plan in one minute"
+- setAirplaneMode: enabled
+- scrollUntilVisible:
+    element:
+      text: "The chai stop"
+    direction: DOWN
+- tapOn: "The chai stop"
+- assertVisible: "Turn 1 of 2"
+- tapOn: "Hear Mira"
+- assertVisible: "एक चाय दीजिए।"
+- setAirplaneMode: disabled
+
