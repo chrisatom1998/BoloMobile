@@ -4,7 +4,7 @@ export type SavedPhrase = {
   en: string;
 };
 
-export type MiraResponseLanguage = 'en' | 'hi';
+export type AshaResponseLanguage = 'en' | 'hi';
 
 export type LearnerLevel = 'new' | 'beginner' | 'intermediate';
 export type ScriptPreference = 'both' | 'devanagari' | 'latin';
@@ -15,7 +15,7 @@ export type LearnerProfile = {
   level: LearnerLevel;
   scriptPreference: ScriptPreference;
   primaryGoal: LearningGoal;
-  responseLanguage: MiraResponseLanguage;
+  responseLanguage: AshaResponseLanguage;
   microphoneTested: boolean;
 };
 
@@ -56,7 +56,7 @@ export type ReminderSettings = {
 
 export type ChatMessage = {
   id: string;
-  role: 'you' | 'mira';
+  role: 'you' | 'asha';
   text: string;
-  language?: MiraResponseLanguage;
+  language?: AshaResponseLanguage;
 };

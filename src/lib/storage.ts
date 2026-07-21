@@ -24,7 +24,7 @@ export const storageKeys = {
   reminder: 'bolo-practice-reminder',
 } as const;
 
-export const AI_CONSENT_VERSION = 6 as const;
+export const AI_CONSENT_VERSION = 8 as const;
 export const MAX_CHAT_HISTORY_MESSAGES = 100;
 export const MAX_CHAT_MESSAGE_CHARACTERS = 2_400;
 export const MAX_DAILY_PRACTICE_SECONDS = 24 * 60 * 60;
@@ -118,8 +118,9 @@ function validPhrase(value: unknown): value is SavedPhrase {
 function normalizeChatMessage(value: unknown, truncateText: boolean): ChatMessage | null {
   if (!value || typeof value !== 'object') return null;
   const message = value as Partial<ChatMessage>;
+  const rawRole = (value as { role?: unknown }).role;
   if (typeof message.id !== 'string' || typeof message.text !== 'string') return null;
-  if (message.role !== 'you' && message.role !== 'mira') return null;
+  if (rawRole !== 'you' && rawRole !== 'asha' && rawRole !== 'mira' && rawRole !== 'arjun') return null;
   if (message.language !== undefined && message.language !== 'en' && message.language !== 'hi') return null;
 
   const id = message.id.trim();
@@ -128,9 +129,10 @@ function normalizeChatMessage(value: unknown, truncateText: boolean): ChatMessag
   if (!truncateText && rawText.length > MAX_CHAT_MESSAGE_CHARACTERS) return null;
 
   const text = truncateText ? rawText.slice(0, MAX_CHAT_MESSAGE_CHARACTERS) : rawText;
+  const role: ChatMessage['role'] = rawRole === 'mira' || rawRole === 'arjun' ? 'asha' : rawRole;
   return message.language === undefined
-    ? { id, role: message.role, text }
-    : { id, role: message.role, text, language: message.language };
+    ? { id, role, text }
+    : { id, role, text, language: message.language };
 }
 
 function newestUniqueMessages(messages: ChatMessage[]): ChatMessage[] {

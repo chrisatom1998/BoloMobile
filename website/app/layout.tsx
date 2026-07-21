@@ -15,14 +15,14 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(origin),
     title: "Bolo — Hindi for real moments",
-    description: "Practice practical Hindi through 21 real-life scenes, Mira voice coaching, live translation, pronunciation feedback, and offline learning.",
+    description: "Practice practical Hindi through 30 real-life scenes, Asha voice coaching, natural Hindi audio, pronunciation feedback, and offline learning.",
     icons: { icon: "/bolo-icon.png", shortcut: "/bolo-icon.png", apple: "/bolo-icon.png" },
     openGraph: {
       title: "Bolo — Hindi for real moments",
       description: "Learn Hindi by living the moment with practical scenes and optional AI coaching.",
       type: "website",
       url: origin,
-      images: [{ url: `${origin}/og.png`, width: 1792, height: 1024, alt: "Bolo — Hindi for real moments" }],
+      images: [{ url: `${origin}/og.png`, width: 1731, height: 909, alt: "Bolo — Hindi for real moments" }],
     },
     twitter: {
       card: "summary_large_image",

@@ -1,4 +1,4 @@
-import type { ChatMessage, MiraResponseLanguage, SavedPhrase } from '@/state/app-state-types';
+import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { observe } from '@/lib/observability';
 
 const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
@@ -43,7 +43,7 @@ type MobileChatInput = {
   mimeType?: string;
   messages: ChatMessage[];
   clientId: string;
-  responseLanguage?: MiraResponseLanguage;
+  responseLanguage?: AshaResponseLanguage;
 };
 
 type SavedPhrasePreparationInput = {
@@ -149,18 +149,23 @@ async function post<T>(
 
 export function buildMobileChatPayload(input: MobileChatInput) {
   const responseInstruction = input.responseLanguage === 'hi'
-    ? 'Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. '
+    ? 'You are Asha, a calm Hindi conversation coach. Respond in natural Hindi written in Devanagari. Use standard Indian Hindi vocabulary and phrasing. Check factual claims and calculations before answering; compute prices and change carefully. '
     : input.responseLanguage === 'en'
-      ? 'Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. '
+      ? 'You are Asha, a calm Hindi conversation coach. Respond in English. Write every Hindi word or phrase in Devanagari so speech synthesis follows Hindi phonetics, and include a short Latin transliteration in parentheses only when it helps the learner. Check factual claims and calculations before answering; compute prices and change carefully. '
       : '';
   const text = input.text?.trim().slice(0, 500);
   return {
     text: text ? `${responseInstruction}${text}` : undefined,
     audioBase64: input.audioBase64,
     mimeType: input.mimeType,
-    messages: input.messages.slice(-10).map(({ role, text }) => ({ role, text: text.slice(0, 600) })),
+    // The deployed API still expects its legacy assistant discriminator.
+    messages: input.messages.slice(-10).map(({ role, text }) => ({
+      role: role === 'asha' ? 'mira' : role,
+      text: text.slice(0, 600),
+    })),
     clientId: input.clientId,
     languageMode: MOBILE_LANGUAGE_MODE,
+    responseLanguage: input.responseLanguage,
   };
 }
 

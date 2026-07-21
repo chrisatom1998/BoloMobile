@@ -29,7 +29,7 @@ const coreScenes: Scene[] = [
 {id:'friend',category:'Social',words:['नमस्ते','दोस्त','खुशी'],place:'Mumbai · 7:00 PM',title:'Meet a new friend',subtitle:'Introduce yourself naturally',level:'Starter',emoji:'👋',color:'#5662a8',beats:[
 {npc:'नमस्ते, आपका नाम क्या है?',translation:'Hello, what is your name?',prompt:'Introduce yourself as Chris.',tip:'“मेरा नाम … है” is the natural pattern for introducing yourself.',choices:[
 {hi:'मेरा नाम क्रिस है।',latin:'Mera naam Chris hai.',en:'My name is Chris.',correct:true,reply:'आपसे मिलकर खुशी हुई, क्रिस!'},
-{hi:'आपका नाम क्रिस है।',latin:'Aapka naam Chris hai.',en:'Your name is Chris.',correct:false,reply:'मेरा नाम मीरा है—आपका नाम?'},
+{hi:'आपका नाम क्रिस है।',latin:'Aapka naam Chris hai.',en:'Your name is Chris.',correct:false,reply:'मेरा नाम आशा है—आपका नाम?'},
 {hi:'क्रिस कहाँ है?',latin:'Chris kahaan hai?',en:'Where is Chris?',correct:false,reply:'आप ही क्रिस हैं?'}]},
 {npc:'आप कहाँ से हैं?',translation:'Where are you from?',prompt:'Say you are from America.',tip:'Use “से” after a place to mean “from.”',choices:[
 {hi:'मैं अमेरिका से हूँ।',latin:'Main America se hoon.',en:'I am from America.',correct:true,reply:'वाह! मुंबई कैसी लगी?'},

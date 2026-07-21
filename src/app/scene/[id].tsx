@@ -145,12 +145,12 @@ export default function SceneScreen() {
 
       <View style={[styles.world, { borderColor: activeScene.color }]}> 
         <View style={styles.worldTop}><Text style={styles.emoji}>{activeScene.emoji}</Text><Text style={styles.place}>{activeScene.place}</Text></View>
-        <View style={styles.miraRow}>
-          <View style={styles.mira}><Text style={styles.miraText}>मि</Text></View>
+        <View style={styles.ashaRow}>
+          <View style={styles.asha}><Text style={styles.ashaText}>आ</Text></View>
           <View style={styles.bubble}>
             <Pressable
               accessibilityHint={!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false) ? 'Agree to connected AI processing to enable this voice.' : pronunciationBusy ? 'Finish pronunciation practice before playing another voice.' : 'Bundled lesson audio works offline.'}
-              accessibilityLabel="Hear Mira"
+              accessibilityLabel="Hear Asha"
               accessibilityRole="button"
               accessibilityState={{ disabled: (!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy }}
               disabled={(!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy}
@@ -191,7 +191,7 @@ export default function SceneScreen() {
       </View>
 
       {picked === null ? (
-        <View style={styles.hint}><Text style={styles.hintTitle}>Mira’s hint</Text><Text style={styles.hintBody}>{beat.tip}</Text></View>
+        <View style={styles.hint}><Text style={styles.hintTitle}>Asha’s hint</Text><Text style={styles.hintBody}>{beat.tip}</Text></View>
       ) : (
         <View style={styles.result}>
           <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked].reply}</Text></View>
@@ -226,9 +226,9 @@ const styles = StyleSheet.create({
   worldTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   emoji: { fontSize: 30 },
   place: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  miraRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  mira: { width: 52, height: 52, borderRadius: 18, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
-  miraText: { color: colors.white, fontSize: 24, fontWeight: '900' },
+  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  asha: { width: 52, height: 52, borderRadius: 18, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  ashaText: { color: colors.white, fontSize: 24, fontWeight: '900' },
   bubble: { flex: 1, backgroundColor: colors.background, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, gap: spacing.xs },
   speaker: { position: 'absolute', zIndex: 1, right: spacing.sm, top: spacing.sm, width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.4 },

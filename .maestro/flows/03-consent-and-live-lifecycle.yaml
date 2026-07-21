@@ -9,24 +9,46 @@ tags:
     clearState: true
     permissions:
       microphone: deny
+- tapOn:
+    text: "Don’t Allow"
+    optional: true
 - runFlow: ../subflows/complete-onboarding.yaml
-- tapOn: "Practice live with Mira"
+- tapOn: "Practice live with Asha"
+- assertNotVisible: "Live translate"
 - scrollUntilVisible:
     element:
       text: "I agree and want to continue"
     direction: DOWN
 - tapOn: "I agree and want to continue"
-- tapOn: "Start a voice conversation"
-- assertVisible: "Microphone access is required for live voice practice."
+- tapOn: "How do I say thank you?"
+- extendedWaitUntil:
+    visible: ".*[Dd]hanyavaad.*"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Asha is thinking…"
+    timeout: 60000
+- assertNotVisible: ".*(voice audio could not play|Voice playback failed).*"
+- scrollUntilVisible:
+    element:
+      text: "Start a voice conversation"
+    direction: UP
+    timeout: 20000
+- tapOn:
+    id: "realtime-voice-orb"
+- tapOn:
+    text: "Don’t Allow"
+    optional: true
+- assertVisible: ".*(Microphone access is required for live voice practice|Live voice requires a physical iPhone).*"
 - setPermissions:
     permissions:
       microphone: allow
 - stopApp
 - launchApp
-- tapOn: "Practice live with Mira"
-- tapOn: "Start a voice conversation"
+- tapOn: "Practice live with Asha"
+- tapOn:
+    id: "realtime-voice-orb"
 - extendedWaitUntil:
-    visible: "Mira is listening"
+    visible: ".*(Asha is listening|Live voice requires a physical iPhone).*"
     timeout: 30000
 - scrollUntilVisible:
     element:
@@ -43,7 +65,7 @@ tags:
 - tapOn: "Withdraw"
 - assertVisible: "AI consent withdrawn"
 - tapOn: "OK"
-- assertVisible: "Before using Mira"
+- assertVisible: "Before using Asha"
 - pressKey: Home
 - launchApp:
     stopApp: false

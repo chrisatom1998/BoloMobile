@@ -8,9 +8,17 @@ import type { RealtimePeerOptions, RealtimePeerSession } from '../src/lib/realti
 import { stopSpeaking } from '../src/lib/speech';
 import { createRealtimeClientSecret } from '../src/services/bolo-api';
 
+let mockIsDevice = true;
+
 jest.mock('expo-audio', () => ({
   requestRecordingPermissionsAsync: jest.fn(),
   setAudioModeAsync: jest.fn(),
+}));
+
+jest.mock('expo-device', () => ({
+  get isDevice() {
+    return mockIsDevice;
+  },
 }));
 
 jest.mock('@/lib/realtime-peer', () => ({
@@ -53,10 +61,34 @@ function createPeer(): RealtimePeerSession {
 describe('Realtime connection lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockIsDevice = true;
     Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' });
     requestPermissionMock.mockResolvedValue({ granted: true } as Awaited<ReturnType<typeof requestRecordingPermissionsAsync>>);
     setAudioModeMock.mockResolvedValue(undefined);
     stopSpeakingMock.mockImplementation(() => undefined);
+  });
+
+  it('rejects iOS Simulator before WebRTC can trigger a native audio crash', async () => {
+    mockIsDevice = false;
+    const onError = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete: jest.fn(),
+    }));
+
+    try {
+      await act(async () => {
+        await expect(result.current.startTurn()).rejects.toThrow('Live voice requires a physical iPhone');
+      });
+      expect(requestPermissionMock).not.toHaveBeenCalled();
+      expect(createSecretMock).not.toHaveBeenCalled();
+      expect(createPeerMock).not.toHaveBeenCalled();
+      expect(result.current.status).toBe('disconnected');
+    } finally {
+      mockIsDevice = true;
+      await unmount();
+    }
   });
 
   it('sends the selected Hindi response language in the Realtime session configuration', async () => {
@@ -85,7 +117,7 @@ describe('Realtime connection lifecycle', () => {
       await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
         type: 'session.update',
         session: expect.objectContaining({
-          instructions: expect.stringContaining('Reply in concise, natural Hindi written only in Romanized Latin script'),
+          instructions: expect.stringContaining('Reply in concise, natural spoken Hindi'),
         }),
       })));
       await act(async () => {
@@ -97,7 +129,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('sets full-volume speaker routing before WebRTC setup and reasserts it when response audio starts', async () => {
+  it('waits for WebRTC output before applying speaker routing to avoid an iOS audio-session race', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     const speakerMode = {
@@ -128,7 +160,7 @@ describe('Realtime connection lifecycle', () => {
       await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
       expect(setAudioModeMock.mock.calls.filter(([mode]) => (
         mode.allowsRecording === true && mode.shouldRouteThroughEarpiece === false
-      ))).toHaveLength(1);
+      ))).toHaveLength(0);
 
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
@@ -141,7 +173,7 @@ describe('Realtime connection lifecycle', () => {
       expect(setAudioModeMock).toHaveBeenLastCalledWith(speakerMode);
       expect(setAudioModeMock.mock.calls.filter(([mode]) => (
         mode.allowsRecording === true && mode.shouldRouteThroughEarpiece === false
-      ))).toHaveLength(2);
+      ))).toHaveLength(1);
     } finally {
       await unmount();
     }
@@ -277,7 +309,7 @@ describe('Realtime connection lifecycle', () => {
         const turn = index + 1;
         const itemId = `input-turn-${turn}`;
         const transcript = `Learner turn ${turn}.`;
-        const reply = `Mira reply ${turn}.`;
+        const reply = `Asha reply ${turn}.`;
 
         if (index > 0) {
           await act(async () => {
@@ -329,7 +361,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('publishes learner and Mira transcript deltas while a voice turn is still in progress', async () => {
+  it('publishes learner and Asha transcript deltas while a voice turn is still in progress', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     createSecretMock.mockResolvedValue({
@@ -369,12 +401,12 @@ describe('Realtime connection lifecycle', () => {
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.delta',
           item_id: 'input-live',
-          delta: ', Mira',
+          delta: ', Asha',
         }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-live',
-          transcript: 'Namaste, Mira.',
+          transcript: 'Namaste, Asha.',
         }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
@@ -388,23 +420,85 @@ describe('Realtime connection lifecycle', () => {
       });
 
       expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'you', text: 'Namaste' });
-      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'you', text: 'Namaste, Mira' });
-      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'you', text: 'Namaste, Mira.' });
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'you', text: 'Namaste, Asha' });
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'you', text: 'Namaste, Asha.' });
       expect(onInputTranscriptComplete).toHaveBeenCalledWith({
         itemId: 'input-live',
-        transcript: 'Namaste, Mira.',
+        transcript: 'Namaste, Asha.',
       });
       expect(onInputTranscriptComplete).toHaveBeenCalledTimes(1);
-      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'mira', text: 'Hello' });
-      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'mira', text: 'Hello there' });
-      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'mira', text: 'Hello there.' });
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'asha', text: 'Hello' });
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'asha', text: 'Hello there' });
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'asha', text: 'Hello there.' });
       expect(onTurnComplete).not.toHaveBeenCalled();
     } finally {
       await unmount();
     }
   });
 
-  it('keeps a delayed learner transcript when Mira fails before transcription finishes', async () => {
+  it('keeps the Devanagari speech transcript for accurate replay', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_devanagari_speech',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onTranscriptChange = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      responseLanguage: 'hi',
+      onError: jest.fn(),
+      onTranscriptChange,
+      onTurnComplete,
+    }));
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await start;
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-hindi' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          item_id: 'input-hindi',
+          transcript: 'Namaste, Asha.',
+        }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.delta', delta: 'आप कैसे' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.delta', delta: ' हैं?' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.output_audio_transcript.done',
+          transcript: 'आप कैसे हैं?',
+        }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
+        await Promise.resolve();
+      });
+
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'asha', text: 'आप कैसे' });
+      expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'asha', text: 'आप कैसे हैं?' });
+      expect(onTurnComplete).toHaveBeenCalledWith({
+        transcript: 'Namaste, Asha.',
+        reply: 'आप कैसे हैं?',
+        language: 'hi',
+      });
+      expect(result.current.status).toBe('ready');
+    } finally {
+      await unmount();
+    }
+  });
+
+  it('keeps a delayed learner transcript when Asha fails before transcription finishes', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     createSecretMock.mockResolvedValue({
@@ -442,14 +536,14 @@ describe('Realtime connection lifecycle', () => {
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-delayed-failure',
-          transcript: 'Keep my words even when Mira fails.',
+          transcript: 'Keep my words even when Asha fails.',
         }));
         await Promise.resolve();
       });
 
       expect(onInputTranscriptComplete).toHaveBeenCalledWith({
         itemId: 'input-delayed-failure',
-        transcript: 'Keep my words even when Mira fails.',
+        transcript: 'Keep my words even when Asha fails.',
       });
       expect(onInputTranscriptComplete).toHaveBeenCalledTimes(1);
       expect(onTurnComplete).not.toHaveBeenCalled();
@@ -458,7 +552,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('closes a stalled session when Realtime never completes the response', async () => {
+  it('retries one stalled Realtime response and then closes if the retry also stalls', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     createSecretMock.mockResolvedValue({
@@ -493,6 +587,20 @@ describe('Realtime connection lifecycle', () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-stalled-response' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
+        jest.advanceTimersByTime(45_000);
+        await Promise.resolve();
+      });
+
+      expect(result.current.status).toBe('responding');
+      expect(peer.send).toHaveBeenCalledWith({ type: 'response.cancel' });
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.create',
+        response: expect.objectContaining({ instructions: expect.stringContaining('one short sentence') }),
+      }));
+      expect(peer.close).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+
+      await act(async () => {
         jest.advanceTimersByTime(45_000);
         await Promise.resolve();
       });
@@ -683,7 +791,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('stops after one output-limited continuation instead of retrying indefinitely', async () => {
+  it('allows two output-limited continuations and then preserves the bounded partial reply', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     createSecretMock.mockResolvedValue({
@@ -746,10 +854,39 @@ describe('Realtime connection lifecycle', () => {
       });
 
       expect(peer.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'response.create' }));
-      expect(peer.send).toHaveBeenCalledWith({ type: 'output_audio_buffer.clear' });
-      expect(onError).toHaveBeenCalledWith(expect.stringContaining('incomplete'));
-      expect(onError).toHaveBeenCalledTimes(1);
-      expect(onTurnComplete).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
+        await Promise.resolve();
+      });
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'response.create' }));
+
+      jest.mocked(peer.send).mockClear();
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Third partial.' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.done',
+          response: { status: 'incomplete', status_details: { type: 'incomplete', reason: 'max_output_tokens' } },
+        }));
+        await Promise.resolve();
+      });
+
+      expect(peer.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'response.create' }));
+      expect(onError).not.toHaveBeenCalled();
+      expect(onTurnComplete).toHaveBeenCalledWith({
+        transcript: 'Please answer fully.',
+        reply: 'First partial. Second partial. Third partial.',
+        language: 'en',
+      });
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe('ready');
     } finally {
       jest.useRealTimers();
       await unmount();

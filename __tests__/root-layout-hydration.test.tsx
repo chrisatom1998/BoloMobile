@@ -10,6 +10,10 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => ({ hydrated: mockHydrated }),
 }));
 
+jest.mock('@/hooks/use-practice-reminder-routing', () => ({
+  usePracticeReminderRouting: jest.fn(),
+}));
+
 jest.mock('expo-router', () => {
   const React = jest.requireActual('react');
   const { View } = jest.requireActual('react-native');

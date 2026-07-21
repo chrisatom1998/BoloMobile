@@ -61,7 +61,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
   }
 
   function reportFeedback() {
-    showAppAlert('Report Mira’s feedback', 'Choose the main problem.', [
+    showAppAlert('Report Asha’s feedback', 'Choose the main problem.', [
       { text: 'Unsafe or inappropriate', onPress: () => void submitReport('unsafe_or_inappropriate') },
       { text: 'Incorrect or misleading', onPress: () => void submitReport('incorrect_or_misleading') },
       { text: 'Cancel', style: 'cancel' },
@@ -74,7 +74,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
         <Sparkles color={colors.brandText} size={18} />
         <View style={styles.text}>
           <Text style={styles.title}>Practice this answer</Text>
-          <Text style={styles.body}>Record up to 15 seconds. Mira will check one useful sound or rhythm detail.</Text>
+          <Text style={styles.body}>Record up to 15 seconds. Asha will check one useful sound or rhythm detail.</Text>
         </View>
       </View>
       <AiConsentGate>

@@ -26,10 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Live voice screen redesign** (`src/app/live.tsx`, `src/components/realtime-voice-button.tsx`):
   - The glowing orb is now the single voice CTA; the separate "Start voice chat" pill was removed. The orb's center reflects session state (brand glyph when idle/connecting/responding, mic when ready, send icon while recording), and a floating X ends an active session.
-  - Hero copy deduplicated to one title and at most one supporting line per session state; the "Ask Mira" card no longer repeats the hero's pitch.
-  - The "Live Mira caption" block is hidden until a session produces content, then animates in with a 260 ms native-driver fade/rise. The translate-mode caption card follows the same reveal pattern, driven by recorder status.
+  - Hero copy deduplicated to one title and at most one supporting line per session state; the "Ask Asha" card no longer repeats the hero's pitch.
+  - The "Live Asha caption" block is hidden until a session produces content, then animates in with a 260 ms native-driver fade/rise. The translate-mode caption card follows the same reveal pattern, driven by recorder status.
   - The "Correct me" / "Live translate" toggles are now styled and announced as a segmented control (`tablist`/`tab` roles, selected-thumb shadow, higher-contrast idle labels).
-  - The "Ask Mira" section reads as a bottom sheet: drag handle, rounded top edge overlapping the hero; the "Text phrase help below ↓" hint row was removed.
+  - The "Ask Asha" section reads as a bottom sheet: drag handle, rounded top edge overlapping the hero; the "Text phrase help below ↓" hint row was removed.
   - Compact responsive layout (smaller orb, tighter spacing) for windows under 760 pt tall.
 
 ### Added

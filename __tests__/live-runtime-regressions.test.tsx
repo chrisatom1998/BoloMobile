@@ -43,7 +43,7 @@ jest.mock('@/components/realtime-voice-button', () => {
     }: {
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
-      onTranscriptChange?: (update: { speaker: 'you' | 'mira'; text: string }) => void;
+      onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
       onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
       responseLanguage: 'en' | 'hi';
     }) => mockReact.createElement(
@@ -53,7 +53,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(
         MockPressable,
         {
-          accessibilityLabel: 'Create Mira reply',
+          accessibilityLabel: 'Create Asha reply',
           onPress: () => {
             onInputTranscriptComplete?.({ itemId: 'mock-input', transcript: 'Namaste' });
             onTurnComplete({ transcript: 'Namaste', reply: 'Hello there.', language: 'en' });
@@ -104,10 +104,10 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(
         MockPressable,
         {
-          accessibilityLabel: 'Mock Mira transcript',
-          onPress: () => onTranscriptChange?.({ speaker: 'mira', text: 'Namaste Chris, aap kaise hain?' }),
+          accessibilityLabel: 'Mock Asha transcript',
+          onPress: () => onTranscriptChange?.({ speaker: 'asha', text: 'Namaste Chris, aap kaise hain?' }),
         },
-        mockReact.createElement(MockText, null, 'Mock Mira transcript'),
+        mockReact.createElement(MockText, null, 'Mock Asha transcript'),
       ),
       mockReact.createElement(
         MockPressable,
@@ -148,7 +148,7 @@ jest.mock('@/state/app-state', () => ({
       __togglePhraseMock: jest.Mock;
     };
     const [chatHistory, setChatHistory] = mockReact.useState<
-      { id: string; role: 'you' | 'mira'; text: string; language?: 'en' | 'hi' }[]
+      { id: string; role: 'you' | 'asha'; text: string; language?: 'en' | 'hi' }[]
     >([]);
     const appendChatMessages = mockReact.useCallback((messages: typeof chatHistory) => {
       appState.__appendChatMessagesMock(messages);
@@ -262,7 +262,7 @@ describe('live theme styles', () => {
     const styles = createLiveStyles(darkColors);
 
     expect(styles.list.backgroundColor).toBe(darkColors.background);
-    expect(styles.miraMessage.backgroundColor).toBe(darkColors.paperRaised);
+    expect(styles.ashaMessage.backgroundColor).toBe(darkColors.paperRaised);
     expect(styles.messageText.color).toBe(darkColors.ink);
     expect(styles.composer.backgroundColor).toBe(darkColors.paperRaised);
     expect(styles.input.backgroundColor).toBe(darkColors.backgroundWarm);
@@ -281,37 +281,37 @@ describe('immersive live conversation design', () => {
 
     expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#0D1513');
     expect(view.getByText('Conversational Hindi coach · English replies')).toBeTruthy();
-    expect(view.getByText('Start speaking')).toBeTruthy();
-    expect(view.getByText('Start speaking').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByText('Tap to connect')).toBeTruthy();
+    expect(view.getByText('Tap to connect').props.accessibilityLiveRegion).toBe('polite');
     expect(view.queryByText('Tap the orb and ask anything in Hindi.')).toBeNull();
-    expect(view.queryByText('Live Mira caption')).toBeNull();
+    expect(view.queryByText('Live Asha caption')).toBeNull();
     expect(view.queryByLabelText('Open text phrase help')).toBeNull();
-    expect(view.getByText('Ask Mira')).toBeTruthy();
+    expect(view.getByText('Ask Asha')).toBeTruthy();
     expect(view.getByText('How do I say…?')).toBeTruthy();
     expect(view.getByLabelText('Open chat history')).toBeTruthy();
 
-    const sheet = view.getByTestId('ask-mira-sheet');
+    const sheet = view.getByTestId('ask-asha-sheet');
     const sheetStyle = StyleSheet.flatten(sheet.props.style);
     expect(sheetStyle.marginTop).toBeLessThan(0);
     expect(sheetStyle.borderTopLeftRadius).toBeGreaterThanOrEqual(30);
-    expect(view.getByTestId('ask-mira-sheet-handle')).toBeTruthy();
+    expect(view.getByTestId('ask-asha-sheet-handle')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
-    expect(view.getByText('Connecting to Mira…')).toBeTruthy();
+    expect(view.getByText('Connecting to Asha…')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
     expect(view.getByText('Listening to your Hindi…')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
-    expect(view.getByText('Mira is preparing your English reply…')).toBeTruthy();
+    expect(view.getByText('Asha is preparing your English reply…')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
-    expect(view.queryByText('Live Mira caption')).toBeNull();
+    expect(view.queryByText('Live Asha caption')).toBeNull();
 
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
-    expect(view.getByText('Live Mira caption')).toBeTruthy();
-    expect(view.getAllByText('Hello there.').length).toBeGreaterThan(0);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.getByText('Live Asha caption')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText('Go back'));
     expect(mockRouterBack).toHaveBeenCalledTimes(1);
-    expect(view.getByLabelText('Message Mira')).toBeTruthy();
+    expect(view.getByLabelText('Message Asha')).toBeTruthy();
 
     await view.unmount();
     await flushMicrotasks();
@@ -321,18 +321,18 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
-    expect(view.getByText('Live Mira caption')).toBeTruthy();
+    expect(view.getByText('Live Asha caption')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByText('Live Mira caption')).toBeTruthy();
+    expect(view.getByText('Live Asha caption')).toBeTruthy();
     expect(view.getByText('Captions appear after your first turn.')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
-    expect(view.queryByText('Live Mira caption')).toBeNull();
+    expect(view.queryByText('Live Asha caption')).toBeNull();
 
     await view.unmount();
     await flushMicrotasks();
   });
 
-  it('shows learner transcription and then Mira captions while the voice turn is in progress', async () => {
+  it('shows learner transcription and then Asha captions while the voice turn is in progress', async () => {
     const view = await render(<LiveScreen />);
 
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
@@ -340,8 +340,8 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('You said')).toBeTruthy();
     expect(view.getByText('Namaste, mera naam Chris hai.')).toBeTruthy();
 
-    await fireEvent.press(view.getByLabelText('Mock Mira transcript'));
-    expect(view.getByText('Live Mira caption')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    expect(view.getByText('Live Asha caption')).toBeTruthy();
     expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
 
     await view.unmount();
@@ -375,8 +375,8 @@ describe('immersive live conversation design', () => {
     try {
       const view = await render(<LiveScreen />);
       const heroStyle = StyleSheet.flatten(view.getByTestId('voice-conversation-hero').props.style);
-      const sheetStyle = StyleSheet.flatten(view.getByTestId('ask-mira-sheet').props.style);
-      const headingStyle = StyleSheet.flatten(view.getByTestId('ask-mira-heading').props.style);
+      const sheetStyle = StyleSheet.flatten(view.getByTestId('ask-asha-sheet').props.style);
+      const headingStyle = StyleSheet.flatten(view.getByTestId('ask-asha-heading').props.style);
 
       expect(heroStyle.gap).toBe(4);
       expect(sheetStyle.gap).toBe(4);
@@ -405,7 +405,7 @@ describe('generated-message reporting', () => {
       .mockResolvedValueOnce({ reported: true });
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText(/Report reply:/u));
 
     const firstReason = (alert.mock.calls[0][2] as { onPress?: () => void }[])[0].onPress;
@@ -426,7 +426,7 @@ describe('generated-message reporting', () => {
     expect(alert).toHaveBeenCalledWith('Could not send report', 'Network unavailable.');
 
     await fireEvent.press(view.getByLabelText(/Report reply:/u));
-    const retryPrompt = alert.mock.calls.findLast(([title]) => title === 'Report Mira\u2019s reply');
+    const retryPrompt = alert.mock.calls.findLast(([title]) => title === 'Report Asha\u2019s reply');
     const retryReason = (retryPrompt?.[2] as { onPress?: () => void }[] | undefined)?.[0].onPress;
     await act(async () => {
       retryReason?.();
@@ -449,7 +449,7 @@ describe('generated-message reporting', () => {
     });
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText(/Report reply:/u));
     const reason = (alert.mock.calls[0][2] as { onPress?: () => void }[])[0].onPress;
     await act(async () => {
@@ -471,42 +471,42 @@ describe('typed live coaching request control', () => {
     jest.clearAllMocks();
   });
 
-  it('announces pending work and the completed Mira reply', async () => {
+  it('announces pending work and the completed Asha reply', async () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     boloApi.sendMobileChat.mockReturnValue(request.promise);
     const view = await render(<LiveScreen />);
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'Please help with this sentence.');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please help with this sentence.');
     await fireEvent.press(view.getByLabelText('Send message'));
 
-    expect(view.getByText('Mira is thinking\u2026').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByText('Asha is thinking\u2026').props.accessibilityLiveRegion).toBe('polite');
     await act(async () => {
       request.resolve({ transcript: '', reply: 'Here is an announced correction.', language: 'en' });
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
     });
-    expect(view.getByText('Here is an announced correction.').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByLabelText('Selectable chat text: Here is an announced correction.').props.accessibilityLiveRegion).toBe('polite');
     await view.unmount();
     await flushMicrotasks();
   });
 
   it('never persists a learner-only turn when the request fails before a reply', async () => {
-    boloApi.sendMobileChat.mockRejectedValueOnce(new Error('Mira is unavailable.'));
+    boloApi.sendMobileChat.mockRejectedValueOnce(new Error('Asha is unavailable.'));
     const view = await render(<LiveScreen />);
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'Do not leave this orphaned.');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Do not leave this orphaned.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
 
     expect(appState.__appendChatMessagesMock).not.toHaveBeenCalled();
     expect(view.queryByText('Do not leave this orphaned.')).toBeNull();
-    expect(view.getByText('Mira is unavailable.').props.accessibilityRole).toBe('alert');
+    expect(view.getByText('Asha is unavailable.').props.accessibilityRole).toBe('alert');
     await view.unmount();
     await flushMicrotasks();
   });
 
-  it('allows one request and persists the completed learner/Mira pair atomically', async () => {
+  it('allows one request and persists the completed learner/Asha pair atomically', async () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     boloApi.sendMobileChat.mockReturnValue(request.promise);
     const view = await render(<LiveScreen />);
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'Please correct this.');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please correct this.');
     const send = view.getByLabelText('Send message');
     const onPress = getOnPress(send);
 
@@ -518,7 +518,7 @@ describe('typed live coaching request control', () => {
     expect(boloApi.sendMobileChat).toHaveBeenCalledTimes(1);
     expect(boloApi.sendMobileChat.mock.calls[0][0]).toEqual(expect.objectContaining({ messages: [] }));
     expect(appState.__appendChatMessagesMock).not.toHaveBeenCalled();
-    expect(view.getByText('Please correct this.')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Please correct this.')).toBeTruthy();
 
     await act(async () => {
       request.resolve({ transcript: '', reply: 'Here is the correction.', language: 'en' });
@@ -527,10 +527,10 @@ describe('typed live coaching request control', () => {
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledTimes(1);
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
       expect.objectContaining({ role: 'you', text: 'Please correct this.' }),
-      expect.objectContaining({ role: 'mira', text: 'Here is the correction.', language: 'en' }),
+      expect.objectContaining({ role: 'asha', text: 'Here is the correction.', language: 'en' }),
     ]);
-    expect(view.getByText('Please correct this.')).toBeTruthy();
-    expect(view.getByText('Here is the correction.')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Please correct this.')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Here is the correction.')).toBeTruthy();
     await view.unmount();
     await flushMicrotasks();
   });
@@ -543,7 +543,7 @@ describe('typed live coaching request control', () => {
       return request.promise;
     });
     const view = await render(<LiveScreen />);
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'Pending during unmount.');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Pending during unmount.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await view.unmount();
     expect(requestSignal?.aborted).toBe(true);
@@ -557,18 +557,18 @@ describe('typed live coaching request control', () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'The text reply succeeded.', language: 'en' });
     speech.speakText.mockRejectedValueOnce(new Error('Voice playback failed.'));
     const view = await render(<LiveScreen />);
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'Keep this completed turn.');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Keep this completed turn.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
 
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledTimes(1);
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
       expect.objectContaining({ role: 'you', text: 'Keep this completed turn.' }),
-      expect.objectContaining({ role: 'mira', text: 'The text reply succeeded.', language: 'en' }),
+      expect.objectContaining({ role: 'asha', text: 'The text reply succeeded.', language: 'en' }),
     ]);
-    expect(view.getByText('Keep this completed turn.')).toBeTruthy();
-    expect(view.getByText('The text reply succeeded.')).toBeTruthy();
-    const playbackError = view.getByText('Mira replied, but the voice audio could not play. Voice playback failed.');
+    expect(view.getByLabelText('Selectable chat text: Keep this completed turn.')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: The text reply succeeded.')).toBeTruthy();
+    const playbackError = view.getByText('Asha replied, but the voice audio could not play. Voice playback failed.');
     expect(playbackError.props.accessibilityRole).toBe('alert');
     await view.unmount();
     await flushMicrotasks();
@@ -599,11 +599,17 @@ describe('live coaching state', () => {
       en: 'How are you?',
     });
     const view = await render(<LiveScreen />);
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
 
-    expect(view.getByText('Namaste').props.selectable).toBe(true);
-    await fireEvent.press(view.getByLabelText('Save transcript phrase: Namaste'));
-    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Namaste');
+    const message = view.getByLabelText('Selectable chat text: Hello there.');
+    expect(message.props.readOnly).toBe(true);
+    await fireEvent(message, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 5 } } });
+    // Losing focus collapses the native selection before the adjacent button
+    // receives its press. The last non-empty highlighted range must survive.
+    await fireEvent(message, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Hello');
+    expect(view.getByText('Only the words you highlighted were copied here. Adjust them if needed, then let Bolo prepare the phrase details.')).toBeTruthy();
     await fireEvent.changeText(view.getByLabelText('Selected transcript text'), 'Aap kaise hain?');
     await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
     await flushMicrotasks();
@@ -627,23 +633,35 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
-  it('selects English or Hindi for typed and realtime Mira responses and locks the choice during a live session', async () => {
+  it('keeps the full-message trimming fallback when no chat text was highlighted', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
+
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Hello there.');
+    expect(view.getByText('Highlight words in chat before tapping Save, or trim the transcript here. Bolo will add a Romanized Hindi version and English meaning.')).toBeTruthy();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('selects English or Hindi for typed and realtime Asha responses and locks the choice during a live session', async () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Dhanyavaad.', language: 'hi' });
     const view = await render(<LiveScreen />);
-    const english = view.getByRole('radio', { name: 'Mira voice language: English' });
-    const hindi = view.getByRole('radio', { name: 'Mira voice language: Hindi' });
+    const english = view.getByRole('radio', { name: 'Asha voice language: English' });
+    const hindi = view.getByRole('radio', { name: 'Asha voice language: Hindi' });
 
     expect(english.props.accessibilityState).toEqual({ checked: true, disabled: false });
     expect(hindi.props.accessibilityState).toEqual({ checked: false, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('en');
 
     await fireEvent.press(hindi);
-    expect(view.getByRole('radio', { name: 'Mira voice language: Hindi' }).props.accessibilityState)
+    expect(view.getByRole('radio', { name: 'Asha voice language: Hindi' }).props.accessibilityState)
       .toEqual({ checked: true, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
     expect(view.getByText('Conversational Hindi coach · Hindi replies')).toBeTruthy();
 
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'How do I say thank you?');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'How do I say thank you?');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
     expect(boloApi.sendMobileChat).toHaveBeenCalledWith(expect.objectContaining({
@@ -652,13 +670,13 @@ describe('live coaching state', () => {
     }), expect.any(AbortSignal));
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
       expect.objectContaining({ role: 'you', text: 'How do I say thank you?' }),
-      expect.objectContaining({ role: 'mira', text: 'Dhanyavaad.', language: 'hi' }),
+      expect.objectContaining({ role: 'asha', text: 'Dhanyavaad.', language: 'hi' }),
     ]);
 
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByRole('radio', { name: 'Mira voice language: English' }).props.accessibilityState.disabled).toBe(true);
-    expect(view.getByRole('radio', { name: 'Mira voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
-    await fireEvent.press(view.getByRole('radio', { name: 'Mira voice language: English' }));
+    expect(view.getByRole('radio', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('radio', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(view.getByRole('radio', { name: 'Asha voice language: English' }));
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
 
     await view.unmount();
@@ -668,17 +686,17 @@ describe('live coaching state', () => {
   it('clears saved coaching history only after destructive confirmation', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
-    expect(view.queryByLabelText('Clear Mira chat history')).toBeNull();
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
 
-    const clear = view.getByLabelText('Clear Mira chat history');
+    const clear = view.getByLabelText('Clear Asha chat history');
     expect(clear.props.accessibilityRole).toBe('button');
     expect(StyleSheet.flatten(clear.props.style).minHeight).toBeGreaterThanOrEqual(44);
     await fireEvent.press(clear);
-    expect(view.getByText('Namaste')).toBeTruthy();
-    expect(view.getAllByText('Hello there.').length).toBeGreaterThan(0);
+    expect(view.getByLabelText('Selectable chat text: Namaste')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
 
-    const firstPrompt = alert.mock.calls.find(([title]) => title === 'Clear Mira chat?');
+    const firstPrompt = alert.mock.calls.find(([title]) => title === 'Clear Asha chat?');
     const cancelAction = (firstPrompt?.[2] as { text?: string; style?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Cancel');
     expect(cancelAction).toMatchObject({ text: 'Cancel', style: 'cancel' });
@@ -687,11 +705,11 @@ describe('live coaching state', () => {
       await Promise.resolve();
     });
     expect(appState.__clearChatHistoryMock).not.toHaveBeenCalled();
-    expect(view.getByText('Namaste')).toBeTruthy();
-    expect(view.getAllByText('Hello there.').length).toBeGreaterThan(0);
+    expect(view.getByLabelText('Selectable chat text: Namaste')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
 
     await fireEvent.press(clear);
-    const confirmPrompt = alert.mock.calls.findLast(([title]) => title === 'Clear Mira chat?');
+    const confirmPrompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (confirmPrompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
     await act(async () => {
@@ -700,10 +718,10 @@ describe('live coaching state', () => {
     });
 
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
-    expect(view.queryByText('Namaste')).toBeNull();
-    expect(view.queryByText('Hello there.')).toBeNull();
-    expect(view.getByText(/Hi! Tell me what you would like to practice/u)).toBeTruthy();
-    expect(view.queryByLabelText('Clear Mira chat history')).toBeNull();
+    expect(view.queryByLabelText('Selectable chat text: Namaste')).toBeNull();
+    expect(view.queryByLabelText('Selectable chat text: Hello there.')).toBeNull();
+    expect(view.getByDisplayValue('Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
+    expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
     await view.unmount();
     await flushMicrotasks();
     alert.mockRestore();
@@ -714,13 +732,13 @@ describe('live coaching state', () => {
     speech.speakText.mockReturnValue(playback.promise);
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
     const listenActions = view.getAllByLabelText(/Read reply aloud/u);
     await fireEvent.press(listenActions[listenActions.length - 1]);
     expect(speech.speakText).toHaveBeenCalledWith('Hello there.');
 
-    await fireEvent.press(view.getByLabelText('Clear Mira chat history'));
-    const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Mira chat?');
+    await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
+    const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (prompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
     await act(async () => {
@@ -736,9 +754,9 @@ describe('live coaching state', () => {
     alert.mockRestore();
   });
 
-  it('gives each Mira message action a unique bounded accessible name', async () => {
+  it('gives each Asha message action a unique bounded accessible name', async () => {
     const view = await render(<LiveScreen />);
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
     const actionLabels = view.getAllByRole('button')
       .map(({ props }) => props.accessibilityLabel)
       .filter((label): label is string => typeof label === 'string');
@@ -762,10 +780,10 @@ describe('live audio control exclusion', () => {
 
   it('blocks typed chat and AI playback while realtime is capturing audio', async () => {
     const view = await render(<LiveScreen />);
-    await fireEvent.press(view.getByLabelText('Create Mira reply'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
 
-    expect(view.getByLabelText('Message Mira').props.editable).toBe(false);
+    expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
     for (const listen of view.getAllByLabelText(/Read reply aloud:/u)) {
       expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(true);
       await fireEvent.press(listen);
@@ -775,7 +793,7 @@ describe('live audio control exclusion', () => {
     expect(speech.speakText).not.toHaveBeenCalled();
 
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
-    expect(view.getByLabelText('Message Mira').props.editable).toBe(true);
+    expect(view.getByLabelText('Message Asha').props.editable).toBe(true);
     expect(view.getAllByLabelText(/Read reply aloud:/u)[0].props.accessibilityState?.disabled
       ?? view.getAllByLabelText(/Read reply aloud:/u)[0].props.disabled).toBe(false);
 
@@ -788,14 +806,14 @@ describe('live audio control exclusion', () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
 
-    expect(view.getByLabelText('Message Mira').props.editable).toBe(true);
-    await fireEvent.changeText(view.getByLabelText('Message Mira'), 'Keep this typed question.');
+    expect(view.getByLabelText('Message Asha').props.editable).toBe(true);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Keep this typed question.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
 
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
       expect.objectContaining({ role: 'you', text: 'Keep this typed question.' }),
-      expect.objectContaining({ role: 'mira', text: 'A reply while realtime stays connected.' }),
+      expect.objectContaining({ role: 'asha', text: 'A reply while realtime stays connected.' }),
     ]);
     expect(speech.preloadSpeech).toHaveBeenCalledWith('A reply while realtime stays connected.');
     expect(speech.speakText).not.toHaveBeenCalled();

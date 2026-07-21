@@ -96,7 +96,7 @@ export default function PhrasesScreen() {
         const offline = hasOfflineSpeech?.(item.hi) ?? false;
         const canListen = aiConsent || offline;
         const review = reviews[item.hi];
-        const category = phraseCategories.get(item.hi) ?? 'Mira';
+        const category = phraseCategories.get(item.hi) ?? 'Asha';
         return (
           <View style={styles.card}>
             <View style={styles.copy}>

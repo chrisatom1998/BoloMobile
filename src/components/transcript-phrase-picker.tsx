@@ -12,10 +12,12 @@ type TranscriptPhrasePickerProps = {
   message: ChatMessage;
   onClose: () => void;
   onSave: (phrase: SavedPhrase) => void;
+  selectedText?: string;
 };
 
-export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave }: TranscriptPhrasePickerProps) {
-  const [selectedText, setSelectedText] = useState(message.text.trim());
+export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, selectedText: highlightedText }: TranscriptPhrasePickerProps) {
+  const initialText = highlightedText?.trim() || message.text.trim();
+  const [selectedText, setSelectedText] = useState(initialText);
   const [hindi, setHindi] = useState('');
   const [latin, setLatin] = useState('');
   const [english, setEnglish] = useState('');
@@ -49,7 +51,8 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
       Keyboard.dismiss();
     } catch (cause) {
       if (mountedRef.current && !controller.signal.aborted) {
-        setError(cause instanceof Error ? cause.message : 'Bolo could not prepare that phrase.');
+        const reason = cause instanceof Error ? cause.message : 'Bolo could not prepare that phrase.';
+        setError(`${reason} You can fill the three fields below and save manually.`);
       }
     } finally {
       if (requestRef.current === controller) {
@@ -90,7 +93,9 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
             </Pressable>
           </View>
 
-          <Text style={styles.instructions}>Trim the transcript to the exact words you want. Bolo will add a Romanized Hindi version and English meaning.</Text>
+          <Text style={styles.instructions}>{highlightedText?.trim()
+            ? 'Only the words you highlighted were copied here. Adjust them if needed, then let Bolo prepare the phrase details.'
+            : 'Highlight words in chat before tapping Save, or trim the transcript here. Bolo will add a Romanized Hindi version and English meaning.'}</Text>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Selected transcript text</Text>
             <TextInput
@@ -105,7 +110,6 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
                 setEnglish('');
                 setError('');
               }}
-              selectTextOnFocus
               style={[styles.input, styles.sourceInput]}
               value={selectedText}
             />

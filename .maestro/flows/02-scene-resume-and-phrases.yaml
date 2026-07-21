@@ -74,3 +74,5 @@ tags:
 - tapOn: "Saved phrases"
 - assertVisible: "Saved phrases"
 - assertVisible: "चीनी कम, कृपया।"
+- tapOn: "Hear चीनी कम, कृपया।"
+- assertNotVisible: ".*Offline lesson audio failed.*"

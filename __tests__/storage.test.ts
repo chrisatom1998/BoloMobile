@@ -56,52 +56,64 @@ describe('local progress storage', () => {
   });
 
   it('strictly validates chat history and discards malformed records', () => {
-    const valid = { id: 'mira-1', role: 'mira', text: '  A useful reply.  ', language: 'en' };
+    const valid = { id: 'asha-1', role: 'asha', text: '  A useful reply.  ', language: 'en' };
     const value = JSON.stringify([
       valid,
       null,
       { id: '', role: 'you', text: 'Blank id' },
       { id: 'blank-text', role: 'you', text: '   ' },
       { id: 'bad-role', role: 'system', text: 'Not allowed' },
-      { id: 'bad-language', role: 'mira', text: 'Not allowed', language: 'fr' },
-      { id: 'oversized', role: 'mira', text: 'x'.repeat(MAX_CHAT_MESSAGE_CHARACTERS + 1) },
+      { id: 'bad-language', role: 'asha', text: 'Not allowed', language: 'fr' },
+      { id: 'oversized', role: 'asha', text: 'x'.repeat(MAX_CHAT_MESSAGE_CHARACTERS + 1) },
       { id: 'x'.repeat(129), role: 'you', text: 'Oversized id' },
     ]);
 
     expect(sanitizeChatHistory(value)).toEqual([
-      { id: 'mira-1', role: 'mira', text: 'A useful reply.', language: 'en' },
+      { id: 'asha-1', role: 'asha', text: 'A useful reply.', language: 'en' },
     ]);
     expect(sanitizeChatHistory('{bad json')).toEqual([]);
     expect(sanitizeChatHistory('{}')).toEqual([]);
   });
 
+  it('migrates prior coach identities to Asha for display', () => {
+    const history = sanitizeChatHistory(JSON.stringify([
+      { id: 'legacy-mira', role: 'mira', text: 'नमस्ते!' },
+      { id: 'legacy-arjun', role: 'arjun', text: 'नमस्कार!' },
+    ]));
+
+    expect(history).toEqual([
+      { id: 'legacy-mira', role: 'asha', text: 'नमस्ते!' },
+      { id: 'legacy-arjun', role: 'asha', text: 'नमस्कार!' },
+    ]);
+  });
+
   it('keeps the newest 100 unique chat messages and lets the newest duplicate win', () => {
     const messages = Array.from({ length: MAX_CHAT_HISTORY_MESSAGES + 5 }, (_, index) => ({
       id: `message-${index}`,
-      role: index % 2 === 0 ? 'you' : 'mira',
+      role: index % 2 === 0 ? 'you' : 'asha',
       text: `Message ${index}`,
     }));
-    messages.push({ id: `message-${MAX_CHAT_HISTORY_MESSAGES + 4}`, role: 'mira', text: 'Replacement' });
+    messages.push({ id: `message-${MAX_CHAT_HISTORY_MESSAGES + 4}`, role: 'asha', text: 'Replacement' });
 
     const history = sanitizeChatHistory(JSON.stringify(messages));
 
     expect(history).toHaveLength(MAX_CHAT_HISTORY_MESSAGES);
     expect(history[0].id).toBe('message-5');
-    expect(history.at(-1)).toEqual({ id: 'message-104', role: 'mira', text: 'Replacement' });
+    expect(history.at(-1)).toEqual({ id: 'message-104', role: 'asha', text: 'Replacement' });
   });
 
   it('bounds new chat text and rejects an invalid multi-message append atomically', () => {
-    const current = [{ id: 'existing', role: 'mira' as const, text: 'Existing reply.' }];
+    const current = [{ id: 'existing', role: 'asha' as const, text: 'Existing reply.' }];
     const appended = appendChatHistory(current, [
       { id: 'you-2', role: 'you', text: 'Learner turn.' },
-      { id: 'mira-2', role: 'mira', text: 'x'.repeat(MAX_CHAT_MESSAGE_CHARACTERS + 50), language: 'en' },
+      { id: 'asha-2', role: 'asha', text: 'x'.repeat(MAX_CHAT_MESSAGE_CHARACTERS + 50), language: 'en' },
     ]);
 
     expect(appended).toHaveLength(3);
     expect(appended[2].text).toHaveLength(MAX_CHAT_MESSAGE_CHARACTERS);
     expect(appendChatHistory(current, [
       { id: 'you-3', role: 'you', text: 'Valid half.' },
-      { id: '', role: 'mira', text: 'Invalid half.' },
+      { id: '', role: 'asha', text: 'Invalid half.' },
     ])).toBe(current);
   });
 
@@ -119,7 +131,7 @@ describe('local progress storage', () => {
   it('requires the current versioned AI consent record', () => {
     const current = createAiConsentRecord(new Date('2026-07-13T20:00:00.000Z'));
 
-    expect(AI_CONSENT_VERSION).toBe(6);
+    expect(AI_CONSENT_VERSION).toBe(8);
     expect(current).toEqual({ version: AI_CONSENT_VERSION, acceptedAt: '2026-07-13T20:00:00.000Z' });
     expect(sanitizeAiConsent(JSON.stringify(current))).toEqual(current);
     expect(sanitizeAiConsent('true')).toBeNull();

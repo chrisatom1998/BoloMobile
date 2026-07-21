@@ -246,9 +246,9 @@ export const additionalScenes: Scene[] = [
         npc: 'रविवार को मेरी शादी है, ज़रूर आइएगा!',
         translation: 'My wedding is on Sunday—please do come!',
         prompt: 'Congratulate them and say you will come.',
-        tip: '“बहुत बधाई” offers congratulations; “ज़रूर आऊँगा” gives a warm yes.',
+        tip: '“बधाई हो” offers congratulations; “ज़रूर आऊँगा” gives a warm yes.',
         choices: [
-          { hi: 'बहुत बधाई! मैं ज़रूर आऊँगा।', latin: 'Bahut badhaai! Main zaroor aaoonga.', en: 'Congratulations! I will definitely come.', correct: true, reply: 'धन्यवाद, हमें बहुत खुशी होगी।' },
+          { hi: 'बधाई हो! मैं ज़रूर आऊँगा।', latin: 'Badhaai ho! Main zaroor aaoonga.', en: 'Congratulations! I will definitely come.', correct: true, reply: 'धन्यवाद, हमें बहुत खुशी होगी।' },
           { hi: 'रविवार मेरी ट्रेन खाती है।', latin: 'Ravivaar meri train khaati hai.', en: 'Sunday eats my train.', correct: false, reply: 'क्या आप शादी में आ पाएँगे?' },
           { hi: 'शादी कितने किलो है?', latin: 'Shaadi kitne kilo hai?', en: 'How many kilos is the wedding?', correct: false, reply: 'मैं आपको शादी में बुला रहा हूँ।' },
         ],

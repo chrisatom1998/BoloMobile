@@ -71,7 +71,7 @@ describe('HomeScreen primary journey', () => {
 
     await fireEvent.press(view.getByLabelText('Settings'));
     await fireEvent.press(view.getByLabelText('Saved phrases'));
-    await fireEvent.press(view.getByLabelText('Practice live with Mira'));
+    await fireEvent.press(view.getByLabelText('Practice live with Asha'));
     await fireEvent.press(view.getByLabelText('Open scene chai'));
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/settings');

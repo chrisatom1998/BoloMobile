@@ -1,0 +1,55 @@
+appId: com.bolo.hindi
+name: Realtime voice turns in English and Hindi reply modes
+tags:
+  - critical
+  - voice
+---
+- launchApp:
+    clearState: true
+    permissions:
+      microphone: allow
+- tapOn:
+    text: "Allow"
+    optional: true
+- runFlow: ../subflows/complete-onboarding.yaml
+- tapOn: "Practice live with Asha"
+- scrollUntilVisible:
+    element:
+      text: "I agree and want to continue"
+    direction: DOWN
+- tapOn: "I agree and want to continue"
+- tapOn:
+    id: "realtime-voice-orb"
+- tapOn:
+    text: "Allow"
+    optional: true
+- extendedWaitUntil:
+    visible: "Asha is listening"
+    timeout: 30000
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Ready when you are"
+    timeout: 60000
+- tapOn: "End live voice session"
+- scrollUntilVisible:
+    element:
+      text: "Asha voice language: Hindi"
+    direction: UP
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+- tapOn: "Asha voice language: Hindi"
+- assertVisible: ".*Hindi replies"
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Asha is listening"
+    timeout: 30000
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Ready when you are"
+    timeout: 60000
+- tapOn: "End live voice session"
+- assertVisible: "Tap to connect"

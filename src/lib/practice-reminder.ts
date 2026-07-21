@@ -49,3 +49,8 @@ export async function cancelPracticeReminder(current: ReminderSettings): Promise
   }
   return { ...current, enabled: false, notificationId: null };
 }
+
+export async function clearAllPracticeReminders() {
+  const Notifications = loadNotifications();
+  await Notifications.cancelAllScheduledNotificationsAsync();
+}

@@ -53,9 +53,9 @@
         "altText": "A completed Hindi practice turn with feedback, a score, and an option to save the natural answer."
       },
       {
-        "id": "mira",
-        "screen": "Mira connected coaching with a non-sensitive sample conversation",
-        "altText": "Mira practice chat explaining English-first replies, typed messages, voice turns, and reply reporting."
+        "id": "asha",
+        "screen": "Asha connected coaching with a non-sensitive sample conversation",
+        "altText": "Asha practice chat explaining English-first replies, typed messages, voice turns, and reply reporting."
       },
       {
         "id": "saved-phrases",

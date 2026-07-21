@@ -141,7 +141,7 @@ describe('SceneScreen primary journey', () => {
     speakTextMock.mockRejectedValueOnce(new Error('AI voice is unavailable.'));
     const view = await render(<SceneScreen />);
 
-    await fireEvent.press(view.getByLabelText('Hear Mira'));
+    await fireEvent.press(view.getByLabelText('Hear Asha'));
     await waitFor(() => expect(view.getByRole('alert').props.children).toBe('AI voice is unavailable.'));
 
     await view.unmount();

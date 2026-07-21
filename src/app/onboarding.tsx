@@ -6,7 +6,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAppState } from '@/state/app-state';
 import { observe } from '@/lib/observability';
-import type { LearnerLevel, LearningGoal, MiraResponseLanguage, ScriptPreference } from '@/state/app-state-types';
+import type { LearnerLevel, LearningGoal, AshaResponseLanguage, ScriptPreference } from '@/state/app-state-types';
 import { colors, radius, sharedStyles, spacing } from '@/theme';
 
 type Choice<T extends string | number> = { label: string; value: T; detail?: string };
@@ -48,7 +48,7 @@ export default function OnboardingScreen() {
   const [level, setLevel] = useState<LearnerLevel>('new');
   const [scriptPreference, setScriptPreference] = useState<ScriptPreference>('both');
   const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>('conversation');
-  const [responseLanguage, setResponseLanguage] = useState<MiraResponseLanguage>('en');
+  const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>('en');
   const [goal, setGoal] = useState<5 | 10 | 15>(10);
   const [microphoneTested, setMicrophoneTested] = useState(false);
   const [microphoneStatus, setMicrophoneStatus] = useState('You can test this later in live practice.');
@@ -104,8 +104,8 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.section}>
-        <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text style={styles.title}>Mira’s replies</Text></View>
-        <ChoiceRow label="Mira response language" value={responseLanguage} onChange={setResponseLanguage} choices={[
+        <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text style={styles.title}>Asha’s replies</Text></View>
+        <ChoiceRow label="Asha response language" value={responseLanguage} onChange={setResponseLanguage} choices={[
           { value: 'en', label: 'English first' },
           { value: 'hi', label: 'Hindi first' },
         ]} />

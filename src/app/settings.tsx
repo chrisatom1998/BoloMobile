@@ -8,7 +8,7 @@ import { AiConsentGate } from '@/components/ai-consent-gate';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
-import { cancelPracticeReminder, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '@/lib/practice-reminder';
 import { defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
@@ -82,6 +82,7 @@ export default function SettingsScreen() {
     deletionRef.current = controller;
     try {
       await deleteMobileData(clientId, controller.signal);
+      await clearAllPracticeReminders();
       await clearAllData();
       if (mountedRef.current) {
         showAppAlert('Bolo data deleted', 'Stored reports and data on this device were deleted. Bolo created a new random app identifier.');
@@ -105,7 +106,7 @@ export default function SettingsScreen() {
   function confirmDeletion() {
     showAppAlert(
       'Delete your Bolo data?',
-      'This permanently deletes reports tied to this installation, recent Mira chat history, saved phrases, practice progress, your consent choice, and the current random app identifier.',
+      'This permanently deletes reports tied to this installation, recent Asha chat history, saved phrases, practice progress, your consent choice, and the current random app identifier.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete data', style: 'destructive', onPress: () => void performDeletion() },
@@ -133,7 +134,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={styles.row}>
           <View style={styles.icon}><Languages color={colors.white} size={20} /></View>
-          <View style={styles.copy}><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Mira’s default reply language</Text></View>
+          <View style={styles.copy}><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Hindi display</Text>
         <View accessibilityLabel="Hindi display preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
@@ -143,8 +144,8 @@ export default function SettingsScreen() {
             </Pressable>
           ))}
         </View>
-        <Text style={styles.choiceLabel}>Mira replies</Text>
-        <View accessibilityLabel="Mira reply language preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
+        <Text style={styles.choiceLabel}>Asha replies</Text>
+        <View accessibilityLabel="Asha reply language preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
           {(['en', 'hi'] as const).map((value) => (
             <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: learnerProfile.responseLanguage === value }} onPress={() => updateLearnerProfile({ responseLanguage: value })} style={[styles.choiceButton, learnerProfile.responseLanguage === value && styles.choiceButtonActive]}>
               <Text style={[styles.choiceButtonText, learnerProfile.responseLanguage === value && styles.choiceButtonTextActive]}>{value === 'en' ? 'English' : 'Hindi'}</Text>

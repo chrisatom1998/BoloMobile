@@ -106,7 +106,7 @@ describe('previously uncovered audit screens', () => {
       <TranscriptPhrasePicker
         aiConsent
         clientId="client-12345678"
-        message={{ id: 'message-1', role: 'mira', text: 'How are you?' }}
+        message={{ id: 'message-1', role: 'asha', text: 'How are you?' }}
         onClose={jest.fn()}
         onSave={onSave}
       />,
@@ -117,6 +117,54 @@ describe('previously uncovered audit screens', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
 
     expect(onSave).toHaveBeenCalledWith(phrase);
+  });
+
+  it('starts from only the excerpt highlighted in the chat message', async () => {
+    const view = await render(
+      <TranscriptPhrasePicker
+        aiConsent
+        clientId="client-12345678"
+        message={{ id: 'message-1', role: 'asha', text: 'Namaste. Aap kaise hain?' }}
+        onClose={jest.fn()}
+        onSave={jest.fn()}
+        selectedText="Aap kaise hain?"
+      />,
+    );
+
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Aap kaise hain?');
+    await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenCalledWith(
+      { clientId: 'client-12345678', text: 'Aap kaise hain?' },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('still saves the highlighted excerpt when automatic phrase preparation is unavailable', async () => {
+    const onSave = jest.fn();
+    boloApi.prepareSavedPhraseFromText.mockRejectedValueOnce(new Error('Could not connect to the server.'));
+    const view = await render(
+      <TranscriptPhrasePicker
+        aiConsent
+        clientId="client-12345678"
+        message={{ id: 'message-1', role: 'asha', text: 'Namaste. Aap kaise hain?' }}
+        onClose={jest.fn()}
+        onSave={onSave}
+        selectedText="Aap kaise hain?"
+      />,
+    );
+
+    await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
+    await waitFor(() => expect(view.getByRole('alert').props.children).toContain('save manually'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'आप कैसे हैं?');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Aap kaise hain?');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'How are you?');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+
+    expect(onSave).toHaveBeenCalledWith({
+      hi: 'आप कैसे हैं?',
+      latin: 'Aap kaise hain?',
+      en: 'How are you?',
+    });
   });
 
   it('keeps the onboarding daily goal numeric through selection and submission', async () => {

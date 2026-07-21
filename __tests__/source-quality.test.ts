@@ -34,4 +34,15 @@ describe('shipping source guardrails', () => {
 
     expect(scene).toMatch(/\{aiConsent \? <PronunciationRecorder[\s\S]*?\/> : null\}/u);
   });
+
+  it('keeps generated Hindi in Devanagari through voice replay', () => {
+    const realtime = fileSystem.readFileSync('src/hooks/use-realtime-conversation.ts', 'utf8');
+    const api = fileSystem.readFileSync('src/services/bolo-api.ts', 'utf8');
+    const session = fileSystem.readFileSync('src/lib/realtime-session.ts', 'utf8');
+
+    expect(realtime).not.toContain('romanizeDevanagari');
+    expect(api).toMatch(/Respond in natural Hindi written in Devanagari/u);
+    expect(api).not.toMatch(/Hindi conversation coach[\s\S]{0,180}Never use Devanagari/u);
+    expect(session).toMatch(/do not apply American English vowels, stress, or letter-name pronunciation/u);
+  });
 });

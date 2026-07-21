@@ -8,6 +8,12 @@ jest.mock('lucide-react-native', () => ({
   X: () => null,
 }));
 
+jest.mock('@/lib/haptics', () => ({
+  hapticSelect: jest.fn(),
+  hapticStartRecording: jest.fn(),
+  hapticTap: jest.fn(),
+}));
+
 const mockDisconnect = jest.fn();
 const mockStartTurn = jest.fn(async () => undefined);
 const mockFinishTurn = jest.fn(async () => undefined);
@@ -23,6 +29,10 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
 }));
 
 import { RealtimeVoiceButton } from '../src/components/realtime-voice-button';
+
+const haptics = jest.requireMock('@/lib/haptics') as {
+  hapticStartRecording: jest.Mock;
+};
 
 describe('realtime voice accessibility', () => {
   beforeEach(() => {
@@ -43,6 +53,7 @@ describe('realtime voice accessibility', () => {
     expect(view.queryByLabelText('End live voice session')).toBeNull();
     await fireEvent.press(start);
     expect(mockStartTurn).toHaveBeenCalledTimes(1);
+    expect(haptics.hapticStartRecording).not.toHaveBeenCalled();
   });
 
   it('keeps both voice actions at least 44 points and exposes disabled state', async () => {
@@ -63,6 +74,7 @@ describe('realtime voice accessibility', () => {
     const ready = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
     await fireEvent.press(ready.getByLabelText('Speak'));
     expect(mockStartTurn).toHaveBeenCalledTimes(1);
+    expect(haptics.hapticStartRecording).toHaveBeenCalledTimes(1);
     await ready.unmount();
 
     mockVoiceStatus = 'recording';

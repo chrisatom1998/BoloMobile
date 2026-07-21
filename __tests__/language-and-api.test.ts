@@ -51,9 +51,10 @@ describe('connected coaching contract', () => {
         mimeType: 'audio/mpeg',
       });
       const [, init] = fetchMock.mock.calls[0];
-      const payload = JSON.parse(String(init?.body)) as { text: string };
+      const payload = JSON.parse(String(init?.body)) as { text: string; coach?: string };
       expect(fetchMock.mock.calls[0][0]).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed/api/phrase-audio');
       expect(payload.text).toHaveLength(AI_VOICE_TEXT_LIMIT);
+      expect(payload.coach).toBeUndefined();
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -77,7 +78,7 @@ describe('connected coaching contract', () => {
   it('sends the explicit English-default language mode and bounded context', () => {
     const messages: ChatMessage[] = Array.from({ length: 12 }, (_, index) => ({
       id: String(index),
-      role: index % 2 ? 'mira' : 'you',
+      role: index % 2 ? 'asha' : 'you',
       text: `${index}-${'x'.repeat(700)}`,
     }));
     const payload = buildMobileChatPayload({
@@ -108,10 +109,12 @@ describe('connected coaching contract', () => {
       responseLanguage: 'hi',
     });
 
-    expect(english.text).toBe('Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. How do I say thank you?');
-    expect(hindi.text).toBe('Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. How do I say thank you?');
+    expect(english.text).toBe('You are Asha, a calm Hindi conversation coach. Respond in English. Write every Hindi word or phrase in Devanagari so speech synthesis follows Hindi phonetics, and include a short Latin transliteration in parentheses only when it helps the learner. Check factual claims and calculations before answering; compute prices and change carefully. How do I say thank you?');
+    expect(hindi.text).toBe('You are Asha, a calm Hindi conversation coach. Respond in natural Hindi written in Devanagari. Use standard Indian Hindi vocabulary and phrasing. Check factual claims and calculations before answering; compute prices and change carefully. How do I say thank you?');
     expect(english.languageMode).toBe(MOBILE_LANGUAGE_MODE);
     expect(hindi.languageMode).toBe(MOBILE_LANGUAGE_MODE);
+    expect(english.responseLanguage).toBe('en');
+    expect(hindi.responseLanguage).toBe('hi');
   });
 
   it('keeps the full maximum-length learner message when a response-language instruction is added', () => {
@@ -123,7 +126,7 @@ describe('connected coaching contract', () => {
       responseLanguage: 'hi',
     });
 
-    expect(payload.text).toBe(`Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. ${learnerText}`);
+    expect(payload.text).toBe(`You are Asha, a calm Hindi conversation coach. Respond in natural Hindi written in Devanagari. Use standard Indian Hindi vocabulary and phrasing. Check factual claims and calculations before answering; compute prices and change carefully. ${learnerText}`);
   });
 
   it('rejects a malformed successful response instead of passing it to the UI', async () => {
@@ -328,9 +331,10 @@ describe('connected coaching contract', () => {
       },
     });
     expect(englishSession.instructions).toContain('Reply in concise, natural English');
-    expect(hindiSession.instructions).toContain('Reply in concise, natural Hindi written only in Romanized Latin script');
-    expect(englishSession.instructions).toContain('Never use Devanagari');
-    expect(hindiSession.instructions).toContain('Never use Devanagari');
+    expect(hindiSession.instructions).toContain('Reply in concise, natural spoken Hindi');
+    expect(englishSession.instructions).toContain('form every Hindi phrase in Devanagari');
+    expect(hindiSession.instructions).toContain('Use Devanagari for every Hindi word or phrase');
+    expect(hindiSession.instructions).toContain('standard Indian Hindi pronunciation and prosody');
     expect(englishSession.instructions).toContain('Check factual claims and calculations before answering');
     expect(hindiSession.instructions).toContain('compute prices and change carefully');
   });

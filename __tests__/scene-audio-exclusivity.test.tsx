@@ -63,7 +63,7 @@ describe('scene audio exclusivity', () => {
 
   it('blocks scene playback and answer selection throughout pronunciation activity', async () => {
     const view = await render(<SceneScreen />);
-    const listen = view.getByLabelText('Hear Mira');
+    const listen = view.getByLabelText('Hear Asha');
     const answer = view.getByLabelText(/^एक चाय दीजिए/u);
 
     await fireEvent.press(view.getByLabelText('Start pronunciation activity'));
