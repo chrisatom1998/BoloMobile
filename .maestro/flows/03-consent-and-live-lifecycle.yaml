@@ -21,6 +21,18 @@ tags:
 - setPermissions:
     permissions:
       microphone: allow
+- stopApp
+- launchApp
+- tapOn: "Practice live with Mira"
+- tapOn: "Start a voice conversation"
+- extendedWaitUntil:
+    visible: "Mira is listening"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Go back"
+    direction: UP
+    timeout: 20000
 - tapOn: "Go back"
 - tapOn: "Settings"
 - scrollUntilVisible:

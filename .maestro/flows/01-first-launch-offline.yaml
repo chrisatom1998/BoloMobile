@@ -15,6 +15,11 @@ tags:
       text: "Check microphone access"
     direction: DOWN
 - tapOn: "Check microphone access"
+- scrollUntilVisible:
+    element:
+      text: "Microphone access is off. Typed and written practice still work."
+    direction: DOWN
+    timeout: 20000
 - assertVisible: "Microphone access is off. Typed and written practice still work."
 - runFlow: ../subflows/complete-onboarding.yaml
 - stopApp
@@ -23,11 +28,31 @@ tags:
 - setAirplaneMode: enabled
 - scrollUntilVisible:
     element:
-      text: "The chai stop"
+      text: "Food scenes, 5"
     direction: DOWN
-- tapOn: "The chai stop"
+    visibilityPercentage: 50
+    centerElement: true
+    timeout: 20000
+- tapOn: "Food scenes, 5"
+- scrollUntilVisible:
+    element:
+      text: ".*The chai stop.*"
+    direction: DOWN
+    visibilityPercentage: 50
+    centerElement: true
+    timeout: 20000
+- tapOn: ".*The chai stop.*"
 - assertVisible: "Turn 1 of 2"
+- scrollUntilVisible:
+    element:
+      text: "Hear Mira"
+    direction: DOWN
+    timeout: 20000
 - tapOn: "Hear Mira"
-- assertVisible: "एक चाय दीजिए।"
+- scrollUntilVisible:
+    element:
+      text: ".*एक चाय दीजिए।.*"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: ".*एक चाय दीजिए।.*"
 - setAirplaneMode: disabled
-

@@ -108,8 +108,8 @@ describe('connected coaching contract', () => {
       responseLanguage: 'hi',
     });
 
-    expect(english.text).toBe('Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. How do I say thank you?');
-    expect(hindi.text).toBe('Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. How do I say thank you?');
+    expect(english.text).toBe('Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. How do I say thank you?');
+    expect(hindi.text).toBe('Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. How do I say thank you?');
     expect(english.languageMode).toBe(MOBILE_LANGUAGE_MODE);
     expect(hindi.languageMode).toBe(MOBILE_LANGUAGE_MODE);
   });
@@ -123,7 +123,7 @@ describe('connected coaching contract', () => {
       responseLanguage: 'hi',
     });
 
-    expect(payload.text).toBe(`Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. ${learnerText}`);
+    expect(payload.text).toBe(`Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. ${learnerText}`);
   });
 
   it('rejects a malformed successful response instead of passing it to the UI', async () => {
@@ -331,6 +331,8 @@ describe('connected coaching contract', () => {
     expect(hindiSession.instructions).toContain('Reply in concise, natural Hindi written only in Romanized Latin script');
     expect(englishSession.instructions).toContain('Never use Devanagari');
     expect(hindiSession.instructions).toContain('Never use Devanagari');
+    expect(englishSession.instructions).toContain('Check factual claims and calculations before answering');
+    expect(hindiSession.instructions).toContain('compute prices and change carefully');
   });
 
   it('requests deletion using only the current random app identifier', async () => {

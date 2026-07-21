@@ -35,11 +35,15 @@ jest.mock('@/components/ai-consent-gate', () => {
 jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
+      onInputTranscriptComplete,
       onStatusChange,
+      onTranscriptChange,
       onTurnComplete,
       responseLanguage,
     }: {
+      onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
+      onTranscriptChange?: (update: { speaker: 'you' | 'mira'; text: string }) => void;
       onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
       responseLanguage: 'en' | 'hi';
     }) => mockReact.createElement(
@@ -50,7 +54,10 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Create Mira reply',
-          onPress: () => onTurnComplete({ transcript: 'Namaste', reply: 'Hello there.', language: 'en' }),
+          onPress: () => {
+            onInputTranscriptComplete?.({ itemId: 'mock-input', transcript: 'Namaste' });
+            onTurnComplete({ transcript: 'Namaste', reply: 'Hello there.', language: 'en' });
+          },
         },
         mockReact.createElement(MockText, null, 'Create reply'),
       ),
@@ -85,6 +92,22 @@ jest.mock('@/components/realtime-voice-button', () => {
           onPress: () => onStatusChange?.('responding'),
         },
         mockReact.createElement(MockText, null, 'Mock responding'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock learner transcript',
+          onPress: () => onTranscriptChange?.({ speaker: 'you', text: 'Namaste, mera naam Chris hai.' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock learner transcript'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock Mira transcript',
+          onPress: () => onTranscriptChange?.({ speaker: 'mira', text: 'Namaste Chris, aap kaise hain?' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock Mira transcript'),
       ),
       mockReact.createElement(
         MockPressable,
@@ -304,6 +327,22 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('Captions appear after your first turn.')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.queryByText('Live Mira caption')).toBeNull();
+
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('shows learner transcription and then Mira captions while the voice turn is in progress', async () => {
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    await fireEvent.press(view.getByLabelText('Mock learner transcript'));
+    expect(view.getByText('You said')).toBeTruthy();
+    expect(view.getByText('Namaste, mera naam Chris hai.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock Mira transcript'));
+    expect(view.getByText('Live Mira caption')).toBeTruthy();
+    expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
 
     await view.unmount();
     await flushMicrotasks();

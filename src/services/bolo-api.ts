@@ -149,9 +149,9 @@ async function post<T>(
 
 export function buildMobileChatPayload(input: MobileChatInput) {
   const responseInstruction = input.responseLanguage === 'hi'
-    ? 'Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. '
+    ? 'Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. '
     : input.responseLanguage === 'en'
-      ? 'Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. '
+      ? 'Respond in English. Write every Hindi word or phrase only in Romanized Latin script. Never use Devanagari. Check factual claims and calculations before answering; compute prices and change carefully. '
       : '';
   const text = input.text?.trim().slice(0, 500);
   return {

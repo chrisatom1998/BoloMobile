@@ -9,23 +9,68 @@ tags:
 - runFlow: ../subflows/complete-onboarding.yaml
 - scrollUntilVisible:
     element:
-      text: "The chai stop"
+      text: "Food scenes, 5"
     direction: DOWN
-- tapOn: "The chai stop"
+    visibilityPercentage: 50
+    centerElement: true
+    timeout: 20000
+- tapOn: "Food scenes, 5"
+- scrollUntilVisible:
+    element:
+      text: ".*The chai stop.*"
+    direction: DOWN
+    visibilityPercentage: 50
+    centerElement: true
+    timeout: 20000
+- tapOn: ".*The chai stop.*"
+- scrollUntilVisible:
+    element:
+      text: ".*One tea, please.*"
+    direction: DOWN
+    timeout: 20000
 - tapOn: ".*One tea, please.*"
+- scrollUntilVisible:
+    element:
+      text: "Continue"
+    direction: DOWN
+    timeout: 20000
 - tapOn: "Continue"
+- scrollUntilVisible:
+    element:
+      text: "Turn 2 of 2"
+    direction: UP
+    timeout: 20000
 - assertVisible: "Turn 2 of 2"
 - stopApp
 - launchApp
 - tapOn: "Continue"
+- scrollUntilVisible:
+    element:
+      text: "Turn 2 of 2"
+    direction: UP
+    timeout: 20000
 - assertVisible: "Turn 2 of 2"
-- tapOn: "Save phrase"
+- scrollUntilVisible:
+    element:
+      text: ".*Less sugar, please.*"
+    direction: DOWN
+    timeout: 20000
 - tapOn: ".*Less sugar, please.*"
+- scrollUntilVisible:
+    element:
+      text: "Save phrase"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Save phrase"
+- scrollUntilVisible:
+    element:
+      text: "Finish"
+    direction: DOWN
+    timeout: 20000
 - tapOn: "Finish"
 - assertVisible: "Scene complete"
 - stopApp
 - launchApp
 - tapOn: "Saved phrases"
 - assertVisible: "Saved phrases"
-- assertVisible: "कम चीनी दीजिए।"
-
+- assertVisible: "चीनी कम, कृपया।"
