@@ -102,7 +102,7 @@ const requiredPrivacyFacts = [
   'Send turn',
   'segments microphone audio in memory without creating a recording file',
   'Support requests contain the name, email',
-  'up to 100 recent typed and transcribed Mira chat messages',
+  'up to 100 recent typed and transcribed Asha chat messages',
   'unencrypted storage on this device',
   'Clear chat',
   'does not delete reports',
@@ -120,8 +120,8 @@ function pngSize(relativePath) {
 }
 
 const screenshots = [
-  ...['01-home', '02-guided-scene', '03-scene-result', '04-mira'].map((name) => ({ path: `assets/store/screenshots/android/${name}.png`, width: 1080, height: 1920 })),
-  ...['01-home', '02-guided-scene', '03-scene-result', '04-mira'].map((name) => ({ path: `assets/store/screenshots/ios/${name}.png`, width: 1320, height: 2868 })),
+  ...['01-home', '02-guided-scene', '03-scene-result', '04-asha'].map((name) => ({ path: `assets/store/screenshots/android/${name}.png`, width: 1080, height: 1920 })),
+  ...['01-home', '02-guided-scene', '03-scene-result', '04-asha'].map((name) => ({ path: `assets/store/screenshots/ios/${name}.png`, width: 1320, height: 2868 })),
 ];
 for (const screenshot of screenshots) {
   if (!existsSync(resolve(root, screenshot.path))) throw new Error(`Missing shipping-build screenshot: ${screenshot.path}`);

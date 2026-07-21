@@ -46,5 +46,6 @@ describe('Bolo scenario catalog', () => {
     for (const line of spokenLines) {
       expect(offlineHindiAudio[line]).toBeDefined();
     }
+    expect(Object.keys(offlineHindiAudio).sort()).toEqual([...new Set(spokenLines)].sort());
   });
 });

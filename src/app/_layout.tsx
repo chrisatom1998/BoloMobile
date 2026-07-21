@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { AppErrorBoundary } from '@/components/app-error-boundary';
+import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
 import { observe } from '@/lib/observability';
 import { AppStateProvider, useAppState } from '@/state/app-state';
 import { colors, spacing } from '@/theme';
@@ -20,6 +21,7 @@ export default function RootLayout() {
 
 function AppNavigator() {
   const { hydrated } = useAppState();
+  usePracticeReminderRouting(hydrated);
 
   useEffect(() => {
     if (hydrated) observe('app_opened');

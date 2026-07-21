@@ -134,7 +134,7 @@ def generate_feature_graphic() -> None:
     draw.text((920, 240), "Bolo", font=font(LATIN_FONT, 156), fill=INK)
     draw.text((925, 445), "Hindi for real moments", font=font(LATIN_REGULAR, 65), fill=INK)
     draw.rounded_rectangle((920, 600, 1360, 704), radius=52, fill=FOREST)
-    draw_centered_text(draw, (920, 600, 1360, 704), "21 practice scenes", font(LATIN_FONT, 34), PAPER)
+    draw_centered_text(draw, (920, 600, 1360, 704), "30 practice scenes", font(LATIN_FONT, 34), PAPER)
     draw.text((925, 760), "Speak. Listen. Keep going.", font=font(LATIN_REGULAR, 36), fill=MUTED)
     save_scaled(image, STORE / "play-store-feature.png", (1024, 500), "RGB")
 

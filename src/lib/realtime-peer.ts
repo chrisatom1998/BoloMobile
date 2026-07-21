@@ -7,6 +7,7 @@ import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-pe
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
 const DISCONNECTED_WATCHDOG_MS = 10_000;
+const NEGOTIATION_TIMEOUT_MS = 15_000;
 
 type NativeEventTarget = {
   addEventListener(
@@ -90,21 +91,43 @@ export async function createRealtimePeerSession({
   peerEvents.addEventListener('iceconnectionstatechange', updateDisconnectedWatchdog);
 
   try {
-    const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
-    await peer.setLocalDescription(offer);
-    if (!offer.sdp) throw new Error('The live voice offer did not contain audio session data.');
-    const response = await fetch(REALTIME_CALLS_URL, {
-      method: 'POST',
-      body: offer.sdp,
-      headers: {
-        Authorization: `Bearer ${ephemeralKey}`,
-        'Content-Type': 'application/sdp',
-      },
-      signal,
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const finish = (cause?: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', abort);
+        if (cause) reject(cause);
+        else resolve();
+      };
+      const abort = () => finish(new Error('The live voice connection was canceled.'));
+      const timeout = setTimeout(
+        () => finish(new Error('The live voice connection took too long to negotiate.')),
+        NEGOTIATION_TIMEOUT_MS,
+      );
+
+      void (async () => {
+        const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: false });
+        await peer.setLocalDescription(offer);
+        if (!offer.sdp) throw new Error('The live voice offer did not contain audio session data.');
+        const response = await fetch(REALTIME_CALLS_URL, {
+          method: 'POST',
+          body: offer.sdp,
+          headers: {
+            Authorization: `Bearer ${ephemeralKey}`,
+            'Content-Type': 'application/sdp',
+          },
+          signal,
+        });
+        const answerSdp = await response.text();
+        if (!response.ok) throw new Error('OpenAI could not establish the live audio connection.');
+        await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+      })().then(() => finish(), finish);
+
+      signal?.addEventListener('abort', abort, { once: true });
+      if (signal?.aborted) abort();
     });
-    const answerSdp = await response.text();
-    if (!response.ok) throw new Error('OpenAI could not establish the live audio connection.');
-    await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
 
     await new Promise<void>((resolve, reject) => {
       if (signal?.aborted) return reject(new Error('The live voice connection was canceled.'));

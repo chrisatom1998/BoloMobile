@@ -213,7 +213,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
 
   useEffect(() => () => onActivityChangeRef.current?.(false), []);
 
-  const label = starting ? 'Starting…' : busy ? 'Mira is thinking…' : isRecording ? `Stop · ${Math.max(1, Math.ceil(recorderState.durationMillis / 1000))}s` : idleLabel;
+  const label = starting ? 'Starting…' : busy ? 'Asha is thinking…' : isRecording ? `Stop · ${Math.max(1, Math.ceil(recorderState.durationMillis / 1000))}s` : idleLabel;
   const unavailable = disabled || busy || starting;
   const styles = useStyles();
   const { colors } = useTheme();

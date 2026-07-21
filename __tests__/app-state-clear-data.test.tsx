@@ -72,7 +72,7 @@ function seedEveryStorageKey() {
   const today = dateKey();
   const values: Record<string, string> = {
     [storageKeys.aiConsent]: JSON.stringify(createAiConsentRecord()),
-    [storageKeys.chatHistory]: JSON.stringify([{ id: 'mira-old', role: 'mira', text: 'Stored reply.', language: 'en' }]),
+    [storageKeys.chatHistory]: JSON.stringify([{ id: 'asha-old', role: 'asha', text: 'Stored reply.', language: 'en' }]),
     [storageKeys.clientId]: 'client-old-12345',
     [storageKeys.goal]: '15',
     [storageKeys.phrases]: JSON.stringify([{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }]),

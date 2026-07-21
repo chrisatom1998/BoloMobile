@@ -262,7 +262,7 @@ describe('voice control lifecycle', () => {
     await waitFor(() => expect(view.getByText('Keep the first vowel short.')).toBeTruthy());
     await fireEvent.press(view.getByText('Report feedback'));
 
-    const prompt = alert.mock.calls.find(([title]) => title.startsWith('Report Mira'));
+    const prompt = alert.mock.calls.find(([title]) => title.startsWith('Report Asha'));
     const submit = (prompt?.[2] as { onPress?: () => void }[] | undefined)?.[0].onPress;
     await act(async () => {
       submit?.();
@@ -301,7 +301,7 @@ describe('voice control lifecycle', () => {
     await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
     await fireEvent.press(view.getByLabelText('Stop recording'));
     await fireEvent.press(view.getByText('Report feedback'));
-    const prompt = alert.mock.calls.find(([title]) => title.startsWith('Report Mira'));
+    const prompt = alert.mock.calls.find(([title]) => title.startsWith('Report Asha'));
     const submit = (prompt?.[2] as { onPress?: () => void }[] | undefined)?.[0].onPress;
     await act(async () => {
       submit?.();

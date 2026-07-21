@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 const scenes = [
   { number: "01", place: "Delhi · 9:10 AM", title: "Order a chai", hindi: "एक चाय, कृपया", note: "Cafés & food", tone: "terracotta" },
   { number: "02", place: "Jaipur · 4:35 PM", title: "Find your way", hindi: "यह कहाँ है?", note: "Getting around", tone: "forest" },
@@ -6,9 +8,9 @@ const scenes = [
 ];
 
 const features = [
-  { mark: "21", title: "Guided scenes", text: "Practice the conversations that actually happen—from chai stops and train stations to work and family visits." },
-  { mark: "मि", title: "Meet Mira", text: "Type or speak naturally. Mira can coach in English or Hindi and help you keep the conversation moving." },
-  { mark: "↔", title: "Live translation", text: "Speak Hindi and see a clear English translation, designed for quick understanding in the moment." },
+  { mark: "30", title: "Guided scenes", text: "Practice the conversations that actually happen—from chai stops and train stations to work and family visits." },
+  { mark: "आ", title: "Meet Asha", text: "Type or speak naturally. Asha can coach in English or Hindi and help you keep the conversation moving." },
+  { mark: "क", title: "Natural Hindi audio", text: "Hear Devanagari-first Hindi with clear Indian pronunciation, then repeat it at your own pace." },
   { mark: "◉", title: "Pronunciation checks", text: "Record one focused answer, hear useful feedback, then try again while the phrase is still fresh." },
   { mark: "★", title: "Your phrasebook", text: "Save the lines you want to remember and build a practical collection that stays on your device." },
   { mark: "7", title: "Daily momentum", text: "Set a small practice goal, complete a challenge, and watch your streak grow one real moment at a time." },
@@ -19,13 +21,13 @@ export default function Home() {
     <main>
       <header className="site-header">
         <a className="brand" href="#top" aria-label="Bolo home">
-          <img src="/bolo-icon.png" alt="" width="48" height="48" />
+          <Image src="/bolo-icon.png" alt="" width={48} height={48} />
           <span className="brand-name">Bolo</span>
           <span className="brand-tagline">Hindi for real moments</span>
         </a>
         <nav aria-label="Main navigation">
           <a href="#scenes">Scenes</a>
-          <a href="#mira">Meet Mira</a>
+          <a href="#asha">Meet Asha</a>
           <a href="#features">Features</a>
           <a className="nav-cta" href="#how-it-works">See how it works <span aria-hidden="true">↗</span></a>
         </nav>
@@ -35,14 +37,14 @@ export default function Home() {
         <div className="hero-copy">
           <p className="eyebrow"><span />Your Hindi field guide</p>
           <h1>Learn Hindi by <em>living</em> the moment.</h1>
-          <p className="hero-lead">Step into real conversations—ordering chai, meeting family, finding your way. Mira listens, translates, and helps you answer with confidence.</p>
+          <p className="hero-lead">Step into real conversations—ordering chai, meeting family, finding your way. Asha listens, explains, and helps you answer with confidence.</p>
           <div className="hero-actions">
             <a className="primary-button" href="#scenes"><span className="button-play" aria-hidden="true">▶</span> Explore the scenes</a>
-            <a className="text-link" href="#mira">Meet your coach, Mira</a>
+            <a className="text-link" href="#asha">Meet your coach, Asha</a>
           </div>
           <div className="hero-proof" aria-label="Bolo highlights">
-            <div><strong>21</strong><span>Guided real-life scenes</span></div>
-            <div><strong>Live</strong><span>Hindi → English translation</span></div>
+            <div><strong>30</strong><span>Guided real-life scenes</span></div>
+            <div><strong>Hindi</strong><span>Natural pronunciation coaching</span></div>
             <div><strong>0</strong><span>Accounts required</span></div>
           </div>
         </div>
@@ -52,18 +54,18 @@ export default function Home() {
           <span className="hero-sun" aria-hidden="true" />
           <span className="hero-arch" aria-hidden="true" />
           <div className="phone-wrap">
-            <img src="/mira-voice.png" alt="Bolo's Mira voice coaching screen with English and Hindi reply controls" />
+            <Image src="/asha-voice.png" alt="Bolo's Asha voice coaching screen with English and Hindi reply controls" width={390} height={844} priority />
           </div>
           <div className="round-stamp" aria-hidden="true">Speak<br />with<br />confidence</div>
           <article className="practice-postcard">
             <div className="postcard-top"><span>Scene 01 · At the café</span><b>नमस्ते</b></div>
             <h2>“Ek chai, please.”</h2>
-            <p>Mira gives gentle pronunciation feedback while you practice a phrase you’ll actually use.</p>
+            <p>Asha gives gentle pronunciation feedback while you practice a phrase you’ll actually use.</p>
             <div className="wave" aria-hidden="true"><i /><i /><i /><i /><i /><span>Try saying it</span></div>
           </article>
           <div className="visual-index">
             <h2>Made for the moment</h2>
-            <p><span>Voice coaching</span><b>Mira AI</b></p>
+            <p><span>Voice coaching</span><b>Asha AI</b></p>
             <p><span>Written practice</span><b>Offline</b></p>
             <p><span>Your progress</span><b>Phrases + streaks</b></p>
           </div>
@@ -90,7 +92,7 @@ export default function Home() {
             </article>
           ))}
         </div>
-        <p className="scene-footnote">Plus 17 more moments across travel, food, work, health, shopping, and everyday life.</p>
+        <p className="scene-footnote">Plus 26 more moments across travel, food, work, health, shopping, and everyday life.</p>
       </section>
 
       <section className="steps" id="how-it-works">
@@ -100,26 +102,26 @@ export default function Home() {
           <div className="step-grid">
             <article><span>01</span><h3>Enter the moment</h3><p>Choose a real-life scene and see exactly where the conversation begins.</p></article>
             <article><span>02</span><h3>Choose your reply</h3><p>Read Hindi, transliteration, and meaning—then select the response that feels natural.</p></article>
-            <article><span>03</span><h3>Speak it out loud</h3><p>Listen to Mira, practice your pronunciation, or continue with a live voice turn.</p></article>
+            <article><span>03</span><h3>Speak it out loud</h3><p>Listen to Asha, practice your pronunciation, or continue with a live voice turn.</p></article>
           </div>
         </div>
       </section>
 
-      <section className="mira section-shell" id="mira">
-        <div className="mira-visual">
-          <div className="mira-halo halo-one" /><div className="mira-halo halo-two" />
-          <img src="/mira-voice.png" alt="Mira's voice practice interface in Bolo" />
-          <aside className="mira-note top-note"><span>Live translate</span><strong>नमस्ते → Hello</strong></aside>
-          <aside className="mira-note bottom-note"><span>Pronunciation</span><strong>Clear and natural</strong></aside>
+      <section className="asha section-shell" id="asha">
+        <div className="asha-visual">
+          <div className="asha-halo halo-one" /><div className="asha-halo halo-two" />
+          <Image src="/asha-voice.png" alt="Asha's voice practice interface in Bolo" width={390} height={844} />
+          <aside className="asha-note top-note"><span>Reply language</span><strong>English or हिन्दी</strong></aside>
+          <aside className="asha-note bottom-note"><span>Pronunciation</span><strong>Clear and natural</strong></aside>
         </div>
-        <div className="mira-copy">
+        <div className="asha-copy">
           <p className="eyebrow"><span />Your conversation coach</p>
-          <h2>Meet Mira.<br /><em>She’ll meet you where you are.</em></h2>
+          <h2>Meet Asha.<br /><em>She’ll meet you where you are.</em></h2>
           <p>Ask how to say something, practice one phrase, or start a voice turn. Choose English-first coaching or Hindi replies whenever you’re ready for more immersion.</p>
           <ul>
             <li><span>01</span><div><strong>Correct me</strong><p>Focused guidance for the Hindi you want to say.</p></div></li>
-            <li><span>02</span><div><strong>Live translate</strong><p>Hindi speech becomes clear English text in the moment.</p></div></li>
-            <li><span>03</span><div><strong>English or हिन्दी</strong><p>You control the language Mira uses to reply.</p></div></li>
+            <li><span>02</span><div><strong>Natural Hindi</strong><p>Devanagari-first speech keeps pronunciation clear and grounded in Indian Hindi.</p></div></li>
+            <li><span>03</span><div><strong>English or हिन्दी</strong><p>You control the language Asha uses to reply.</p></div></li>
           </ul>
         </div>
       </section>
@@ -127,7 +129,7 @@ export default function Home() {
       <section className="features section-shell" id="features">
         <div className="section-heading feature-heading">
           <div><p className="eyebrow"><span />Built for steady progress</p><h2>Everything you need.<br /><em>Nothing in the way.</em></h2></div>
-          <p>No account. No pressure. Start with the 21 written scenes offline, then choose if and when you want connected AI coaching.</p>
+          <p>No account. No pressure. Start with the 30 written scenes offline, then choose if and when you want connected AI coaching.</p>
         </div>
         <div className="feature-grid">
           {features.map((feature) => (
@@ -149,7 +151,7 @@ export default function Home() {
       </section>
 
       <section className="closing">
-        <div className="closing-stamp" aria-hidden="true">21<br /><span>real moments</span></div>
+        <div className="closing-stamp" aria-hidden="true">30<br /><span>real moments</span></div>
         <p className="eyebrow"><span />Your next conversation starts here</p>
         <h2>Go from “I know that word”<br />to <em>“I can say this.”</em></h2>
         <a className="primary-button" href="#scenes"><span className="button-play" aria-hidden="true">▶</span> Find your first scene</a>
@@ -157,7 +159,7 @@ export default function Home() {
       </section>
 
       <footer>
-        <a className="brand footer-brand" href="#top"><img src="/bolo-icon.png" alt="" width="44" height="44" /><span className="brand-name">Bolo</span></a>
+        <a className="brand footer-brand" href="#top"><Image src="/bolo-icon.png" alt="" width={44} height={44} /><span className="brand-name">Bolo</span></a>
         <p>Hindi for real moments.</p>
         <div><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy">Privacy</a><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms">Terms</a><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=support">Support</a></div>
       </footer>

@@ -57,13 +57,13 @@ describe('live voice privacy copy', () => {
     const declarations = read('store/privacy-declarations.md');
     const releaseValidation = read('scripts/validate-release.mjs');
 
-    expect(consent).toMatch(/up to 100 recent Mira chat messages[\s\S]{0,80}unencrypted[\s\S]{0,80}this device/iu);
-    expect(inAppPolicy).toMatch(/up to 100 recent typed and transcribed Mira chat messages/iu);
+    expect(consent).toMatch(/up to 100 recent Asha chat messages[\s\S]{0,80}unencrypted[\s\S]{0,80}this device/iu);
+    expect(inAppPolicy).toMatch(/up to 100 recent typed and transcribed Asha chat messages/iu);
     expect(inAppPolicy).toMatch(/Clear chat[\s\S]{0,120}removes only the saved typed and voice chat[\s\S]{0,100}does not delete reports/iu);
-    expect(settings).toMatch(/permanently deletes[\s\S]{0,100}recent Mira chat history/iu);
+    expect(settings).toMatch(/permanently deletes[\s\S]{0,100}recent Asha chat history/iu);
     expect(declarations).toMatch(/Clear chat removes only saved typed and voice chat[\s\S]{0,80}does not delete submitted reports/iu);
     expect(declarations).toMatch(/clearing local data, including chat history/iu);
-    expect(releaseValidation).toMatch(/up to 100 recent typed and transcribed Mira chat messages/iu);
+    expect(releaseValidation).toMatch(/up to 100 recent typed and transcribed Asha chat messages/iu);
     expect(releaseValidation).toMatch(/unencrypted storage on this device/iu);
     expect(releaseValidation).toMatch(/Clear chat[\s\S]{0,80}does not delete reports/iu);
   });

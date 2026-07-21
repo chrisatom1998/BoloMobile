@@ -48,14 +48,14 @@ function HistoryHarness() {
         accessibilityLabel="Append completed voice turn"
         onPress={() => appendChatMessages([
           { id: 'you-new', role: 'you', text: 'My completed turn.' },
-          { id: 'mira-new', role: 'mira', text: 'A completed reply.', language: 'en' },
+          { id: 'asha-new', role: 'asha', text: 'A completed reply.', language: 'en' },
         ])}
       />
       <Pressable
         accessibilityLabel="Append later voice turn"
         onPress={() => appendChatMessages([
           { id: 'you-later', role: 'you', text: 'A stale turn.' },
-          { id: 'mira-later', role: 'mira', text: 'A stale reply.', language: 'en' },
+          { id: 'asha-later', role: 'asha', text: 'A stale reply.', language: 'en' },
         ])}
       />
       <Pressable accessibilityLabel="Clear chat history" onPress={clearChatHistory} />
@@ -73,25 +73,25 @@ describe('chat history provider persistence', () => {
 
   it('hydrates history, persists a completed pair atomically, and restores it after remount', async () => {
     asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([
-      { id: 'mira-saved', role: 'mira', text: 'Previously saved.', language: 'en' },
+      { id: 'asha-saved', role: 'asha', text: 'Previously saved.', language: 'en' },
     ]));
     const first = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
-    await waitFor(() => expect(first.getByTestId('history').props.children).toBe('mira-saved:Previously saved.'));
+    await waitFor(() => expect(first.getByTestId('history').props.children).toBe('asha-saved:Previously saved.'));
 
     await fireEvent.press(first.getByLabelText('Append completed voice turn'));
     await waitFor(() => expect(first.getByTestId('history').props.children).toBe(
-      'mira-saved:Previously saved.|you-new:My completed turn.|mira-new:A completed reply.',
+      'asha-saved:Previously saved.|you-new:My completed turn.|asha-new:A completed reply.',
     ));
     await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? '[]')).toEqual([
-      { id: 'mira-saved', role: 'mira', text: 'Previously saved.', language: 'en' },
+      { id: 'asha-saved', role: 'asha', text: 'Previously saved.', language: 'en' },
       { id: 'you-new', role: 'you', text: 'My completed turn.' },
-      { id: 'mira-new', role: 'mira', text: 'A completed reply.', language: 'en' },
+      { id: 'asha-new', role: 'asha', text: 'A completed reply.', language: 'en' },
     ]));
 
     await first.unmount();
     const restored = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
     await waitFor(() => expect(restored.getByTestId('history').props.children).toContain('you-new:My completed turn.'));
-    await waitFor(() => expect(restored.getByTestId('history').props.children).toContain('mira-new:A completed reply.'));
+    await waitFor(() => expect(restored.getByTestId('history').props.children).toContain('asha-new:A completed reply.'));
 
     await fireEvent.press(restored.getByLabelText('Clear chat history'));
     await waitFor(() => expect(restored.getByTestId('history').props.children).toBe('empty'));
@@ -102,7 +102,7 @@ describe('chat history provider persistence', () => {
     const cleared = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
     await waitFor(() => expect(cleared.getByTestId('history').props.children).toBe('empty'));
     await fireEvent.press(cleared.getByLabelText('Append completed voice turn'));
-    await waitFor(() => expect(cleared.getByTestId('history').props.children).toContain('mira-new:A completed reply.'));
+    await waitFor(() => expect(cleared.getByTestId('history').props.children).toContain('asha-new:A completed reply.'));
     await fireEvent.press(cleared.getByLabelText('Clear all data'));
     await waitFor(() => expect(cleared.getByTestId('history').props.children).toBe('empty'));
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
@@ -140,7 +140,7 @@ describe('chat history provider persistence', () => {
     await waitFor(() => expect(view.getByTestId('history').props.children).toBe('empty'));
 
     await fireEvent.press(view.getByLabelText('Append completed voice turn'));
-    await waitFor(() => expect(view.getByTestId('history').props.children).toContain('mira-new:A completed reply.'));
+    await waitFor(() => expect(view.getByTestId('history').props.children).toContain('asha-new:A completed reply.'));
     await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1));
 
     await fireEvent.press(view.getByLabelText('Clear chat history'));
@@ -164,15 +164,15 @@ describe('chat history provider persistence', () => {
     await waitFor(() => expect(view.getByTestId('history').props.children).toBe('empty'));
 
     await fireEvent.press(view.getByLabelText('Append completed voice turn'));
-    await waitFor(() => expect(view.getByTestId('history').props.children).toContain('mira-new:A completed reply.'));
+    await waitFor(() => expect(view.getByTestId('history').props.children).toContain('asha-new:A completed reply.'));
     await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1));
 
     await fireEvent.press(view.getByLabelText('Clear all data'));
     expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1);
-    expect(view.getByTestId('history').props.children).toContain('mira-new:A completed reply.');
+    expect(view.getByTestId('history').props.children).toContain('asha-new:A completed reply.');
 
     await fireEvent.press(view.getByLabelText('Append later voice turn'));
-    expect(view.getByTestId('history').props.children).not.toContain('mira-later:A stale reply.');
+    expect(view.getByTestId('history').props.children).not.toContain('asha-later:A stale reply.');
     expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1);
 
     firstWrite.resolve();

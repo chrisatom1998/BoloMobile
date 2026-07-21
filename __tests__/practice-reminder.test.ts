@@ -4,19 +4,21 @@ const mockGetPermissions = jest.fn();
 const mockRequestPermissions = jest.fn();
 const mockSchedule = jest.fn();
 const mockCancel = jest.fn();
+const mockCancelAll = jest.fn();
 
 jest.mock('expo-notifications', () => ({
   AndroidImportance: { DEFAULT: 3 },
   IosAuthorizationStatus: { PROVISIONAL: 3 },
   SchedulableTriggerInputTypes: { DAILY: 'daily' },
   cancelScheduledNotificationAsync: (...args: unknown[]) => mockCancel(...args),
+  cancelAllScheduledNotificationsAsync: () => mockCancelAll(),
   getPermissionsAsync: (...args: unknown[]) => mockGetPermissions(...args),
   requestPermissionsAsync: (...args: unknown[]) => mockRequestPermissions(...args),
   scheduleNotificationAsync: (...args: unknown[]) => mockSchedule(...args),
   setNotificationChannelAsync: jest.fn(),
 }));
 
-import { cancelPracticeReminder, schedulePracticeReminder } from '../src/lib/practice-reminder';
+import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
 
 describe('practice reminders', () => {
   beforeEach(() => {
@@ -54,5 +56,11 @@ describe('practice reminders', () => {
 
     expect(mockCancel).toHaveBeenCalledWith('reminder-1');
     expect(result).toEqual({ enabled: false, hour: 20, minute: 15, notificationId: null });
+  });
+
+  it('removes every scheduled reminder during data deletion', async () => {
+    await clearAllPracticeReminders();
+
+    expect(mockCancelAll).toHaveBeenCalledTimes(1);
   });
 });

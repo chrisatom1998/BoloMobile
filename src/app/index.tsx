@@ -32,10 +32,10 @@ export default function HomeScreen() {
     ? { eyebrow: 'Ready to review', title: `Review ${duePhrases.length} phrase${duePhrases.length === 1 ? '' : 's'}`, body: 'A quick recall round keeps useful Hindi ready when you need it.', action: 'Start review', onPress: () => router.push('/review' as Href) }
     : dailySteps === 1
       ? practice.chaiDone
-        ? { eyebrow: 'Finish today’s challenge', title: 'Take one turn with Mira', body: 'One calm spoken or typed response completes today’s challenge.', action: 'Practice with Mira', onPress: () => router.push('/live') }
+        ? { eyebrow: 'Finish today’s challenge', title: 'Take one turn with Asha', body: 'One calm spoken or typed response completes today’s challenge.', action: 'Practice with Asha', onPress: () => router.push('/live') }
         : { eyebrow: 'Finish today’s challenge', title: 'Handle the chai stop', body: 'Complete the guided chai scene to finish your second step.', action: 'Open scene', onPress: () => openScene(scenes[0]) }
       : goalPercent >= 100
-        ? { eyebrow: 'Daily goal complete', title: 'Use your Hindi live', body: 'Your lesson goal is done. Try one free-form conversation with Mira.', action: 'Talk with Mira', onPress: () => router.push('/live') }
+        ? { eyebrow: 'Daily goal complete', title: 'Use your Hindi live', body: 'Your lesson goal is done. Try one free-form conversation with Asha.', action: 'Talk with Asha', onPress: () => router.push('/live') }
         : { eyebrow: resumed ? 'Continue your scene' : 'Your next step', title: recommended.title, body: recommended.subtitle, action: resumed ? 'Continue' : 'Start 3-minute scene', onPress: () => openScene(recommended) },
   [dailySteps, duePhrases.length, goalPercent, openScene, practice.chaiDone, recommended, resumed, router]);
 
@@ -74,9 +74,9 @@ export default function HomeScreen() {
           <Text style={styles.quickActionTitle}>Phrases</Text>
           <Text style={styles.quickActionMeta}>{phrases.length} saved</Text>
         </Pressable>
-        <Pressable accessibilityLabel="Practice live with Mira" accessibilityRole="button" onPress={() => router.push('/live')} style={[styles.quickAction, styles.quickActionPrimary]}>
+        <Pressable accessibilityLabel="Practice live with Asha" accessibilityRole="button" onPress={() => router.push('/live')} style={[styles.quickAction, styles.quickActionPrimary]}>
           <Mic color={colors.white} size={21} />
-          <Text style={[styles.quickActionTitle, styles.quickActionTitlePrimary]}>Mira</Text>
+          <Text style={[styles.quickActionTitle, styles.quickActionTitlePrimary]}>Asha</Text>
           <Text style={[styles.quickActionMeta, styles.quickActionMetaPrimary]}>Talk live</Text>
         </Pressable>
       </View>
@@ -86,7 +86,7 @@ export default function HomeScreen() {
           <Text style={styles.goalTitle}>Daily goal</Text>
           <View style={styles.challengeChecks}>
             <Text style={styles.challengeCheck}>{practice.chaiDone ? '✓' : '○'} Chai scene</Text>
-            <Text style={styles.challengeCheck}>{practice.liveDone ? '✓' : '○'} Mira turn</Text>
+            <Text style={styles.challengeCheck}>{practice.liveDone ? '✓' : '○'} Asha turn</Text>
           </View>
         </View>
         <View style={styles.goalChoices}>

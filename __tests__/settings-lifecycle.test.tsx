@@ -36,6 +36,7 @@ jest.mock('@/lib/public-pages', () => ({
 
 jest.mock('@/lib/practice-reminder', () => ({
   cancelPracticeReminder: jest.fn(async (current) => ({ ...current, enabled: false, notificationId: null })),
+  clearAllPracticeReminders: jest.fn(async () => undefined),
   schedulePracticeReminder: jest.fn(async (_current, hour, minute = 0) => ({
     enabled: true,
     hour,
@@ -54,9 +55,11 @@ jest.mock('@/state/app-state', () => ({
 
 import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
+import { clearAllPracticeReminders } from '../src/lib/practice-reminder';
 import { deleteMobileData } from '../src/services/bolo-api';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
+const clearAllPracticeRemindersMock = clearAllPracticeReminders as jest.MockedFunction<typeof clearAllPracticeReminders>;
 const deleteMobileDataMock = deleteMobileData as jest.MockedFunction<typeof deleteMobileData>;
 
 type AlertAction = {
@@ -130,6 +133,7 @@ describe('SettingsScreen lifecycle and UI', () => {
 
     remoteDeletion.resolve({ deleted: true });
     await waitFor(() => expect(clearAllData).toHaveBeenCalledTimes(1));
+    expect(clearAllPracticeRemindersMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith(
       'Bolo data deleted',
       expect.stringContaining('new random app identifier'),
@@ -149,8 +153,23 @@ describe('SettingsScreen lifecycle and UI', () => {
       'Deletion service unavailable.',
     ));
     expect(deleteMobileDataMock).toHaveBeenCalledWith('client-12345678', expect.any(AbortSignal));
+    expect(clearAllPracticeRemindersMock).not.toHaveBeenCalled();
     expect(clearAllData).not.toHaveBeenCalled();
     expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
+  });
+
+  it('keeps local reminder state available for retry when system cancellation fails', async () => {
+    clearAllPracticeRemindersMock.mockRejectedValueOnce(new Error('Reminder cancellation failed.'));
+    const view = await render(<SettingsScreen />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Delete my Bolo data' }));
+    await act(async () => runAlertAction('Delete your Bolo data?', 'Delete data'));
+
+    await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith(
+      'Could not delete data',
+      'Reminder cancellation failed.',
+    ));
+    expect(clearAllData).not.toHaveBeenCalled();
   });
 
   it('surfaces a local-clear failure without claiming deletion succeeded', async () => {

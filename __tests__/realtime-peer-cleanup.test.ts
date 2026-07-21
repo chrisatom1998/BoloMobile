@@ -171,6 +171,58 @@ describe('Realtime peer setup cleanup', () => {
     }
   });
 
+  it('times out and closes a native peer when remote description setup hangs', async () => {
+    const remoteDescription = deferred<void>();
+    const microphone = { enabled: true, stop: jest.fn() };
+    const stream = {
+      getAudioTracks: jest.fn(() => [microphone]),
+      getTracks: jest.fn(() => [microphone]),
+    };
+    const dataChannel = {
+      addEventListener: jest.fn(),
+      close: jest.fn(),
+      readyState: 'connecting',
+      send: jest.fn(),
+    };
+    const peer = {
+      addTrack: jest.fn(),
+      close: jest.fn(),
+      connectionState: 'connecting',
+      createDataChannel: jest.fn(() => dataChannel),
+      createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
+      setLocalDescription: jest.fn(async () => undefined),
+      setRemoteDescription: jest.fn(() => remoteDescription.promise),
+      addEventListener: jest.fn(),
+    };
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockImplementation(() => peer);
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      text: async () => 'native-answer',
+    })) as unknown as typeof fetch;
+
+    let rejection: unknown;
+    const session = createNativeSession({
+      ephemeralKey: 'ek_native_timeout',
+      onClose: jest.fn(),
+      onMessage: jest.fn(),
+      signal: new AbortController().signal,
+    }).catch((error: unknown) => {
+      rejection = error;
+    });
+
+    await flushMicrotasks();
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(15_000);
+    await flushMicrotasks();
+
+    expect(rejection).toEqual(expect.objectContaining({ message: 'The live voice connection took too long to negotiate.' }));
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(dataChannel.close).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    await session;
+  });
+
   it('rejects and closes the native peer when abort wins before an already-open data channel is awaited', async () => {
     const remoteDescription = deferred<void>();
     const microphone = { enabled: true, stop: jest.fn() };

@@ -15,7 +15,7 @@ import { useRealtimeConversation, type RealtimeInputTranscript, type RealtimeTra
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
-import type { MiraResponseLanguage } from '@/state/app-state-types';
+import type { AshaResponseLanguage } from '@/state/app-state-types';
 
 type Props = {
   clientId: string;
@@ -26,7 +26,7 @@ type Props = {
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
-  responseLanguage?: MiraResponseLanguage;
+  responseLanguage?: AshaResponseLanguage;
 };
 
 const labels = {
@@ -34,7 +34,7 @@ const labels = {
   connecting: 'Connecting…',
   ready: 'Speak',
   recording: 'Send turn',
-  responding: 'Mira is speaking…',
+  responding: 'Asha is speaking…',
 } as const;
 
 const BREATH_MS = 2_600;
@@ -43,7 +43,7 @@ const THROB_MS = 700;
 
 /**
  * Animates the orb by status: a slow breath while ready, rings that ripple
- * outward while recording, and a quick throb while Mira responds. All motion
+ * outward while recording, and a quick throb while Asha responds. All motion
  * lives on wrapper views so the Pressable keeps its static hit-target styles.
  */
 function useOrbMotion(status: RealtimeVoiceStatus) {
@@ -126,7 +126,11 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
       void Promise.resolve().then(voice.finishTurn).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
       return;
     }
-    hapticStartRecording();
+    // Starting WebRTC reconfigures the native audio session. Keep the initial
+    // connection free of simultaneous UI-sound/haptic work; on iOS that can
+    // deadlock RemoteIO while the peer applies its remote audio description.
+    // Once connected, starting later turns is safe to acknowledge haptically.
+    if (voice.status === 'ready') hapticStartRecording();
     void voice.startTurn().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
   }, [blocked, onError, voice]);
 
@@ -151,13 +155,14 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
           disabled={blocked}
           onPress={press}
           style={[styles.orb, compact && styles.orbCompact, connected && styles.orbActive, voice.status === 'recording' && styles.orbRecording, blocked && styles.disabled]}
+          testID="realtime-voice-orb"
         >
           <View style={styles.orbHighlight} />
           {voice.status === 'ready'
             ? <Mic color={colors.white} size={52} />
             : voice.status === 'recording'
               ? <Send color={colors.white} size={52} />
-              : <Text style={styles.orbGlyph}>मि</Text>}
+              : <Text style={styles.orbGlyph}>आ</Text>}
         </Pressable>
       </Animated.View>
       {connected ? (
