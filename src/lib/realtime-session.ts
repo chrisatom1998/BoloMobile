@@ -15,6 +15,7 @@ export function buildRealtimeSessionConfig(model: string, responseLanguage: Mira
       'When correcting Hindi, first acknowledge meaning, then give one corrected Hindi phrase and a brief explanation.',
       'Correct at most one useful mistake and continue the conversation naturally.',
       'Never claim the learner said words that are absent from the audio transcript.',
+      'Check factual claims and calculations before answering; compute prices and change carefully.',
       'Do not ask for or retain sensitive personal information.',
     ].join(' '),
     audio: {

@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { useRealtimeConversation, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import { useRealtimeConversation, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
@@ -22,7 +22,9 @@ type Props = {
   compact?: boolean;
   disabled?: boolean;
   onError: (message: string) => void;
+  onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
+  onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
   responseLanguage?: MiraResponseLanguage;
 };
@@ -98,8 +100,8 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, onError, onStatusChange, onTurnComplete, responseLanguage = 'en' }: Props) {
-  const voice = useRealtimeConversation({ clientId, onError, onTurnComplete, responseLanguage });
+export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, onError, onInputTranscriptComplete, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+  const voice = useRealtimeConversation({ clientId, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting' || voice.status === 'responding';
   const connected = voice.status !== 'disconnected';

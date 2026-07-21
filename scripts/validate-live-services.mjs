@@ -165,7 +165,7 @@ async function runServicePass(pass) {
 
     await check(`mobile-chat Hindi #${pass}`, async () => {
       const result = await postJson(`mobile-chat Hindi #${pass}`, '/api/mobile-chat', {
-        text: 'Respond in Hindi using Devanagari. Ask me how I am today.',
+        text: 'Respond in natural Hindi written only in Romanized Latin script. Never use Devanagari. Ask me how I am today.',
         messages: [],
         clientId,
         languageMode: 'english-unless-hindi-requested',
@@ -173,9 +173,10 @@ async function runServicePass(pass) {
       textValue(result.payload.transcript, `mobile-chat Hindi #${pass} transcript`, 1_200);
       const reply = textValue(result.payload.reply, `mobile-chat Hindi #${pass} reply`, 2_400);
       assert(result.payload.language === 'hi', `mobile-chat Hindi #${pass}`, 'explicit Hindi request was not tagged hi');
-      assert(containsDevanagari(reply), `mobile-chat Hindi #${pass}`, 'explicit Devanagari request did not return Devanagari');
+      assert(!containsDevanagari(reply), `mobile-chat Hindi #${pass}`, 'Romanized Hindi reply unexpectedly contained Devanagari');
+      assert(/[A-Za-z]/u.test(reply), `mobile-chat Hindi #${pass}`, 'Romanized Hindi reply did not contain Latin text');
       return { elapsedMs: result.elapsedMs, replyLength: reply.length };
-    }, (result) => `${result.elapsedMs} ms; ${result.replyLength}-character Hindi reply`);
+    }, (result) => `${result.elapsedMs} ms; ${result.replyLength}-character Romanized Hindi reply`);
 
     const phrase = await check(`phrase-audio #${pass}`, async () => {
       const result = await postJson(`phrase-audio #${pass}`, '/api/phrase-audio', { text: 'मुझे पानी चाहिए।' });

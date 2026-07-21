@@ -13,11 +13,15 @@ import { createRealtimeClientSecret, OPENAI_REALTIME_MODEL } from '@/services/bo
 import type { MiraResponseLanguage } from '@/state/app-state-types';
 
 export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding';
+export type RealtimeTranscriptUpdate = { speaker: 'you' | 'mira'; text: string };
+export type RealtimeInputTranscript = { itemId: string; transcript: string };
 
 type Options = {
   clientId: string;
   responseLanguage?: MiraResponseLanguage;
   onError: (message: string) => void;
+  onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
 };
 
@@ -28,12 +32,20 @@ type RealtimeEvent = {
   text?: string;
   transcript?: string;
   error?: { message?: string };
-  response?: { status?: string; status_details?: { error?: { message?: string } } };
+  response?: {
+    status?: string;
+    status_details?: {
+      error?: { message?: string };
+      reason?: string;
+      type?: string;
+    };
+  };
 };
 
 const MINIMUM_TURN_MS = 250;
 const RESPONSE_WATCHDOG_MS = 45_000;
 const TURN_SETTLEMENT_WATCHDOG_MS = 45_000;
+const MAX_INCOMPLETE_CONTINUATIONS = 1;
 const REALTIME_SPEAKER_AUDIO_MODE = {
   allowsRecording: true,
   interruptionMode: 'doNotMix',
@@ -55,7 +67,7 @@ function rememberCompletedInputItem(items: Set<string>, itemId: string | null) {
   }
 }
 
-export function useRealtimeConversation({ clientId, responseLanguage = 'en', onError, onTurnComplete }: Options) {
+export function useRealtimeConversation({ clientId, responseLanguage = 'en', onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete }: Options) {
   const [status, setStatus] = useState<RealtimeVoiceStatus>('disconnected');
   const peerRef = useRef<RealtimePeerSession | null>(null);
   const statusRef = useRef<RealtimeVoiceStatus>('disconnected');
@@ -65,12 +77,16 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
   const completedReplyRef = useRef('');
   const inputItemIdRef = useRef<string | null>(null);
   const completedInputItemIdsRef = useRef<Set<string>>(new Set());
+  const publishedInputTranscriptIdsRef = useRef<Set<string>>(new Set());
+  const failedResponseInputItemIdsRef = useRef<Set<string>>(new Set());
   const responseCompletedRef = useRef(false);
   const outputAudioStartedRef = useRef(false);
   const outputAudioStoppedRef = useRef(false);
   const outputClearRequestedRef = useRef(false);
   const turnFinalizedRef = useRef(false);
   const responseCreatedRef = useRef(false);
+  const continuationPendingRef = useRef(false);
+  const incompleteContinuationCountRef = useRef(0);
   const turnWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const turnStartedAtRef = useRef(0);
   const lifecycleRef = useRef(0);
@@ -78,11 +94,11 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
   const connectAbortRef = useRef<AbortController | null>(null);
   const connectResolveRef = useRef<(() => void) | null>(null);
   const connectRejectRef = useRef<((error: Error) => void) | null>(null);
-  const callbacksRef = useRef({ onError, onTurnComplete });
+  const callbacksRef = useRef({ onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete });
 
   useEffect(() => {
-    callbacksRef.current = { onError, onTurnComplete };
-  }, [onError, onTurnComplete]);
+    callbacksRef.current = { onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete };
+  }, [onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete]);
 
   const updateStatus = useCallback((next: RealtimeVoiceStatus) => {
     statusRef.current = next;
@@ -100,6 +116,16 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     turnWatchdogRef.current = null;
   }, []);
 
+  const publishTranscript = useCallback((speaker: RealtimeTranscriptUpdate['speaker'], text: string) => {
+    callbacksRef.current.onTranscriptChange?.({ speaker, text: text.trim() });
+  }, []);
+
+  const publishCompletedInputTranscript = useCallback((itemId: string, transcript: string) => {
+    if (publishedInputTranscriptIdsRef.current.has(itemId)) return;
+    rememberCompletedInputItem(publishedInputTranscriptIdsRef.current, itemId);
+    callbacksRef.current.onInputTranscriptComplete?.({ itemId, transcript });
+  }, []);
+
   const failStalledTurn = useCallback((message: string) => {
     if (statusRef.current !== 'responding') return;
     clearTurnWatchdog();
@@ -114,6 +140,8 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     inputItemIdRef.current = null;
     responseCompletedRef.current = false;
     responseCreatedRef.current = false;
+    continuationPendingRef.current = false;
+    incompleteContinuationCountRef.current = 0;
     outputAudioStartedRef.current = false;
     outputAudioStoppedRef.current = false;
     outputClearRequestedRef.current = false;
@@ -138,6 +166,8 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     clearTurnWatchdog();
     responseCompletedRef.current = false;
     responseCreatedRef.current = false;
+    continuationPendingRef.current = false;
+    incompleteContinuationCountRef.current = 0;
     outputAudioStartedRef.current = false;
     outputAudioStoppedRef.current = false;
     outputClearRequestedRef.current = false;
@@ -190,6 +220,38 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     unlockCompletedTurn();
   }, [clearTurnWatchdog, unlockCompletedTurn, updateStatus]);
 
+  const requestIncompleteContinuation = useCallback(() => {
+    if (!continuationPendingRef.current || statusRef.current !== 'responding') return;
+    const peer = peerRef.current;
+    if (!peer) {
+      failStalledTurn('Mira could not continue the incomplete voice response. Please try again.');
+      return;
+    }
+    continuationPendingRef.current = false;
+    responseTextRef.current = '';
+    responseCompletedRef.current = false;
+    responseCreatedRef.current = false;
+    continuationPendingRef.current = false;
+    outputAudioStartedRef.current = false;
+    outputAudioStoppedRef.current = false;
+    outputClearRequestedRef.current = false;
+    try {
+      peer.send({
+        type: 'response.create',
+        response: {
+          output_modalities: ['audio'],
+          instructions: 'Continue the previous reply exactly where it stopped. Do not repeat the part already spoken. Finish concisely.',
+        },
+      });
+      armTurnWatchdog(
+        RESPONSE_WATCHDOG_MS,
+        'Mira did not finish the continued voice response. Start a new live voice session and try again.',
+      );
+    } catch {
+      failStalledTurn('Mira could not continue the incomplete voice response. Please try again.');
+    }
+  }, [armTurnWatchdog, failStalledTurn]);
+
   const handleServerEvent = useCallback((raw: string) => {
     let event: RealtimeEvent;
     try {
@@ -215,10 +277,22 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         break;
       case 'conversation.item.input_audio_transcription.completed':
         if (!event.item_id || completedInputItemIdsRef.current.has(event.item_id)) break;
-        if (inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
+        const belongsToFailedResponse = failedResponseInputItemIdsRef.current.delete(event.item_id);
+        if (!belongsToFailedResponse && inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
+        if (publishedInputTranscriptIdsRef.current.has(event.item_id)) break;
+        if (belongsToFailedResponse) {
+          if (event.transcript?.trim()) {
+            publishTranscript('you', event.transcript);
+            publishCompletedInputTranscript(event.item_id, event.transcript.trim());
+          }
+          rememberCompletedInputItem(completedInputItemIdsRef.current, event.item_id);
+          break;
+        }
         if (!inputItemIdRef.current) inputItemIdRef.current = event.item_id;
         if (event.transcript?.trim()) {
           transcriptRef.current = event.transcript.trim();
+          publishTranscript('you', transcriptRef.current);
+          publishCompletedInputTranscript(event.item_id, transcriptRef.current);
           if (completedReplyRef.current) finalizeTurn();
         } else if (statusRef.current === 'responding') {
           rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
@@ -230,9 +304,25 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           finishTurnWithoutResult();
         }
         break;
+      case 'conversation.item.input_audio_transcription.delta':
+        if (!event.item_id || completedInputItemIdsRef.current.has(event.item_id)) break;
+        if (inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
+        if (!inputItemIdRef.current) inputItemIdRef.current = event.item_id;
+        if (event.delta) {
+          transcriptRef.current += event.delta;
+          publishTranscript('you', transcriptRef.current);
+        }
+        break;
       case 'conversation.item.input_audio_transcription.failed':
         if (event.item_id && completedInputItemIdsRef.current.has(event.item_id)) break;
-        if (event.item_id && inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
+        const failedAfterResponseFailure = event.item_id
+          ? failedResponseInputItemIdsRef.current.delete(event.item_id)
+          : false;
+        if (!failedAfterResponseFailure && event.item_id && inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
+        if (failedAfterResponseFailure) {
+          rememberCompletedInputItem(completedInputItemIdsRef.current, event.item_id ?? null);
+          break;
+        }
         if (event.item_id && !inputItemIdRef.current) inputItemIdRef.current = event.item_id;
         if (statusRef.current === 'responding') {
           rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
@@ -276,14 +366,30 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         outputAudioStartedRef.current = false;
         outputAudioStoppedRef.current = true;
         outputClearRequestedRef.current = false;
+        if (continuationPendingRef.current) {
+          requestIncompleteContinuation();
+          break;
+        }
         unlockCompletedTurn();
         break;
       case 'response.output_audio_transcript.delta':
-        if (event.delta) responseTextRef.current += event.delta;
+        if (event.delta) {
+          responseTextRef.current += event.delta;
+          publishTranscript(
+            'mira',
+            [completedReplyRef.current.trim(), responseTextRef.current.trim()].filter(Boolean).join(' '),
+          );
+        }
         break;
       case 'response.output_audio_transcript.done': {
         const text = (event.transcript || event.text || responseTextRef.current).trim();
         responseTextRef.current = text;
+        if (text) {
+          publishTranscript(
+            'mira',
+            [completedReplyRef.current.trim(), text].filter(Boolean).join(' '),
+          );
+        }
         break;
       }
       case 'response.done': {
@@ -294,8 +400,34 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         );
         const responseStatus = event.response?.status;
         const failure = event.response?.status_details?.error?.message;
+        const incompleteReason = event.response?.status_details?.reason;
+        if (
+          responseStatus === 'incomplete'
+          && incompleteReason === 'max_output_tokens'
+          && incompleteContinuationCountRef.current < MAX_INCOMPLETE_CONTINUATIONS
+        ) {
+          const partialReply = responseTextRef.current.trim();
+          if (partialReply) {
+            completedReplyRef.current = [completedReplyRef.current.trim(), partialReply]
+              .filter(Boolean)
+              .join(' ');
+          }
+          responseTextRef.current = '';
+          responseCompletedRef.current = false;
+          responseCreatedRef.current = false;
+          incompleteContinuationCountRef.current += 1;
+          continuationPendingRef.current = true;
+          if (!outputAudioStartedRef.current || outputAudioStoppedRef.current) {
+            requestIncompleteContinuation();
+          }
+          break;
+        }
         if (responseStatus !== 'completed' || failure) {
-          rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+          if (inputItemIdRef.current && !publishedInputTranscriptIdsRef.current.has(inputItemIdRef.current)) {
+            rememberCompletedInputItem(failedResponseInputItemIdsRef.current, inputItemIdRef.current);
+          } else {
+            rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+          }
           inputItemIdRef.current = null;
           responseTextRef.current = '';
           completedReplyRef.current = '';
@@ -313,7 +445,9 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         responseTextRef.current = '';
         responseCompletedRef.current = true;
         if (text) {
-          completedReplyRef.current = text;
+          completedReplyRef.current = [completedReplyRef.current.trim(), text]
+            .filter(Boolean)
+            .join(' ');
           if (transcriptRef.current) finalizeTurn();
         } else {
           callbacksRef.current.onError('Mira completed a voice response without readable speech. Please try again.');
@@ -350,7 +484,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         break;
       }
     }
-  }, [armTurnWatchdog, finalizeTurn, finishTurnWithoutResult, unlockCompletedTurn, updateStatus]);
+  }, [armTurnWatchdog, finalizeTurn, finishTurnWithoutResult, publishCompletedInputTranscript, publishTranscript, requestIncompleteContinuation, unlockCompletedTurn, updateStatus]);
 
   const disconnect = useCallback(() => {
     lifecycleRef.current += 1;
@@ -371,8 +505,12 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     completedReplyRef.current = '';
     inputItemIdRef.current = null;
     completedInputItemIdsRef.current.clear();
+    publishedInputTranscriptIdsRef.current.clear();
+    failedResponseInputItemIdsRef.current.clear();
     responseCompletedRef.current = false;
     responseCreatedRef.current = false;
+    continuationPendingRef.current = false;
+    incompleteContinuationCountRef.current = 0;
     outputAudioStartedRef.current = false;
     outputAudioStoppedRef.current = false;
     outputClearRequestedRef.current = false;
@@ -517,17 +655,21 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     responseTextRef.current = '';
     responseCompletedRef.current = false;
     responseCreatedRef.current = false;
+    continuationPendingRef.current = false;
+    incompleteContinuationCountRef.current = 0;
     outputAudioStartedRef.current = false;
     outputAudioStoppedRef.current = false;
     outputClearRequestedRef.current = false;
     turnFinalizedRef.current = false;
     clearTurnWatchdog();
+    publishTranscript('you', '');
+    publishTranscript('mira', '');
     sendEvent({ type: 'output_audio_buffer.clear' });
     sendEvent({ type: 'input_audio_buffer.clear' });
     peer.setMicrophoneEnabled(true);
     turnStartedAtRef.current = Date.now();
     updateStatus('recording');
-  }, [clearTurnWatchdog, connect, disconnect, sendEvent, updateStatus]);
+  }, [clearTurnWatchdog, connect, disconnect, publishTranscript, sendEvent, updateStatus]);
 
   const finishTurn = useCallback(() => {
     if (statusRef.current !== 'recording') return;

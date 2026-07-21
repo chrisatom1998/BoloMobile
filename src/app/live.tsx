@@ -10,7 +10,7 @@ import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
-import type { RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import type { RealtimeInputTranscript, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
@@ -69,6 +69,8 @@ export default function LiveScreen() {
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
   const [liveCaption, setLiveCaption] = useState('');
+  const [liveMiraTranscript, setLiveMiraTranscript] = useState('');
+  const [liveUserTranscript, setLiveUserTranscript] = useState('');
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
@@ -109,8 +111,13 @@ export default function LiveScreen() {
     : realtimeStatus === 'recording'
       ? 'Listening to your Hindi…'
       : realtimeStatus === 'responding'
-        ? `Mira is preparing your ${responseLanguageName} reply…`
+        ? liveMiraTranscript || liveUserTranscript || `Mira is preparing your ${responseLanguageName} reply…`
         : liveCaption || (realtimeStatus === 'ready' ? 'Captions appear after your first turn.' : '');
+  const liveCaptionLabel = realtimeStatus === 'recording'
+    ? 'Your transcript'
+    : realtimeStatus === 'responding' && !liveMiraTranscript && liveUserTranscript
+      ? 'You said'
+      : 'Live Mira caption';
 
   const scrollToChat = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: true });
@@ -148,6 +155,23 @@ export default function LiveScreen() {
     if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
     additions.push({ id: `mira-${now}`, role: 'mira', text: result.reply.trim(), language: result.language });
     appendChatMessages(additions);
+    if (!practiced.current) {
+      practiced.current = true;
+      markLiveTurn();
+    }
+  }, [appendChatMessages, markLiveTurn]);
+
+  const recordRealtimeInputTranscript = useCallback((result: RealtimeInputTranscript) => {
+    if (!mountedRef.current || !result.transcript.trim()) return;
+    appendChatMessages([{ id: `you-voice-${result.itemId}`, role: 'you', text: result.transcript.trim() }]);
+  }, [appendChatMessages]);
+
+  const recordRealtimeReply = useCallback((result: { reply: string; language: 'en' | 'hi' }) => {
+    if (!mountedRef.current) return;
+    scrollAfterContentChangeRef.current = true;
+    const now = Date.now();
+    void preloadSpeech(result.reply);
+    appendChatMessages([{ id: `mira-${now}`, role: 'mira', text: result.reply.trim(), language: result.language }]);
     if (!practiced.current) {
       practiced.current = true;
       markLiveTurn();
@@ -235,17 +259,27 @@ export default function LiveScreen() {
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     realtimeStatusRef.current = status;
     setRealtimeStatus(status);
+    if (status === 'recording') {
+      setLiveMiraTranscript('');
+      setLiveUserTranscript('');
+    }
     if (status === 'ready') observe('voice_connection_succeeded');
   }, []);
   const showRealtimeError = useCallback((message: string) => {
     observe('voice_connection_failed');
     setError(message);
   }, []);
+  const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {
+    if (update.speaker === 'mira') setLiveMiraTranscript(update.text);
+    else setLiveUserTranscript(update.text);
+  }, []);
   const completeRealtimeTurn = useCallback((turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
     setError('');
     setLiveCaption(turn.reply.trim());
-    recordTurn(turn);
-  }, [recordTurn]);
+    setLiveMiraTranscript(turn.reply.trim());
+    setLiveUserTranscript(turn.transcript.trim());
+    recordRealtimeReply(turn);
+  }, [recordRealtimeReply]);
 
   const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
@@ -338,14 +372,14 @@ export default function LiveScreen() {
                       })}
                     </View>
                   </View>
-                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onStatusChange={updateRealtimeStatus} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} />
+                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} />
                   <View style={[styles.heroCopy, { width: heroContentWidth }]}>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
                     {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
                   </View>
                   {realtimeOwnsAudio || liveCaptionText !== '' ? (
                     <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
-                      <Text style={styles.captionLabel}>Live Mira caption</Text>
+                      <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
                       <Text accessibilityLiveRegion="polite" style={styles.captionText}>{liveCaptionText}</Text>
                     </CaptionReveal>
                   ) : null}
