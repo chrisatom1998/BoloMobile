@@ -1,0 +1,7 @@
+{
+  "id": "asha",
+  "displayName": "Asha",
+  "provider": "openai",
+  "voice": "marin",
+  "generatedSpeechModel": "gpt-4o-mini-tts"
+}

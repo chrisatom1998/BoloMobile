@@ -376,13 +376,12 @@ describe('connected coaching contract', () => {
     expect(englishSession).toMatchObject({
       type: 'realtime',
       model: 'gpt-realtime-2.1',
-      output_modalities: ['audio'],
+      output_modalities: ['text'],
       audio: {
         input: {
           transcription: { model: 'gpt-4o-mini-transcribe' },
           turn_detection: null,
         },
-        output: { voice: 'marin' },
       },
     });
     expect(englishSession.instructions).toContain('Reply in concise, natural English');

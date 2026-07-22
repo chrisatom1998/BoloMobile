@@ -5,7 +5,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { useRealtimeConversation } from '../src/hooks/use-realtime-conversation';
 import { createRealtimePeerSession } from '../src/lib/realtime-peer';
 import type { RealtimePeerOptions, RealtimePeerSession } from '../src/lib/realtime-peer.types';
-import { stopSpeaking } from '../src/lib/speech';
+import { speakText, stopSpeaking } from '../src/lib/speech';
 import { createRealtimeClientSecret } from '../src/services/bolo-api';
 
 let mockIsDevice = true;
@@ -26,6 +26,7 @@ jest.mock('@/lib/realtime-peer', () => ({
 }));
 
 jest.mock('@/lib/speech', () => ({
+  speakText: jest.fn(async () => undefined),
   stopSpeaking: jest.fn(),
 }));
 
@@ -38,6 +39,7 @@ const requestPermissionMock = requestRecordingPermissionsAsync as jest.MockedFun
 const setAudioModeMock = setAudioModeAsync as jest.MockedFunction<typeof setAudioModeAsync>;
 const createPeerMock = createRealtimePeerSession as jest.MockedFunction<typeof createRealtimePeerSession>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
+const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const createSecretMock = createRealtimeClientSecret as jest.MockedFunction<typeof createRealtimeClientSecret>;
 
 function deferred<T>() {
@@ -66,6 +68,7 @@ describe('Realtime connection lifecycle', () => {
     requestPermissionMock.mockResolvedValue({ granted: true } as Awaited<ReturnType<typeof requestRecordingPermissionsAsync>>);
     setAudioModeMock.mockResolvedValue(undefined);
     stopSpeakingMock.mockImplementation(() => undefined);
+    speakTextMock.mockResolvedValue(undefined);
   });
 
   it('rejects iOS Simulator before WebRTC can trigger a native audio crash', async () => {
@@ -125,6 +128,77 @@ describe('Realtime connection lifecycle', () => {
         await start;
       });
     } finally {
+      await unmount();
+    }
+  });
+
+  it('renders text-only Realtime output through canonical Asha TTS before unlocking the next turn', async () => {
+    const peer = createPeer();
+    const playback = deferred<void>();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_canonical_voice',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    speakTextMock.mockReturnValue(playback.promise);
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      responseLanguage: 'hi',
+      onError: jest.fn(),
+      onTurnComplete,
+    }));
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'session.update',
+        session: expect.objectContaining({ output_modalities: ['text'] }),
+      })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await start;
+        now.mockReturnValue(1_500);
+        await result.current.finishTurn();
+        expect(peer.send).toHaveBeenCalledWith({ type: 'response.create', response: { output_modalities: ['text'] } });
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-canonical' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          item_id: 'input-canonical',
+          transcript: 'Say hello.',
+        }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_text.delta', delta: 'नमस्ते' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_text.done', text: 'नमस्ते!' }));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        await Promise.resolve();
+      });
+
+      expect(speakTextMock).toHaveBeenCalledWith('नमस्ते!', expect.any(AbortSignal), 1, 'hi');
+      expect(onTurnComplete).not.toHaveBeenCalled();
+      expect(result.current.status).toBe('responding');
+
+      await act(async () => {
+        playback.resolve();
+        await Promise.resolve();
+      });
+
+      expect(onTurnComplete).toHaveBeenCalledWith({
+        transcript: 'Say hello.',
+        reply: 'नमस्ते!',
+        language: 'hi',
+      });
+      expect(result.current.status).toBe('ready');
+    } finally {
+      now.mockRestore();
       await unmount();
     }
   });
@@ -763,7 +837,7 @@ describe('Realtime connection lifecycle', () => {
       expect(peer.send).toHaveBeenCalledWith({
         type: 'response.create',
         response: expect.objectContaining({
-          output_modalities: ['audio'],
+          output_modalities: ['text'],
           instructions: expect.stringContaining('Continue the previous reply'),
         }),
       });

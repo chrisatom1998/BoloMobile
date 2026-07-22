@@ -1,19 +1,13 @@
-import { createAudioPlayer, setAudioModeAsync, type AudioPlayer, type AudioStatus } from 'expo-audio';
+import { createAudioPlayer, type AudioPlayer, type AudioStatus } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 
+import { setVoiceAudioMode } from '@/lib/voice';
 import type { AiVoiceAudio } from '@/services/bolo-api';
 
 const PLAYBACK_TIMEOUT_MS = 90_000;
 const MAX_PLAYBACK_TIMEOUT_MS = 120_000;
 const MIN_PLAYBACK_RATE = 0.1;
 const PREPARED_AUDIO_CACHE_LIMIT = 4;
-const AI_VOICE_PLAYBACK_MODE = {
-  allowsRecording: false,
-  interruptionMode: 'doNotMix',
-  playsInSilentMode: true,
-  shouldRouteThroughEarpiece: false,
-} as const;
-
 type PreparedAudio = {
   audio: AiVoiceAudio;
   file: File;
@@ -98,7 +92,7 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal,
   evictPreparedAudio();
   try {
     await Promise.all([
-      setAudioModeAsync(AI_VOICE_PLAYBACK_MODE),
+      setVoiceAudioMode('playback'),
       prepared.hasStarted ? prepared.player.seekTo(0) : Promise.resolve(),
     ]);
     prepared.player.setPlaybackRate?.(rate);
