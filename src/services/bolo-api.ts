@@ -1,5 +1,6 @@
 import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { observe } from '@/lib/observability';
 
 const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
@@ -254,10 +255,13 @@ export function createRealtimeClientSecret(clientId: string, signal?: AbortSigna
   }, isRealtimeClientSecret, signal);
 }
 
-export function requestAiVoiceAudio(text: string, signal?: AbortSignal) {
+export function requestAiVoiceAudio(text: string, signal?: AbortSignal, language?: AshaResponseLanguage) {
   const boundedText = text.trim().slice(0, AI_VOICE_TEXT_LIMIT);
   if (!boundedText) return Promise.reject(new BoloApiError('There is no text to read aloud.'));
-  return post('/api/phrase-audio', { text: boundedText }, isAiVoiceAudio, signal);
+  return post('/api/phrase-audio', {
+    text: boundedText,
+    ...(language === HINDI_SPEECH_LANGUAGE ? { language: HINDI_SPEECH_LANGUAGE, locale: HINDI_SPEECH_LOCALE } : {}),
+  }, isAiVoiceAudio, signal);
 }
 
 export function checkPronunciation(input: {

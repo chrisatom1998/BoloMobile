@@ -205,7 +205,7 @@ export default function LiveScreen() {
     if (!mountedRef.current) return;
     scrollAfterContentChangeRef.current = true;
     const now = Date.now();
-    void preloadSpeech(result.reply);
+    void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     const additions: ChatMessage[] = [];
     if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
     additions.push({ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language });
@@ -225,7 +225,7 @@ export default function LiveScreen() {
     if (!mountedRef.current) return;
     scrollAfterContentChangeRef.current = true;
     const now = Date.now();
-    void preloadSpeech(result.reply);
+    void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     appendChatMessages([{ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language }]);
     if (!practiced.current) {
       practiced.current = true;
@@ -233,11 +233,12 @@ export default function LiveScreen() {
     }
   }, [appendChatMessages, markLiveTurn]);
 
-  const playReply = useCallback(async (text: string) => {
+  const playReply = useCallback(async (text: string, language?: AshaResponseLanguage) => {
     if (!aiConsent || realtimeOwnsAudio) return;
     setError('');
     try {
-      await speakText(text);
+      if (language === 'hi') await speakText(text, undefined, 1, 'hi');
+      else await speakText(text);
     } catch (cause) {
       if (mountedRef.current) setError(cause instanceof Error ? cause.message : 'Bolo could not play the AI voice.');
     }
@@ -300,7 +301,8 @@ export default function LiveScreen() {
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
       if (realtimeStatusRef.current === 'disconnected') {
         try {
-          await speakText(result.reply, controller.signal);
+          if (result.language === 'hi') await speakText(result.reply, controller.signal, 1, 'hi');
+          else await speakText(result.reply, controller.signal);
         } catch (cause) {
           if (mountedRef.current && !controller.signal.aborted) {
             const reason = cause instanceof Error ? cause.message : 'Bolo could not play the AI voice.';
@@ -502,7 +504,7 @@ export default function LiveScreen() {
                     {item.id !== welcome.id ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" onPress={() => openPhrasePicker(item)} style={styles.smallAction}><BookmarkPlus color={item.role === 'you' ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, item.role === 'you' && styles.userText]}>Save selection</Text></Pressable> : null}
                     {item.role === 'asha' ? (
                       <>
-                        <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
+                        <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text, item.language)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
                         {item.id !== welcome.id ? <Pressable accessibilityLabel={`Report reply: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: reported.has(item.id) || pendingReports.has(item.id) }} disabled={reported.has(item.id) || pendingReports.has(item.id)} onPress={() => report(item)} style={[styles.smallAction, (reported.has(item.id) || pendingReports.has(item.id)) && styles.disabled]}><Flag color={reported.has(item.id) ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported.has(item.id) ? 'Reported' : pendingReports.has(item.id) ? 'Reporting\u2026' : 'Report'}</Text></Pressable> : null}
                       </>
                     ) : null}

@@ -60,6 +60,28 @@ describe('connected coaching contract', () => {
     }
   });
 
+  it('marks Hindi AI voice audio with the lesson locale', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ audioBase64: 'SUQzBAAAAAA=', mimeType: 'audio/mpeg' }),
+    }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      await requestAiVoiceAudio('सीट 12A मिल गई है।', undefined, 'hi');
+      const [, init] = fetchMock.mock.calls[0];
+      expect(JSON.parse(String(init?.body))).toEqual({
+        text: 'सीट 12A मिल गई है।',
+        language: 'hi',
+        locale: 'hi-IN',
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('rejects malformed AI voice audio', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = jest.fn(async () => ({

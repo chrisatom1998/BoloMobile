@@ -9,12 +9,8 @@ const sourceFiles = ['scenes.ts', 'additional-scenes.ts'];
 const outputDirectory = join(root, 'assets/audio/hindi-core');
 const generatedModule = join(root, 'src/data/offline-hindi-audio.ts');
 const spokenPropertyNames = new Set(['hi', 'npc', 'reply']);
-const pronunciationOverrides = new Map([
-  ['चीनी कम, कृपया।', 'कृपया, चाय में चीनी कम रखिए।'],
-  ['सीट 12A मिल गई है।', 'सीट नंबर बारह, अंग्रेज़ी अक्षर ए, मिल गई है।'],
-  ['हाँ, गाड़ी का नंबर 4821 है।', 'हाँ, गाड़ी का नंबर चार आठ दो एक है।'],
-  ['नहीं, मेरा कमरा 4821 है।', 'नहीं, मेरा कमरा चार आठ दो एक है।'],
-]);
+const pronunciationProfile = JSON.parse(readFileSync(join(root, 'src/data/hindi-pronunciation-profile.json'), 'utf8'));
+const pronunciationOverrides = new Map(Object.entries(pronunciationProfile.overrides));
 
 function propertyName(node) {
   if (ts.isIdentifier(node) || ts.isStringLiteral(node)) return node.text;
