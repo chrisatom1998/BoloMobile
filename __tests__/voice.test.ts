@@ -25,11 +25,13 @@ describe('Asha voice service', () => {
     await setVoiceAudioMode('playback');
     await setVoiceAudioMode('recording');
     await setVoiceAudioMode('realtime');
+    await setVoiceAudioMode('realtimePlayback');
     await resetVoiceAudioMode();
 
     expect(setAudioModeMock.mock.calls).toEqual([
       [{ allowsRecording: false, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: true, playsInSilentMode: true }],
+      [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: false, playsInSilentMode: true }],
     ]);
