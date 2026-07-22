@@ -12,8 +12,10 @@ import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import type { RealtimeInputTranscript, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
+import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
@@ -37,23 +39,32 @@ function SelectableChatText({
   accessibilityLabel,
   accessibilityLiveRegion,
   onSelectedText,
+  sourceText,
   style,
   text,
 }: {
   accessibilityLabel: string;
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
-  onSelectedText: (text: string) => void;
+  onSelectedText: (selection: { sourceText: string; text: string }) => void;
+  sourceText: string;
   style: StyleProp<TextStyle>;
   text: string;
 }) {
-  const [height, setHeight] = useState(23);
+  const [measurement, setMeasurement] = useState<{ height?: number; text: string }>({ text });
+  // A new or recycled message must measure at its natural height before the
+  // measured value is pinned; a one-line initial height clips long turns.
+  const height = measurement.text === text ? measurement.height : undefined;
 
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
     if (end <= start) return;
     const excerpt = text.slice(start, end).trim();
-    if (excerpt) onSelectedText(excerpt);
-  }, [onSelectedText, text]);
+    if (!excerpt) return;
+    onSelectedText({
+      sourceText: sourceTextForDisplayedSelection({ displayText: text, end, sourceText, start }),
+      text: excerpt,
+    });
+  }, [onSelectedText, sourceText, text]);
 
   return (
     <TextInput
@@ -62,11 +73,14 @@ function SelectableChatText({
       accessibilityLiveRegion={accessibilityLiveRegion}
       contextMenuHidden={false}
       multiline
-      onContentSizeChange={(event) => setHeight(Math.max(23, Math.ceil(event.nativeEvent.contentSize.height)))}
+      onContentSizeChange={(event) => {
+        const nextHeight = Math.max(23, Math.ceil(event.nativeEvent.contentSize.height));
+        setMeasurement((current) => current.text === text && current.height === nextHeight ? current : { height: nextHeight, text });
+      }}
       onSelectionChange={selectionChanged}
       readOnly
       scrollEnabled={false}
-      style={[style, { height }]}
+      style={[style, { minHeight: 23 }, height === undefined ? undefined : { height }]}
       value={text}
     />
   );
@@ -113,7 +127,7 @@ export default function LiveScreen() {
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
-  const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string } | null>(null);
+  const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
@@ -121,7 +135,7 @@ export default function LiveScreen() {
   const pendingReportIdsRef = useRef<Set<string>>(new Set());
   const reportedIdsRef = useRef<Set<string>>(new Set());
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
-  const selectedChatTextRef = useRef<Map<string, string>>(new Map());
+  const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
   const visibleMessages = useMemo(
@@ -149,10 +163,11 @@ export default function LiveScreen() {
   const liveCaptionText = realtimeStatus === 'connecting'
     ? 'Connecting to Asha…'
     : realtimeStatus === 'recording'
-      ? 'Listening to your Hindi…'
+      ? liveUserTranscript || 'Listening to your Hindi…'
       : realtimeStatus === 'responding'
         ? liveAshaTranscript || liveUserTranscript || `Asha is preparing your ${responseLanguageName} reply…`
         : liveCaption || (realtimeStatus === 'ready' ? 'Captions appear after your first turn.' : '');
+  const visibleLiveCaptionText = romanizeDevanagari(liveCaptionText);
   const liveCaptionLabel = realtimeStatus === 'recording'
     ? 'Your transcript'
     : realtimeStatus === 'responding' && !liveAshaTranscript && liveUserTranscript
@@ -243,12 +258,13 @@ export default function LiveScreen() {
     clearChatHistory();
   }, [clearChatHistory]);
 
-  const rememberSelectedChatText = useCallback((messageId: string, selectedText: string) => {
-    selectedChatTextRef.current.set(messageId, selectedText);
+  const rememberSelectedChatText = useCallback((messageId: string, selection: { sourceText: string; text: string }) => {
+    selectedChatTextRef.current.set(messageId, selection);
   }, []);
 
   const openPhrasePicker = useCallback((message: ChatMessage) => {
-    setPhraseMessage({ message, selectedText: selectedChatTextRef.current.get(message.id) });
+    const selection = selectedChatTextRef.current.get(message.id);
+    setPhraseMessage({ message, selectedText: selection?.text, sourceText: selection?.sourceText || message.text });
   }, []);
 
   const confirmClearChat = useCallback(() => {
@@ -429,7 +445,7 @@ export default function LiveScreen() {
                   {realtimeOwnsAudio || liveCaptionText !== '' ? (
                     <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
                       <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
-                      <Text accessibilityLiveRegion="polite" style={styles.captionText}>{liveCaptionText}</Text>
+                      <Text accessibilityLiveRegion="polite" style={styles.captionText}>{visibleLiveCaptionText}</Text>
                     </CaptionReveal>
                   ) : null}
                   {!aiConsent ? <Text style={[styles.heroConsentHint, { width: Math.min(330, heroContentWidth) }]}>Review the consent card below to enable connected coaching.</Text> : null}
@@ -467,31 +483,35 @@ export default function LiveScreen() {
           scrollAfterContentChangeRef.current = false;
           listRef.current?.scrollToEnd({ animated: true });
         }}
-        renderItem={({ item }) => (
-          <View style={[styles.messageRow, item.role === 'you' && styles.messageRowYou]}>
-            <View style={[styles.message, item.role === 'you' ? styles.userMessage : styles.ashaMessage]}>
-              <Text style={[styles.messageLabel, item.role === 'you' && styles.userText]}>{item.role === 'you' ? 'You' : 'Asha'}</Text>
-              <SelectableChatText
-                accessibilityLabel={`Selectable chat text: ${messageActionExcerpt(item.text)}`}
-                accessibilityLiveRegion={item.role === 'asha' && item.id !== welcome.id ? 'polite' : 'none'}
-                onSelectedText={(selectedText) => rememberSelectedChatText(item.id, selectedText)}
-                style={[styles.messageText, item.role === 'you' && styles.userText]}
-                text={item.text}
-              />
-              {item.role === 'asha' || item.id !== welcome.id ? (
-                <View style={styles.messageActions}>
-                  {item.id !== welcome.id ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" onPress={() => openPhrasePicker(item)} style={styles.smallAction}><BookmarkPlus color={item.role === 'you' ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, item.role === 'you' && styles.userText]}>Save selection</Text></Pressable> : null}
-                  {item.role === 'asha' ? (
-                    <>
-                      <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
-                      {item.id !== welcome.id ? <Pressable accessibilityLabel={`Report reply: ${messageActionExcerpt(item.text)}`} accessibilityRole="button" accessibilityState={{ disabled: reported.has(item.id) || pendingReports.has(item.id) }} disabled={reported.has(item.id) || pendingReports.has(item.id)} onPress={() => report(item)} style={[styles.smallAction, (reported.has(item.id) || pendingReports.has(item.id)) && styles.disabled]}><Flag color={reported.has(item.id) ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported.has(item.id) ? 'Reported' : pendingReports.has(item.id) ? 'Reporting\u2026' : 'Report'}</Text></Pressable> : null}
-                    </>
-                  ) : null}
-                </View>
-              ) : null}
+        renderItem={({ item }) => {
+          const displayText = romanizeDevanagari(item.text);
+          return (
+            <View style={[styles.messageRow, item.role === 'you' && styles.messageRowYou]}>
+              <View style={[styles.message, item.role === 'you' ? styles.userMessage : styles.ashaMessage]}>
+                <Text style={[styles.messageLabel, item.role === 'you' && styles.userText]}>{item.role === 'you' ? 'You' : 'Asha'}</Text>
+                <SelectableChatText
+                  accessibilityLabel={`Selectable chat text: ${messageActionExcerpt(displayText)}`}
+                  accessibilityLiveRegion={item.role === 'asha' && item.id !== welcome.id ? 'polite' : 'none'}
+                  onSelectedText={(selection) => rememberSelectedChatText(item.id, selection)}
+                  sourceText={item.text}
+                  style={[styles.messageText, item.role === 'you' && styles.userText]}
+                  text={displayText}
+                />
+                {item.role === 'asha' || item.id !== welcome.id ? (
+                  <View style={styles.messageActions}>
+                    {item.id !== welcome.id ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" onPress={() => openPhrasePicker(item)} style={styles.smallAction}><BookmarkPlus color={item.role === 'you' ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, item.role === 'you' && styles.userText]}>Save selection</Text></Pressable> : null}
+                    {item.role === 'asha' ? (
+                      <>
+                        <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
+                        {item.id !== welcome.id ? <Pressable accessibilityLabel={`Report reply: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: reported.has(item.id) || pendingReports.has(item.id) }} disabled={reported.has(item.id) || pendingReports.has(item.id)} onPress={() => report(item)} style={[styles.smallAction, (reported.has(item.id) || pendingReports.has(item.id)) && styles.disabled]}><Flag color={reported.has(item.id) ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported.has(item.id) ? 'Reported' : pendingReports.has(item.id) ? 'Reporting\u2026' : 'Report'}</Text></Pressable> : null}
+                      </>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
       />
 
       <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.xs) }]}>
@@ -520,7 +540,7 @@ export default function LiveScreen() {
           </>
         ) : <Text style={styles.consentHint}>Review the consent card above to enable connected coaching.</Text>}
       </View>
-      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} selectedText={phraseMessage.selectedText} /> : null}
+      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
     </KeyboardAvoidingView>
   );
 }

@@ -212,6 +212,39 @@ describe('connected coaching contract', () => {
     }
   });
 
+  it('prepares a Romanized selection from its retained Devanagari source instead of requiring JSON from the chat service', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        transcript: '',
+        reply: 'I am shopping for clothes.',
+        language: 'en',
+      }),
+    }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    try {
+      await expect(prepareSavedPhraseFromText({
+        clientId: 'client-12345678',
+        sourceText: 'मैं कपड़ों की खरीदारी कर रहा हूँ',
+        text: 'Main kapadon kee khareedaaree kar rahaa hoon',
+      })).resolves.toEqual({
+        hi: 'मैं कपड़ों की खरीदारी कर रहा हूँ',
+        latin: 'Main kapadon kee khareedaaree kar rahaa hoon',
+        en: 'I am shopping for clothes.',
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [, init] = fetchMock.mock.calls[0];
+      const payload = JSON.parse(String(init?.body)) as { responseLanguage?: string; text: string };
+      expect(payload.responseLanguage).toBeUndefined();
+      expect(payload.text).toContain('Phrase: "मैं कपड़ों की खरीदारी कर रहा हूँ"');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('rejects prepared phrases containing non-Romanized script', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = jest.fn(async () => ({
