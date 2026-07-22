@@ -46,8 +46,10 @@ jest.mock('expo-file-system', () => {
 });
 
 import * as aiVoicePlayer from '../src/lib/ai-voice-player';
+import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
+import { hasOfflineSpeech } from '../src/lib/offline-voice-player';
 import { splitAiVoiceText } from '../src/lib/speech-text';
-import { preloadSpeech, speakText, stopSpeaking } from '../src/lib/speech';
+import { preloadSpeech, speakText, splitSpeechByLanguage, stopSpeaking } from '../src/lib/speech';
 import * as boloApi from '../src/services/bolo-api';
 
 const expoAudio = jest.requireMock('expo-audio') as {
@@ -462,5 +464,46 @@ describe('AI voice speech orchestration', () => {
 
     await expect(speech).resolves.toBeUndefined();
     expect(playbackSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('lesson-consistent Hindi speech routing', () => {
+  beforeEach(async () => {
+    await stopSpeaking();
+    jest.restoreAllMocks();
+  });
+
+  afterEach(async () => {
+    await stopSpeaking();
+    jest.restoreAllMocks();
+  });
+
+  it('keeps a Hindi phrase and its seat identifier together between English narration', () => {
+    expect(splitSpeechByLanguage('You can say, सीट 12A मिल गई है। if needed.')).toEqual([
+      { text: 'You can say,', language: undefined },
+      { text: 'सीट 12A मिल गई है।', language: 'hi' },
+      { text: 'if needed.', language: undefined },
+    ]);
+  });
+
+  it('keeps an English lesson number in the English narration before a Hindi phrase', () => {
+    expect(splitSpeechByLanguage('In lesson 2, say नमस्ते।')).toEqual([
+      { text: 'In lesson 2, say', language: undefined },
+      { text: 'नमस्ते', language: 'hi' },
+    ]);
+  });
+
+  it('resolves a Romanized lesson phrase to its exact bundled Hindi clip', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
+    const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio');
+    const romanizedLessonPhrase = romanizeDevanagari('चीनी कम, कृपया।');
+
+    expect(hasOfflineSpeech(romanizedLessonPhrase)).toBe(true);
+    await expect(speakText(romanizedLessonPhrase, undefined, 1, 'hi')).resolves.toBeUndefined();
+
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(expoAudio.createAudioPlayer).toHaveBeenLastCalledWith(expect.any(Number), { updateInterval: 100 });
+    expect(native.player.play).toHaveBeenCalledTimes(1);
   });
 });

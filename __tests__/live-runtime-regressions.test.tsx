@@ -389,7 +389,7 @@ describe('immersive live conversation design', () => {
       .find((candidate) => candidate.props.value === displayReply);
     if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
     expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
-    expect(speech.preloadSpeech).toHaveBeenCalledWith(longDevanagariReply);
+    expect(speech.preloadSpeech).toHaveBeenCalledWith(longDevanagariReply, 'hi');
 
     await view.unmount();
     await flushMicrotasks();

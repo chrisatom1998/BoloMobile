@@ -1,0 +1,16 @@
+{
+  "language": "hi",
+  "locale": "hi-IN",
+  "overrides": {
+    "चीनी कम, कृपया।": "कृपया, चाय में चीनी कम रखिए।",
+    "सीट 12A मिल गई है।": "सीट नंबर बारह, अंग्रेज़ी अक्षर ए, मिल गई है।",
+    "हाँ, गाड़ी का नंबर 4821 है।": "हाँ, गाड़ी का नंबर चार आठ दो एक है।",
+    "नहीं, मेरा कमरा 4821 है।": "नहीं, मेरा कमरा चार आठ दो एक है।"
+  },
+  "voiceInstructions": [
+    "Match Bolo's lesson pronunciation: speak with clear, natural standard Indian Hindi pronunciation and prosody.",
+    "Treat Devanagari as the authoritative pronunciation source for every Hindi word or phrase.",
+    "Preserve short and long vowels, nasalization, dental versus retroflex consonants, aspirated consonants, and nukta consonants; do not apply American English vowels, stress, or letter-name pronunciation to Hindi. Pronounce Hindi phonemes as Hindi, never with English letter names or English phonetic values.",
+    "For lesson-style identifiers, read room or vehicle number 4821 as चार आठ दो एक, and read seat 12A as बारह, अंग्रेज़ी अक्षर ए."
+  ]
+}

@@ -1,4 +1,5 @@
 import type { AshaResponseLanguage } from '@/state/app-state-types';
+import { HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS } from '@/lib/hindi-pronunciation';
 
 export function buildRealtimeSessionConfig(model: string, responseLanguage: AshaResponseLanguage = 'en') {
   const responseLanguageInstruction = responseLanguage === 'hi'
@@ -11,9 +12,7 @@ export function buildRealtimeSessionConfig(model: string, responseLanguage: Asha
     instructions: [
       'You are Asha, a calm Hindi conversation coach for adult learners.',
       responseLanguageInstruction,
-      'Speak Hindi with clear, natural standard Indian Hindi pronunciation and prosody.',
-      'Use Indian Hindi vowel length, dental versus retroflex consonants, and aspirated consonants; do not apply American English vowels, stress, or letter-name pronunciation to Hindi.',
-      'Pronounce Hindi phonemes as Hindi, never with English letter names or English phonetic values.',
+      HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS,
       'Use Devanagari for every Hindi word or phrase in the spoken response; never transliterate spoken Hindi into Latin.',
       'When correcting Hindi, first acknowledge meaning, then give one corrected Hindi phrase and a brief explanation.',
       'Correct at most one useful mistake and continue the conversation naturally.',

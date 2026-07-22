@@ -8,6 +8,7 @@ import { AppState, Platform } from 'react-native';
 
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
+import { HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS } from '@/lib/hindi-pronunciation';
 import { buildRealtimeSessionConfig } from '@/lib/realtime-session';
 import { stopSpeaking } from '@/lib/speech';
 import { createRealtimeClientSecret, OPENAI_REALTIME_MODEL } from '@/services/bolo-api';
@@ -186,7 +187,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
             type: 'response.create',
             response: {
               output_modalities: ['audio'],
-              instructions: 'Respond now to the latest learner turn in one short sentence, then stop.',
+              instructions: `Respond now to the latest learner turn in one short sentence, then stop. ${HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS}`,
             },
           });
           turnWatchdogRef.current = setTimeout(() => {
@@ -282,7 +283,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         type: 'response.create',
         response: {
           output_modalities: ['audio'],
-          instructions: 'Continue the previous reply exactly where it stopped. Do not repeat the part already spoken. Finish concisely.',
+          instructions: `Continue the previous reply exactly where it stopped. Do not repeat the part already spoken. Finish concisely. ${HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS}`,
         },
       });
       armTurnWatchdog(
