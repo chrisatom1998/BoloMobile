@@ -8,7 +8,10 @@ export function buildRealtimeSessionConfig(model: string, responseLanguage: Asha
   return {
     type: 'realtime' as const,
     model,
-    output_modalities: ['audio'] as const,
+    // Realtime keeps the low-latency microphone stream, while completed text
+    // is rendered by Bolo's canonical Asha TTS pipeline. Built-in voice names
+    // are not acoustically identical across the Realtime and TTS models.
+    output_modalities: ['text'] as const,
     instructions: [
       'You are Asha, a calm Hindi conversation coach for adult learners.',
       responseLanguageInstruction,
@@ -26,7 +29,6 @@ export function buildRealtimeSessionConfig(model: string, responseLanguage: Asha
         transcription: { model: 'gpt-4o-mini-transcribe' },
         turn_detection: null,
       },
-      output: { voice: 'marin' },
     },
   };
 }

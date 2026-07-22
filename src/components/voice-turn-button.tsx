@@ -1,7 +1,6 @@
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
-  setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
 } from 'expo-audio';
@@ -11,6 +10,7 @@ import { AppState, Pressable, Text, View } from 'react-native';
 
 import { hapticStartRecording, hapticTap, hapticWarning } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
+import { resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { deleteRecordingUri, readRecordingUri } from '@/lib/recording-file';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
@@ -67,7 +67,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       } catch {
         // Cache cleanup is best-effort while the app is transitioning state.
       } finally {
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+        await resetVoiceAudioMode().catch(() => undefined);
         if (mountedRef.current) {
           setRecording(false);
           setError(FOREGROUND_EXIT_MESSAGE);
@@ -90,7 +90,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       try {
         await recorder.stop();
       } finally {
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+        await resetVoiceAudioMode().catch(() => undefined);
       }
       const uri = recorder.uri;
       if (!uri) throw new Error('The recording did not produce an audio file.');
@@ -127,7 +127,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       const permission = await requestRecordingPermissionsAsync();
       if (!permission.granted) throw new Error('Microphone access is required. Enable it in your device settings and try again.');
       if (!isCurrentAttempt() || !await waitForForeground(lifecycle)) return;
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await setVoiceAudioMode('recording');
       releaseRecordingMode = true;
       if (!isCurrentAttempt() || !await waitForForeground(lifecycle)) return;
       await recorder.prepareToRecordAsync();
@@ -141,14 +141,14 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
     } catch (cause) {
       recordingRef.current = false;
       if (mountedRef.current) setRecording(false);
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+      await resetVoiceAudioMode().catch(() => undefined);
       if (mountedRef.current) {
         hapticWarning();
         setError(cause instanceof Error ? cause.message : 'Recording could not start.');
       }
     } finally {
       if (releaseRecordingMode) {
-        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+        await resetVoiceAudioMode().catch(() => undefined);
       }
       startingRef.current = false;
       if (mountedRef.current) setStarting(false);
@@ -175,7 +175,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
         } catch {
           // Native cleanup is best-effort during unmount.
         } finally {
-          await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+          await resetVoiceAudioMode().catch(() => undefined);
         }
       })();
     };

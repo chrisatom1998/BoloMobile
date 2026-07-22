@@ -1,7 +1,8 @@
-import { createAudioPlayer, setAudioModeAsync, type AudioStatus } from 'expo-audio';
+import { createAudioPlayer, type AudioStatus } from 'expo-audio';
 
 import { offlineHindiAudio } from '@/data/offline-hindi-audio';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { setVoiceAudioMode } from '@/lib/voice';
 
 const PLAYBACK_TIMEOUT_MS = 60_000;
 const MAX_PLAYBACK_TIMEOUT_MS = 90_000;
@@ -71,12 +72,7 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
   const player = createAudioPlayer(source, { updateInterval: 100 });
   const rate = normalizedPlaybackRate(playbackRate);
   try {
-    await setAudioModeAsync({
-      allowsRecording: false,
-      interruptionMode: 'doNotMix',
-      playsInSilentMode: true,
-      shouldRouteThroughEarpiece: false,
-    });
+    await setVoiceAudioMode('playback');
     player.setPlaybackRate?.(rate);
     await new Promise<void>((resolve, reject) => {
       let settled = false;
