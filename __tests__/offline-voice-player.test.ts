@@ -21,6 +21,9 @@ jest.mock('@/data/offline-hindi-audio', () => ({
 }));
 
 import { playOfflineSpeech } from '../src/lib/offline-voice-player';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+
+const setAudioModeMock = setAudioModeAsync as jest.MockedFunction<typeof setAudioModeAsync>;
 
 describe('offline voice playback speed', () => {
   beforeEach(() => {
@@ -37,6 +40,22 @@ describe('offline voice playback speed', () => {
     await expect(playOfflineSpeech('saved phrase', new AbortController().signal, 0.1)).resolves.toBe(true);
 
     expect(mockPlayer.setPlaybackRate).toHaveBeenCalledWith(0.1);
+  });
+
+  it('preserves the active WebRTC session for bundled phrase playback', async () => {
+    await expect(playOfflineSpeech(
+      'saved phrase',
+      new AbortController().signal,
+      1,
+      'realtimePlayback',
+    )).resolves.toBe(true);
+
+    expect(setAudioModeMock).not.toHaveBeenCalled();
+    expect(mockPlayer.play).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(createAudioPlayer)).toHaveBeenCalledWith(42, {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
   });
 
   it('caps the slow-playback watchdog at ninety seconds', async () => {

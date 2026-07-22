@@ -3,8 +3,10 @@ import { canonicalLessonAudioText, hasOfflineSpeech, playOfflineSpeech } from '@
 import { splitAiVoiceText } from '@/lib/speech-text';
 import { requestAiVoiceAudio, type AiVoiceAudio } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
+import type { VoiceAudioMode } from '@/lib/voice';
 
 const AI_VOICE_CACHE_LIMIT = 24;
+const GENERATED_SPEECH_ATTEMPTS = 2;
 const aiVoiceCache = new Map<string, AiVoiceAudio>();
 const pendingAudioPreloads = new Map<string, Promise<AiVoiceAudio>>();
 let activeSpeechController: AbortController | null = null;
@@ -140,6 +142,72 @@ function waitForPreload(pending: Promise<AiVoiceAudio>, signal: AbortSignal) {
   });
 }
 
+async function loadSpeechAudio(chunk: SpeechChunk, signal: AbortSignal) {
+  const key = audioCacheKey(chunk.text, chunk.language);
+  const cached = aiVoiceCache.get(key);
+  if (cached) return cached;
+
+  const pending = pendingAudioPreloads.get(key);
+  if (pending) {
+    try {
+      const audio = await waitForPreload(pending, signal);
+      if (audio) return audio;
+    } catch {
+      if (signal.aborted) return undefined;
+      // A failed best-effort warm-up should not prevent the explicit playback
+      // request below from recovering the learner's spoken reply.
+    }
+  }
+  if (signal.aborted) return undefined;
+
+  const audio = await requestSpeechAudio(chunk.text, signal, chunk.language);
+  rememberAudio(key, audio);
+  return audio;
+}
+
+type PreparedSpeechAudio =
+  | { audio: AiVoiceAudio; error?: never }
+  | { audio?: never; error: unknown };
+
+function prepareSpeechAudio(chunk: SpeechChunk, signal: AbortSignal): Promise<PreparedSpeechAudio> {
+  return loadSpeechAudio(chunk, signal).then(
+    (audio) => audio ? { audio } : { error: new Error('Speech was canceled.') },
+    (error: unknown) => ({ error }),
+  );
+}
+
+async function playGeneratedSpeech(
+  chunk: SpeechChunk,
+  prepared: Promise<PreparedSpeechAudio> | undefined,
+  signal: AbortSignal,
+  playbackRate: number,
+  audioMode: VoiceAudioMode,
+) {
+  let result = prepared ? await prepared : await prepareSpeechAudio(chunk, signal);
+  for (let attempt = 0; attempt < GENERATED_SPEECH_ATTEMPTS; attempt += 1) {
+    if (signal.aborted) return;
+    if (!result.audio) {
+      if (attempt + 1 >= GENERATED_SPEECH_ATTEMPTS) throw result.error;
+      result = await prepareSpeechAudio(chunk, signal);
+      continue;
+    }
+    try {
+      const audio = result.audio;
+      if (playbackRate === 1 && audioMode === 'playback') await playAiVoiceAudio(audio, signal);
+      else if (playbackRate === 1) await playAiVoiceAudio(audio, signal, 1, audioMode);
+      else await playAiVoiceAudio(audio, signal, playbackRate, audioMode);
+      return;
+    } catch (error) {
+      if (signal.aborted) return;
+      if (attempt + 1 >= GENERATED_SPEECH_ATTEMPTS) throw error;
+      // A corrupt/truncated generated clip is cached by text. Evict it before
+      // the single recovery request so Hindi playback can finish cleanly.
+      aiVoiceCache.delete(audioCacheKey(chunk.text, chunk.language));
+      result = await prepareSpeechAudio(chunk, signal);
+    }
+  }
+}
+
 export async function preloadSpeech(text: string, requestedLanguage?: AshaResponseLanguage) {
   for (const { text: chunk, language } of splitSpeechByLanguage(text, requestedLanguage)) {
     if (hasOfflineSpeech(chunk)) continue;
@@ -154,7 +222,13 @@ export async function preloadSpeech(text: string, requestedLanguage?: AshaRespon
   }
 }
 
-export async function speakText(text: string, signal?: AbortSignal, playbackRate = 1, requestedLanguage?: AshaResponseLanguage) {
+export async function speakText(
+  text: string,
+  signal?: AbortSignal,
+  playbackRate = 1,
+  requestedLanguage?: AshaResponseLanguage,
+  audioMode: VoiceAudioMode = 'playback',
+) {
   const chunks = splitSpeechByLanguage(text, requestedLanguage);
   stopSpeaking();
   if (!chunks.length || signal?.aborted) return;
@@ -165,31 +239,34 @@ export async function speakText(text: string, signal?: AbortSignal, playbackRate
   signal?.addEventListener('abort', abort, { once: true });
 
   try {
-    for (const { text: chunk, language } of chunks) {
+    const preparedAudio = new Map<number, Promise<PreparedSpeechAudio>>();
+    const prepareChunk = (index: number) => {
+      const chunk = chunks[index];
+      if (!chunk || hasOfflineSpeech(chunk.text) || preparedAudio.has(index)) return;
+      preparedAudio.set(index, prepareSpeechAudio(chunk, controller.signal));
+    };
+    // Keep at most the current and next generated clips in flight. This lets a
+    // Hindi phrase load while the preceding English coaching text is speaking,
+    // without sending an unbounded burst of TTS requests for a long response.
+    prepareChunk(0);
+    prepareChunk(1);
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      const { text: chunk, language } = chunks[index];
       if (controller.signal.aborted) return;
+      prepareChunk(index + 1);
       if (hasOfflineSpeech(chunk)) {
-        await playOfflineSpeech(chunk, controller.signal, playbackRate);
+        await playOfflineSpeech(chunk, controller.signal, playbackRate, audioMode);
         continue;
       }
-      const key = audioCacheKey(chunk, language);
-      let audio = aiVoiceCache.get(key);
-      if (!audio) {
-        const pending = pendingAudioPreloads.get(key);
-        if (pending) {
-          try {
-            audio = await waitForPreload(pending, controller.signal) ?? undefined;
-          } catch {
-            if (controller.signal.aborted) return;
-          }
-        }
-        if (!audio) {
-          audio = await requestSpeechAudio(chunk, controller.signal, language);
-          rememberAudio(key, audio);
-        }
-      }
-      if (controller.signal.aborted) return;
-      if (playbackRate === 1) await playAiVoiceAudio(audio, controller.signal);
-      else await playAiVoiceAudio(audio, controller.signal, playbackRate);
+      await playGeneratedSpeech(
+        { text: chunk, language },
+        preparedAudio.get(index),
+        controller.signal,
+        playbackRate,
+        audioMode,
+      );
+      preparedAudio.delete(index);
     }
   } catch (error) {
     if (!controller.signal.aborted) throw error;

@@ -1,7 +1,7 @@
 import { createAudioPlayer, type AudioPlayer, type AudioStatus } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 
-import { setVoiceAudioMode } from '@/lib/voice';
+import { setVoiceAudioMode, type VoiceAudioMode } from '@/lib/voice';
 import type { AiVoiceAudio } from '@/services/bolo-api';
 
 const PLAYBACK_TIMEOUT_MS = 90_000;
@@ -67,7 +67,12 @@ function getPreparedAudio(audio: AiVoiceAudio) {
   const file = new File(Paths.cache, `bolo-ai-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
   try {
     file.write(audio.audioBase64, { encoding: 'base64' });
-    const player = createAudioPlayer(file.uri, { updateInterval: 100 });
+    const player = createAudioPlayer(file.uri, {
+      updateInterval: 100,
+      // Realtime owns the microphone session between turns. Do not let a
+      // finished Asha reply deactivate that shared iOS audio session.
+      keepAudioSessionActive: true,
+    });
     player.volume = 1;
     const prepared = { audio, file, hasStarted: false, inUse: 0, player };
     preparedAudioCache.set(audio, prepared);
@@ -84,7 +89,7 @@ export function clearAiVoicePlaybackCache() {
   }
 }
 
-export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1): Promise<void> {
+export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback'): Promise<void> {
   if (signal.aborted) return;
   const prepared = getPreparedAudio(audio);
   const rate = normalizedPlaybackRate(playbackRate);
@@ -92,7 +97,10 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal,
   evictPreparedAudio();
   try {
     await Promise.all([
-      setVoiceAudioMode('playback'),
+      // The live WebRTC call already owns an active PlayAndRecord session.
+      // Reapplying Expo's audio mode while the microphone track is stopped can
+      // leave iOS's capture unit silent when the next turn enables that track.
+      audioMode === 'realtimePlayback' ? Promise.resolve() : setVoiceAudioMode(audioMode),
       prepared.hasStarted ? prepared.player.seekTo(0) : Promise.resolve(),
     ]);
     prepared.player.setPlaybackRate?.(rate);

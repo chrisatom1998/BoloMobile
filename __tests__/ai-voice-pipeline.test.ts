@@ -140,7 +140,10 @@ describe('AI voice native playback', () => {
     );
     const file = expoFileSystem.__mockFiles[0];
     expect(file.write).toHaveBeenCalledWith('SUQzBAAAAAA=', { encoding: 'base64' });
-    expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(file.uri, { updateInterval: 100 });
+    expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(file.uri, {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
     expect(native.player.volume).toBe(1);
     expect(native.player.play).toHaveBeenCalledTimes(1);
     expect(native.player.pause).toHaveBeenCalledTimes(1);
@@ -184,6 +187,19 @@ describe('AI voice native playback', () => {
     }, new AbortController().signal, 0.1);
 
     expect(native.player.setPlaybackRate).toHaveBeenCalledWith(0.1);
+  });
+
+  it('preserves the active WebRTC audio session during canonical playback', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
+
+    await aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'cmVhbHRpbWUtcGxheWJhY2s=',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal, 1, 'realtimePlayback');
+
+    expect(expoAudio.setAudioModeAsync).not.toHaveBeenCalled();
+    expect(native.player.play).toHaveBeenCalledTimes(1);
   });
 
   it('caps the slow-playback watchdog at two minutes', async () => {
@@ -287,7 +303,7 @@ describe('AI voice speech orchestration', () => {
     jest.restoreAllMocks();
   });
 
-  it('requests and plays long speech chunks strictly in sequence', async () => {
+  it('prefetches the next speech chunk while preserving playback order', async () => {
     const text = `${'A'.repeat(240)} ${'B'.repeat(60)}`;
     const chunks = splitAiVoiceText(text).map((chunk) => chunk.trim());
     expect(chunks).toHaveLength(2);
@@ -310,15 +326,15 @@ describe('AI voice speech orchestration', () => {
     });
 
     const speech = speakText(text);
-    await waitFor(() => requestSpy.mock.calls.length === 1);
+    await waitFor(() => requestSpy.mock.calls.length === 2);
     expect(playbackSpy).not.toHaveBeenCalled();
 
     requestDeferred[0].resolve(audio[0]);
     await waitFor(() => playbackSpy.mock.calls.length === 1);
-    expect(requestSpy).toHaveBeenCalledTimes(1);
+    expect(requestSpy).toHaveBeenCalledTimes(2);
 
     playbackDeferred[0].resolve();
-    await waitFor(() => requestSpy.mock.calls.length === 2);
+    await Promise.resolve();
     expect(playbackSpy).toHaveBeenCalledTimes(1);
 
     requestDeferred[1].resolve(audio[1]);
@@ -328,8 +344,39 @@ describe('AI voice speech orchestration', () => {
 
     expect(requestSpy.mock.calls.map(([chunk]) => chunk)).toEqual(chunks);
     expect(requestSpy.mock.invocationCallOrder[0]).toBeLessThan(playbackSpy.mock.invocationCallOrder[0]);
-    expect(playbackSpy.mock.invocationCallOrder[0]).toBeLessThan(requestSpy.mock.invocationCallOrder[1]);
+    expect(requestSpy.mock.invocationCallOrder[1]).toBeLessThan(playbackSpy.mock.invocationCallOrder[0]);
     expect(requestSpy.mock.invocationCallOrder[1]).toBeLessThan(playbackSpy.mock.invocationCallOrder[1]);
+  });
+
+  it('retries a failed Hindi clip once and completes the rest of the reply', async () => {
+    const text = 'You can say, मुझे पानी चाहिए। Then smile.';
+    const chunks = splitSpeechByLanguage(text);
+    expect(chunks).toEqual([
+      { text: 'You can say,', language: undefined },
+      { text: 'मुझे पानी चाहिए।', language: 'hi' },
+      { text: 'Then smile.', language: undefined },
+    ]);
+    const audio = new Map(chunks.map(({ text: chunk }, index) => [chunk, {
+      audioBase64: `Y2h1bmst${index}=`,
+      mimeType: 'audio/mpeg' as const,
+    }]));
+    const hindiFailure = new Error('temporary Hindi synthesis failure');
+    const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio').mockImplementation((chunk) => {
+      if (chunk === 'मुझे पानी चाहिए।' && requestSpy.mock.calls.filter(([value]) => value === chunk).length === 1) {
+        return Promise.reject(hindiFailure);
+      }
+      return Promise.resolve(audio.get(chunk)!);
+    });
+    const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockResolvedValue();
+
+    await expect(speakText(text)).resolves.toBeUndefined();
+
+    expect(requestSpy.mock.calls.filter(([chunk]) => chunk === 'मुझे पानी चाहिए।')).toHaveLength(2);
+    expect(playbackSpy.mock.calls.map(([value]) => value.audioBase64)).toEqual([
+      audio.get('You can say,')?.audioBase64,
+      audio.get('मुझे पानी चाहिए।')?.audioBase64,
+      audio.get('Then smile.')?.audioBase64,
+    ]);
   });
 
   it('reuses cached AI audio for repeated text while playing it each time', async () => {
@@ -503,7 +550,10 @@ describe('lesson-consistent Hindi speech routing', () => {
     await expect(speakText(romanizedLessonPhrase, undefined, 1, 'hi')).resolves.toBeUndefined();
 
     expect(requestSpy).not.toHaveBeenCalled();
-    expect(expoAudio.createAudioPlayer).toHaveBeenLastCalledWith(expect.any(Number), { updateInterval: 100 });
+    expect(expoAudio.createAudioPlayer).toHaveBeenLastCalledWith(expect.any(Number), {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
     expect(native.player.play).toHaveBeenCalledTimes(1);
   });
 });

@@ -37,12 +37,14 @@ jest.mock('@/components/ai-consent-gate', () => {
 jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
+      onError,
       onInputTranscriptComplete,
       onStatusChange,
       onTranscriptChange,
       onTurnComplete,
       responseLanguage,
     }: {
+      onError: (message: string) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
@@ -77,6 +79,14 @@ jest.mock('@/components/realtime-voice-button', () => {
           },
         },
         mockReact.createElement(MockText, null, 'Create long Devanagari reply'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock realtime error',
+          onPress: () => onError('I didn’t receive enough audio.'),
+        },
+        mockReact.createElement(MockText, null, 'Mock realtime error'),
       ),
       mockReact.createElement(
         MockPressable,
@@ -361,6 +371,22 @@ describe('immersive live conversation design', () => {
     await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
     expect(view.getByText('Live Asha caption')).toBeTruthy();
     expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
+
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('clears a stale voice error when the next recording actually starts', async () => {
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.press(view.getByLabelText('Mock realtime error'));
+    expect(view.getByText('I didn’t receive enough audio.').props.accessibilityRole).toBe('alert');
+
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    expect(view.getByText('I didn’t receive enough audio.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    expect(view.queryByText('I didn’t receive enough audio.')).toBeNull();
 
     await view.unmount();
     await flushMicrotasks();

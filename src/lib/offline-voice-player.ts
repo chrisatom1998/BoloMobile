@@ -2,7 +2,7 @@ import { createAudioPlayer, type AudioStatus } from 'expo-audio';
 
 import { offlineHindiAudio } from '@/data/offline-hindi-audio';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
-import { setVoiceAudioMode } from '@/lib/voice';
+import { setVoiceAudioMode, type VoiceAudioMode } from '@/lib/voice';
 
 const PLAYBACK_TIMEOUT_MS = 60_000;
 const MAX_PLAYBACK_TIMEOUT_MS = 90_000;
@@ -64,15 +64,22 @@ export function hasOfflineSpeech(text: string) {
   return lessonText !== null && offlineHindiAudio[lessonText] !== undefined;
 }
 
-export async function playOfflineSpeech(text: string, signal: AbortSignal, playbackRate = 1) {
+export async function playOfflineSpeech(text: string, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback') {
   const lessonText = canonicalLessonAudioText(text);
   const source = lessonText ? offlineHindiAudio[lessonText] : undefined;
   if (source === undefined) return false;
   if (signal.aborted) return true;
-  const player = createAudioPlayer(source, { updateInterval: 100 });
+  const player = createAudioPlayer(source, {
+    updateInterval: 100,
+    // A lesson clip can play while the live WebRTC call remains connected.
+    // Keep iOS capture available for the learner's next orb turn.
+    keepAudioSessionActive: true,
+  });
   const rate = normalizedPlaybackRate(playbackRate);
   try {
-    await setVoiceAudioMode('playback');
+    // Canonical playback inside a live WebRTC call must preserve the call's
+    // existing PlayAndRecord session so the next microphone turn can restart.
+    if (audioMode !== 'realtimePlayback') await setVoiceAudioMode(audioMode);
     player.setPlaybackRate?.(rate);
     await new Promise<void>((resolve, reject) => {
       let settled = false;

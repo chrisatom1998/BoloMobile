@@ -14,4 +14,4 @@ type AshaVoiceProfile = {
  */
 export const ASHA_VOICE_PROFILE = ashaVoiceProfile as AshaVoiceProfile;
 
-export type VoiceAudioMode = 'idle' | 'playback' | 'recording' | 'realtime';
+export type VoiceAudioMode = 'idle' | 'playback' | 'recording' | 'realtime' | 'realtimePlayback';

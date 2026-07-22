@@ -60,6 +60,59 @@ function createPeer(): RealtimePeerSession {
   };
 }
 
+type ResponseEventOptions = {
+  attempt?: number;
+  id?: string;
+  status?: string;
+  statusDetails?: {
+    error?: { message?: string };
+    reason?: string;
+    type?: string;
+  };
+  turn?: number;
+};
+
+function responseIdentity({ attempt = 1, id, turn = 1 }: ResponseEventOptions = {}) {
+  return {
+    id: id ?? `response-${turn}-${attempt}`,
+    metadata: {
+      bolo_attempt: String(attempt),
+      bolo_turn: String(turn),
+    },
+  };
+}
+
+function responseCreatedEvent(options: ResponseEventOptions = {}) {
+  return {
+    type: 'response.created',
+    response: {
+      ...responseIdentity(options),
+      status: 'in_progress',
+    },
+  };
+}
+
+function responseDoneEvent(options: ResponseEventOptions = {}) {
+  return {
+    type: 'response.done',
+    response: {
+      ...responseIdentity(options),
+      status: options.status ?? 'completed',
+      ...(options.statusDetails ? { status_details: options.statusDetails } : {}),
+    },
+  };
+}
+
+function finishRecordedTurn(result: { current: { finishTurn: () => void } }) {
+  const later = Date.now() + 1_500;
+  const now = jest.spyOn(Date, 'now').mockReturnValue(later);
+  try {
+    result.current.finishTurn();
+  } finally {
+    now.mockRestore();
+  }
+}
+
 describe('Realtime connection lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -166,23 +219,27 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
-        now.mockReturnValue(1_500);
+        now.mockReturnValue(2_000);
         await result.current.finishTurn();
-        expect(peer.send).toHaveBeenCalledWith({ type: 'response.create', response: { output_modalities: ['text'] } });
+        expect(peer.send).toHaveBeenCalledWith({ type: 'input_audio_buffer.commit' });
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-canonical' }));
+        expect(peer.send).toHaveBeenCalledWith({
+          type: 'response.create',
+          response: expect.objectContaining({ output_modalities: ['text'] }),
+        });
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-canonical',
           transcript: 'Say hello.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_text.delta', delta: 'नमस्ते' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_text.done', text: 'नमस्ते!' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         await Promise.resolve();
       });
 
-      expect(speakTextMock).toHaveBeenCalledWith('नमस्ते!', expect.any(AbortSignal), 1, 'hi');
+      expect(speakTextMock).toHaveBeenCalledWith('नमस्ते!', expect.any(AbortSignal), 1, 'hi', 'realtimePlayback');
       expect(onTurnComplete).not.toHaveBeenCalled();
       expect(result.current.status).toBe('responding');
 
@@ -197,13 +254,76 @@ describe('Realtime connection lifecycle', () => {
         language: 'hi',
       });
       expect(result.current.status).toBe('ready');
+
+      setAudioModeMock.mockClear();
+      jest.mocked(peer.setMicrophoneEnabled).mockClear();
+      await act(async () => {
+        await result.current.startTurn();
+      });
+
+      expect(setAudioModeMock).not.toHaveBeenCalled();
+      expect(peer.setMicrophoneEnabled).toHaveBeenCalledWith(true);
+      expect(result.current.status).toBe('recording');
     } finally {
       now.mockRestore();
       await unmount();
     }
   });
 
-  it('waits for WebRTC output before applying speaker routing to avoid an iOS audio-session race', async () => {
+  it('waits for committed microphone audio and recovers cleanly when Realtime receives none', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_empty_input',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete: jest.fn(),
+    }));
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await start;
+        jest.mocked(peer.send).mockClear();
+        now.mockReturnValue(2_000);
+        await result.current.finishTurn();
+      });
+
+      expect(peer.send).toHaveBeenCalledWith({ type: 'input_audio_buffer.commit' });
+      expect(peer.send).not.toHaveBeenCalledWith({ type: 'response.create', response: { output_modalities: ['text'] } });
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'error',
+          error: { message: 'Error committing input audio buffer: buffer too small. Expected at least 100ms of audio, but buffer only has 0.00ms of audio.' },
+        }));
+        await Promise.resolve();
+      });
+
+      expect(onError).toHaveBeenCalledWith('I didn’t receive enough audio. Speak for at least a second, then tap the orb again to send.');
+      expect(peer.send).toHaveBeenCalledWith({ type: 'input_audio_buffer.clear' });
+      expect(result.current.status).toBe('ready');
+    } finally {
+      now.mockRestore();
+      await unmount();
+    }
+  });
+
+  it('configures a recording-capable speaker session before WebRTC captures microphone audio', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     const speakerMode = {
@@ -232,15 +352,11 @@ describe('Realtime connection lifecycle', () => {
         start = result.current.startTurn();
       });
       await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
-      expect(setAudioModeMock.mock.calls.filter(([mode]) => (
-        mode.allowsRecording === true && mode.shouldRouteThroughEarpiece === false
-      ))).toHaveLength(0);
+      expect(setAudioModeMock).toHaveBeenCalledWith(speakerMode);
 
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         await Promise.resolve();
       });
 
@@ -393,6 +509,7 @@ describe('Realtime connection lifecycle', () => {
         }
 
         await act(async () => {
+          finishRecordedTurn(result);
           peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: itemId }));
           if (index > 0) {
             peerOptions?.onMessage(JSON.stringify({
@@ -401,10 +518,10 @@ describe('Realtime connection lifecycle', () => {
               transcript: 'Stale transcript that must be ignored.',
             }));
           }
-          peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+          peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ turn })));
           peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
           peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: reply }));
-          peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+          peerOptions?.onMessage(JSON.stringify(responseDoneEvent({ turn })));
           peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
           jest.advanceTimersByTime(delayMs);
           await Promise.resolve();
@@ -431,6 +548,147 @@ describe('Realtime connection lifecycle', () => {
       }
     } finally {
       jest.useRealTimers();
+      await unmount();
+    }
+  });
+
+  it('completes twenty correlated text-only voice turns with canonical audio every time', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_twenty_turn_endurance',
+      expires_at: Math.floor(Date.now() / 1000) + 600,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete,
+    }));
+    let clock = 10_000;
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => clock);
+
+    try {
+      let firstStart!: Promise<void>;
+      await act(() => {
+        firstStart = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await firstStart;
+      });
+
+      let previousResponseId: string | null = null;
+      for (let index = 0; index < 20; index += 1) {
+        const turn = index + 1;
+        const itemId = `input-endurance-${turn}`;
+        const responseId = `resp-endurance-${turn}`;
+        const transcript = `Learner endurance turn ${turn}.`;
+        const reply = `Asha endurance reply ${turn}.`;
+        const metadata = { bolo_turn: String(turn), bolo_attempt: '1' };
+
+        if (index > 0) {
+          clock += 100;
+          await act(async () => {
+            await result.current.startTurn();
+          });
+          expect(result.current.status).toBe('recording');
+        }
+
+        if (previousResponseId) {
+          await act(async () => {
+            peerOptions?.onMessage(JSON.stringify({
+              type: 'response.created',
+              response: { id: previousResponseId, status: 'in_progress' },
+            }));
+            peerOptions?.onMessage(JSON.stringify({
+              type: 'response.output_text.done',
+              response_id: previousResponseId,
+              text: 'A metadata-free stale reply that must not play.',
+            }));
+            peerOptions?.onMessage(JSON.stringify({
+              type: 'response.done',
+              response: { id: previousResponseId, status: 'completed' },
+            }));
+            await Promise.resolve();
+          });
+          expect(result.current.status).toBe('recording');
+        }
+
+        clock += 1_500;
+        await act(async () => {
+          result.current.finishTurn();
+          if (previousResponseId) {
+            const staleMetadata = { bolo_turn: String(turn - 1), bolo_attempt: '1' };
+            peerOptions?.onMessage(JSON.stringify({
+              type: 'response.created',
+              response: { id: previousResponseId, metadata: staleMetadata, status: 'in_progress' },
+            }));
+            peerOptions?.onMessage(JSON.stringify({
+              type: 'response.output_text.done',
+              response_id: previousResponseId,
+              text: 'A stale reply that must not play.',
+            }));
+            peerOptions?.onMessage(JSON.stringify({
+              type: 'response.done',
+              response: { id: previousResponseId, metadata: staleMetadata, status: 'completed' },
+            }));
+          }
+          peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: itemId }));
+          peerOptions?.onMessage(JSON.stringify({
+            type: 'response.created',
+            response: { id: responseId, metadata, status: 'in_progress' },
+          }));
+          peerOptions?.onMessage(JSON.stringify({
+            type: 'conversation.item.input_audio_transcription.completed',
+            item_id: itemId,
+            transcript,
+          }));
+          peerOptions?.onMessage(JSON.stringify({
+            type: 'response.output_text.delta',
+            response_id: responseId,
+            delta: reply.slice(0, 10),
+          }));
+          peerOptions?.onMessage(JSON.stringify({
+            type: 'response.output_text.done',
+            response_id: responseId,
+            text: reply,
+          }));
+          peerOptions?.onMessage(JSON.stringify({
+            type: 'response.done',
+            response: { id: responseId, metadata, status: 'completed' },
+          }));
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        await waitFor(() => expect(result.current.status).toBe('ready'));
+        expect(onTurnComplete).toHaveBeenCalledTimes(turn);
+        expect(onTurnComplete).toHaveBeenLastCalledWith({ transcript, reply, language: 'en' });
+        expect(speakTextMock).toHaveBeenCalledTimes(turn);
+        expect(speakTextMock).toHaveBeenLastCalledWith(
+          reply,
+          expect.any(AbortSignal),
+          1,
+          'en',
+          'realtimePlayback',
+        );
+        expect(onError).not.toHaveBeenCalled();
+        previousResponseId = responseId;
+      }
+
+      expect(jest.mocked(peer.setMicrophoneEnabled).mock.calls).toEqual(
+        Array.from({ length: 20 }, () => [[true], [false]]).flat(),
+      );
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(20);
+    } finally {
+      now.mockRestore();
       await unmount();
     }
   });
@@ -466,6 +724,7 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-live' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.delta',
@@ -482,7 +741,7 @@ describe('Realtime connection lifecycle', () => {
           item_id: 'input-live',
           transcript: 'Namaste, Asha.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.delta', delta: 'Hello' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.delta', delta: ' there' }));
@@ -540,13 +799,14 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-hindi' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-hindi',
           transcript: 'Namaste, Asha.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.delta', delta: 'आप कैसे' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.delta', delta: ' हैं?' }));
@@ -554,7 +814,7 @@ describe('Realtime connection lifecycle', () => {
           type: 'response.output_audio_transcript.done',
           transcript: 'आप कैसे हैं?',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
         await Promise.resolve();
       });
@@ -601,12 +861,13 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-delayed-failure' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
-        peerOptions?.onMessage(JSON.stringify({
-          type: 'response.done',
-          response: { status: 'incomplete', status_details: { reason: 'content_filter' } },
-        }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({
+          status: 'incomplete',
+          statusDetails: { reason: 'content_filter' },
+        })));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-delayed-failure',
@@ -658,21 +919,33 @@ describe('Realtime connection lifecycle', () => {
     jest.useFakeTimers();
     try {
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-stalled-response' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         jest.advanceTimersByTime(45_000);
         await Promise.resolve();
       });
 
       expect(result.current.status).toBe('responding');
-      expect(peer.send).toHaveBeenCalledWith({ type: 'response.cancel' });
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.cancel',
+        response_id: 'response-1-1',
+        event_id: expect.any(String),
+      }));
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+      expect(peer.close).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({ status: 'cancelled' })));
+        await Promise.resolve();
+      });
+
       expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
         type: 'response.create',
         response: expect.objectContaining({ instructions: expect.stringContaining('one short sentence') }),
       }));
-      expect(peer.close).not.toHaveBeenCalled();
-      expect(onError).not.toHaveBeenCalled();
 
       await act(async () => {
         jest.advanceTimersByTime(45_000);
@@ -690,13 +963,511 @@ describe('Realtime connection lifecycle', () => {
           type: 'response.output_audio_transcript.done',
           transcript: 'Stale reply after the watchdog.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         await Promise.resolve();
       });
       expect(onTurnComplete).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledTimes(1);
     } finally {
       jest.useRealTimers();
+      await unmount();
+    }
+  });
+
+  it('ignores the expected cancellation completion while a watchdog retry succeeds', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_correlated_watchdog_retry',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete,
+    }));
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000);
+
+    let start!: Promise<void>;
+    await act(() => {
+      start = result.current.startTurn();
+    });
+    await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+    await act(async () => {
+      peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+      await start;
+    });
+
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+      now.mockReturnValue(2_500);
+      result.current.finishTurn();
+      peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-watchdog-retry' }));
+      peerOptions?.onMessage(JSON.stringify({
+        type: 'conversation.item.input_audio_transcription.completed',
+        item_id: 'input-watchdog-retry',
+        transcript: 'Please retry this response.',
+      }));
+      peerOptions?.onMessage(JSON.stringify({
+        type: 'response.created',
+        response: { id: 'resp-watchdog-original', metadata: { bolo_turn: '1', bolo_attempt: '1' }, status: 'in_progress' },
+      }));
+      });
+
+      await act(async () => {
+        jest.advanceTimersByTime(45_000);
+        await Promise.resolve();
+      });
+
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.cancel',
+        response_id: 'resp-watchdog-original',
+        event_id: expect.any(String),
+      }));
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+      expect(result.current.status).toBe('responding');
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.done',
+          response: {
+            id: 'resp-watchdog-original',
+            metadata: { bolo_turn: '1', bolo_attempt: '1' },
+            status: 'cancelled',
+          },
+        }));
+        await Promise.resolve();
+      });
+
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.create',
+        response: expect.objectContaining({
+          metadata: { bolo_turn: '1', bolo_attempt: '2' },
+        }),
+      }));
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.created',
+          response: { id: 'resp-watchdog-retry', metadata: { bolo_turn: '1', bolo_attempt: '2' }, status: 'in_progress' },
+        }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.output_text.done',
+          response_id: 'resp-watchdog-retry',
+          text: 'The retry completed.',
+        }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.done',
+          response: {
+            id: 'resp-watchdog-retry',
+            metadata: { bolo_turn: '1', bolo_attempt: '2' },
+            status: 'completed',
+          },
+        }));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(onTurnComplete).toHaveBeenCalledWith({
+        transcript: 'Please retry this response.',
+        reply: 'The retry completed.',
+        language: 'en',
+      });
+      expect(speakTextMock).toHaveBeenCalledWith(
+        'The retry completed.',
+        expect.any(AbortSignal),
+        1,
+        'en',
+        'realtimePlayback',
+      );
+      expect(result.current.status).toBe('ready');
+    } finally {
+      jest.useRealTimers();
+      now.mockRestore();
+      await unmount();
+    }
+  });
+
+  it('waits for an id-less cancellation rejection before starting a watchdog retry', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_idless_watchdog_retry',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete: jest.fn(),
+    }));
+
+    let start!: Promise<void>;
+    await act(() => {
+      start = result.current.startTurn();
+    });
+    await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+    await act(async () => {
+      peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+      await start;
+    });
+
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        finishRecordedTurn(result);
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-idless-retry' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          item_id: 'input-idless-retry',
+          transcript: 'Retry without a response ID.',
+        }));
+        jest.advanceTimersByTime(45_000);
+        await Promise.resolve();
+      });
+
+      const cancellationEvent = jest.mocked(peer.send).mock.calls
+        .map(([event]) => event)
+        .find((event) => event.type === 'response.cancel') as {
+          event_id?: string;
+          response_id?: string;
+          type?: string;
+        } | undefined;
+      expect(cancellationEvent).toEqual(expect.objectContaining({
+        type: 'response.cancel',
+        event_id: expect.any(String),
+      }));
+      expect(cancellationEvent).not.toHaveProperty('response_id');
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'error',
+          error: {
+            event_id: cancellationEvent?.event_id,
+            message: 'No active response found to cancel.',
+          },
+        }));
+        await Promise.resolve();
+      });
+
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(2);
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.create',
+        response: expect.objectContaining({
+          metadata: { bolo_turn: '1', bolo_attempt: '2' },
+        }),
+      }));
+      expect(onError).not.toHaveBeenCalled();
+      expect(result.current.status).toBe('responding');
+    } finally {
+      jest.useRealTimers();
+      await unmount();
+    }
+  });
+
+  it('fails closed when a response cancellation is not acknowledged', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_cancel_timeout',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete: jest.fn(),
+    }));
+
+    let start!: Promise<void>;
+    await act(() => {
+      start = result.current.startTurn();
+    });
+    await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+    await act(async () => {
+      peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+      await start;
+    });
+
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        finishRecordedTurn(result);
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-cancel-timeout' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ id: 'resp-cancel-timeout' })));
+        jest.advanceTimersByTime(45_000);
+        await Promise.resolve();
+      });
+
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.cancel',
+        response_id: 'resp-cancel-timeout',
+        event_id: expect.any(String),
+      }));
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(10_000);
+        await Promise.resolve();
+      });
+
+      expect(result.current.status).toBe('disconnected');
+      expect(peer.close).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('did not finish'));
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+      await unmount();
+    }
+  });
+
+  it('does not extend the cancellation timeout when response.created arrives after an id-less cancel', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_late_response_id_cancel_timeout',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete: jest.fn(),
+    }));
+
+    let start!: Promise<void>;
+    await act(() => {
+      start = result.current.startTurn();
+    });
+    await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+    await act(async () => {
+      peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+      await start;
+    });
+
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        finishRecordedTurn(result);
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-late-response-id' }));
+        jest.advanceTimersByTime(45_000);
+        await Promise.resolve();
+      });
+
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.cancel',
+        event_id: expect.any(String),
+      }));
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ id: 'resp-late-cancel-id' })));
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe('responding');
+
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+        await Promise.resolve();
+      });
+
+      expect(result.current.status).toBe('disconnected');
+      expect(peer.close).toHaveBeenCalledTimes(1);
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('did not finish'));
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+      await unmount();
+    }
+  });
+
+  it('uses a real completion that wins the cancellation race without creating a duplicate retry', async () => {
+    const peer = createPeer();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_cancel_completion_race',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    const onError = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete,
+    }));
+
+    let start!: Promise<void>;
+    await act(() => {
+      start = result.current.startTurn();
+    });
+    await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+    await act(async () => {
+      peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+      await start;
+    });
+
+    jest.useFakeTimers();
+    try {
+      await act(async () => {
+        finishRecordedTurn(result);
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-cancel-race' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          item_id: 'input-cancel-race',
+          transcript: 'Let the original answer finish.',
+        }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ id: 'resp-cancel-race' })));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'response.output_text.done',
+          response_id: 'resp-cancel-race',
+          text: 'The original response completed.',
+        }));
+        jest.advanceTimersByTime(45_000);
+        await Promise.resolve();
+      });
+
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'response.cancel',
+        response_id: 'resp-cancel-race',
+      }));
+      const cancellationEvent = jest.mocked(peer.send).mock.calls
+        .map(([event]) => event)
+        .find((event) => event.type === 'response.cancel') as { event_id?: string } | undefined;
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'error',
+          error: {
+            event_id: cancellationEvent?.event_id,
+            message: 'No active response found to cancel.',
+          },
+        }));
+        await Promise.resolve();
+      });
+      expect(result.current.status).toBe('responding');
+      expect(onError).not.toHaveBeenCalled();
+
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({ id: 'resp-cancel-race' })));
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(jest.mocked(peer.send).mock.calls.filter(([event]) => event.type === 'response.create')).toHaveLength(1);
+      expect(speakTextMock).toHaveBeenCalledWith(
+        'The original response completed.',
+        expect.any(AbortSignal),
+        1,
+        'en',
+        'realtimePlayback',
+      );
+      expect(onTurnComplete).toHaveBeenCalledWith({
+        transcript: 'Let the original answer finish.',
+        reply: 'The original response completed.',
+        language: 'en',
+      });
+      const microphoneCallCount = jest.mocked(peer.setMicrophoneEnabled).mock.calls.length;
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'error',
+          error: {
+            event_id: cancellationEvent?.event_id,
+            message: 'No active response found to cancel.',
+          },
+        }));
+        await Promise.resolve();
+      });
+      expect(onError).not.toHaveBeenCalled();
+      expect(peer.setMicrophoneEnabled).toHaveBeenCalledTimes(microphoneCallCount);
+      expect(result.current.status).toBe('ready');
+    } finally {
+      jest.useRealTimers();
+      await unmount();
+    }
+  });
+
+  it('aborts canonical speech when the remote WebRTC connection closes', async () => {
+    const peer = createPeer();
+    const playback = deferred<void>();
+    let peerOptions: RealtimePeerOptions | undefined;
+    createSecretMock.mockResolvedValue({
+      value: 'ek_remote_close_during_tts',
+      expires_at: Math.floor(Date.now() / 1000) + 60,
+    });
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      return peer;
+    });
+    speakTextMock.mockReturnValue(playback.promise);
+    const onError = jest.fn();
+    const onTurnComplete = jest.fn();
+    const { result, unmount } = await renderHook(() => useRealtimeConversation({
+      clientId: 'client-12345678',
+      onError,
+      onTurnComplete,
+    }));
+
+    try {
+      let start!: Promise<void>;
+      await act(() => {
+        start = result.current.startTurn();
+      });
+      await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
+      await act(async () => {
+        peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
+        await start;
+        finishRecordedTurn(result);
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-remote-close' }));
+        peerOptions?.onMessage(JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          item_id: 'input-remote-close',
+          transcript: 'Keep speaking until disconnect.',
+        }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
+        peerOptions?.onMessage(JSON.stringify({ type: 'response.output_text.done', text: 'This playback will be interrupted.' }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
+        await Promise.resolve();
+      });
+      const playbackSignal = speakTextMock.mock.calls.at(-1)?.[1];
+      expect(playbackSignal?.aborted).toBe(false);
+
+      await act(async () => {
+        peerOptions?.onClose();
+        await Promise.resolve();
+      });
+
+      expect(playbackSignal?.aborted).toBe(true);
+      expect(result.current.status).toBe('disconnected');
+      expect(onError).toHaveBeenCalledWith('The live voice connection closed. Start a new session to continue.');
+      playback.resolve();
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(onTurnComplete).not.toHaveBeenCalled();
+    } finally {
       await unmount();
     }
   });
@@ -733,19 +1504,20 @@ describe('Realtime connection lifecycle', () => {
     jest.useFakeTimers();
     try {
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-stalled-output' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-stalled-output',
           transcript: 'My complete input.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'response.output_audio_transcript.done',
           transcript: 'The complete reply.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         await Promise.resolve();
       });
       expect(onTurnComplete).toHaveBeenCalledWith({
@@ -810,20 +1582,21 @@ describe('Realtime connection lifecycle', () => {
     jest.useFakeTimers();
     try {
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-continued' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-continued',
           transcript: 'Please give me the full answer.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'The first part' }));
         jest.mocked(peer.send).mockClear();
-        peerOptions?.onMessage(JSON.stringify({
-          type: 'response.done',
-          response: { status: 'incomplete', status_details: { type: 'incomplete', reason: 'max_output_tokens' } },
-        }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({
+          status: 'incomplete',
+          statusDetails: { type: 'incomplete', reason: 'max_output_tokens' },
+        })));
         await Promise.resolve();
       });
 
@@ -843,10 +1616,10 @@ describe('Realtime connection lifecycle', () => {
       });
 
       await act(async () => {
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ attempt: 2 })));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'and the final part.' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({ attempt: 2 })));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
         await Promise.resolve();
       });
@@ -865,7 +1638,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('allows two output-limited continuations and then preserves the bounded partial reply', async () => {
+  it('continues past two output-limited responses instead of speaking a partial reply', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     createSecretMock.mockResolvedValue({
@@ -897,19 +1670,20 @@ describe('Realtime connection lifecycle', () => {
     jest.useFakeTimers();
     try {
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-retry-limit' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-retry-limit',
           transcript: 'Please answer fully.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'First partial.' }));
-        peerOptions?.onMessage(JSON.stringify({
-          type: 'response.done',
-          response: { status: 'incomplete', status_details: { type: 'incomplete', reason: 'max_output_tokens' } },
-        }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({
+          status: 'incomplete',
+          statusDetails: { type: 'incomplete', reason: 'max_output_tokens' },
+        })));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
         await Promise.resolve();
       });
@@ -917,13 +1691,14 @@ describe('Realtime connection lifecycle', () => {
 
       jest.mocked(peer.send).mockClear();
       await act(async () => {
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ attempt: 2 })));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Second partial.' }));
-        peerOptions?.onMessage(JSON.stringify({
-          type: 'response.done',
-          response: { status: 'incomplete', status_details: { type: 'incomplete', reason: 'max_output_tokens' } },
-        }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({
+          attempt: 2,
+          status: 'incomplete',
+          statusDetails: { type: 'incomplete', reason: 'max_output_tokens' },
+        })));
         await Promise.resolve();
       });
 
@@ -938,29 +1713,27 @@ describe('Realtime connection lifecycle', () => {
 
       jest.mocked(peer.send).mockClear();
       await act(async () => {
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent({ attempt: 3 })));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Third partial.' }));
-        peerOptions?.onMessage(JSON.stringify({
-          type: 'response.done',
-          response: { status: 'incomplete', status_details: { type: 'incomplete', reason: 'max_output_tokens' } },
-        }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({
+          attempt: 3,
+          status: 'incomplete',
+          statusDetails: { type: 'incomplete', reason: 'max_output_tokens' },
+        })));
         await Promise.resolve();
       });
 
       expect(peer.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'response.create' }));
       expect(onError).not.toHaveBeenCalled();
-      expect(onTurnComplete).toHaveBeenCalledWith({
-        transcript: 'Please answer fully.',
-        reply: 'First partial. Second partial. Third partial.',
-        language: 'en',
-      });
+      expect(onTurnComplete).not.toHaveBeenCalled();
 
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
         await Promise.resolve();
       });
-      expect(result.current.status).toBe('ready');
+      expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'response.create' }));
+      expect(result.current.status).toBe('responding');
     } finally {
       jest.useRealTimers();
       await unmount();
@@ -999,15 +1772,16 @@ describe('Realtime connection lifecycle', () => {
     jest.useFakeTimers();
     try {
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-incomplete' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Partial output' }));
         jest.mocked(peer.send).mockClear();
-        peerOptions?.onMessage(JSON.stringify({
-          type: 'response.done',
-          response: { status: 'incomplete', status_details: { type: 'incomplete', reason: 'content_filter' } },
-        }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent({
+          status: 'incomplete',
+          statusDetails: { type: 'incomplete', reason: 'content_filter' },
+        })));
         await Promise.resolve();
       });
 
@@ -1095,7 +1869,9 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        finishRecordedTurn(result);
+        peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-output-error' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         jest.mocked(peer.send).mockClear();
         peerOptions?.onMessage(JSON.stringify({ type: 'error', error: { message: 'Realtime output failed.' } }));
@@ -1147,20 +1923,22 @@ describe('Realtime connection lifecycle', () => {
     jest.useFakeTimers();
     try {
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-waiting' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Reply waiting.' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         await Promise.resolve();
       });
 
       expect(result.current.status).toBe('responding');
+      const microphoneCallCount = jest.mocked(peer.setMicrophoneEnabled).mock.calls.length;
       await act(async () => {
         await result.current.startTurn();
       });
       expect(result.current.status).toBe('responding');
-      expect(peer.setMicrophoneEnabled).toHaveBeenCalledTimes(1);
+      expect(peer.setMicrophoneEnabled).toHaveBeenCalledTimes(microphoneCallCount);
 
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({
@@ -1187,7 +1965,7 @@ describe('Realtime connection lifecycle', () => {
         await result.current.startTurn();
       });
       expect(result.current.status).toBe('recording');
-      expect(peer.setMicrophoneEnabled).toHaveBeenCalledTimes(2);
+      expect(peer.setMicrophoneEnabled).toHaveBeenCalledTimes(microphoneCallCount + 1);
     } finally {
       jest.useRealTimers();
       await unmount();
@@ -1224,16 +2002,17 @@ describe('Realtime connection lifecycle', () => {
       });
 
       await act(async () => {
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-audio-drain' }));
         peerOptions?.onMessage(JSON.stringify({
           type: 'conversation.item.input_audio_transcription.completed',
           item_id: 'input-audio-drain',
           transcript: 'Play the full reply.',
         }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Full spoken reply.' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         await Promise.resolve();
       });
 
@@ -1278,11 +2057,12 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-empty-transcript' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Reply that should not be saved.' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
         await Promise.resolve();
       });
@@ -1333,11 +2113,12 @@ describe('Realtime connection lifecycle', () => {
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
         await start;
+        finishRecordedTurn(result);
         peerOptions?.onMessage(JSON.stringify({ type: 'input_audio_buffer.committed', item_id: 'input-failed-transcript' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.created' }));
+        peerOptions?.onMessage(JSON.stringify(responseCreatedEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.started' }));
         peerOptions?.onMessage(JSON.stringify({ type: 'response.output_audio_transcript.done', transcript: 'Reply that should not be saved.' }));
-        peerOptions?.onMessage(JSON.stringify({ type: 'response.done', response: { status: 'completed' } }));
+        peerOptions?.onMessage(JSON.stringify(responseDoneEvent()));
         peerOptions?.onMessage(JSON.stringify({ type: 'output_audio_buffer.stopped' }));
         await Promise.resolve();
       });

@@ -1,4 +1,5 @@
 import type { AiVoiceAudio } from '@/services/bolo-api';
+import type { VoiceAudioMode } from '@/lib/voice';
 
 const PLAYBACK_TIMEOUT_MS = 90_000;
 const MIN_PLAYBACK_RATE = 0.1;
@@ -55,7 +56,8 @@ export function clearAiVoicePlaybackCache() {
   }
 }
 
-export async function playAiVoiceAudio(audioData: AiVoiceAudio, signal: AbortSignal, playbackRate = 1): Promise<void> {
+export async function playAiVoiceAudio(audioData: AiVoiceAudio, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback'): Promise<void> {
+  void audioMode;
   if (signal.aborted) return;
   const prepared = getPreparedAudio(audioData);
   prepared.inUse += 1;

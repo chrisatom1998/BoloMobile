@@ -30,6 +30,15 @@ const VOICE_AUDIO_MODES = {
     playsInSilentMode: true,
     shouldRouteThroughEarpiece: false,
   },
+  // Keep the WebRTC call's PlayAndRecord session alive while canonical TTS
+  // speaks its text reply. Switching to standalone playback during the call
+  // can leave the iOS player without an active output route.
+  realtimePlayback: {
+    allowsRecording: true,
+    interruptionMode: 'doNotMix',
+    playsInSilentMode: true,
+    shouldRouteThroughEarpiece: false,
+  },
 } as const;
 
 export async function setVoiceAudioMode(mode: VoiceAudioMode) {

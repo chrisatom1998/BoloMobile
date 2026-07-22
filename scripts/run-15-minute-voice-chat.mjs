@@ -6,6 +6,7 @@ const DEBUG_PORT = Number(process.env.BOLO_CDP_PORT ?? 9224);
 const APP_URL = process.env.BOLO_WEB_URL ?? 'http://127.0.0.1:8083';
 const SESSION_MS = Number(process.env.BOLO_VOICE_SESSION_MS ?? 15 * 60_000);
 const TURN_RECORDING_MS = Number(process.env.BOLO_VOICE_TURN_MS ?? 12_000);
+const TARGET_TURNS = Number(process.env.BOLO_VOICE_TARGET_TURNS ?? 0);
 const WAIT_STEP_MS = 500;
 const SYNTHETIC_MIC_PATH = process.env.BOLO_SYNTHETIC_MIC_PATH;
 
@@ -137,6 +138,19 @@ async function main() {
   ]);
 
   try {
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: `(() => {
+        window.__boloAudioPlayback = { completed: 0, failed: 0, started: 0 };
+        const originalPlay = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function(...args) {
+          const state = window.__boloAudioPlayback;
+          state.started += 1;
+          this.addEventListener('ended', () => { state.completed += 1; }, { once: true });
+          this.addEventListener('error', () => { state.failed += 1; }, { once: true });
+          return originalPlay.apply(this, args);
+        };
+      })()`,
+    });
     if (SYNTHETIC_MIC_PATH) {
       const audioBase64 = (await readFile(SYNTHETIC_MIC_PATH)).toString('base64');
       const installSyntheticMicrophone = `(() => {
@@ -230,20 +244,34 @@ async function main() {
     }
     const startedAt = Date.now();
     let completedTurns = 0;
-    console.log(`${timestamp()} SESSION_STARTED duration_target_ms=${SESSION_MS}`);
+    console.log(`${timestamp()} SESSION_STARTED duration_target_ms=${SESSION_MS} turn_target=${TARGET_TURNS || 'duration'}`);
 
-    while (Date.now() - startedAt < SESSION_MS) {
+    while (
+      Date.now() - startedAt < SESSION_MS
+      && (TARGET_TURNS <= 0 || completedTurns < TARGET_TURNS)
+    ) {
+      const audioBefore = await client.evaluate('window.__boloAudioPlayback?.completed ?? 0');
       await sleep(TURN_RECORDING_MS);
       await click(client, 'Send turn', 5_000);
       await waitForText(client, 'Ready when you are', 110_000);
+      const audioCompleted = await waitFor(
+        client,
+        () => client.evaluate(`(window.__boloAudioPlayback?.completed ?? 0) > ${audioBefore}`),
+        5_000,
+        'canonical Asha audio to finish',
+      );
+      if (!audioCompleted) throw new Error('Asha returned to ready without completing voice audio.');
       completedTurns += 1;
       const elapsedMs = Date.now() - startedAt;
       const transcriptCards = await client.evaluate(`document.querySelectorAll('[aria-label^="Save transcript phrase:"]').length`);
+      const audioState = await client.evaluate('window.__boloAudioPlayback');
       const appErrors = await client.evaluate(`[
         ...document.querySelectorAll('[role="alert"]')
       ].map((element) => element.textContent?.trim()).filter(Boolean)`);
-      console.log(`${timestamp()} TURN_COMPLETED turn=${completedTurns} elapsed_ms=${elapsedMs} transcript_actions=${transcriptCards}`);
+      console.log(`${timestamp()} TURN_COMPLETED turn=${completedTurns} elapsed_ms=${elapsedMs} transcript_actions=${transcriptCards} audio_completed=${audioState.completed} audio_failed=${audioState.failed}`);
       if (appErrors.length) throw new Error(`Bolo displayed an error: ${appErrors.join(' | ')}`);
+      if (audioState.failed > 0) throw new Error(`Asha audio reported ${audioState.failed} media playback error(s).`);
+      if (TARGET_TURNS > 0 && completedTurns >= TARGET_TURNS) break;
       if (elapsedMs >= SESSION_MS) break;
       const remainingMs = SESSION_MS - elapsedMs;
       if (remainingMs <= TURN_RECORDING_MS + 1_000) {
@@ -258,7 +286,10 @@ async function main() {
     const finalText = await bodyText(client);
     const eventFailures = summarizeEvents(client.events);
     if (completedTurns < 1) throw new Error('The session completed no voice turns.');
-    if (elapsedMs < SESSION_MS) throw new Error(`Session lasted only ${elapsedMs} ms.`);
+    if (TARGET_TURNS > 0 && completedTurns < TARGET_TURNS) {
+      throw new Error(`The session completed ${completedTurns}/${TARGET_TURNS} required voice turns.`);
+    }
+    if (TARGET_TURNS <= 0 && elapsedMs < SESSION_MS) throw new Error(`Session lasted only ${elapsedMs} ms.`);
     if (!finalText.includes('Ready when you are')) throw new Error('Asha was not ready after the final voice turn.');
     if (eventFailures.length) throw new Error(eventFailures.join('\n'));
 

@@ -327,6 +327,7 @@ export default function LiveScreen() {
     realtimeStatusRef.current = status;
     setRealtimeStatus(status);
     if (status === 'recording') {
+      setError('');
       setLiveAshaTranscript('');
       setLiveUserTranscript('');
     }
