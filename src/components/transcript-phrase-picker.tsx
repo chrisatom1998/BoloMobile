@@ -4,6 +4,7 @@ import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
 
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
+import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { colors, radius, spacing } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
@@ -13,11 +14,13 @@ type TranscriptPhrasePickerProps = {
   onClose: () => void;
   onSave: (phrase: SavedPhrase) => void;
   selectedText?: string;
+  sourceText?: string;
 };
 
-export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, selectedText: highlightedText }: TranscriptPhrasePickerProps) {
-  const initialText = highlightedText?.trim() || message.text.trim();
+export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
+  const initialText = highlightedText?.trim() || romanizeDevanagari(message.text.trim());
   const [selectedText, setSelectedText] = useState(initialText);
+  const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
   const [hindi, setHindi] = useState('');
   const [latin, setLatin] = useState('');
   const [english, setEnglish] = useState('');
@@ -43,7 +46,11 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
     const controller = new AbortController();
     requestRef.current = controller;
     try {
-      const phrase = await prepareSavedPhraseFromText({ clientId, text }, controller.signal);
+      const phrase = await prepareSavedPhraseFromText({
+        clientId,
+        text,
+        ...(sourceText ? { sourceText } : {}),
+      }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) return;
       setLatin(phrase.latin);
       setHindi(phrase.hi);
@@ -105,6 +112,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
               multiline
               onChangeText={(value) => {
                 setSelectedText(value);
+                setSourceText('');
                 setHindi('');
                 setLatin('');
                 setEnglish('');

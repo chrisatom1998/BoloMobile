@@ -3,9 +3,11 @@ import * as mockReact from 'react';
 import { Alert, Animated, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText } from 'react-native';
 
 import LiveScreen, { createLiveStyles } from '../src/app/live';
+import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 import { darkColors } from '../src/theme';
 
 const mockRouterBack = jest.fn();
+const longDevanagariReply = 'आप कैसे हैं? धन्यवाद, आशा। ज़रूर। आप कैसे हैं? धन्यवाद, आशा। ज़रूर।';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockRouterBack }),
@@ -64,6 +66,21 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(
         MockPressable,
         {
+          accessibilityLabel: 'Create long Devanagari Asha reply',
+          onPress: () => {
+            onInputTranscriptComplete?.({ itemId: 'mock-hindi-input', transcript: 'मेरा नाम क्रिस है।' });
+            onTurnComplete({
+              transcript: 'मेरा नाम क्रिस है।',
+              reply: longDevanagariReply,
+              language: 'hi',
+            });
+          },
+        },
+        mockReact.createElement(MockText, null, 'Create long Devanagari reply'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
           accessibilityLabel: 'Mock realtime connecting',
           onPress: () => onStatusChange?.('connecting'),
         },
@@ -97,7 +114,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock learner transcript',
-          onPress: () => onTranscriptChange?.({ speaker: 'you', text: 'Namaste, mera naam Chris hai.' }),
+          onPress: () => onTranscriptChange?.({ speaker: 'you', text: 'नमस्ते, मेरा नाम Chris है।' }),
         },
         mockReact.createElement(MockText, null, 'Mock learner transcript'),
       ),
@@ -105,7 +122,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock Asha transcript',
-          onPress: () => onTranscriptChange?.({ speaker: 'asha', text: 'Namaste Chris, aap kaise hain?' }),
+          onPress: () => onTranscriptChange?.({ speaker: 'asha', text: 'नमस्ते Chris, आप कैसे हैं?' }),
         },
         mockReact.createElement(MockText, null, 'Mock Asha transcript'),
       ),
@@ -335,14 +352,44 @@ describe('immersive live conversation design', () => {
   it('shows learner transcription and then Asha captions while the voice turn is in progress', async () => {
     const view = await render(<LiveScreen />);
 
-    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
     await fireEvent.press(view.getByLabelText('Mock learner transcript'));
-    expect(view.getByText('You said')).toBeTruthy();
-    expect(view.getByText('Namaste, mera naam Chris hai.')).toBeTruthy();
+    expect(view.getByText('Your transcript')).toBeTruthy();
+    expect(view.getByText('Namaste, meraa naam Chris hai.')).toBeTruthy();
 
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
     expect(view.getByText('Live Asha caption')).toBeTruthy();
     expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
+
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('shows full Romanized voice turns while retaining the original text for voice playback', async () => {
+    const displayReply = romanizeDevanagari(longDevanagariReply);
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
+
+    const message = view.getAllByLabelText(/^Selectable chat text:/u)
+      .find((candidate) => candidate.props.value === displayReply);
+    if (!message) throw new Error('The Romanized Asha message was not rendered.');
+    expect(message.props.value).toBe(displayReply);
+    expect(view.queryByDisplayValue(longDevanagariReply)).toBeNull();
+    const initialStyle = StyleSheet.flatten(message.props.style);
+    expect(initialStyle.height).toBeUndefined();
+    expect(initialStyle.minHeight).toBe(23);
+
+    await act(async () => {
+      message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
+      await Promise.resolve();
+    });
+    const resizedMessage = view.getAllByLabelText(/^Selectable chat text:/u)
+      .find((candidate) => candidate.props.value === displayReply);
+    if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
+    expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
+    expect(speech.preloadSpeech).toHaveBeenCalledWith(longDevanagariReply);
 
     await view.unmount();
     await flushMicrotasks();
@@ -629,6 +676,39 @@ describe('live coaching state', () => {
       en: 'How are you?',
     });
     expect(view.queryByLabelText('Selected transcript text')).toBeNull();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('retains the original Hindi source behind a selected Romanized chat phrase', async () => {
+    boloApi.prepareSavedPhraseFromText.mockResolvedValueOnce({
+      hi: 'आप कैसे हैं?',
+      latin: 'Aap kaise hain?',
+      en: 'How are you?',
+    });
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
+
+    const displayReply = romanizeDevanagari(longDevanagariReply);
+    const message = view.getAllByLabelText(/^Selectable chat text:/u)
+      .find((candidate) => candidate.props.value === displayReply);
+    if (!message) throw new Error('The Romanized Asha message was not rendered.');
+    const selectedText = 'Aap kaise hain?';
+    await fireEvent(message, 'selectionChange', { nativeEvent: { selection: { start: 0, end: selectedText.length } } });
+    const saveSelection = view.getAllByLabelText(/^Save transcript phrase:/u)
+      .find((candidate) => String(candidate.props.accessibilityLabel).includes('Aap kaise hain?'));
+    if (!saveSelection) throw new Error('The Asha save action was not rendered.');
+    await fireEvent.press(saveSelection);
+
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe(selectedText);
+    await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
+    await flushMicrotasks();
+
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenCalledWith({
+      clientId: 'client-12345678',
+      sourceText: 'आप कैसे हैं?',
+      text: selectedText,
+    }, expect.any(AbortSignal));
     await view.unmount();
     await flushMicrotasks();
   });
