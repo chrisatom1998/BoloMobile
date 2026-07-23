@@ -199,11 +199,10 @@ async function playGeneratedSpeech(
       return;
     } catch (error) {
       if (signal.aborted) return;
-      if (attempt + 1 >= GENERATED_SPEECH_ATTEMPTS) throw error;
-      // A corrupt/truncated generated clip is cached by text. Evict it before
-      // the single recovery request so Hindi playback can finish cleanly.
-      aiVoiceCache.delete(audioCacheKey(chunk.text, chunk.language));
-      result = await prepareSpeechAudio(chunk, signal);
+      // A native player can report an error after the clip has already become
+      // audible. Retrying at this point repeats the beginning of a response
+      // (for example, "You can say") instead of recovering silently.
+      throw error;
     }
   }
 }
