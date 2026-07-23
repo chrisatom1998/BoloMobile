@@ -379,6 +379,24 @@ describe('AI voice speech orchestration', () => {
     ]);
   });
 
+  it('does not replay a coaching lead-in after its playback has started', async () => {
+    const text = 'You can say this, मुझे आज पानी चाहिए।';
+    const chunks = splitSpeechByLanguage(text);
+    const audio = new Map(chunks.map(({ text: chunk }, index) => [chunk, {
+      audioBase64: `cGxheWJhY2st${index}=`,
+      mimeType: 'audio/mpeg' as const,
+    }]));
+    const playbackFailure = new Error('iOS reported a playback error after the clip started');
+    const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio')
+      .mockImplementation((chunk) => Promise.resolve(audio.get(chunk)!));
+    const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockRejectedValue(playbackFailure);
+
+    await expect(speakText(text)).rejects.toThrow(playbackFailure);
+
+    expect(playbackSpy).toHaveBeenCalledTimes(1);
+    expect(requestSpy.mock.calls.map(([chunk]) => chunk)).toEqual(chunks.map(({ text: chunk }) => chunk));
+  });
+
   it('reuses cached AI audio for repeated text while playing it each time', async () => {
     const audio: boloApi.AiVoiceAudio = { audioBase64: 'Y2FjaGU=', mimeType: 'audio/mpeg' };
     const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue(audio);
