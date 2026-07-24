@@ -47,8 +47,8 @@ describe('home accessibility', () => {
     const allScenes = view.getByLabelText(/^All scenes,/u);
     const topbar = view.getByTestId('today-topbar');
 
-    expect(StyleSheet.flatten(settings.props.style).height).toBeGreaterThanOrEqual(48);
-    expect(StyleSheet.flatten(settings.props.style).width).toBeGreaterThanOrEqual(48);
+    expect(StyleSheet.flatten(settings.props.style).minHeight).toBeGreaterThanOrEqual(48);
+    expect(StyleSheet.flatten(settings.props.style).minWidth).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(savedPhrases.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minWidth).toBeGreaterThanOrEqual(48);

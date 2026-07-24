@@ -64,17 +64,18 @@ export default function HomeScreen() {
   const header = useMemo(() => (
     <View style={styles.headerContent}>
       <View style={styles.topbar} testID="today-topbar">
+        <JournalMotif accessibilityLabel="Bolo journal motif" size="panel" style={styles.headerMotif} />
         <View style={styles.intro}>
           <View style={styles.brandCopy}>
             <JournalKicker>A quiet practice</JournalKicker>
             <JournalDisplay style={styles.greeting}>Make Hindi yours.</JournalDisplay>
             <Text style={styles.brandTagline}>One useful moment at a time.</Text>
           </View>
+          <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton}>
+            <Text style={styles.settingsDots}>•••</Text>
+            <Text style={styles.settingsLabel}>Settings</Text>
+          </Pressable>
         </View>
-        <JournalMotif accessibilityLabel="Bolo journal motif" size="corner" style={styles.headerMotif} />
-        <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.roundButton}>
-          <Text style={styles.roundButtonText}>•••</Text>
-        </Pressable>
       </View>
 
         <Card variant="transparent" style={styles.nextCard}>
@@ -175,14 +176,15 @@ const useStyles = makeStyles((c) => ({
   separator: { height: spacing.md },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'center', gap: spacing.lg, marginBottom: spacing.lg },
   sceneCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' },
-  topbar: { width: '100%', minHeight: 142, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm },
-  intro: { minWidth: 0, flex: 1, paddingTop: spacing.md },
+  topbar: { width: '100%', minHeight: 214, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  intro: { minWidth: 0, flex: 1, maxWidth: 200, paddingTop: spacing.lg, gap: spacing.lg },
   brandCopy: { minWidth: 0, flexShrink: 1 },
-  greeting: { marginTop: spacing.xs, maxWidth: 230, fontSize: 29, lineHeight: 35 },
+  greeting: { marginTop: spacing.xs, maxWidth: 200, fontSize: 27, lineHeight: 33 },
   brandTagline: { color: c.muted, fontSize: 14, lineHeight: 20, marginTop: spacing.sm, textAlign: 'left' },
-  headerMotif: { position: 'absolute', right: 52, top: spacing.sm },
-  roundButton: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(33, 37, 33, 0.08)' },
-  roundButtonText: { color: c.ink, fontSize: 18, fontWeight: '900', letterSpacing: 1.2 },
+  headerMotif: { position: 'absolute', right: 0, top: -2, width: 158, height: 196 },
+  settingsButton: { alignSelf: 'flex-start', minHeight: 48, minWidth: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md, boxShadow: '0 4px 12px rgba(33, 37, 33, 0.08)' },
+  settingsDots: { color: c.brandText, fontSize: 15, fontWeight: '900', letterSpacing: 1.2 },
+  settingsLabel: { color: c.muted, fontSize: 13, fontWeight: '800' },
   nextCard: { width: '100%', minHeight: 232, alignItems: 'stretch', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 26, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm, overflow: 'hidden', boxShadow: '0 10px 22px rgba(35, 39, 35, 0.08)' },
   nextHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   nextCardBody: { width: '100%', alignItems: 'flex-start', gap: spacing.sm },
