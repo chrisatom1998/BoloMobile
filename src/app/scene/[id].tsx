@@ -1,7 +1,7 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, Heart, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
@@ -11,11 +11,14 @@ import { observe } from '@/lib/observability';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
-import { colors, radius, sharedStyles, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function SceneScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
   const scene = useMemo(() => getScene(id), [id]);
   const { aiConsent, checkpointScene, learnerProfile, markSceneComplete, phrases, sceneProgress, togglePhrase } = useAppState();
   const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
@@ -213,63 +216,63 @@ export default function SceneScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
-  center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   hud: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  hudText: { color: colors.ink, fontWeight: '900' },
-  turn: { color: colors.muted, fontSize: 13, fontWeight: '800' },
-  track: { height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: colors.line },
+  hudText: { color: c.ink, fontWeight: '900' },
+  turn: { color: c.muted, fontSize: 13, fontWeight: '800' },
+  track: { height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
   trackFill: { height: '100%', borderRadius: radius.pill },
-  world: { ...sharedStyles.card, borderWidth: 2, gap: spacing.lg },
+  world: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 2, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg },
   worldTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   emoji: { fontSize: 30 },
-  place: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+  place: { color: c.muted, fontSize: 12, fontWeight: '700' },
   ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  asha: { width: 52, height: 52, borderRadius: 18, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
-  ashaText: { color: colors.white, fontSize: 24, fontWeight: '900' },
-  bubble: { flex: 1, backgroundColor: colors.background, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, gap: spacing.xs },
-  speaker: { position: 'absolute', zIndex: 1, right: spacing.sm, top: spacing.sm, width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.paper, alignItems: 'center', justifyContent: 'center' },
+  asha: { width: 52, height: 52, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
+  ashaText: { color: c.white, fontSize: 24, fontWeight: '900' },
+  bubble: { flex: 1, backgroundColor: c.background, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, gap: spacing.xs },
+  speaker: { position: 'absolute', zIndex: 1, right: spacing.sm, top: spacing.sm, width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paper, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.4 },
-  audioError: { color: colors.danger, fontSize: 13, lineHeight: 18 },
-  npc: { color: colors.ink, fontSize: 21, lineHeight: 29, fontWeight: '800', paddingRight: 48 },
-  translation: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  prompt: { color: colors.ink, fontSize: 18, lineHeight: 25, fontWeight: '800' },
+  audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  npc: { color: c.ink, fontSize: 21, lineHeight: 29, fontWeight: '800', paddingRight: 48 },
+  translation: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  prompt: { color: c.ink, fontSize: 18, lineHeight: 25, fontWeight: '800' },
   answerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  answerTitle: { color: colors.ink, fontSize: 26, fontWeight: '900', marginTop: spacing.xs },
+  answerTitle: { color: c.ink, fontSize: 26, fontWeight: '900', marginTop: spacing.xs },
   choices: { gap: spacing.sm },
-  choice: { minHeight: 82, backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  choiceCorrect: { borderColor: colors.success, backgroundColor: '#EBF6F1' },
-  choiceWrong: { borderColor: colors.danger, backgroundColor: '#FBEDEA' },
-  choiceNumber: { minWidth: 30, minHeight: 30, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xs },
-  choiceNumberText: { color: colors.muted, fontWeight: '800' },
+  choice: { minHeight: 82, backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  choiceCorrect: { borderColor: c.success, backgroundColor: c.successSoft },
+  choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
+  choiceNumber: { minWidth: 30, minHeight: 30, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xs },
+  choiceNumberText: { color: c.muted, fontWeight: '800' },
   choiceCopy: { flex: 1, gap: 3 },
-  choiceHindi: { color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
-  choiceMeaning: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  hint: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: '#FFF2D9', padding: spacing.lg, gap: spacing.xs },
-  hintTitle: { color: colors.ink, fontSize: 14, fontWeight: '900' },
-  hintBody: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.ink, padding: spacing.lg, gap: spacing.lg },
+  choiceHindi: { color: c.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  choiceMeaning: { color: c.muted, fontSize: 12, lineHeight: 17 },
+  hint: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, padding: spacing.lg, gap: spacing.xs },
+  hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900' },
+  hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, padding: spacing.lg, gap: spacing.lg },
   resultCopy: { gap: spacing.xs },
-  resultTitle: { color: colors.white, fontSize: 17, fontWeight: '900' },
-  resultHindi: { color: '#D5E5E1', fontSize: 18, lineHeight: 25, fontWeight: '700' },
-  nextButton: { alignSelf: 'flex-end', minHeight: 44, borderRadius: radius.pill, backgroundColor: colors.brand, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  nextText: { color: colors.white, fontWeight: '900' },
-  saveRow: { ...sharedStyles.card, flexDirection: 'row', alignItems: 'center' },
+  resultTitle: { color: c.white, fontSize: 17, fontWeight: '900' },
+  resultHindi: { color: c.heroSubtle, fontSize: 18, lineHeight: 25, fontWeight: '700' },
+  nextButton: { alignSelf: 'flex-end', minHeight: 44, borderRadius: radius.pill, backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  nextText: { color: c.white, fontWeight: '900' },
+  saveRow: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   saveCopy: { flex: 1, gap: spacing.xs },
-  saveTitle: { color: colors.ink, fontSize: 15, fontWeight: '900' },
-  saveMeaning: { color: colors.muted, fontSize: 13 },
-  saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
-  saveButtonActive: { backgroundColor: colors.brand },
+  saveTitle: { color: c.ink, fontSize: 15, fontWeight: '900' },
+  saveMeaning: { color: c.muted, fontSize: 13 },
+  saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center' },
+  saveButtonActive: { backgroundColor: c.brand },
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
-  finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
-  finishHindi: { color: colors.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },
-  finishTitle: { color: colors.ink, fontSize: 26, lineHeight: 32, fontWeight: '900', textAlign: 'center' },
+  finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
+  finishHindi: { color: c.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },
+  finishTitle: { color: c.ink, fontSize: 26, lineHeight: 32, fontWeight: '900', textAlign: 'center' },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: colors.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
-  finishValue: { color: colors.ink, fontSize: 20, fontWeight: '900' },
-  finishLabel: { color: colors.muted, fontSize: 11, textAlign: 'center' },
-  secondaryButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.paper, borderWidth: 1, borderColor: colors.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
-});
+  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
+  finishValue: { color: c.ink, fontSize: 20, fontWeight: '900' },
+  finishLabel: { color: c.muted, fontSize: 11, textAlign: 'center' },
+  secondaryButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { color: c.ink, fontSize: 16, fontWeight: '800' },
+}));

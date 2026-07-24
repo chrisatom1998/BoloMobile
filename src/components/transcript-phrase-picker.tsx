@@ -1,11 +1,11 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
-import { colors, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
   aiConsent: boolean;
@@ -18,6 +18,8 @@ type TranscriptPhrasePickerProps = {
 };
 
 export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const initialText = highlightedText?.trim() || romanizeDevanagari(message.text.trim());
   const [selectedText, setSelectedText] = useState(initialText);
   const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
@@ -151,24 +153,24 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background },
+const useStyles = makeStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.background },
   content: { gap: spacing.lg, padding: spacing.xl, paddingBottom: spacing.xxl },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   headerCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
-  eyebrow: { color: colors.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  title: { color: colors.ink, fontSize: 28, lineHeight: 34, fontWeight: '900' },
-  closeButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  instructions: { color: colors.muted, fontSize: 15, lineHeight: 22 },
+  eyebrow: { color: c.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  title: { color: c.ink, fontSize: 28, lineHeight: 34, fontWeight: '900' },
+  closeButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  instructions: { color: c.muted, fontSize: 15, lineHeight: 22 },
   fieldGroup: { gap: spacing.sm },
-  label: { color: colors.ink, fontSize: 13, fontWeight: '800' },
-  input: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: colors.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: colors.paperRaised, color: colors.ink, fontSize: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+  label: { color: c.ink, fontSize: 13, fontWeight: '800' },
+  input: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, fontSize: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
   sourceInput: { minHeight: 112, textAlignVertical: 'top' },
-  prepareButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  prepareButtonText: { color: colors.white, fontSize: 15, fontWeight: '900' },
-  hint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 18 },
-  saveButton: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  saveButtonText: { color: colors.white, fontSize: 16, fontWeight: '900' },
+  prepareButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  prepareButtonText: { color: c.white, fontSize: 15, fontWeight: '900' },
+  hint: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  saveButton: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  saveButtonText: { color: c.white, fontSize: 16, fontWeight: '900' },
   disabled: { opacity: 0.45 },
-});
+}));

@@ -2,9 +2,10 @@ import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
 import { Activity, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { SegmentedControl } from '@/components/segmented-control';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
@@ -12,7 +13,7 @@ import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeRemi
 import { defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
-import { colors, radius, sharedStyles, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
   const normalizedHour = Math.min(23, Math.max(0, Math.round(hour)));
@@ -23,6 +24,9 @@ export function formatReminderTime(hour: number, minute = 0) {
 export default function SettingsScreen() {
   const router = useRouter();
   const state = useAppState();
+  const { colors } = useTheme();
+  const sharedStyles = useSharedStyles();
+  const styles = useStyles();
   const { aiConsent, clearAllData, clientId, setAiConsent } = state;
   const learnerProfile = state.learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const reminder = state.reminder ?? defaultReminderSettings();
@@ -137,35 +141,48 @@ export default function SettingsScreen() {
           <View style={styles.copy}><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Hindi display</Text>
-        <View accessibilityLabel="Hindi display preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
-          {(['both', 'devanagari', 'latin'] as const).map((value) => (
-            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: learnerProfile.scriptPreference === value }} onPress={() => updateLearnerProfile({ scriptPreference: value })} style={[styles.choiceButton, learnerProfile.scriptPreference === value && styles.choiceButtonActive]}>
-              <Text style={[styles.choiceButtonText, learnerProfile.scriptPreference === value && styles.choiceButtonTextActive]}>{value === 'both' ? 'Both' : value === 'devanagari' ? 'हिन्दी' : 'Latin'}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedControl
+          accessibilityLabel="Hindi display preference"
+          onValueChange={(scriptPreference) => updateLearnerProfile({ scriptPreference })}
+          options={[
+            { label: 'Both', value: 'both' },
+            { label: 'हिन्दी', value: 'devanagari' },
+            { label: 'Latin', value: 'latin' },
+          ]}
+          value={learnerProfile.scriptPreference}
+        />
         <Text style={styles.choiceLabel}>Asha replies</Text>
-        <View accessibilityLabel="Asha reply language preference" accessibilityRole="radiogroup" style={styles.choiceRow}>
-          {(['en', 'hi'] as const).map((value) => (
-            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: learnerProfile.responseLanguage === value }} onPress={() => updateLearnerProfile({ responseLanguage: value })} style={[styles.choiceButton, learnerProfile.responseLanguage === value && styles.choiceButtonActive]}>
-              <Text style={[styles.choiceButtonText, learnerProfile.responseLanguage === value && styles.choiceButtonTextActive]}>{value === 'en' ? 'English' : 'Hindi'}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <SegmentedControl
+          accessibilityLabel="Asha reply language preference"
+          onValueChange={(responseLanguage) => updateLearnerProfile({ responseLanguage })}
+          options={[
+            { label: 'English', value: 'en' },
+            { label: 'Hindi', value: 'hi' },
+          ]}
+          value={learnerProfile.responseLanguage}
+        />
         <Pressable accessibilityRole="button" onPress={() => router.push('/onboarding' as Href)} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
       </View>
 
       <View style={styles.card}>
         <View style={styles.row}>
-          <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
+        <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
           <View style={styles.copy}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
         </View>
-        <View style={styles.choiceRow}>
-          {[9, 19, 20].map((hour) => (
-            <Pressable key={hour} accessibilityRole="button" accessibilityState={{ disabled: savingReminder, selected: reminder.enabled && reminder.hour === hour }} disabled={savingReminder} onPress={() => void changeReminder(hour)} style={[styles.choiceButton, reminder.enabled && reminder.hour === hour && styles.choiceButtonActive]}><Text style={[styles.choiceButtonText, reminder.enabled && reminder.hour === hour && styles.choiceButtonTextActive]}>{formatReminderTime(hour)}</Text></Pressable>
-          ))}
-        </View>
-        {reminder.enabled ? <Pressable accessibilityRole="button" accessibilityState={{ disabled: savingReminder }} disabled={savingReminder} onPress={() => void changeReminder()} style={styles.secondaryButton}><Text style={styles.secondaryText}>Turn reminder off</Text></Pressable> : null}
+        <SegmentedControl
+          accessibilityLabel="Practice reminder time"
+          compact
+          disabled={savingReminder}
+          disabledHint="Bolo is updating your reminder."
+          onValueChange={(next) => void changeReminder(next === 'off' ? undefined : Number(next))}
+          options={[
+            { label: 'Off', value: 'off' },
+            { label: formatReminderTime(9), value: '9' },
+            { label: formatReminderTime(19), value: '19' },
+            { label: formatReminderTime(20), value: '20' },
+          ]}
+          value={reminder.enabled ? String(reminder.hour) as '9' | '19' | '20' : 'off'}
+        />
       </View>
 
       {aiConsent ? (
@@ -230,27 +247,22 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
-  card: { ...sharedStyles.card, gap: spacing.lg },
-  linkCard: { ...sharedStyles.card, flexDirection: 'row', alignItems: 'center' },
+  card: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg },
+  linkCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, gap: 3 },
-  title: { color: colors.ink, fontSize: 16, fontWeight: '900' },
-  body: { color: colors.muted, fontSize: 13 },
-  detail: { color: colors.muted, fontSize: 14, lineHeight: 21 },
-  destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: '#E4B5AE', backgroundColor: '#FBEDEA', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  destructiveText: { color: colors.danger, fontSize: 15, fontWeight: '800' },
+  title: { color: c.ink, fontSize: 16, fontWeight: '900' },
+  body: { color: c.muted, fontSize: 13 },
+  detail: { color: c.muted, fontSize: 14, lineHeight: 21 },
+  destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  destructiveText: { color: c.danger, fontSize: 15, fontWeight: '800' },
   disabled: { opacity: 0.5 },
-  choiceLabel: { color: colors.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  choiceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  choiceButton: { minWidth: 78, minHeight: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  choiceButtonActive: { borderColor: colors.ink, backgroundColor: colors.ink },
-  choiceButtonText: { color: colors.muted, fontSize: 13, fontWeight: '800' },
-  choiceButtonTextActive: { color: colors.white },
-  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  secondaryText: { color: colors.forest, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  choiceLabel: { color: c.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
+  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  secondaryText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
   about: { padding: spacing.lg, gap: spacing.sm },
-  aboutText: { color: colors.muted, fontSize: 13, lineHeight: 19 },
-});
+  aboutText: { color: c.muted, fontSize: 13, lineHeight: 19 },
+}));

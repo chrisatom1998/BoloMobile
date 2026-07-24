@@ -19,8 +19,15 @@ tags:
     element:
       text: "I agree and want to continue"
     direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
 - tapOn: "I agree and want to continue"
-- tapOn: "How do I say thank you?"
+- tapOn:
+    id: "message-asha-input"
+- inputText: "How do I say thank you?"
+- tapOn:
+    id: "send-asha-message"
 - extendedWaitUntil:
     visible: ".*[Dd]hanyavaad.*"
     timeout: 60000

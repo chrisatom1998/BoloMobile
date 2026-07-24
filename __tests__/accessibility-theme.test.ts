@@ -1,4 +1,6 @@
-import { colors } from '../src/theme';
+import { renderHook } from '@testing-library/react-native';
+
+import { colors, lightColors, useTheme } from '../src/theme';
 
 function relativeLuminance(hex: string) {
   const channels = hex.match(/[a-f\d]{2}/giu)?.map((channel) => Number.parseInt(channel, 16) / 255) ?? [];
@@ -15,6 +17,14 @@ function contrastRatio(foreground: string, background: string) {
 }
 
 describe('accessible theme contrast', () => {
+  it('locks the runtime palette to light mode', async () => {
+    const { result } = await renderHook(() => useTheme());
+
+    expect(result.current.colors).toBe(lightColors);
+    expect(result.current.isDark).toBe(false);
+    expect(result.current.scheme).toBe('light');
+  });
+
   it.each([
     ['white text on the brand color', colors.white, colors.brand],
     ['white text on the forest color', colors.white, colors.forest],

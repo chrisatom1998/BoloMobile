@@ -1,5 +1,7 @@
 import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
+import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ArrowLeft, BookmarkPlus, Flag, MessageCircle, Send, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
@@ -7,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
+import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
@@ -28,6 +31,7 @@ const welcome: ChatMessage = {
 };
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
+const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 
 function messageActionExcerpt(text: string) {
   const normalized = text.replace(/\s+/gu, ' ').trim();
@@ -136,6 +140,7 @@ export default function LiveScreen() {
   const reportedIdsRef = useRef<Set<string>>(new Set());
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
+  const transcriptTurnActionRef = useRef<(() => void) | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
   const visibleMessages = useMemo(
@@ -144,6 +149,28 @@ export default function LiveScreen() {
   );
   const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
   const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
+  const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
+  const transcriptTurnDisabled = !aiConsent || busy || realtimeStatus === 'connecting' || realtimeStatus === 'responding';
+  const transcriptTurnLabel = {
+    disconnected: 'Connect with Asha',
+    connecting: 'Connecting to Asha…',
+    ready: 'Start next Asha turn',
+    recording: 'Send this turn',
+    responding: 'Asha is responding…',
+  }[realtimeStatus];
+  const transcriptTurnHint = !aiConsent
+    ? 'Review consent to enable connected voice coaching.'
+    : busy
+      ? 'Wait while Asha finishes the current reply.'
+      : realtimeStatus === 'connecting'
+        ? 'The live voice session is connecting.'
+        : realtimeStatus === 'responding'
+          ? 'Wait while Asha finishes speaking.'
+          : realtimeStatus === 'recording'
+            ? 'Sends the turn currently being recorded.'
+            : realtimeStatus === 'ready'
+              ? 'Starts your next voice turn with Asha.'
+              : 'Connects to Asha for your next voice turn.';
   const languageControlLocked = busy || realtimeOwnsAudio;
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const voiceHeroTitle = {
@@ -168,15 +195,30 @@ export default function LiveScreen() {
         ? liveAshaTranscript || liveUserTranscript || `Asha is preparing your ${responseLanguageName} reply…`
         : liveCaption || (realtimeStatus === 'ready' ? 'Captions appear after your first turn.' : '');
   const visibleLiveCaptionText = romanizeDevanagari(liveCaptionText);
-  const liveCaptionLabel = realtimeStatus === 'recording'
+  const hasLiveCaption = realtimeOwnsAudio || liveCaptionText !== '';
+  const liveCaptionLabel = !hasLiveCaption
+    ? 'LIVE'
+    : realtimeStatus === 'recording'
     ? 'Your transcript'
     : realtimeStatus === 'responding' && !liveAshaTranscript && liveUserTranscript
       ? 'You said'
       : 'Live Asha caption';
+  const captionText = hasLiveCaption
+    ? visibleLiveCaptionText
+    : 'Tap the orb, then speak naturally.';
 
   const scrollToChat = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: true });
   }, []);
+
+  const bindTranscriptTurnAction = useCallback((action: (() => void) | null) => {
+    transcriptTurnActionRef.current = action;
+  }, []);
+
+  const startTranscriptTurn = useCallback(() => {
+    if (transcriptTurnDisabled) return;
+    transcriptTurnActionRef.current?.();
+  }, [transcriptTurnDisabled]);
 
   const clearPendingUserMessage = useCallback((expectedId: string) => {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
@@ -390,7 +432,7 @@ export default function LiveScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <FlatList
         ref={listRef}
         contentInsetAdjustmentBehavior="never"
@@ -405,52 +447,64 @@ export default function LiveScreen() {
           <View>
             <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, { paddingTop: insets.top + spacing.sm }]} testID="voice-conversation-hero">
               <View style={[styles.topbar, { width: heroContentWidth }]}>
-                <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={router.back} style={styles.headerButton}>
-                  <ArrowLeft color={colors.white} size={25} />
-                </Pressable>
-                <View style={styles.headerCopy}>
-                  <Text style={styles.headerTitle}>Asha</Text>
-                  <Text numberOfLines={1} style={styles.headerSubtitle}>Conversational Hindi coach · {responseLanguageName} replies</Text>
+                <View style={styles.headerIdentity}>
+                  <Image
+                    accessible={false}
+                    cachePolicy="memory-disk"
+                    contentFit="cover"
+                    source={ashaPortrait}
+                    style={styles.ashaPortrait}
+                    testID="asha-header-portrait"
+                    transition={0}
+                  />
+                  <View style={styles.headerCopy}>
+                    <Text numberOfLines={1} style={styles.headerEyebrow}>Your Hindi coach</Text>
+                    <Text style={styles.headerTitle}>Asha</Text>
+                    <Text numberOfLines={1} style={styles.headerSubtitle}>Conversational Hindi coach · {responseLanguageName} replies</Text>
+                  </View>
                 </View>
-                <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                  <MessageCircle color={colors.ink} size={22} />
-                </Pressable>
+                <View style={styles.headerActions}>
+                  <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
+                    <View style={styles.privateDot} />
+                    <Text style={styles.privateText}>Private</Text>
+                  </View>
+                  <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={router.back} style={styles.headerButton}>
+                    <ArrowLeft color={colors.ink} size={19} />
+                  </Pressable>
+                  <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                    <MessageCircle color={colors.ink} size={19} />
+                  </Pressable>
+                </View>
               </View>
 
               <>
-                  <View accessibilityLabel="Asha response language" accessibilityRole="radiogroup" style={[styles.languageSelector, { width: heroContentWidth }]}>
-                    <Text style={styles.languageSelectorLabel}>Asha speaks</Text>
-                    <View style={styles.languageOptions}>
-                      {([['en', 'English', 'English'], ['hi', 'हिन्दी', 'Hindi']] as const).map(([value, label, accessibleName]) => {
-                        const selected = responseLanguage === value;
-                        return (
-                          <Pressable
-                            key={value}
-                            accessibilityHint={languageControlLocked ? 'End the current request or live voice session to change Asha voice language.' : undefined}
-                            accessibilityLabel={`Asha voice language: ${accessibleName}`}
-                            accessibilityRole="radio"
-                            accessibilityState={{ checked: selected, disabled: languageControlLocked }}
-                            disabled={languageControlLocked}
-                            onPress={() => changeResponseLanguage(value)}
-                            style={[styles.languageButton, selected && styles.languageButtonSelected, languageControlLocked && styles.disabled]}
-                          >
-                            <Text style={[styles.languageButtonText, selected && styles.languageButtonTextSelected]}>{label}</Text>
-                          </Pressable>
-                        );
-                      })}
+                  <SegmentedControl
+                    accessibilityLabel="Asha voice language"
+                    disabled={languageControlLocked}
+                    disabledHint="End the current request or live voice session to change Asha voice language."
+                    onValueChange={changeResponseLanguage}
+                    options={[
+                      { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
+                      { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
+                    ]}
+                    style={[styles.languageSelector, { width: heroContentWidth }]}
+                    value={responseLanguage}
+                  />
+                  <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}> 
+                    <View style={styles.liveVoiceBadge}>
+                      <View style={styles.liveVoiceDot} />
+                      <Text style={styles.liveVoiceText}>Live voice</Text>
+                    </View>
+                    <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} size="minimal" />
+                    <View style={styles.heroCopy}>
+                      <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
+                      {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
                     </View>
                   </View>
-                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} />
-                  <View style={[styles.heroCopy, { width: heroContentWidth }]}>
-                    <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
-                    {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
-                  </View>
-                  {realtimeOwnsAudio || liveCaptionText !== '' ? (
-                    <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
-                      <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
-                      <Text accessibilityLiveRegion="polite" style={styles.captionText}>{visibleLiveCaptionText}</Text>
-                    </CaptionReveal>
-                  ) : null}
+                  <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
+                    <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
+                    <Text accessibilityLiveRegion="polite" style={styles.captionText}>{captionText}</Text>
+                  </CaptionReveal>
                   {!aiConsent ? <Text style={[styles.heroConsentHint, { width: Math.min(330, heroContentWidth) }]}>Review the consent card below to enable connected coaching.</Text> : null}
               </>
             </View>
@@ -476,7 +530,6 @@ export default function LiveScreen() {
                     </Pressable>
                   ) : null}
                 </View>
-                <Text style={styles.askBody}>Your recent practice stays here on this device.</Text>
                 <AiConsentGate><View /></AiConsentGate>
             </View>
           </View>
@@ -491,7 +544,12 @@ export default function LiveScreen() {
           return (
             <View style={[styles.messageRow, item.role === 'you' && styles.messageRowYou]}>
               <View style={[styles.message, item.role === 'you' ? styles.userMessage : styles.ashaMessage]}>
-                <Text style={[styles.messageLabel, item.role === 'you' && styles.userText]}>{item.role === 'you' ? 'You' : 'Asha'}</Text>
+                <View style={styles.messageIdentity}>
+                  <View style={[styles.messageAvatar, item.role === 'you' && styles.messageAvatarYou]}>
+                    <Text style={[styles.messageAvatarText, item.role === 'you' && styles.messageAvatarTextYou]}>{item.role === 'you' ? 'Y' : 'आ'}</Text>
+                  </View>
+                  <Text style={[styles.messageLabel, item.role === 'you' && styles.userText]}>{item.role === 'you' ? 'You' : 'Asha'}</Text>
+                </View>
                 <SelectableChatText
                   accessibilityLabel={`Selectable chat text: ${messageActionExcerpt(displayText)}`}
                   accessibilityLiveRegion={item.role === 'asha' && item.id !== welcome.id ? 'polite' : 'none'}
@@ -515,6 +573,24 @@ export default function LiveScreen() {
             </View>
           );
         }}
+        ListFooterComponent={hasTranscriptMessages ? (
+          <View style={styles.transcriptFooter}>
+            <View style={styles.transcriptTurnCard}>
+              <Text style={styles.transcriptTurnEyebrow}>Next voice turn</Text>
+              <PressableFeedback
+                accessibilityHint={transcriptTurnHint}
+                accessibilityLabel={transcriptTurnLabel}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: transcriptTurnDisabled }}
+                isDisabled={transcriptTurnDisabled}
+                onPress={startTranscriptTurn}
+                style={[styles.transcriptTurnButton, transcriptTurnDisabled && styles.disabled]}
+              >
+                <Text style={styles.transcriptTurnButtonText}>{transcriptTurnLabel}</Text>
+              </PressableFeedback>
+            </View>
+          </View>
+        ) : null}
       />
 
       <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.xs) }]}>
@@ -523,22 +599,34 @@ export default function LiveScreen() {
         {aiConsent ? (
           <>
             <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
-              {['Correct my Hindi', 'How do I say thank you?', 'Practice a short dialogue'].map((example) => <Pressable key={example} accessibilityRole="button" accessibilityState={{ disabled: busy || realtimeLocked }} disabled={busy || realtimeLocked} onPress={() => void sendText(example)} style={[styles.example, (busy || realtimeLocked) && styles.disabled]}><Text style={styles.exampleText}>{example}</Text></Pressable>)}
+              {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
+                <PressableFeedback
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: busy || realtimeLocked }}
+                  isDisabled={busy || realtimeLocked}
+                  key={example}
+                  onPress={() => void sendText(example)}
+                  style={[styles.example, (busy || realtimeLocked) && styles.disabled]}
+                >
+                  <Text style={styles.exampleText}>{example}</Text>
+                </PressableFeedback>
+              ))}
             </ScrollView>
             <View style={styles.inputRow}>
               <TextInput
                 accessibilityLabel="Message Asha"
+                testID="message-asha-input"
                 editable={!busy && !realtimeLocked}
                 maxLength={500}
                 multiline
                 onChangeText={setInput}
                 onSubmitEditing={() => void sendText()}
-                placeholder="Type a message…"
+                placeholder="Ask in English or Hindi…"
                 placeholderTextColor={colors.muted}
                 style={styles.input}
                 value={input}
               />
-              <Pressable accessibilityLabel="Send message" accessibilityRole="button" accessibilityState={{ disabled: busy || realtimeLocked || !input.trim() }} disabled={busy || realtimeLocked || !input.trim()} onPress={() => void sendText()} style={[styles.sendButton, (busy || realtimeLocked || !input.trim()) && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
+              <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: busy || realtimeLocked || !input.trim() }} disabled={busy || realtimeLocked || !input.trim()} onPress={() => void sendText()} style={[styles.sendButton, (busy || realtimeLocked || !input.trim()) && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
             </View>
           </>
         ) : <Text style={styles.consentHint}>Review the consent card above to enable connected coaching.</Text>}
@@ -549,66 +637,82 @@ export default function LiveScreen() {
 }
 
 export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
-  screen: { flex: 1, backgroundColor: c.heroBase },
+  screen: { flex: 1, backgroundColor: c.background },
   list: { flex: 1, backgroundColor: c.background },
   listContent: { backgroundColor: c.background, paddingBottom: spacing.lg },
   voiceHero: {
+    minHeight: 492,
     alignItems: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl + spacing.xl,
-    backgroundColor: c.heroBase,
+    paddingBottom: spacing.lg,
+    backgroundColor: c.background,
     overflow: 'hidden',
   },
-  voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.xxl + spacing.lg },
-  topbar: { position: 'relative', minHeight: 58, alignSelf: 'center', alignItems: 'stretch', justifyContent: 'center' },
-  headerButton: { position: 'absolute', left: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  headerCopy: { minWidth: 0, alignSelf: 'stretch', justifyContent: 'center', gap: 2, overflow: 'hidden', marginHorizontal: 64 },
-  headerTitle: { color: c.white, fontSize: 20, fontWeight: '900' },
-  headerSubtitle: { minWidth: 0, flexShrink: 1, color: c.heroMuted, fontSize: 12, lineHeight: 16 },
-  chatButton: { position: 'absolute', right: 0, top: 3, width: 52, height: 52, borderRadius: 17, borderCurve: 'continuous', backgroundColor: c.paper, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  languageSelector: { minHeight: 50, alignSelf: 'center', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  languageSelectorLabel: { color: c.heroMuted, fontSize: 12, fontWeight: '800', letterSpacing: 0.7, textTransform: 'uppercase' },
-  languageOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.heroRaised, padding: 4 },
-  languageButton: { minWidth: 86, minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  languageButtonSelected: { backgroundColor: c.paper },
-  languageButtonText: { color: c.heroMuted, fontSize: 14, fontWeight: '800' },
-  languageButtonTextSelected: { color: c.ink },
-  heroCopy: { minWidth: 0, alignSelf: 'center', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs },
-  heroTitle: { minWidth: 0, flexShrink: 1, color: c.white, fontSize: 24, lineHeight: 30, fontWeight: '900', textAlign: 'center' },
-  heroBody: { minWidth: 0, maxWidth: 350, flexShrink: 1, color: c.heroMuted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  captionBlock: { alignSelf: 'center', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  captionLabel: { color: c.heroMuted, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, textTransform: 'uppercase' },
-  captionText: { color: c.white, fontSize: 20, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
-  heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: c.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  askSection: { minHeight: 176, alignSelf: 'stretch', gap: spacing.md, marginTop: -(spacing.xxl + spacing.lg), position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.background, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg },
+  voiceHeroCompact: { gap: spacing.xs, minHeight: 430, paddingBottom: spacing.md },
+  topbar: { minHeight: 72, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', paddingRight: 158, position: 'relative' },
+  headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  ashaPortrait: { width: 36, height: 36, flexShrink: 0, borderRadius: 13, borderCurve: 'continuous', backgroundColor: c.brandSoft, borderColor: c.brand, borderWidth: StyleSheet.hairlineWidth },
+  headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2, overflow: 'hidden' },
+  headerEyebrow: { alignSelf: 'stretch', color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.75, textTransform: 'uppercase', textAlign: 'left' },
+  headerTitle: { alignSelf: 'stretch', color: c.ink, fontSize: 29, lineHeight: 34, fontWeight: '900', textAlign: 'left' },
+  headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.muted, fontSize: 11, lineHeight: 15, textAlign: 'left' },
+  headerActions: { position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  privateBadge: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10 },
+  privateDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
+  privateText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
+  headerButton: { width: 36, height: 36, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
+  chatButton: { width: 36, height: 36, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
+  languageSelector: { alignSelf: 'center' },
+  voiceStage: { alignSelf: 'center', minHeight: 318, borderRadius: 28, borderCurve: 'continuous', backgroundColor: c.heroBase, alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, padding: spacing.lg, overflow: 'hidden' },
+  voiceStageCompact: { minHeight: 270, paddingVertical: spacing.md },
+  liveVoiceBadge: { minHeight: 27, borderRadius: radius.pill, backgroundColor: c.heroRaised, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm },
+  liveVoiceDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: '#45D1B3' },
+  liveVoiceText: { color: '#73E1CA', fontSize: 10, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
+  heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: 3 },
+  heroTitle: { minWidth: 0, flexShrink: 1, color: c.white, fontSize: 22, lineHeight: 28, fontWeight: '900', textAlign: 'center' },
+  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  captionBlock: { minHeight: 94, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 20, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  captionLabel: { color: c.forestText, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center' },
+  captionText: { minWidth: 0, alignSelf: 'stretch', color: c.ink, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: 'center' },
+  heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  askSection: { minHeight: 116, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.lineStrong },
-  askHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  askHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.sm },
+  askHeadingRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', position: 'relative', gap: spacing.md },
+  askHeadingCopy: { minWidth: 0, alignItems: 'center', gap: 3 },
   askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { color: c.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  askTitle: { color: c.ink, fontSize: 31, lineHeight: 37, fontWeight: '500' },
-  askBody: { maxWidth: 520, color: c.muted, fontSize: 14, lineHeight: 21 },
-  clearChatButton: { width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  messageRow: { alignItems: 'flex-start', backgroundColor: c.background, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  askEyebrow: { color: c.brandDark, fontSize: 11, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
+  askTitle: { color: c.ink, fontSize: 19, lineHeight: 24, fontWeight: '900', textAlign: 'center' },
+  clearChatButton: { position: 'absolute', right: 0, width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
+  messageRow: { alignItems: 'flex-start', backgroundColor: c.paper, paddingHorizontal: 20, marginBottom: spacing.sm },
   messageRowYou: { alignItems: 'flex-end' },
   message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.xs, shadowColor: c.black, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.04 * c.shadowOpacityScale, shadowRadius: 10, elevation: 1 * c.shadowOpacityScale },
   ashaMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
   userMessage: { backgroundColor: c.night },
+  messageIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  messageAvatar: { width: 23, height: 23, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
+  messageAvatarYou: { backgroundColor: 'rgba(255,255,255,0.16)' },
+  messageAvatarText: { color: c.brandText, fontSize: 12, lineHeight: 15, fontWeight: '900' },
+  messageAvatarTextYou: { color: c.white, fontSize: 10 },
   messageLabel: { color: c.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   messageText: { alignSelf: 'stretch', color: c.ink, fontSize: 16, lineHeight: 23, margin: 0, padding: 0 },
   userText: { color: c.white },
   messageActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
-  composer: { backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: StyleSheet.hairlineWidth, padding: spacing.md, gap: spacing.sm, shadowColor: c.black, shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.08 * c.shadowOpacityScale, shadowRadius: 18, elevation: 8 * c.shadowOpacityScale },
-  examples: { gap: spacing.sm, paddingRight: spacing.md },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
-  exampleText: { color: c.ink, fontSize: 13, fontWeight: '800', textAlign: 'center' },
+  transcriptFooter: { backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },
+  transcriptTurnCard: { borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.backgroundWarm, gap: spacing.sm, padding: spacing.md },
+  transcriptTurnEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.75, textTransform: 'uppercase' },
+  transcriptTurnButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  transcriptTurnButtonText: { color: c.white, fontSize: 14, fontWeight: '900', textAlign: 'center' },
+  composer: { backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
+  examples: { justifyContent: 'center', gap: spacing.sm, paddingRight: spacing.md },
+  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 11 },
+  exampleText: { color: c.ink, fontSize: 12, fontWeight: '800', textAlign: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 16 },
-  sendButton: { width: 52, height: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15 },
+  sendButton: { width: 48, height: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
   requestStatus: { color: c.forest, fontSize: 13, fontWeight: '800', textAlign: 'center' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },

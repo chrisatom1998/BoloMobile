@@ -18,7 +18,7 @@ jest.mock('@/state/app-state', () => ({
   }),
 }));
 
-import PhrasesScreen from '../src/app/phrases';
+import PhrasesScreen from '../src/app/(tabs)/phrases';
 
 describe('saved phrase accessibility', () => {
   it('exposes 44 point buttons and the disabled playback state', async () => {
@@ -28,8 +28,11 @@ describe('saved phrase accessibility', () => {
 
     expect(listen.props.accessibilityRole).toBe('button');
     expect(listen.props.accessibilityState).toEqual({ disabled: true });
-    expect(StyleSheet.flatten(listen.props.style)).toMatchObject({ height: 44, width: 44 });
+    expect(StyleSheet.flatten(listen.props.style).minHeight).toBeGreaterThanOrEqual(44);
     expect(remove.props.accessibilityRole).toBe('button');
     expect(StyleSheet.flatten(remove.props.style)).toMatchObject({ height: 44, width: 44 });
+
+    const list = view.getByTestId('saved-phrase-list');
+    expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
   });
 });

@@ -54,7 +54,7 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
 }));
 
-import HomeScreen from '../src/app/index';
+import HomeScreen from '../src/app/(tabs)/index';
 import { scenes } from '../src/data/scenes';
 
 describe('HomeScreen primary journey', () => {

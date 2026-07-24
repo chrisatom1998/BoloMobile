@@ -81,6 +81,7 @@ describe('privacy and scene-card rendered UI', () => {
       name: `${scene.title}. ${scene.subtitle}. ${scene.level}.`,
     });
     expect(StyleSheet.flatten(card.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(card.props.style)).toMatchObject({ alignSelf: 'center', width: '100%' });
     expect(view.getByLabelText(`Practice words: ${scene.words.join(', ')}`)).toBeTruthy();
 
     await fireEvent.press(card);

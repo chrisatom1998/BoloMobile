@@ -1,26 +1,36 @@
+import '../../global.css';
+
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { HeroUINativeProvider } from 'heroui-native/provider';
 import { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
 import { observe } from '@/lib/observability';
 import { AppStateProvider, useAppState } from '@/state/app-state';
-import { colors, spacing } from '@/theme';
+import { makeStyles, spacing, useTheme } from '@/theme';
 
 export default function RootLayout() {
   return (
-    <AppErrorBoundary>
-      <AppStateProvider>
-        <AppNavigator />
-      </AppStateProvider>
-    </AppErrorBoundary>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <HeroUINativeProvider>
+        <AppErrorBoundary>
+          <AppStateProvider>
+            <AppNavigator />
+          </AppStateProvider>
+        </AppErrorBoundary>
+      </HeroUINativeProvider>
+    </GestureHandlerRootView>
   );
 }
 
 function AppNavigator() {
   const { hydrated } = useAppState();
+  const { colors } = useTheme();
+  const styles = useStyles();
   usePracticeReminderRouting(hydrated);
 
   useEffect(() => {
@@ -29,7 +39,7 @@ function AppNavigator() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar animated style="dark" />
       {hydrated ? (
         <Stack
           screenOptions={{
@@ -40,12 +50,9 @@ function AppNavigator() {
             contentStyle: { backgroundColor: colors.background },
           }}
         >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
-          <Stack.Screen name="live" options={{ headerShown: false }} />
-          <Stack.Screen name="phrases" options={{ title: 'My phrases', headerLargeTitle: true }} />
           <Stack.Screen name="review" options={{ title: 'Quick review' }} />
-          <Stack.Screen name="progress" options={{ title: 'My progress', headerLargeTitle: true }} />
           <Stack.Screen name="settings" options={{ title: 'Settings', headerLargeTitle: true }} />
           <Stack.Screen name="diagnostics" options={{ title: 'Private diagnostics' }} />
           <Stack.Screen name="privacy" options={{ title: 'Privacy & data use' }} />
@@ -61,17 +68,17 @@ function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   loading: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.lg,
-    backgroundColor: colors.background,
+    backgroundColor: c.background,
   },
   loadingMark: {
-    color: colors.brand,
+    color: c.brand,
     fontSize: 48,
     fontWeight: '900',
   },
-});
+}));

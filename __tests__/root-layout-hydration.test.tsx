@@ -37,16 +37,14 @@ describe('RootLayout hydration gate', () => {
     expect(screen.getByTestId('app-hydration-loading')).toBeTruthy();
     expect(screen.getByText('ब')).toBeTruthy();
     expect(screen.queryByTestId('app-stack')).toBeNull();
-    expect(screen.queryByTestId('stack-screen-live')).toBeNull();
+    expect(screen.queryByTestId('stack-screen-(tabs)')).toBeNull();
 
     mockHydrated = true;
     await screen.rerender(<RootLayout />);
 
     expect(screen.queryByTestId('app-hydration-loading')).toBeNull();
     expect(screen.getByTestId('app-stack')).toBeTruthy();
-    expect(screen.getByTestId('stack-screen-index')).toBeTruthy();
-    expect(screen.getByTestId('stack-screen-live')).toBeTruthy();
-    expect(screen.getByTestId('stack-screen-phrases')).toBeTruthy();
+    expect(screen.getByTestId('stack-screen-(tabs)')).toBeTruthy();
     expect(screen.getByTestId('stack-screen-settings')).toBeTruthy();
     expect(screen.getByTestId('stack-screen-privacy')).toBeTruthy();
     expect(screen.getByTestId('stack-screen-scene/[id]')).toBeTruthy();

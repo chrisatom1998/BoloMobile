@@ -2,7 +2,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import * as mockReact from 'react';
 import { Alert, Animated, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText } from 'react-native';
 
-import LiveScreen, { createLiveStyles } from '../src/app/live';
+import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 import { darkColors } from '../src/theme';
 
@@ -14,6 +14,10 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+
+jest.mock('expo-image', () => ({
+  Image: ({ testID }: { testID?: string }) => mockReact.createElement(MockText, { testID }, 'Asha portrait'),
+}));
 
 jest.mock('lucide-react-native', () => ({
   ArrowDown: () => null,
@@ -41,6 +45,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onInputTranscriptComplete,
       onStatusChange,
       onTranscriptChange,
+      onTurnActionReady,
       onTurnComplete,
       responseLanguage,
     }: {
@@ -48,9 +53,15 @@ jest.mock('@/components/realtime-voice-button', () => {
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
+      onTurnActionReady?: (action: (() => void) | null) => void;
       onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
       responseLanguage: 'en' | 'hi';
-    }) => mockReact.createElement(
+    }) => {
+      mockReact.useEffect(() => {
+        onTurnActionReady?.(() => onStatusChange?.('recording'));
+        return () => onTurnActionReady?.(null);
+      }, [onStatusChange, onTurnActionReady]);
+      return mockReact.createElement(
       mockReact.Fragment,
       null,
       mockReact.createElement(MockText, { testID: 'mock-realtime-language' }, responseLanguage),
@@ -144,7 +155,8 @@ jest.mock('@/components/realtime-voice-button', () => {
         },
         mockReact.createElement(MockText, null, 'Mock disconnected'),
       ),
-    ),
+      );
+    },
   };
 });
 
@@ -306,7 +318,7 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
     const hero = view.getByTestId('voice-conversation-hero');
 
-    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#0D1513');
+    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#F6F3ED');
     expect(view.getByText('Conversational Hindi coach · English replies')).toBeTruthy();
     expect(view.getByText('Tap to connect')).toBeTruthy();
     expect(view.getByText('Tap to connect').props.accessibilityLiveRegion).toBe('polite');
@@ -371,6 +383,28 @@ describe('immersive live conversation design', () => {
     await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
     expect(view.getByText('Live Asha caption')).toBeTruthy();
     expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
+
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('keeps the compact Asha portrait and exposes one transcript-footer action that reuses the active voice turn', async () => {
+    const view = await render(<LiveScreen />);
+
+    expect(view.getByTestId('asha-header-portrait')).toBeTruthy();
+    expect(view.queryByText('Continue with Asha')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+
+    const nextTurn = view.getByLabelText('Start next Asha turn');
+    expect(nextTurn.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(nextTurn);
+    expect(view.getByText('Asha is listening')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    const waiting = view.getByLabelText('Asha is responding…');
+    expect(waiting.props.accessibilityState.disabled).toBe(true);
 
     await view.unmount();
     await flushMicrotasks();
@@ -754,16 +788,16 @@ describe('live coaching state', () => {
   it('selects English or Hindi for typed and realtime Asha responses and locks the choice during a live session', async () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Dhanyavaad.', language: 'hi' });
     const view = await render(<LiveScreen />);
-    const english = view.getByRole('radio', { name: 'Asha voice language: English' });
-    const hindi = view.getByRole('radio', { name: 'Asha voice language: Hindi' });
+    const english = view.getByRole('tab', { name: 'Asha voice language: English' });
+    const hindi = view.getByRole('tab', { name: 'Asha voice language: Hindi' });
 
-    expect(english.props.accessibilityState).toEqual({ checked: true, disabled: false });
-    expect(hindi.props.accessibilityState).toEqual({ checked: false, disabled: false });
+    expect(english.props.accessibilityState).toEqual({ selected: true, disabled: false });
+    expect(hindi.props.accessibilityState).toEqual({ selected: false, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('en');
 
     await fireEvent.press(hindi);
-    expect(view.getByRole('radio', { name: 'Asha voice language: Hindi' }).props.accessibilityState)
-      .toEqual({ checked: true, disabled: false });
+    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState)
+      .toEqual({ selected: true, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
     expect(view.getByText('Conversational Hindi coach · Hindi replies')).toBeTruthy();
 
@@ -780,9 +814,9 @@ describe('live coaching state', () => {
     ]);
 
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByRole('radio', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(true);
-    expect(view.getByRole('radio', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
-    await fireEvent.press(view.getByRole('radio', { name: 'Asha voice language: English' }));
+    expect(view.getByRole('tab', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(view.getByRole('tab', { name: 'Asha voice language: English' }));
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
 
     await view.unmount();

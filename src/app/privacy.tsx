@@ -1,11 +1,13 @@
 import { ExternalLink } from 'lucide-react-native';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
-import { colors, radius, sharedStyles, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function PrivacyScreen() {
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
   function openPage(page: PublicPage, title: string) {
     void openPublicPage(page).catch((error: unknown) => {
       showAppAlert(`Could not open ${title}`, error instanceof Error ? error.message : 'Check your connection and try again.');
@@ -50,10 +52,13 @@ export default function PrivacyScreen() {
 }
 
 function Section({ children, title }: { children: string; title: string }) {
+  const styles = useStyles();
   return <View style={styles.section}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{children}</Text></View>;
 }
 
 function PolicyLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <Pressable accessibilityRole="link" onPress={onPress} style={styles.link}>
       <Text style={styles.linkText}>{label}</Text><ExternalLink color={colors.forest} size={17} />
@@ -61,12 +66,12 @@ function PolicyLink({ label, onPress }: { label: string; onPress: () => void }) 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   section: { gap: spacing.sm },
-  title: { color: colors.ink, fontSize: 17, fontWeight: '900' },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 23 },
+  title: { color: c.ink, fontSize: 17, fontWeight: '900' },
+  body: { color: c.muted, fontSize: 15, lineHeight: 23 },
   links: { gap: spacing.sm, paddingTop: spacing.sm },
-  link: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.paper, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  linkText: { flex: 1, color: colors.forest, fontSize: 14, fontWeight: '800' },
-});
+  link: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paper, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  linkText: { flex: 1, color: c.forestText, fontSize: 14, fontWeight: '800' },
+}));
