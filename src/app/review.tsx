@@ -1,16 +1,19 @@
 import { useRouter } from 'expo-router';
 import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
-import { colors, radius, sharedStyles, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function ReviewScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
   const session = useMemo(() => (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5)), [duePhrases, phraseReviews, phrases]);
   const [index, setIndex] = useState(0);
@@ -102,33 +105,33 @@ export default function ReviewScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.background, padding: spacing.xl, gap: spacing.lg },
-  center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
+const useStyles = makeStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.background, padding: spacing.xl, gap: spacing.lg },
+  center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
   header: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
-  progress: { color: colors.ink, fontSize: 15, fontWeight: '900' },
-  mastery: { color: colors.muted, fontSize: 14, fontWeight: '700' },
-  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: colors.line },
-  trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: colors.forest },
-  card: { ...sharedStyles.elevatedCard, minHeight: 360, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
-  prompt: { color: colors.ink, fontSize: 29, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
+  progress: { color: c.ink, fontSize: 15, fontWeight: '900' },
+  mastery: { color: c.muted, fontSize: 14, fontWeight: '700' },
+  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
+  trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
+  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 360, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  prompt: { color: c.ink, fontSize: 29, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
-  hindi: { color: colors.ink, fontSize: 34, lineHeight: 44, fontWeight: '900', textAlign: 'center' },
-  latin: { color: colors.forest, fontSize: 18, lineHeight: 25, fontWeight: '700', textAlign: 'center' },
+  hindi: { color: c.ink, fontSize: 34, lineHeight: 44, fontWeight: '900', textAlign: 'center' },
+  latin: { color: c.forestText, fontSize: 18, lineHeight: 25, fontWeight: '700', textAlign: 'center' },
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: colors.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  audioText: { color: colors.forest, fontSize: 14, fontWeight: '800' },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  audioText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  error: { color: c.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
   disabled: { opacity: 0.4 },
-  revealButton: { minHeight: 52, borderRadius: radius.md, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  revealText: { color: colors.white, fontSize: 16, fontWeight: '900' },
+  revealButton: { minHeight: 52, borderRadius: radius.md, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  revealText: { color: c.neutralSurfaceText, fontSize: 16, fontWeight: '900' },
   grades: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   gradeButton: { minWidth: 140, flexGrow: 1, minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  againButton: { backgroundColor: '#FBEDEA', borderWidth: 1, borderColor: '#E4B5AE' },
-  gotItButton: { backgroundColor: colors.forest },
-  againText: { color: colors.danger, fontSize: 16, fontWeight: '900' },
-  gotItText: { color: colors.white, fontSize: 16, fontWeight: '900' },
-  doneMark: { width: 72, height: 72, borderRadius: 25, backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' },
-  title: { color: colors.ink, fontSize: 27, lineHeight: 34, fontWeight: '900', textAlign: 'center' },
-  body: { color: colors.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-});
+  againButton: { backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine },
+  gotItButton: { backgroundColor: c.forest },
+  againText: { color: c.danger, fontSize: 16, fontWeight: '900' },
+  gotItText: { color: c.white, fontSize: 16, fontWeight: '900' },
+  doneMark: { width: 72, height: 72, borderRadius: 25, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
+  title: { color: c.ink, fontSize: 27, lineHeight: 34, fontWeight: '900', textAlign: 'center' },
+  body: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+}));

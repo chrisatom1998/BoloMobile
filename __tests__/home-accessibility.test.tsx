@@ -36,7 +36,7 @@ jest.mock('@/state/app-state', () => ({
   }),
 }));
 
-import HomeScreen from '../src/app/index';
+import HomeScreen from '../src/app/(tabs)/index';
 
 describe('home accessibility', () => {
   it('provides 48 point targets and selected state for compact controls', async () => {
@@ -45,6 +45,7 @@ describe('home accessibility', () => {
     const savedPhrases = view.getByLabelText('Saved phrases');
     const fiveMinuteGoal = view.getByLabelText('5 minute daily goal');
     const allScenes = view.getByLabelText(/^All scenes,/u);
+    const topbar = view.getByTestId('today-topbar');
 
     expect(StyleSheet.flatten(settings.props.style).height).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(settings.props.style).width).toBeGreaterThanOrEqual(48);
@@ -54,5 +55,9 @@ describe('home accessibility', () => {
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
     expect(StyleSheet.flatten(allScenes.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(allScenes.props.accessibilityState).toEqual({ selected: true });
+    expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
+
+    const list = view.getByTestId('today-scene-list');
+    expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
   });
 });

@@ -1,11 +1,13 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { getObservabilitySnapshot, type ObservabilitySnapshot } from '@/lib/observability';
-import { colors, sharedStyles, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
 
 export default function DiagnosticsScreen() {
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
   const [snapshot, setSnapshot] = useState<ObservabilitySnapshot>({ days: {} });
   useFocusEffect(useCallback(() => {
     let active = true;
@@ -32,15 +34,15 @@ export default function DiagnosticsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
-  notice: { ...sharedStyles.card, gap: spacing.sm },
-  title: { color: colors.ink, fontSize: 20, lineHeight: 26, fontWeight: '900' },
-  body: { color: colors.muted, fontSize: 14, lineHeight: 21 },
-  card: { ...sharedStyles.card, gap: spacing.sm },
-  day: { color: colors.brandDark, fontSize: 13, fontWeight: '900' },
+  notice: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
+  title: { color: c.ink, fontSize: 20, lineHeight: 26, fontWeight: '900' },
+  body: { color: c.muted, fontSize: 14, lineHeight: 21 },
+  card: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
+  day: { color: c.brandDark, fontSize: 13, fontWeight: '900' },
   row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
-  event: { color: colors.ink, fontSize: 13, fontWeight: '700', textTransform: 'capitalize' },
-  count: { color: colors.muted, fontSize: 12 },
-  empty: { color: colors.muted, fontSize: 15, textAlign: 'center', padding: spacing.xl },
-});
+  event: { color: c.ink, fontSize: 13, fontWeight: '700', textTransform: 'capitalize' },
+  count: { color: c.muted, fontSize: 12 },
+  empty: { color: c.muted, fontSize: 15, textAlign: 'center', padding: spacing.xl },
+}));

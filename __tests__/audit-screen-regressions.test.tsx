@@ -49,9 +49,10 @@ jest.mock('@/services/bolo-api', () => ({
 
 import DiagnosticsScreen from '../src/app/diagnostics';
 import OnboardingScreen from '../src/app/onboarding';
-import ProgressScreen from '../src/app/progress';
+import ProgressScreen, { createProgressStyles } from '../src/app/(tabs)/progress';
 import ReviewScreen from '../src/app/review';
 import { TranscriptPhrasePicker } from '../src/components/transcript-phrase-picker';
+import { darkColors } from '../src/theme';
 
 const boloApi = jest.requireMock('../src/services/bolo-api') as { prepareSavedPhraseFromText: jest.Mock };
 const speech = jest.requireMock('../src/lib/speech') as { speakText: jest.Mock };
@@ -180,5 +181,13 @@ describe('previously uncovered audit screens', () => {
 
     expect(view.getByText('Your Hindi is becoming instinct.')).toBeTruthy();
     expect(view.getByText('Last 7 days')).toBeTruthy();
+  });
+
+  it('keeps the progress hero dark and legible in dark mode', () => {
+    const styles = createProgressStyles(darkColors);
+
+    expect(styles.hero.backgroundColor).toBe(darkColors.heroBase);
+    expect(styles.heroTitle.color).toBe(darkColors.white);
+    expect(styles.heroBody.color).toBe(darkColors.heroSubtle);
   });
 });

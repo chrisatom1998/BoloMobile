@@ -35,7 +35,7 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
 }));
 
-import PhrasesScreen from '../src/app/phrases';
+import PhrasesScreen from '../src/app/(tabs)/phrases';
 import { showAppAlert } from '../src/lib/app-alert';
 import { speakText, stopSpeaking } from '../src/lib/speech';
 

@@ -2,12 +2,12 @@ import { AudioModule } from 'expo-audio';
 import { useRouter } from 'expo-router';
 import { BookOpenText, Check, Languages, Mic, Route, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useAppState } from '@/state/app-state';
 import { observe } from '@/lib/observability';
 import type { LearnerLevel, LearningGoal, AshaResponseLanguage, ScriptPreference } from '@/state/app-state-types';
-import { colors, radius, sharedStyles, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 type Choice<T extends string | number> = { label: string; value: T; detail?: string };
 
@@ -17,6 +17,8 @@ function ChoiceRow<T extends string | number>({ choices, label, onChange, value 
   onChange: (value: T) => void;
   value: T;
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View accessibilityLabel={label} accessibilityRole="radiogroup" style={styles.choices}>
       {choices.map((choice) => {
@@ -45,6 +47,9 @@ function ChoiceRow<T extends string | number>({ choices, label, onChange, value 
 export default function OnboardingScreen() {
   const router = useRouter();
   const { completeOnboarding } = useAppState();
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
   const [level, setLevel] = useState<LearnerLevel>('new');
   const [scriptPreference, setScriptPreference] = useState<ScriptPreference>('both');
   const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>('conversation');
@@ -136,26 +141,26 @@ export default function OnboardingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl },
-  brandMark: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: colors.white, fontSize: 34, fontWeight: '900' },
+  brandMark: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
+  brandMarkText: { color: c.white, fontSize: 34, fontWeight: '900' },
   intro: { gap: spacing.sm },
-  heading: { color: colors.ink, fontSize: 32, lineHeight: 38, fontWeight: '900' },
-  section: { ...sharedStyles.card, gap: spacing.md },
+  heading: { color: c.ink, fontSize: 32, lineHeight: 38, fontWeight: '900' },
+  section: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { flexShrink: 1, color: colors.ink, fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  title: { flexShrink: 1, color: c.ink, fontSize: 18, lineHeight: 24, fontWeight: '900' },
   choices: { gap: spacing.sm },
-  choice: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: colors.line, backgroundColor: colors.background, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  choiceSelected: { borderColor: colors.forest, backgroundColor: '#EBF6F1' },
-  check: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.line, alignItems: 'center', justifyContent: 'center' },
-  checkSelected: { borderColor: colors.forest, backgroundColor: colors.forest },
+  choice: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.background, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  choiceSelected: { borderColor: c.forest, backgroundColor: c.successSoft },
+  check: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
+  checkSelected: { borderColor: c.forest, backgroundColor: c.forest },
   choiceCopy: { minWidth: 0, flex: 1, gap: 2 },
-  choiceLabel: { color: colors.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  choiceLabelSelected: { color: colors.forest, fontWeight: '900' },
-  choiceDetail: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-  detail: { color: colors.muted, fontSize: 14, lineHeight: 20 },
-  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  secondaryText: { color: colors.forest, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  status: { color: colors.muted, fontSize: 13, lineHeight: 18 },
-});
+  choiceLabel: { color: c.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  choiceLabelSelected: { color: c.forestText, fontWeight: '900' },
+  choiceDetail: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  detail: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  secondaryText: { color: c.forestText, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  status: { color: c.muted, fontSize: 13, lineHeight: 18 },
+}));

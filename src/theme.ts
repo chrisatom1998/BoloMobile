@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet, useColorScheme, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
+import { StyleSheet, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 
 export const lightColors = {
   background: '#F6F3ED',
@@ -120,7 +120,7 @@ export const darkColors: ThemeColors = {
   orbRecording: '#B44B2E',
 };
 
-/** Light palette. Prefer `useTheme()` in components so dark mode is honored. */
+/** The app intentionally uses this light palette on every device appearance. */
 export const colors = lightColors;
 
 export const spacing = {
@@ -142,13 +142,18 @@ export const radius = {
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;
 
+const fixedLightTheme: {
+  colors: ThemeColors;
+  isDark: false;
+  scheme: 'light';
+} = {
+  colors: lightColors,
+  isDark: false,
+  scheme: 'light' as const,
+};
+
 export function useTheme() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  return useMemo(
-    () => ({ colors: isDark ? darkColors : lightColors, isDark, scheme: isDark ? ('dark' as const) : ('light' as const) }),
-    [isDark],
-  );
+  return fixedLightTheme;
 }
 
 type NamedStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
@@ -238,5 +243,5 @@ export function createSharedStyles(c: ThemeColors) {
 
 export const useSharedStyles = makeStyles(createSharedStyles);
 
-/** Light-mode shared styles. Prefer `useSharedStyles()` so dark mode is honored. */
+/** Shared styles for Bolo's fixed light appearance. */
 export const sharedStyles = StyleSheet.create(createSharedStyles(lightColors));

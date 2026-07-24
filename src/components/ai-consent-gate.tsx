@@ -1,14 +1,16 @@
 import { ShieldCheck } from 'lucide-react-native';
 import { type PropsWithChildren, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage } from '@/lib/public-pages';
 import { observe, observeOncePerSession } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
-import { colors, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 export function AiConsentGate({ children }: PropsWithChildren) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { aiConsent, setAiConsent } = useAppState();
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -56,15 +58,15 @@ export function AiConsentGate({ children }: PropsWithChildren) {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { backgroundColor: colors.paper, borderColor: colors.forest, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md },
-  icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: colors.forest, alignItems: 'center', justifyContent: 'center' },
-  title: { color: colors.ink, fontSize: 22, fontWeight: '900' },
-  body: { color: colors.ink, fontSize: 15, lineHeight: 22 },
-  detail: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+const useStyles = makeStyles((c) => ({
+  card: { backgroundColor: c.paper, borderColor: c.forest, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md },
+  icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
+  title: { color: c.ink, fontSize: 22, fontWeight: '900' },
+  body: { color: c.ink, fontSize: 15, lineHeight: 22 },
+  detail: { color: c.muted, fontSize: 13, lineHeight: 19 },
   link: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  linkText: { color: colors.forest, fontSize: 14, fontWeight: '800', textDecorationLine: 'underline' },
-  button: { minHeight: 50, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  buttonText: { color: colors.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  linkText: { color: c.forestText, fontSize: 14, fontWeight: '800', textDecorationLine: 'underline' },
+  button: { minHeight: 50, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  buttonText: { color: c.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
   disabled: { opacity: 0.5 },
-});
+}));

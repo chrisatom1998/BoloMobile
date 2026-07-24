@@ -21,8 +21,12 @@ type Props = {
   clientId: string;
   compact?: boolean;
   disabled?: boolean;
+  /** A compact, single-orb treatment for dense conversation headers. */
+  size?: 'regular' | 'minimal';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  /** Shares this exact control's turn action with a companion UI surface. */
+  onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
@@ -100,7 +104,7 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, onError, onInputTranscriptComplete, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting' || voice.status === 'responding';
@@ -108,6 +112,8 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
   const styles = useStyles();
   const { colors } = useTheme();
   const { orbStyle, rippleStyle } = useOrbMotion(voice.status);
+  const minimal = size === 'minimal';
+  const voiceIconSize = minimal ? 32 : 52;
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -134,18 +140,23 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
     void voice.startTurn().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
   }, [blocked, onError, voice]);
 
+  useEffect(() => {
+    onTurnActionReady?.(press);
+    return () => onTurnActionReady?.(null);
+  }, [onTurnActionReady, press]);
+
   const endSession = useCallback(() => {
     hapticSelect();
     voice.disconnect();
   }, [voice]);
 
   return (
-    <View style={[styles.stage, compact && styles.stageCompact]} testID="realtime-voice-stage">
-      <View style={[styles.ring, styles.ringOuter, compact && styles.ringOuterCompact]} />
-      <View style={[styles.ring, styles.ringMiddle, compact && styles.ringMiddleCompact]} />
+    <View style={[styles.stage, compact && styles.stageCompact, minimal && styles.stageMinimal]} testID="realtime-voice-stage">
+      <View style={[styles.ring, styles.ringOuter, compact && styles.ringOuterCompact, minimal && styles.ringOuterMinimal]} />
+      <View style={[styles.ring, styles.ringMiddle, compact && styles.ringMiddleCompact, minimal && styles.ringMiddleMinimal]} />
       <Animated.View
         pointerEvents="none"
-        style={[styles.ring, styles.ringInner, compact && styles.ringInnerCompact, voice.status === 'recording' && styles.ringInnerRecording, rippleStyle]}
+        style={[styles.ring, styles.ringInner, compact && styles.ringInnerCompact, minimal && styles.ringInnerMinimal, voice.status === 'recording' && styles.ringInnerRecording, rippleStyle]}
       />
       <Animated.View style={orbStyle}>
         <Pressable
@@ -154,19 +165,19 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
           accessibilityState={{ disabled: blocked }}
           disabled={blocked}
           onPress={press}
-          style={[styles.orb, compact && styles.orbCompact, connected && styles.orbActive, voice.status === 'recording' && styles.orbRecording, blocked && styles.disabled]}
+          style={[styles.orb, compact && styles.orbCompact, minimal && styles.orbMinimal, connected && styles.orbActive, voice.status === 'recording' && styles.orbRecording, blocked && styles.disabled]}
           testID="realtime-voice-orb"
         >
           <View style={styles.orbHighlight} />
           {voice.status === 'ready'
-            ? <Mic color={colors.white} size={52} />
+            ? <Mic color={colors.white} size={voiceIconSize} />
             : voice.status === 'recording'
-              ? <Send color={colors.white} size={52} />
-              : <Text style={styles.orbGlyph}>आ</Text>}
+              ? <Send color={colors.white} size={voiceIconSize} />
+              : <Text style={[styles.orbGlyph, minimal && styles.orbGlyphMinimal]}>आ</Text>}
         </Pressable>
       </Animated.View>
       {connected ? (
-        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact]}>
+        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
           <X color={colors.white} size={18} />
         </Pressable>
       ) : null}
@@ -177,21 +188,28 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
 const useStyles = makeStyles((c) => ({
   stage: { width: 282, height: 282, alignItems: 'center', justifyContent: 'center' },
   stageCompact: { width: 220, height: 220 },
+  stageMinimal: { width: 104, height: 104 },
   ring: { position: 'absolute', borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.14)' },
   ringOuter: { width: 278, height: 278 },
   ringOuterCompact: { width: 216, height: 216 },
+  ringOuterMinimal: { width: 104, height: 104, opacity: 0.2 },
   ringMiddle: { width: 238, height: 238 },
   ringMiddleCompact: { width: 190, height: 190 },
+  ringMiddleMinimal: { width: 96, height: 96, opacity: 0.3 },
   ringInner: { width: 204, height: 204 },
   ringInnerCompact: { width: 164, height: 164 },
+  ringInnerMinimal: { width: 88, height: 88, opacity: 0.4 },
   ringInnerRecording: { borderWidth: 1.5, borderColor: 'rgba(255, 255, 255, 0.38)' },
   orb: { width: 168, height: 168, borderRadius: radius.pill, backgroundColor: c.orb, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: c.orb, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.35, shadowRadius: 34, elevation: 8 },
   orbCompact: { width: 148, height: 148 },
+  orbMinimal: { width: 88, height: 88, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 4 },
   orbActive: { backgroundColor: c.orbActive, shadowOpacity: 0.56 },
   orbRecording: { backgroundColor: c.orbRecording },
   orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.17)' },
   orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '900' },
+  orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.1)', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.18)', alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
+  endButtonMinimal: { right: -spacing.lg, top: 0, marginTop: 0 },
   disabled: { opacity: 0.5 },
 }));
