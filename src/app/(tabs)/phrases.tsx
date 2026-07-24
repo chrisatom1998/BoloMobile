@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
 
 import { SegmentedControl } from '@/components/segmented-control';
+import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { showAppAlert } from '@/lib/app-alert';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
@@ -83,9 +84,10 @@ export default function PhrasesScreen() {
     <View style={styles.header}>
       <View style={styles.headerHero}>
         <View style={styles.headerCopy}>
-          <Text style={styles.headerEyebrow}>Your phrase book</Text>
-          <Text style={styles.headerTitle}>Phrases</Text>
+          <JournalKicker>Your language garden</JournalKicker>
+          <JournalDisplay style={styles.headerTitle}>Words you want to keep.</JournalDisplay>
         </View>
+        <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={styles.headerMotif} />
       </View>
       <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={styles.dueCard}>
         <View style={styles.dueIcon}><Text style={styles.dueIconText}>{due.length}</Text></View>
@@ -185,25 +187,25 @@ const useStyles = makeStyles((c) => ({
   content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.lg, paddingTop: 18, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
   header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  headerHero: { minHeight: 72, alignItems: 'center', justifyContent: 'center' },
-  headerCopy: { alignItems: 'center', gap: 3 },
-  headerEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center' },
-  headerTitle: { color: c.ink, fontSize: 31, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
-  dueCard: { width: '100%', minHeight: 106, overflow: 'hidden', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.goldSoft, borderColor: '#F2DB99', borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 14, padding: spacing.lg, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
+  headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm },
+  headerCopy: { alignItems: 'flex-start', gap: spacing.xs },
+  headerTitle: { maxWidth: 310, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  headerMotif: { borderRadius: 20 },
+  dueCard: { width: '100%', minHeight: 146, overflow: 'hidden', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 14, padding: spacing.lg, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
   dueIcon: { width: 68, height: 68, borderRadius: 21, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   dueIconText: { color: '#38290D', fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 4 },
-  dueTitle: { color: c.ink, fontSize: 17, fontWeight: '900', textAlign: 'left' },
+  dueTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', textAlign: 'left' },
   dueBody: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
   searchField: { width: '100%', alignSelf: 'stretch' },
   searchRow: { width: '100%', minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md },
   search: { minWidth: 0, flex: 1, color: c.ink, fontSize: 15, paddingVertical: spacing.sm },
   segmentedControl: { width: '100%', alignSelf: 'stretch' },
   savedHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
-  savedTitle: { color: c.ink, fontSize: 17, fontWeight: '900', textAlign: 'left' },
+  savedTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 21, fontWeight: '700', textAlign: 'left' },
   savedCount: { color: c.muted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'], textAlign: 'right' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', gap: 5, paddingHorizontal: spacing.lg, paddingVertical: 14, boxShadow: '0 4px 14px rgba(0, 0, 0, 0.035)' },
+  card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', gap: 5, paddingHorizontal: spacing.lg, paddingVertical: 14, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
   cardDue: { borderColor: c.gold, borderWidth: 1.5 },
   cardHeader: { width: '100%', minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   cardHeaderActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.xs },
@@ -219,7 +221,7 @@ const useStyles = makeStyles((c) => ({
   listenText: { fontSize: 11, fontWeight: '800' },
   removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   copy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'flex-start', gap: spacing.xs },
-  hindi: { color: c.ink, fontSize: 23, lineHeight: 31, fontWeight: '900', textAlign: 'left' },
+  hindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 27, lineHeight: 34, fontWeight: '700', textAlign: 'left' },
   latin: { fontSize: 14, fontWeight: '800', textAlign: 'left' },
   latinForest: { color: c.forest },
   latinBrand: { color: c.brand },

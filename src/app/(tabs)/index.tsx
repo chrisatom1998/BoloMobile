@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { SceneCard } from '@/components/scene-card';
+import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { sceneCategories, scenes, type Scene, type SceneCategory } from '@/data/scenes';
 import { recommendedScenes } from '@/lib/learning';
 import { defaultLearnerProfile } from '@/lib/storage';
@@ -63,13 +64,14 @@ export default function HomeScreen() {
   const header = useMemo(() => (
     <View style={styles.headerContent}>
       <View style={styles.topbar} testID="today-topbar">
-        <View style={styles.brand}>
-          <View style={styles.brandMark}><Text style={styles.brandMarkText}>ब</Text></View>
+        <View style={styles.intro}>
           <View style={styles.brandCopy}>
-            <Text style={styles.brandName}>Bolo</Text>
-            <Text style={styles.brandTagline}>Speak Hindi with confidence</Text>
+            <JournalKicker>A quiet practice</JournalKicker>
+            <JournalDisplay style={styles.greeting}>Make Hindi yours.</JournalDisplay>
+            <Text style={styles.brandTagline}>One useful moment at a time.</Text>
           </View>
         </View>
+        <JournalMotif accessibilityLabel="Bolo journal motif" size="corner" style={styles.headerMotif} />
         <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.roundButton}>
           <Text style={styles.roundButtonText}>•••</Text>
         </Pressable>
@@ -173,30 +175,29 @@ const useStyles = makeStyles((c) => ({
   separator: { height: spacing.md },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'center', gap: spacing.lg, marginBottom: spacing.lg },
   sceneCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' },
-  topbar: { width: '100%', minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  brand: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  topbar: { width: '100%', minHeight: 142, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm },
+  intro: { minWidth: 0, flex: 1, paddingTop: spacing.md },
   brandCopy: { minWidth: 0, flexShrink: 1 },
-  brandMark: { width: 46, height: 46, borderRadius: 15, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: c.white, fontSize: 24, fontWeight: '900' },
-  brandName: { color: c.ink, fontSize: 21, fontWeight: '900', textAlign: 'left' },
-  brandTagline: { color: c.muted, fontSize: 12, lineHeight: 17, textAlign: 'left' },
-  roundButton: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', shadowColor: c.black, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06 * c.shadowOpacityScale, shadowRadius: 10, elevation: 2 },
+  greeting: { marginTop: spacing.xs, maxWidth: 230, fontSize: 29, lineHeight: 35 },
+  brandTagline: { color: c.muted, fontSize: 14, lineHeight: 20, marginTop: spacing.sm, textAlign: 'left' },
+  headerMotif: { position: 'absolute', right: 52, top: spacing.sm },
+  roundButton: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(33, 37, 33, 0.08)' },
   roundButtonText: { color: c.ink, fontSize: 18, fontWeight: '900', letterSpacing: 1.2 },
-  nextCard: { width: '100%', minHeight: 232, alignItems: 'stretch', backgroundColor: c.brand, borderRadius: 26, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm, overflow: 'hidden', shadowColor: c.brandDark, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.16 * c.shadowOpacityScale, shadowRadius: 20, elevation: 3 },
+  nextCard: { width: '100%', minHeight: 232, alignItems: 'stretch', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 26, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm, overflow: 'hidden', boxShadow: '0 10px 22px rgba(35, 39, 35, 0.08)' },
   nextHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   nextCardBody: { width: '100%', alignItems: 'flex-start', gap: spacing.sm },
   nextCardFooter: { width: '100%', alignItems: 'stretch', paddingTop: spacing.md },
-  nextEyebrow: { color: '#FFF0E8', fontSize: 12, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'left' },
-  nextTitle: { color: c.white, fontSize: 24, lineHeight: 30, fontWeight: '900', textAlign: 'left' },
-  nextBody: { color: '#FFF2EA', fontSize: 14, lineHeight: 20, textAlign: 'left' },
+  nextEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'left' },
+  nextTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 31, fontWeight: '700', textAlign: 'left' },
+  nextBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
   goalSummary: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
-  todayLabel: { color: '#FFF2EA', fontSize: 12, fontWeight: '800', textAlign: 'left' },
-  streakChip: { minHeight: 28, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)', paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  streakChipText: { color: '#FFF0E8', fontSize: 12, fontWeight: '900' },
-  progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: 'rgba(255,255,255,0.25)' },
-  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.white },
-  nextButton: { minHeight: 44, alignSelf: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  nextButtonText: { color: c.ink, fontSize: 14, fontWeight: '800' },
+  todayLabel: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'left' },
+  streakChip: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  streakChipText: { color: c.brandText, fontSize: 12, fontWeight: '900' },
+  progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm },
+  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
+  nextButton: { minHeight: 48, alignSelf: 'stretch', backgroundColor: c.brand, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  nextButtonText: { color: c.white, fontSize: 14, fontWeight: '800' },
   todayPanel: { width: '100%', alignItems: 'center', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
   todayPanelHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md },
   sectionEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase', textAlign: 'left' },

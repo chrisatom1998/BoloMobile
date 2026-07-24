@@ -8,6 +8,7 @@ import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollVi
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
@@ -458,8 +459,8 @@ export default function LiveScreen() {
                     transition={0}
                   />
                   <View style={styles.headerCopy}>
-                    <Text numberOfLines={1} style={styles.headerEyebrow}>Your Hindi coach</Text>
-                    <Text style={styles.headerTitle}>Asha</Text>
+                    <JournalKicker>Asha · your practice partner</JournalKicker>
+                    <JournalDisplay numberOfLines={2} style={styles.headerTitle}>Let’s begin with a little courage.</JournalDisplay>
                     <Text numberOfLines={1} style={styles.headerSubtitle}>Conversational Hindi coach · {responseLanguageName} replies</Text>
                   </View>
                 </View>
@@ -478,6 +479,10 @@ export default function LiveScreen() {
               </View>
 
               <>
+                  <View accessibilityLabel="Asha, your Hindi practice partner" style={[styles.portraitStage, { width: heroContentWidth }]}>
+                    <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.portraitStageImage} transition={0} />
+                    <View style={styles.portraitStageLabel}><Text style={styles.portraitStageLabelText}>With Asha</Text></View>
+                  </View>
                   <SegmentedControl
                     accessibilityLabel="Asha voice language"
                     disabled={languageControlLocked}
@@ -650,12 +655,11 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
     overflow: 'hidden',
   },
   voiceHeroCompact: { gap: spacing.xs, minHeight: 430, paddingBottom: spacing.md },
-  topbar: { minHeight: 72, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', paddingRight: 158, position: 'relative' },
-  headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  ashaPortrait: { width: 36, height: 36, flexShrink: 0, borderRadius: 13, borderCurve: 'continuous', backgroundColor: c.brandSoft, borderColor: c.brand, borderWidth: StyleSheet.hairlineWidth },
+  topbar: { minHeight: 86, alignSelf: 'center', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', paddingRight: 158, position: 'relative' },
+  headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  ashaPortrait: { width: 1, height: 1, opacity: 0, flexShrink: 0, borderRadius: radius.pill, backgroundColor: c.brandSoft },
   headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2, overflow: 'hidden' },
-  headerEyebrow: { alignSelf: 'stretch', color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.75, textTransform: 'uppercase', textAlign: 'left' },
-  headerTitle: { alignSelf: 'stretch', color: c.ink, fontSize: 29, lineHeight: 34, fontWeight: '900', textAlign: 'left' },
+  headerTitle: { alignSelf: 'stretch', marginTop: spacing.xs, maxWidth: 260, fontSize: 29, lineHeight: 35, textAlign: 'left' },
   headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.muted, fontSize: 11, lineHeight: 15, textAlign: 'left' },
   headerActions: { position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
   privateBadge: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10 },
@@ -664,14 +668,18 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerButton: { width: 36, height: 36, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
   chatButton: { width: 36, height: 36, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
   languageSelector: { alignSelf: 'center' },
-  voiceStage: { alignSelf: 'center', minHeight: 318, borderRadius: 28, borderCurve: 'continuous', backgroundColor: c.heroBase, alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, padding: spacing.lg, overflow: 'hidden' },
-  voiceStageCompact: { minHeight: 270, paddingVertical: spacing.md },
-  liveVoiceBadge: { minHeight: 27, borderRadius: radius.pill, backgroundColor: c.heroRaised, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm },
-  liveVoiceDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: '#45D1B3' },
-  liveVoiceText: { color: '#73E1CA', fontSize: 10, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
+  portraitStage: { alignSelf: 'center', height: 174, overflow: 'hidden', borderRadius: 25, borderCurve: 'continuous', backgroundColor: c.brandSoft },
+  portraitStageImage: { width: '100%', height: '100%' },
+  portraitStageLabel: { position: 'absolute', top: spacing.md, left: spacing.md, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: spacing.sm, paddingVertical: 6 },
+  portraitStageLabelText: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.75, textTransform: 'uppercase' },
+  voiceStage: { alignSelf: 'center', minHeight: 178, borderRadius: 28, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs, padding: spacing.md, overflow: 'hidden', boxShadow: '0 8px 18px rgba(35, 39, 35, 0.07)' },
+  voiceStageCompact: { minHeight: 160, paddingVertical: spacing.sm },
+  liveVoiceBadge: { minHeight: 27, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm },
+  liveVoiceDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
+  liveVoiceText: { color: c.forestText, fontSize: 10, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
   heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: 3 },
-  heroTitle: { minWidth: 0, flexShrink: 1, color: c.white, fontSize: 22, lineHeight: 28, fontWeight: '900', textAlign: 'center' },
-  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  heroTitle: { minWidth: 0, flexShrink: 1, color: c.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
+  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
   captionBlock: { minHeight: 94, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 20, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   captionLabel: { color: c.forestText, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center' },
   captionText: { minWidth: 0, alignSelf: 'stretch', color: c.ink, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: 'center' },
