@@ -1,7 +1,9 @@
+import { createRequire } from 'node:module';
 import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pngInfo } from './lib/png.mjs';
 
+const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
 
 const specs = [
@@ -65,10 +67,13 @@ for (const screenshot of storeAssets.screenshots.recommendedOrder) {
 }
 if (storeAssets.screenshots.apple.ipadSupportAtAudit !== false) throw new Error('Store assets must reflect the phone-only iOS v1 scope.');
 
-const appleInfo = metadata.apple?.info?.['en-US'];
+const resolvedExtra = require(resolve(root, 'app.config.js'))({ config: appConfig }).extra || {};
+for (const key of ['publicPrivacyUrl', 'publicSupportUrl', 'publicTermsUrl', 'boloApiUrl']) {
+  const url = new URL(resolvedExtra[key]);
+  if (url.protocol !== 'https:' || url.hostname === 'example.com') throw new Error(`The resolved ${key} must be a production HTTPS URL.`);
+}
 for (const key of ['privacyPolicyUrl', 'supportUrl', 'marketingUrl']) {
-  const url = new URL(appleInfo?.[key]);
-  if (url.protocol !== 'https:' || url.hostname === 'example.com') throw new Error(`Apple ${key} must be a production HTTPS URL.`);
+  if (metadata.apple?.info?.['en-US']?.[key]) throw new Error(`Apple ${key} must come from store.config.js, not static store.config.json copy.`);
 }
 if (metadata.configVersion !== 0 || metadata.apple?.advisory?.kidsAgeBand !== null) throw new Error('Apple metadata must use schema version 0 and must not opt into the Kids category.');
 for (const key of ['ageRatingOverride', 'koreaAgeRatingOverride']) {

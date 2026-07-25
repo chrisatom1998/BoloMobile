@@ -1,5 +1,6 @@
 const appConfig = require('../app.config.js') as (input: { config: Record<string, unknown> }) => {
   plugins: unknown[];
+  extra: Record<string, unknown>;
 };
 
 function fixture() {
@@ -24,6 +25,8 @@ describe('Expo app configuration', () => {
     process.env = { ...originalEnv };
     delete process.env.BOLO_APP_IDENTIFIER;
     delete process.env.EAS_BUILD_PROFILE;
+    delete process.env.BOLO_PUBLIC_SITE_URL;
+    delete process.env.BOLO_API_URL;
   });
 
   afterEach(() => {
@@ -58,5 +61,45 @@ describe('Expo app configuration', () => {
     const { plugins } = appConfig({ config: fixture() });
 
     expect(plugins.slice(0, 3)).toEqual(fixture().plugins.slice(0, 3));
+  });
+
+  it('publishes the deployed public pages and API base by default', () => {
+    const { extra } = appConfig({ config: fixture() });
+
+    expect(extra).toMatchObject({
+      publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
+      publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
+      publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+      boloApiUrl: 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed',
+    });
+  });
+
+  it('rebuilds every public page URL from an overridden public site', () => {
+    process.env.BOLO_PUBLIC_SITE_URL = 'https://pages.example.test/';
+    process.env.BOLO_API_URL = 'https://api.example.test/app/bolo/';
+
+    const { extra } = appConfig({ config: fixture() });
+
+    expect(extra).toMatchObject({
+      publicPrivacyUrl: 'https://pages.example.test/?page=privacy',
+      publicSupportUrl: 'https://pages.example.test/?page=support',
+      publicTermsUrl: 'https://pages.example.test/?page=terms',
+      boloApiUrl: 'https://api.example.test/app/bolo',
+    });
+  });
+
+  it('refuses public and API URLs that are not HTTPS', () => {
+    process.env.BOLO_PUBLIC_SITE_URL = 'http://pages.example.test';
+    expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_PUBLIC_SITE_URL must use https/u);
+
+    delete process.env.BOLO_PUBLIC_SITE_URL;
+    process.env.BOLO_API_URL = 'http://api.example.test';
+    expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_API_URL must use https/u);
+  });
+
+  it('refuses a public site URL that is not an absolute URL', () => {
+    process.env.BOLO_PUBLIC_SITE_URL = 'pages.example.test';
+
+    expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_PUBLIC_SITE_URL must be an absolute https URL/u);
   });
 });

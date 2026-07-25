@@ -23,10 +23,7 @@
           "lesson"
         ],
         "releaseNotes": "Initial release with 30 guided Hindi scenes, saved phrases, daily practice tracking, consent-gated AI voice playback, and optional typed, live voice, and pronunciation coaching with Asha.",
-        "promoText": "Practice practical Hindi in 30 real-life scenes, then choose optional English-first coaching with Asha.",
-        "privacyPolicyUrl": "https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy",
-        "supportUrl": "https://74e39779183cf78fed.v2.appdeploy.ai/?page=support",
-        "marketingUrl": "https://74e39779183cf78fed.v2.appdeploy.ai/"
+        "promoText": "Practice practical Hindi in 30 real-life scenes, then choose optional English-first coaching with Asha."
       }
     },
     "advisory": {

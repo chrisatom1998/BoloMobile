@@ -32,6 +32,36 @@ describe('connected coaching contract', () => {
     }
   });
 
+  it('falls back to the API base published through the resolved Expo configuration', () => {
+    jest.isolateModules(() => {
+      jest.doMock('expo-constants', () => ({
+        __esModule: true,
+        default: { expoConfig: { extra: { boloApiUrl: 'https://api.example.test/app/bolo/' } } },
+      }));
+
+      const { getBoloApiUrl: resolveApiUrl } = require('../src/services/bolo-api') as {
+        getBoloApiUrl: () => string;
+      };
+
+      expect(resolveApiUrl()).toBe('https://api.example.test/app/bolo');
+    });
+  });
+
+  it('ignores a non-HTTPS API base in the resolved Expo configuration', () => {
+    jest.isolateModules(() => {
+      jest.doMock('expo-constants', () => ({
+        __esModule: true,
+        default: { expoConfig: { extra: { boloApiUrl: 'http://api.example.test' } } },
+      }));
+
+      const { getBoloApiUrl: resolveApiUrl } = require('../src/services/bolo-api') as {
+        getBoloApiUrl: () => string;
+      };
+
+      expect(resolveApiUrl()).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
+    });
+  });
+
   it('splits long mixed-language replies into bounded AI-voice requests', () => {
     const text = `${'A'.repeat(230)} sentence end. नमस्ते, आपका स्वागत है। ${'B'.repeat(260)}`;
     const chunks = splitAiVoiceText(text);
