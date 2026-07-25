@@ -9,6 +9,7 @@ import {
   dateKey,
   emptyPractice,
   previousDate,
+  sanitizeClientId,
   sanitizeGoal,
   sanitizeAiConsent,
   sanitizeChatHistory,
@@ -17,12 +18,36 @@ import {
   sanitizeStreakDays,
 } from '../src/lib/storage';
 
+const nativeUuid = 'b7c1e2f3-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
+jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => nativeUuid) }));
+const { randomUUID: expoRandomUUID } = jest.requireMock('expo-crypto') as { randomUUID: jest.Mock };
+
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
   return value;
 }
 
 describe('local progress storage', () => {
+  it('derives new client ids from a cryptographic source, not Math.random', () => {
+    const globals = globalThis as { crypto?: Crypto };
+    const original = globals.crypto;
+    delete globals.crypto;
+    try {
+      // React Native has no global crypto, so expo-crypto must supply the id.
+      const generated = sanitizeClientId(null);
+      expect(expoRandomUUID).toHaveBeenCalled();
+      expect(generated).toBe(nativeUuid);
+      expect(generated).not.toContain('mobile-');
+    } finally {
+      if (original) globals.crypto = original;
+    }
+  });
+
+  it('keeps a well-formed stored client id instead of regenerating it', () => {
+    expect(sanitizeClientId('a3f1c2d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d')).toBe('a3f1c2d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d');
+    expect(sanitizeClientId('short')).not.toBe('short');
+  });
+
   it('uses local calendar dates and crosses month boundaries safely', () => {
     const value = new Date(2026, 6, 1, 23, 30);
     expect(dateKey(value)).toBe('2026-07-01');

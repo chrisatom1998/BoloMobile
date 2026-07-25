@@ -1,3 +1,5 @@
+import { randomUUID } from 'expo-crypto';
+
 import type {
   ChatMessage,
   LearnerProfile,
@@ -341,9 +343,24 @@ export function sanitizeGoal(value: string | null): 5 | 10 | 15 {
   return goal === 5 || goal === 15 ? goal : 10;
 }
 
+// The client id is the only capability the backend accepts for deleting a
+// learner's data and for minting realtime tokens, so it must be unguessable.
+// React Native exposes no global crypto, so expo-crypto is the real path on device.
+function secureUuid(): string | null {
+  const fromGlobal = globalThis.crypto?.randomUUID?.();
+  if (typeof fromGlobal === 'string' && fromGlobal) return fromGlobal;
+  try {
+    const fromExpo: unknown = randomUUID();
+    if (typeof fromExpo === 'string' && fromExpo) return fromExpo;
+  } catch {
+    // expo-crypto is unavailable outside a native runtime.
+  }
+  return null;
+}
+
 export function sanitizeClientId(value: string | null): string {
   if (value && /^[A-Za-z0-9-]{8,64}$/.test(value)) return value;
-  const generated = globalThis.crypto?.randomUUID?.() ?? `mobile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const generated = secureUuid() ?? `mobile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   return generated.slice(0, 64);
 }
 
