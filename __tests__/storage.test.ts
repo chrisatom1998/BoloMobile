@@ -13,9 +13,14 @@ import {
   sanitizeGoal,
   sanitizeAiConsent,
   sanitizeChatHistory,
+  sanitizePhraseReviews,
   sanitizePhrases,
   sanitizePractice,
+  sanitizePracticeHistory,
+  sanitizeReminder,
+  sanitizeSceneProgress,
   sanitizeStreakDays,
+  defaultReminderSettings,
 } from '../src/lib/storage';
 
 const nativeUuid = 'b7c1e2f3-4a5b-4c6d-8e9f-0a1b2c3d4e5f';
@@ -167,5 +172,209 @@ describe('local progress storage', () => {
     expect(sanitizeAiConsent('true')).toBeNull();
     expect(sanitizeAiConsent('{"version":0,"acceptedAt":"2026-07-13T20:00:00.000Z"}')).toBeNull();
     expect(sanitizeAiConsent('{"version":1,"acceptedAt":"not-a-date"}')).toBeNull();
+  });
+});
+
+describe('scene progress storage', () => {
+  it.each([
+    ['nothing stored', null],
+    ['malformed JSON', '{bad json'],
+    ['an array where a map is expected', '[]'],
+    ['a primitive', '"progress"'],
+  ])('falls back to an empty map for %s', (_label, value) => {
+    expect(sanitizeSceneProgress(value)).toEqual({});
+  });
+
+  it.each([
+    ['uppercase letters', 'Chai-Stall'],
+    ['more than 64 characters', 'a'.repeat(65)],
+    ['underscores', 'chai_stall'],
+    ['spaces', 'chai stall'],
+    ['an empty name', ''],
+  ])('drops scene ids with %s', (_label, sceneId) => {
+    expect(sanitizeSceneProgress(JSON.stringify({ [sceneId]: { completions: 1 } }))).toEqual({});
+  });
+
+  it('zeroes non-integer counters and clamps oversized ones', () => {
+    const progress = expectDefined(sanitizeSceneProgress(JSON.stringify({
+      'chai-stall': {
+        completions: 99_999,
+        bestScore: '400',
+        bestAccuracy: 250,
+        totalCorrect: 3.5,
+        totalAnswers: -4,
+        lastBeatIndex: 900,
+        lastPracticedAt: 'whenever',
+        weakPhrases: [],
+      },
+    }))['chai-stall']);
+
+    expect(progress).toEqual({
+      completions: 10_000,
+      bestScore: 0,
+      bestAccuracy: 100,
+      totalCorrect: 0,
+      totalAnswers: 0,
+      lastPracticedAt: null,
+      lastBeatIndex: 100,
+      weakPhrases: [],
+    });
+  });
+
+  it('deduplicates weak phrases, drops non-strings, and keeps at most fifty', () => {
+    const many = Array.from({ length: 60 }, (_, index) => `phrase-${index}`);
+    const progress = expectDefined(sanitizeSceneProgress(JSON.stringify({
+      'chai-stall': { weakPhrases: ['एक', 'एक', '   ', 7, null, 'दो'] },
+      'auto-ride': { weakPhrases: many },
+    }))['chai-stall']);
+
+    expect(progress.weakPhrases).toEqual(['एक', 'दो']);
+    expect(expectDefined(sanitizeSceneProgress(JSON.stringify({ 'auto-ride': { weakPhrases: many } }))['auto-ride'])
+      .weakPhrases).toHaveLength(50);
+  });
+
+  it('keeps a valid practice timestamp and truncates beyond two hundred scenes', () => {
+    const stored = Object.fromEntries(Array.from({ length: 210 }, (_, index) => [
+      `scene-${index}`,
+      { lastPracticedAt: '2026-07-13T20:00:00.000Z' },
+    ]));
+    const sanitized = sanitizeSceneProgress(JSON.stringify(stored));
+
+    expect(Object.keys(sanitized)).toHaveLength(200);
+    expect(expectDefined(sanitized['scene-0']).lastPracticedAt).toBe('2026-07-13T20:00:00.000Z');
+    expect(sanitized['scene-205']).toBeUndefined();
+  });
+});
+
+describe('phrase review storage', () => {
+  it.each([
+    ['nothing stored', null],
+    ['malformed JSON', '{bad json'],
+    ['an array where a map is expected', '[]'],
+    ['a primitive', '12'],
+  ])('falls back to an empty map for %s', (_label, value) => {
+    expect(sanitizePhraseReviews(value)).toEqual({});
+  });
+
+  it.each([
+    ['an empty key', ''],
+    ['a whitespace key', '   '],
+    ['a key longer than 300 characters', 'x'.repeat(301)],
+  ])('drops reviews stored under %s', (_label, phrase) => {
+    expect(sanitizePhraseReviews(JSON.stringify({ [phrase]: { mastery: 2 } }))).toEqual({});
+  });
+
+  it('clamps mastery, intervals, and review counts into their supported ranges', () => {
+    const reviews = sanitizePhraseReviews(JSON.stringify({
+      'नमस्ते': { mastery: 9, intervalDays: 900, correctReviews: 6, totalReviews: 2, dueAt: '2026-07-20' },
+      'धन्यवाद': { mastery: -3, intervalDays: 2.5, correctReviews: 1, totalReviews: 4, dueAt: 'someday' },
+    }));
+
+    expect(expectDefined(reviews['नमस्ते'])).toEqual({
+      mastery: 5,
+      intervalDays: 365,
+      dueAt: '2026-07-20',
+      lastReviewedAt: null,
+      correctReviews: 6,
+      totalReviews: 6,
+    });
+    expect(expectDefined(reviews['धन्यवाद'])).toEqual({
+      mastery: 0,
+      intervalDays: 0,
+      dueAt: dateKey(),
+      lastReviewedAt: null,
+      correctReviews: 1,
+      totalReviews: 4,
+    });
+  });
+
+  it('keeps at most two hundred reviews', () => {
+    const stored = Object.fromEntries(Array.from({ length: 210 }, (_, index) => [`phrase-${index}`, { mastery: 1 }]));
+
+    expect(Object.keys(sanitizePhraseReviews(JSON.stringify(stored)))).toHaveLength(200);
+  });
+});
+
+describe('practice history storage', () => {
+  it.each([
+    ['nothing stored', null],
+    ['malformed JSON', '{bad json'],
+    ['an object where a list is expected', '{}'],
+    ['a primitive', '"history"'],
+  ])('falls back to an empty history for %s', (_label, value) => {
+    expect(sanitizePracticeHistory(value)).toEqual([]);
+  });
+
+  it('drops undated entries, collapses duplicate days, and sorts the result', () => {
+    expect(sanitizePracticeHistory(JSON.stringify([
+      { date: '2026-07-13', seconds: 60, correct: 1, answers: 2, reviews: 3 },
+      { date: 'yesterday', seconds: 60 },
+      null,
+      { date: '2026-07-11', seconds: 30, correct: 0, answers: 0, reviews: 0 },
+      { date: '2026-07-13', seconds: 90, correct: 4, answers: 5, reviews: 6 },
+    ]))).toEqual([
+      { date: '2026-07-11', seconds: 30, correct: 0, answers: 0, reviews: 0 },
+      { date: '2026-07-13', seconds: 90, correct: 4, answers: 5, reviews: 6 },
+    ]);
+  });
+
+  it('rounds numeric strings and clamps each counter to its daily maximum', () => {
+    expect(sanitizePracticeHistory(JSON.stringify([
+      { date: '2026-07-13', seconds: '120.6', correct: 99_999, answers: -5, reviews: 'not a number' },
+    ]))).toEqual([
+      { date: '2026-07-13', seconds: 121, correct: 10_000, answers: 0, reviews: 0 },
+    ]);
+    expect(expectDefined(sanitizePracticeHistory(JSON.stringify([{ date: '2026-07-13', seconds: 999_999 }]))[0]).seconds)
+      .toBe(MAX_DAILY_PRACTICE_SECONDS);
+  });
+
+  it('keeps only the most recent ninety days', () => {
+    const stored = Array.from({ length: 120 }, (_, index) => ({
+      date: dateKey(new Date(2026, 0, index + 1)),
+      seconds: 60,
+    }));
+    const history = sanitizePracticeHistory(JSON.stringify(stored));
+
+    expect(history).toHaveLength(90);
+    expect(expectDefined(history[0]).date).toBe(dateKey(new Date(2026, 0, 31)));
+    expect(expectDefined(history.at(-1)).date).toBe(dateKey(new Date(2026, 0, 120)));
+  });
+});
+
+describe('practice reminder storage', () => {
+  it.each([
+    ['nothing stored', null],
+    ['malformed JSON', '{bad json'],
+    ['an array where an object is expected', '[]'],
+    ['a primitive', 'true'],
+  ])('falls back to the default reminder for %s', (_label, value) => {
+    expect(sanitizeReminder(value)).toEqual(defaultReminderSettings());
+  });
+
+  it.each([
+    ['a fractional hour', 18.5, 19],
+    ['an hour past midnight', 99, 23],
+    ['a negative hour', -4, 0],
+    ['a string hour', '20', 19],
+  ])('normalizes %s', (_label, hour, expected) => {
+    expect(sanitizeReminder(JSON.stringify({ hour })).hour).toBe(expected);
+  });
+
+  it.each([
+    ['a fractional minute', 30.5, 0],
+    ['a minute past the hour', 90, 59],
+    ['a negative minute', -1, 0],
+    ['a string minute', '45', 0],
+  ])('normalizes %s', (_label, minute, expected) => {
+    expect(sanitizeReminder(JSON.stringify({ minute })).minute).toBe(expected);
+  });
+
+  it('only enables reminders for a literal true and keeps bounded notification ids', () => {
+    expect(sanitizeReminder('{"enabled":"true"}').enabled).toBe(false);
+    expect(sanitizeReminder('{"enabled":1}').enabled).toBe(false);
+    expect(sanitizeReminder('{"enabled":true}').enabled).toBe(true);
+    expect(sanitizeReminder('{"notificationId":"reminder-1"}').notificationId).toBe('reminder-1');
+    expect(sanitizeReminder('{"notificationId":42}').notificationId).toBeNull();
+    expect(sanitizeReminder(JSON.stringify({ notificationId: 'x'.repeat(201) })).notificationId).toBeNull();
   });
 });

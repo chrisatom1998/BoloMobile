@@ -25,8 +25,19 @@ module.exports = ({ config }) => {
     throw new Error('Production builds require BOLO_EAS_PROJECT_ID and BOLO_EXPO_OWNER from the publisher\'s Expo account.');
   }
 
+  const plugins = (Array.isArray(config.plugins) ? config.plugins : []).map((plugin) => {
+    if (!Array.isArray(plugin) || plugin[0] !== 'expo-widgets') return plugin;
+    const [name, options] = plugin;
+    return [name, {
+      ...options,
+      bundleIdentifier: `${identifier}.widgets`,
+      groupIdentifier: `group.${identifier}`,
+    }];
+  });
+
   return {
     ...config,
+    plugins,
     ios: {
       ...config.ios,
       bundleIdentifier: identifier,
