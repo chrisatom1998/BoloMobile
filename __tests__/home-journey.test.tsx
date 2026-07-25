@@ -19,13 +19,16 @@ jest.mock('expo-router', () => ({
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  Bookmark: () => null,
   BarChart3: () => null,
   Check: () => null,
   ChevronRight: () => null,
+  Ear: () => null,
   Flame: () => null,
   Mic: () => null,
   Settings: () => null,
   Sparkles: () => null,
+  Sprout: () => null,
   Target: () => null,
 }));
 
@@ -66,12 +69,12 @@ describe('HomeScreen primary journey', () => {
     mockAppState.practice = { chaiDone: true, date: '2026-07-16', liveDone: false, seconds: 300 };
   });
 
-  it('routes to Settings, saved phrases, live coaching, and the selected scene', async () => {
+  it('routes to Settings, the language garden, live coaching, and the selected scene', async () => {
     const view = await render(<HomeScreen />);
 
     await fireEvent.press(view.getByLabelText('Settings'));
-    await fireEvent.press(view.getByLabelText('Saved phrases'));
-    await fireEvent.press(view.getByLabelText('Practice live with Asha'));
+    await fireEvent.press(view.getByLabelText('Practice saved phrase नमस्ते'));
+    await fireEvent.press(view.getByLabelText('Practice with Asha'));
     await fireEvent.press(view.getByLabelText('Open scene chai'));
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/settings');

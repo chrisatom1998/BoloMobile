@@ -1,8 +1,8 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
+import { Image } from 'expo-image';
 import { Button } from 'heroui-native/button';
-import { Card } from 'heroui-native/card';
-import { Chip } from 'heroui-native/chip';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { Bookmark, Ear, Mic, Sprout } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -16,12 +16,14 @@ import { makeStyles, maxContentWidth, radius, spacing, useSharedStyles } from '@
 
 type Filter = 'All' | SceneCategory;
 
+const ashaPortrait = require('../../../assets/images/asha-portrait.png');
+
 export default function HomeScreen() {
   const router = useRouter();
   const state = useAppState();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const { dailySteps, duePhrases, goal, learnerProfile, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
+  const { dailySteps, duePhrases, goal, learnerProfile, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const [filter, setFilter] = useState<Filter>('All');
   const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
@@ -32,6 +34,8 @@ export default function HomeScreen() {
   const resumed = recommendations.find((scene) => (sceneProgress[scene.id]?.lastBeatIndex ?? 0) > 0);
   const recommended = resumed ?? recommendations[0] ?? scenes[0];
   const minutesToday = Math.floor(practice.seconds / 60);
+  const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
+  const featuredMastery = featuredPhrase ? (phraseReviews ?? {})[featuredPhrase.hi]?.mastery ?? 0 : 0;
 
   const primary = useMemo(() => duePhrases.length > 0
     ? { eyebrow: 'Ready to review', title: `Review ${duePhrases.length} phrase${duePhrases.length === 1 ? '' : 's'}`, body: 'A quick recall round keeps useful Hindi ready when you need it.', action: 'Start review', onPress: () => router.push('/review' as Href) }
@@ -78,16 +82,39 @@ export default function HomeScreen() {
         </View>
       </View>
 
-        <Card variant="transparent" style={styles.nextCard}>
-        <Card.Header style={styles.nextHeading}>
-          <Text style={styles.nextEyebrow}>{primary.eyebrow}</Text>
-          <Chip accessibilityLabel="View progress" accessibilityRole="button" color="warning" onPress={() => router.push('/progress' as Href)} size="sm" style={styles.streakChip} variant="soft">
-            <Chip.Label style={styles.streakChipText}>🔥 {streak} day streak</Chip.Label>
-          </Chip>
-        </Card.Header>
-        <Card.Body style={styles.nextCardBody}>
-          <Card.Title style={styles.nextTitle}>{primary.title}</Card.Title>
-          <Card.Description style={styles.nextBody}>{primary.body}</Card.Description>
+      <View style={styles.practiceArc}>
+        <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.practicePortrait} transition={0} />
+        <View style={styles.practiceArcCopy}>
+          <View style={styles.practiceArcHeading}>
+            <View style={styles.practiceArcTitleCopy}>
+              <JournalKicker>Today · a small practice</JournalKicker>
+              <JournalDisplay style={styles.practiceArcTitle}>Let one phrase take root.</JournalDisplay>
+            </View>
+            <Pressable accessibilityLabel="View progress" accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.streakChip}>
+              <Sprout color={styles.streakChipIcon.color} size={15} />
+              <Text style={styles.streakChipText}>{streak} day streak</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.nextBody}>{primary.body}</Text>
+          <View accessibilityLabel="Today’s gentle practice arc" style={styles.arcSteps}>
+            <View style={styles.arcStep}>
+              <View style={styles.arcIcon}><Ear color={styles.arcIconText.color} size={19} /></View>
+              <Text style={styles.arcStepLabel}>Listen</Text>
+            </View>
+            <View style={styles.arcConnector} />
+            <View style={styles.arcStep}>
+              <View style={[styles.arcIcon, styles.arcIconActive]}><Mic color={styles.arcIconTextActive.color} size={19} /></View>
+              <Text style={[styles.arcStepLabel, styles.arcStepLabelActive]}>Speak</Text>
+            </View>
+            <View style={styles.arcConnector} />
+            <View style={styles.arcStep}>
+              <View style={styles.arcIcon}><Bookmark color={styles.arcIconText.color} size={19} /></View>
+              <Text style={styles.arcStepLabel}>Save</Text>
+            </View>
+          </View>
+          <Button accessibilityLabel={primary.action} accessibilityRole="button" onPress={primary.onPress} size="md" style={styles.nextButton} variant="secondary">
+            <Button.Label style={styles.nextButtonText}>{primary.action}</Button.Label>
+          </Button>
           <View style={styles.goalSummary}>
             <Text style={styles.todayLabel}>Today · {goalPercent}% of {goal} min</Text>
             <Text style={styles.todayLabel}>{minutesToday} min practiced</Text>
@@ -95,35 +122,6 @@ export default function HomeScreen() {
           <View accessibilityLabel={`${goalPercent} percent of daily goal complete`} style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${goalPercent}%` }]} />
           </View>
-        </Card.Body>
-        <Card.Footer style={styles.nextCardFooter}>
-          <Button accessibilityLabel={primary.action} accessibilityRole="button" onPress={primary.onPress} size="md" style={styles.nextButton} variant="secondary">
-            <Button.Label style={styles.nextButtonText}>{primary.action}</Button.Label>
-          </Button>
-        </Card.Footer>
-      </Card>
-
-      <View style={styles.todayPanel}>
-        <View style={styles.todayPanelHeader}>
-          <View>
-            <Text style={styles.sectionEyebrow}>Today’s path</Text>
-            <Text style={styles.todayTitle}>Keep the momentum gentle</Text>
-          </View>
-          <Pressable accessibilityLabel="Progress" accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.progressLink}>
-            <Text style={styles.progressLinkText}>{minutesToday} / {goal} min</Text>
-          </Pressable>
-        </View>
-        <View style={styles.pathActions}>
-          <PressableFeedback accessibilityLabel="Saved phrases" accessibilityRole="button" onPress={() => router.push('/phrases')} style={[styles.pathAction, styles.pathActionForest]}>
-            <Text style={styles.pathTitle}>Phrases</Text>
-            <Text style={styles.pathMeta}>{duePhrases.length ? `${duePhrases.length} due now` : `${phrases.length} saved`}</Text>
-            <Text style={styles.pathArrow}>→</Text>
-          </PressableFeedback>
-          <PressableFeedback accessibilityLabel="Practice live with Asha" accessibilityRole="button" onPress={() => router.push('/live')} style={[styles.pathAction, styles.pathActionBrand]}>
-            <Text style={styles.pathTitle}>Asha</Text>
-            <Text style={styles.pathMeta}>{practice.liveDone ? 'Turn complete' : 'Talk live or type'}</Text>
-            <Text style={styles.pathArrow}>→</Text>
-          </PressableFeedback>
         </View>
       </View>
 
@@ -134,6 +132,18 @@ export default function HomeScreen() {
         </View>
         <Text style={styles.lessonPlansArrow}>→</Text>
       </PressableFeedback>
+      {featuredPhrase ? (
+        <PressableFeedback accessibilityLabel={`Practice saved phrase ${featuredPhrase.hi}`} accessibilityRole="button" onPress={() => router.push('/phrases')} style={styles.gardenCue}>
+          <View style={styles.gardenCueIcon}><Sprout color={styles.gardenCueIconText.color} size={21} /></View>
+          <View style={styles.gardenCueCopy}>
+            <Text style={styles.gardenCueEyebrow}>Language garden</Text>
+            <Text style={styles.gardenCueHindi}>{featuredPhrase.hi}</Text>
+            <Text style={styles.gardenCueLatin}>{featuredPhrase.latin}</Text>
+            <Text style={styles.gardenCueBody}>{featuredMastery ? `${featuredMastery}/5 roots strong` : duePhrases.length ? 'Ready to water today' : 'A phrase worth keeping close'}</Text>
+          </View>
+          <Text style={styles.gardenCueArrow}>→</Text>
+        </PressableFeedback>
+      ) : null}
 
       <View style={styles.sectionHeading}>
         <View>
@@ -154,7 +164,7 @@ export default function HomeScreen() {
         })}
       </ScrollView>
     </View>
-  ), [duePhrases.length, filter, goal, goalPercent, minutesToday, phrases.length, practice.liveDone, primary, router, streak, styles, visibleScenes.length]);
+  ), [duePhrases.length, featuredMastery, featuredPhrase, filter, goal, goalPercent, minutesToday, primary, router, streak, styles, visibleScenes.length]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
@@ -193,23 +203,40 @@ const useStyles = makeStyles((c) => ({
   settingsButton: { alignSelf: 'flex-start', minHeight: 48, minWidth: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md, boxShadow: '0 4px 12px rgba(33, 37, 33, 0.08)' },
   settingsDots: { color: c.brandText, fontSize: 15, fontWeight: '900', letterSpacing: 1.2 },
   settingsLabel: { color: c.muted, fontSize: 13, fontWeight: '800' },
-  nextCard: { width: '100%', minHeight: 232, alignItems: 'stretch', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 26, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm, overflow: 'hidden', boxShadow: '0 10px 22px rgba(35, 39, 35, 0.08)' },
-  nextHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  nextCardBody: { width: '100%', alignItems: 'flex-start', gap: spacing.sm },
-  nextCardFooter: { width: '100%', alignItems: 'stretch', paddingTop: spacing.md },
-  nextEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'left' },
-  nextTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 31, fontWeight: '700', textAlign: 'left' },
+  practiceArc: { width: '100%', alignItems: 'stretch', overflow: 'hidden', borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, boxShadow: '0 10px 22px rgba(35, 39, 35, 0.08)' },
+  practicePortrait: { width: '100%', height: 142 },
+  practiceArcCopy: { width: '100%', alignItems: 'stretch', gap: spacing.md, padding: spacing.lg },
+  practiceArcHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  practiceArcTitleCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  practiceArcTitle: { maxWidth: 270, fontSize: 28, lineHeight: 34, textAlign: 'left' },
   nextBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
   goalSummary: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
   todayLabel: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'left' },
-  streakChip: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  streakChipText: { color: c.brandText, fontSize: 12, fontWeight: '900' },
+  streakChip: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  streakChipIcon: { color: c.forestText },
+  streakChipText: { color: c.forestText, fontSize: 12, fontWeight: '900' },
   progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm },
-  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
-  nextButton: { minHeight: 48, alignSelf: 'stretch', backgroundColor: c.brand, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
+  arcSteps: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
+  arcStep: { minWidth: 0, flex: 1, alignItems: 'center', gap: 5 },
+  arcIcon: { width: 42, height: 42, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center' },
+  arcIconActive: { backgroundColor: c.neutralSurface, borderColor: c.gold, borderWidth: 2 },
+  arcIconText: { color: c.forestText },
+  arcIconTextActive: { color: c.white },
+  arcStepLabel: { color: c.muted, fontSize: 11, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
+  arcStepLabelActive: { color: c.ink },
+  arcConnector: { height: 1, flex: 0.42, backgroundColor: c.gold },
+  nextButton: { minHeight: 52, alignSelf: 'stretch', backgroundColor: c.neutralSurface, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   nextButtonText: { color: c.white, fontSize: 14, fontWeight: '800' },
-  todayPanel: { width: '100%', alignItems: 'center', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
-  todayPanelHeader: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md },
+  gardenCue: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.md },
+  gardenCueIcon: { width: 46, height: 46, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 1, backgroundColor: c.goldSoft, alignItems: 'center', justifyContent: 'center' },
+  gardenCueIconText: { color: c.forestText },
+  gardenCueCopy: { minWidth: 0, flex: 1, gap: 1 },
+  gardenCueEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  gardenCueHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 27, fontWeight: '700' },
+  gardenCueLatin: { color: c.brandText, fontSize: 13, fontWeight: '900' },
+  gardenCueBody: { color: c.muted, fontSize: 12, lineHeight: 17 },
+  gardenCueArrow: { color: c.forestText, fontSize: 22, fontWeight: '900' },
   sectionEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase', textAlign: 'left' },
   todayTitle: { color: c.ink, fontSize: 17, lineHeight: 21, fontWeight: '900', marginTop: 2, textAlign: 'left' },
   progressLink: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },

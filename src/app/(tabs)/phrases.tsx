@@ -1,9 +1,9 @@
 import { useRouter, type Href } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
-import { BookOpen, Trash2, Volume2 } from 'lucide-react-native';
+import { BookOpen, Leaf, Trash2, Volume2 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
+import { FlatList, Text, useWindowDimensions, View } from 'react-native';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
@@ -32,10 +32,10 @@ for (const scene of scenes) {
 
 function MasteryMeter({ mastery }: { mastery: number }) {
   const styles = useStyles();
-  const filledDots = Math.min(3, Math.ceil(mastery / 2));
+  const { colors } = useTheme();
   return (
     <View accessibilityLabel={`Mastery ${mastery} of 5`} style={styles.masteryMeter}>
-      {Array.from({ length: 3 }, (_, index) => <View key={index} style={[styles.masteryDot, index < filledDots && styles.masteryDotFilled]} />)}
+      {Array.from({ length: 5 }, (_, index) => <Leaf color={index < mastery ? colors.forest : colors.lineStrong} fill={index < mastery ? colors.forestSoft : 'transparent'} key={index} size={14} strokeWidth={1.8} />)}
     </View>
   );
 }
@@ -45,6 +45,8 @@ export default function PhrasesScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
+  const { fontScale } = useWindowDimensions();
+  const largeTextLayout = fontScale >= 1.4;
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
   const [audioError, setAudioError] = useState('');
   const [query, setQuery] = useState('');
@@ -89,8 +91,8 @@ export default function PhrasesScreen() {
         </View>
         <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={styles.headerMotif} />
       </View>
-      <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={styles.dueCard}>
-        <View style={styles.dueIcon}><Text style={styles.dueIconText}>{due.length}</Text></View>
+      <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
+        <View style={[styles.dueIcon, largeTextLayout && styles.dueIconLarge]}><Text style={styles.dueIconText}>{due.length}</Text></View>
         <View style={styles.dueCopy}>
           <Text style={styles.dueTitle}>Ready for review</Text>
           <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'Everything is reviewed for today.'}</Text>
@@ -113,6 +115,7 @@ export default function PhrasesScreen() {
           { label: 'Social', value: 'Social' },
           { label: 'Travel', value: 'Travel' },
         ]}
+        stackedAtLargeText
         style={styles.segmentedControl}
         value={filter}
       />
@@ -147,8 +150,8 @@ export default function PhrasesScreen() {
         const category = phraseCategories.get(item.hi) ?? 'Asha';
         const isDue = dueSet.has(item.hi);
         return (
-          <View style={[styles.card, isDue && styles.cardDue]}>
-            <View style={styles.cardHeader}>
+          <View style={[styles.card, largeTextLayout && styles.cardLarge, isDue && styles.cardDue]}>
+            <View style={[styles.cardHeader, largeTextLayout && styles.cardHeaderLarge]}>
               <View style={[styles.categoryPill, category === 'Food' ? styles.categoryPillBrand : styles.categoryPillForest]}>
                 <Text style={[styles.categoryText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>{category === 'Food' ? 'Café' : category}</Text>
               </View>
@@ -171,7 +174,7 @@ export default function PhrasesScreen() {
             </View>
             <View style={styles.actions}>
               {replaySpeeds.map(({ label, rate }) => (
-                <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => void playPhrase(item.hi, rate)} style={[styles.speedButton, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
+                <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => void playPhrase(item.hi, rate)} style={[styles.speedButton, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
               ))}
             </View>
           </View>
@@ -192,7 +195,9 @@ const useStyles = makeStyles((c) => ({
   headerTitle: { maxWidth: 310, fontSize: 30, lineHeight: 36, textAlign: 'left' },
   headerMotif: { borderRadius: 20 },
   dueCard: { width: '100%', minHeight: 146, overflow: 'hidden', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 14, padding: spacing.lg, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
+  dueCardLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   dueIcon: { width: 68, height: 68, borderRadius: 21, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  dueIconLarge: { alignSelf: 'flex-start', height: 'auto', minHeight: 68, minWidth: 68, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: 'auto' },
   dueIconText: { color: '#38290D', fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 4 },
   dueTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', textAlign: 'left' },
@@ -206,8 +211,10 @@ const useStyles = makeStyles((c) => ({
   savedCount: { color: c.muted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'], textAlign: 'right' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
   card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', gap: 5, paddingHorizontal: spacing.lg, paddingVertical: 14, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
+  cardLarge: { alignItems: 'stretch', gap: spacing.md, overflow: 'visible' },
   cardDue: { borderColor: c.gold, borderWidth: 1.5 },
   cardHeader: { width: '100%', minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  cardHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   cardHeaderActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.xs },
   categoryPill: { borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   categoryPillForest: { backgroundColor: c.forestSoft },
@@ -228,12 +235,11 @@ const useStyles = makeStyles((c) => ({
   english: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
   masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: 2 },
   masteryMeter: { flexDirection: 'row', gap: 4 },
-  masteryDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: c.lineStrong },
-  masteryDotFilled: { backgroundColor: c.forest },
   mastery: { color: c.mutedSoft, fontSize: 11, lineHeight: 16, fontWeight: '800', textTransform: 'uppercase' },
   masteryDue: { color: c.brandText },
   actions: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: spacing.xs, paddingTop: spacing.xs },
   speedButton: { minWidth: 54, height: 34, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  speedButtonLarge: { height: 'auto', minHeight: 44, paddingVertical: spacing.sm },
   speedText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
