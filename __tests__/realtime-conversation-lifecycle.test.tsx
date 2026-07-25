@@ -42,6 +42,11 @@ const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const createSecretMock = createRealtimeClientSecret as jest.MockedFunction<typeof createRealtimeClientSecret>;
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -400,7 +405,7 @@ describe('Realtime connection lifecycle', () => {
       firstStart = result.current.startTurn();
     });
     await waitFor(() => expect(createSecretMock).toHaveBeenCalledTimes(1));
-    const firstSignal = createSecretMock.mock.calls[0][1];
+    const firstSignal = expectDefined(createSecretMock.mock.calls[0])[1];
 
     await act(() => result.current.disconnect());
     expect(firstSignal?.aborted).toBe(true);
@@ -450,7 +455,7 @@ describe('Realtime connection lifecycle', () => {
       start = result.current.startTurn();
     });
     await waitFor(() => expect(createSecretMock).toHaveBeenCalledTimes(1));
-    const signal = createSecretMock.mock.calls[0][1];
+    const signal = expectDefined(createSecretMock.mock.calls[0])[1];
 
     await unmount();
     expect(signal?.aborted).toBe(true);
@@ -494,7 +499,8 @@ describe('Realtime connection lifecycle', () => {
 
     jest.useFakeTimers();
     try {
-      const delays = Array.from({ length: 12 }, (_, index) => [500, 2_000, 5_000][index % 3]);
+      const delayCycle = [500, 2_000, 5_000] as const;
+      const delays = Array.from({ length: 12 }, (_, index) => delayCycle[index % 3] ?? delayCycle[0]);
       for (const [index, delayMs] of delays.entries()) {
         const turn = index + 1;
         const itemId = `input-turn-${turn}`;

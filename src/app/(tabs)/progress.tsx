@@ -1,11 +1,13 @@
 import { useRouter, type Href } from 'expo-router';
 import { Award, Check, Leaf, Share2, Sprout, Volume2 } from 'lucide-react-native';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { useMemo } from 'react';
 import { Share, ScrollView, Text, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { showAppAlert } from '@/lib/app-alert';
 import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
-import { useAppState } from '@/state/app-state';
+import { useAppStateValue } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme, type ThemeColors } from '@/theme';
 
 type ProgressStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
@@ -15,13 +17,17 @@ export default function ProgressScreen() {
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const { duePhrases, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppState();
-  const week = weeklyPractice(practiceHistory);
-  const categories = categoryMastery(sceneProgress);
-  const accuracy = learningAccuracy(sceneProgress);
-  const milestones = milestoneProgress(sceneProgress);
-  const completedScenes = Object.values(sceneProgress).filter((item) => item.completions > 0).length;
-  const maxMinutes = Math.max(1, ...week.map((day) => day.seconds / 60));
+  const { duePhrases, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
+  const { week, maxMinutes } = useMemo(() => {
+    const days = weeklyPractice(practiceHistory);
+    return { week: days, maxMinutes: Math.max(1, ...days.map((day) => day.seconds / 60)) };
+  }, [practiceHistory]);
+  const { accuracy, categories, completedScenes, milestones } = useMemo(() => ({
+    categories: categoryMastery(sceneProgress),
+    accuracy: learningAccuracy(sceneProgress),
+    milestones: milestoneProgress(sceneProgress),
+    completedScenes: Object.values(sceneProgress).filter((item) => item.completions > 0).length,
+  }), [sceneProgress]);
   const reviewedThisWeek = week.reduce((total, day) => total + day.reviews, 0);
   const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
   const featuredMastery = featuredPhrase ? phraseReviews[featuredPhrase.hi]?.mastery ?? 0 : 0;
@@ -31,7 +37,9 @@ export default function ProgressScreen() {
     const message = achieved.length
       ? `I’m practicing real-life Hindi with Bolo. ${completedScenes} scenes complete — ${achieved.join(', ')}.`
       : `I’m building practical Hindi confidence with Bolo. ${completedScenes} scene${completedScenes === 1 ? '' : 's'} complete.`;
-    void Share.share({ message, title: 'My Bolo progress' });
+    void Share.share({ message, title: 'My Bolo progress' }).catch((error: unknown) => {
+      showAppAlert('Could not share your progress', error instanceof Error ? error.message : 'Try again in a moment.');
+    });
   }
 
   return (

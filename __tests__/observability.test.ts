@@ -11,6 +11,11 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 import { clearObservability, getObservabilitySnapshot, observe, observeOncePerSession } from '../src/lib/observability';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 describe('privacy-preserving observability', () => {
   beforeEach(async () => {
     mockStore.clear();
@@ -22,7 +27,7 @@ describe('privacy-preserving observability', () => {
     observe('scene_completed');
     await new Promise((resolve) => setTimeout(resolve, 0));
     const snapshot = await getObservabilitySnapshot();
-    const counters = Object.values(snapshot.days)[0];
+    const counters = expectDefined(Object.values(snapshot.days)[0]);
     expect(counters.ai_request_succeeded).toEqual({ count: 1, totalDurationMs: 124 });
     expect(counters.scene_completed).toEqual({ count: 1, totalDurationMs: 0 });
     expect(JSON.stringify(snapshot)).not.toMatch(/message|transcript|audio|phrase|client/i);

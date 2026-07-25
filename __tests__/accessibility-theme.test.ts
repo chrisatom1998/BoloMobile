@@ -5,6 +5,9 @@ import { colors, lightColors, useTheme } from '../src/theme';
 function relativeLuminance(hex: string) {
   const channels = hex.match(/[a-f\d]{2}/giu)?.map((channel) => Number.parseInt(channel, 16) / 255) ?? [];
   const [red, green, blue] = channels.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+  if (red === undefined || green === undefined || blue === undefined) {
+    throw new Error(`expected three color channels in ${hex}`);
+  }
   return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
 }
 

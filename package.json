@@ -62,6 +62,7 @@
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
+    "test:coverage": "jest --runInBand --coverage",
     "e2e:validate": "node ./scripts/validate-e2e-flows.mjs",
     "e2e:ios": "maestro test .maestro",
     "store:validate": "node ./scripts/validate-store-assets.mjs",
@@ -75,6 +76,7 @@
     "submit:ios:production": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs submit --platform ios --latest --profile production",
     "metadata:push": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs metadata:push --profile production",
     "release:validate": "node ./scripts/validate-release.mjs",
+    "release:validate:live": "node ./scripts/validate-release-live.mjs",
     "verify": "npm run lint && npm run typecheck && npm test && npm run store:validate && npm run e2e:validate"
   },
   "jest": {
@@ -89,7 +91,20 @@
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/src/app/"
-    ]
+    ],
+    "restoreMocks": true,
+    "clearMocks": true,
+    "collectCoverageFrom": [
+      "src/**/*.{ts,tsx}"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 82,
+        "branches": 70,
+        "functions": 77,
+        "lines": 86
+      }
+    }
   },
   "expo": {
     "doctor": {
@@ -102,7 +117,8 @@
     }
   },
   "overrides": {
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "brace-expansion": "^5.0.8"
   },
   "private": true
 }

@@ -55,7 +55,7 @@ describe('live voice privacy copy', () => {
     const inAppPolicy = read('src/app/privacy.tsx');
     const settings = read('src/app/settings.tsx');
     const declarations = read('store/privacy-declarations.md');
-    const releaseValidation = read('scripts/validate-release.mjs');
+    const releaseValidation = read('scripts/validate-release-live.mjs');
 
     expect(consent).toMatch(/up to 100 recent Asha chat messages[\s\S]{0,80}unencrypted[\s\S]{0,80}this device/iu);
     expect(inAppPolicy).toMatch(/up to 100 recent typed and transcribed Asha chat messages/iu);

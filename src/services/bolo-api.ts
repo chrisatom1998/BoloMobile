@@ -16,7 +16,12 @@ export const AI_VOICE_TEXT_LIMIT = 240;
 export type ReportReason = 'unsafe_or_inappropriate' | 'incorrect_or_misleading';
 
 export function getBoloApiUrl() {
-  return process.env.EXPO_PUBLIC_BOLO_API_URL?.trim().replace(/\/$/u, '') || DEFAULT_API_URL;
+  const override = process.env.EXPO_PUBLIC_BOLO_API_URL?.trim().replace(/\/$/u, '');
+  if (override && !override.startsWith('https://')) {
+    console.warn('Ignoring EXPO_PUBLIC_BOLO_API_URL: the Bolo API URL must use https://');
+    return DEFAULT_API_URL;
+  }
+  return override || DEFAULT_API_URL;
 }
 
 export type AiVoiceAudio = {

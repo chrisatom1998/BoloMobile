@@ -8,10 +8,11 @@ import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { getScene } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
+import { useSpeakText } from '@/hooks/use-speak-text';
 import { observe } from '@/lib/observability';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiWordTokens } from '@/lib/contextual-word-definition';
-import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
@@ -24,6 +25,7 @@ export default function SceneScreen() {
   const scene = useMemo(() => getScene(id), [id]);
   const { aiConsent, checkpointScene, clientId, learnerProfile, markSceneComplete, phrases, sceneProgress, togglePhrase } = useAppState();
   const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
+  const { audioError, clearAudioError, speak } = useSpeakText();
   const savedBeatIndex = scene ? sceneProgress?.[scene.id]?.lastBeatIndex ?? 0 : 0;
   const [beatIndex, setBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
   const [picked, setPicked] = useState<number | null>(null);
@@ -31,7 +33,6 @@ export default function SceneScreen() {
   const [correctCount, setCorrectCount] = useState(0);
   const [hearts, setHearts] = useState(3);
   const [done, setDone] = useState(false);
-  const [audioError, setAudioError] = useState('');
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
   const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
   const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
@@ -41,7 +42,10 @@ export default function SceneScreen() {
     return () => { void stopSpeaking(); };
   }, []);
 
-  if (!scene) {
+  const currentBeat = scene?.beats[beatIndex];
+  const currentTarget = currentBeat?.choices.find((choice) => choice.correct);
+
+  if (!scene || !currentBeat || !currentTarget) {
     return (
       <View style={styles.center}>
         <Text style={styles.finishTitle}>Scene not found</Text>
@@ -51,26 +55,22 @@ export default function SceneScreen() {
   }
 
   const activeScene = scene;
-  const beat = activeScene.beats[beatIndex];
-  const correctIndex = beat.choices.findIndex((choice) => choice.correct);
-  const target = beat.choices[correctIndex];
+  const beat = currentBeat;
+  const target = currentTarget;
   const saved = phrases.some((phrase) => phrase.hi === target.hi);
-  const correct = picked !== null && beat.choices[picked].correct;
+  const correct = picked !== null && beat.choices[picked]?.correct === true;
 
-  async function play(text: string) {
+  function play(text: string) {
     if ((!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) || pronunciationBusy) return;
-    setAudioError('');
-    try {
-      await speakText(text);
-    } catch (error) {
-      setAudioError(error instanceof Error ? error.message : 'Bolo could not play the AI voice.');
-    }
+    void speak(text);
   }
 
   function choose(index: number) {
     if (picked !== null || pronunciationBusy) return;
+    const choice = beat.choices[index];
+    if (choice === undefined) return;
     setPicked(index);
-    if (beat.choices[index].correct) {
+    if (choice.correct) {
       hapticSuccess();
       setScore((value) => value + 50);
       setCorrectCount((value) => value + 1);
@@ -80,12 +80,12 @@ export default function SceneScreen() {
       setHearts((value) => Math.max(0, value - 1));
       setWeakPhrases((current) => [...new Set([...current, target.hi])]);
     }
-    void play(beat.choices[index].reply);
+    play(choice.reply);
   }
 
   function next() {
     void stopSpeaking();
-    setAudioError('');
+    clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
       markSceneComplete(activeScene.id, elapsedSeconds(), {
         score,
@@ -106,7 +106,7 @@ export default function SceneScreen() {
 
   function replay() {
     void stopSpeaking();
-    setAudioError('');
+    clearAudioError();
     resetTimer();
     setBeatIndex(0);
     setPicked(null);
@@ -148,7 +148,7 @@ export default function SceneScreen() {
       </View>
       <View style={styles.track}><View style={[styles.trackFill, { width: `${(beatIndex + Number(picked !== null)) / activeScene.beats.length * 100}%`, backgroundColor: activeScene.color }]} /></View>
 
-      {!aiConsent ? <AiConsentGate><View /></AiConsentGate> : null}
+      {!aiConsent ? <AiConsentGate /> : null}
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
       <View style={[styles.world, { borderColor: activeScene.color }]}> 
@@ -162,7 +162,7 @@ export default function SceneScreen() {
               accessibilityRole="button"
               accessibilityState={{ disabled: (!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy }}
               disabled={(!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy}
-              onPress={() => void play(beat.npc)}
+              onPress={() => play(beat.npc)}
               style={[styles.speaker, ((!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy) && styles.disabled]}
             ><Volume2 color={colors.ink} size={18} /></Pressable>
             <Text style={styles.npc}>{beat.npc}</Text>
@@ -202,7 +202,7 @@ export default function SceneScreen() {
         <View style={styles.hint}><Text style={styles.hintTitle}>Asha’s hint</Text><Text style={styles.hintBody}>{beat.tip}</Text></View>
       ) : (
         <View style={styles.result}>
-          <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked].reply}</Text></View>
+          <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked]?.reply}</Text></View>
           <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton}><Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
         </View>
       )}

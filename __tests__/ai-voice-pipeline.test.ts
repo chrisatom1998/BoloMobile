@@ -61,6 +61,11 @@ const expoFileSystem = jest.requireMock('expo-file-system') as {
   __mockFiles: MockFile[];
 };
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -138,7 +143,7 @@ describe('AI voice native playback', () => {
       'file:///cache/',
       expect.stringMatching(/^bolo-ai-voice-.+\.mp3$/),
     );
-    const file = expoFileSystem.__mockFiles[0];
+    const file = expectDefined(expoFileSystem.__mockFiles[0]);
     expect(file.write).toHaveBeenCalledWith('SUQzBAAAAAA=', { encoding: 'base64' });
     expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(file.uri, {
       updateInterval: 100,
@@ -168,13 +173,13 @@ describe('AI voice native playback', () => {
     await aiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal);
 
     expect(expoFileSystem.File).toHaveBeenCalledTimes(1);
-    expect(expoFileSystem.__mockFiles[0].write).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).write).toHaveBeenCalledTimes(1);
     expect(expoAudio.createAudioPlayer).toHaveBeenCalledTimes(1);
     expect(native.player.seekTo).toHaveBeenCalledTimes(1);
     expect(native.player.seekTo).toHaveBeenCalledWith(0);
     expect(native.player.play).toHaveBeenCalledTimes(2);
     expect(native.player.release).not.toHaveBeenCalled();
-    expect(expoFileSystem.__mockFiles[0].delete).not.toHaveBeenCalled();
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).not.toHaveBeenCalled();
   });
 
   it('applies playback rates down to one tenth speed', async () => {
@@ -231,8 +236,8 @@ describe('AI voice native playback', () => {
     }
 
     expect(expoAudio.createAudioPlayer).toHaveBeenCalledTimes(5);
-    expect(players[0].player.release).toHaveBeenCalledTimes(1);
-    expect(expoFileSystem.__mockFiles[0].delete).toHaveBeenCalledTimes(1);
+    expect(expectDefined(players[0]).player.release).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
     expect(players.slice(1).every(({ player }) => player.release.mock.calls.length === 0)).toBe(true);
   });
 
@@ -249,7 +254,7 @@ describe('AI voice native playback', () => {
     expect(native.player.pause).toHaveBeenCalledTimes(2);
     expect(native.player.release).toHaveBeenCalledTimes(1);
     expect(native.subscription.remove).toHaveBeenCalledTimes(1);
-    expect(expoFileSystem.__mockFiles[0].delete).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
   });
 
   it('still rejects when pausing an invalidated native player throws during error handling', async () => {
@@ -266,7 +271,7 @@ describe('AI voice native playback', () => {
 
     expect(native.player.release).toHaveBeenCalledTimes(1);
     expect(native.subscription.remove).toHaveBeenCalledTimes(1);
-    expect(expoFileSystem.__mockFiles[0].delete).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
   });
 
   it('treats abort as cancellation while retaining the prepared clip for replay', async () => {
@@ -284,11 +289,11 @@ describe('AI voice native playback', () => {
     expect(native.player.pause).toHaveBeenCalledTimes(1);
     expect(native.player.release).not.toHaveBeenCalled();
     expect(native.subscription.remove).toHaveBeenCalledTimes(1);
-    expect(expoFileSystem.__mockFiles[0].delete).not.toHaveBeenCalled();
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).not.toHaveBeenCalled();
 
     aiVoicePlayer.clearAiVoicePlaybackCache();
     expect(native.player.release).toHaveBeenCalledTimes(1);
-    expect(expoFileSystem.__mockFiles[0].delete).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -317,35 +322,35 @@ describe('AI voice speech orchestration', () => {
     const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio').mockImplementation((chunk) => {
       const index = chunks.indexOf(chunk);
       if (index < 0) throw new Error(`Unexpected speech chunk: ${chunk}`);
-      return requestDeferred[index].promise;
+      return expectDefined(requestDeferred[index]).promise;
     });
     const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockImplementation((value) => {
       const index = audio.findIndex((candidate) => candidate.audioBase64 === value.audioBase64);
       if (index < 0) throw new Error(`Unexpected audio chunk: ${value.audioBase64}`);
-      return playbackDeferred[index].promise;
+      return expectDefined(playbackDeferred[index]).promise;
     });
 
     const speech = speakText(text);
     await waitFor(() => requestSpy.mock.calls.length === 2);
     expect(playbackSpy).not.toHaveBeenCalled();
 
-    requestDeferred[0].resolve(audio[0]);
+    expectDefined(requestDeferred[0]).resolve(expectDefined(audio[0]));
     await waitFor(() => playbackSpy.mock.calls.length === 1);
     expect(requestSpy).toHaveBeenCalledTimes(2);
 
-    playbackDeferred[0].resolve();
+    expectDefined(playbackDeferred[0]).resolve();
     await Promise.resolve();
     expect(playbackSpy).toHaveBeenCalledTimes(1);
 
-    requestDeferred[1].resolve(audio[1]);
+    expectDefined(requestDeferred[1]).resolve(expectDefined(audio[1]));
     await waitFor(() => playbackSpy.mock.calls.length === 2);
-    playbackDeferred[1].resolve();
+    expectDefined(playbackDeferred[1]).resolve();
     await expect(speech).resolves.toBeUndefined();
 
     expect(requestSpy.mock.calls.map(([chunk]) => chunk)).toEqual(chunks);
-    expect(requestSpy.mock.invocationCallOrder[0]).toBeLessThan(playbackSpy.mock.invocationCallOrder[0]);
-    expect(requestSpy.mock.invocationCallOrder[1]).toBeLessThan(playbackSpy.mock.invocationCallOrder[0]);
-    expect(requestSpy.mock.invocationCallOrder[1]).toBeLessThan(playbackSpy.mock.invocationCallOrder[1]);
+    expect(expectDefined(requestSpy.mock.invocationCallOrder[0])).toBeLessThan(expectDefined(playbackSpy.mock.invocationCallOrder[0]));
+    expect(expectDefined(requestSpy.mock.invocationCallOrder[1])).toBeLessThan(expectDefined(playbackSpy.mock.invocationCallOrder[0]));
+    expect(expectDefined(requestSpy.mock.invocationCallOrder[1])).toBeLessThan(expectDefined(playbackSpy.mock.invocationCallOrder[1]));
   });
 
   it('retries a failed Hindi clip once and completes the rest of the reply', async () => {

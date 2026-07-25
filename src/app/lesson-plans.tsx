@@ -29,7 +29,7 @@ export default function LessonPlansScreen() {
           const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
           const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
           const currentIndex = nextIndex < 0 ? plan.lessonIds.length - 1 : nextIndex;
-          const nextLessonId = plan.lessonIds[currentIndex];
+          const nextLessonId = plan.lessonIds[currentIndex] ?? '';
           const percent = Math.round(completed / plan.lessonIds.length * 100);
           return (
             <PressableFeedback

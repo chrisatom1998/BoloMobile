@@ -17,12 +17,12 @@ export function showAppAlert(
 
   if (actions.length === 1) {
     window.alert(alertContent);
-    actions[0].onPress?.();
+    actions[0]?.onPress?.();
     return;
   }
 
   if (choices.length === 1) {
-    if (window.confirm(alertContent)) choices[0].onPress?.();
+    if (window.confirm(alertContent)) choices[0]?.onPress?.();
     else cancel?.onPress?.();
     return;
   }

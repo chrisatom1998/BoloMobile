@@ -8,8 +8,9 @@ import { FlatList, Text, useWindowDimensions, View } from 'react-native';
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { scenes, type SceneCategory } from '@/data/scenes';
+import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
-import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
@@ -48,7 +49,7 @@ export default function PhrasesScreen() {
   const { fontScale } = useWindowDimensions();
   const largeTextLayout = fontScale >= 1.4;
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
-  const [audioError, setAudioError] = useState('');
+  const { audioError, speak } = useSpeakText();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   const due = useMemo(() => duePhrases ?? [], [duePhrases]);
@@ -65,14 +66,9 @@ export default function PhrasesScreen() {
 
   useEffect(() => () => { void stopSpeaking(); }, []);
 
-  async function playPhrase(text: string, playbackRate = 1) {
+  function playPhrase(text: string, playbackRate = 1) {
     if (!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) return;
-    setAudioError('');
-    try {
-      await speakText(text, undefined, playbackRate);
-    } catch (error) {
-      setAudioError(error instanceof Error ? error.message : 'Bolo could not play the voice.');
-    }
+    void speak(text, undefined, playbackRate);
   }
 
   function confirmRemove(phrase: SavedPhrase) {
@@ -156,7 +152,7 @@ export default function PhrasesScreen() {
                 <Text style={[styles.categoryText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>{category === 'Food' ? 'Café' : category}</Text>
               </View>
               <View style={styles.cardHeaderActions}>
-                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => void playPhrase(item.hi)} style={[styles.listenButton, category === 'Food' ? styles.listenButtonBrand : styles.listenButtonForest, !canListen && styles.disabled]}>
+                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, category === 'Food' ? styles.listenButtonBrand : styles.listenButtonForest, !canListen && styles.disabled]}>
                   <Volume2 color={category === 'Food' ? colors.brand : colors.forest} size={14} />
                   <Text style={[styles.listenText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>Listen</Text>
                 </PressableFeedback>
@@ -174,7 +170,7 @@ export default function PhrasesScreen() {
             </View>
             <View style={styles.actions}>
               {replaySpeeds.map(({ label, rate }) => (
-                <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => void playPhrase(item.hi, rate)} style={[styles.speedButton, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
+                <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
               ))}
             </View>
           </View>

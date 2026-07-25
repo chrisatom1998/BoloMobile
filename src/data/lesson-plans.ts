@@ -236,11 +236,11 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
     ? [
       { hi: 'मैं तैयार नहीं हूँ।', latin: 'Main taiyaar nahin hoon.', en: 'I am not ready.' },
       { hi: 'कृपया दरवाज़ा बंद कीजिए।', latin: 'Kripya darwaaza band kijiye.', en: 'Please close the door.' },
-    ]
+    ] as const
     : [
       { hi: 'मुझे मदद चाहिए।', latin: 'Mujhe madad chahiye.', en: 'I need help.' },
       { hi: 'कृपया दरवाज़ा बंद कीजिए।', latin: 'Kripya darwaaza band kijiye.', en: 'Please close the door.' },
-    ];
+    ] as const;
   return {
     id: lessonId(plan.id, lessonIndex),
     category: plan.category,

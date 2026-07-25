@@ -22,7 +22,7 @@ export async function createRealtimePeerSession({
   const audio = new Audio();
   audio.autoplay = true;
   peer.ontrack = (event) => {
-    audio.srcObject = event.streams[0];
+    audio.srcObject = event.streams[0] ?? null;
     void audio.play().catch(() => undefined);
   };
   let closed = false;

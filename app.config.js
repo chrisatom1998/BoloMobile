@@ -5,8 +5,10 @@ const OWNER_PATTERN = /^[a-z0-9][a-z0-9_-]{1,38}$/i;
 
 module.exports = ({ config }) => {
   const configuredIdentifier = process.env.BOLO_APP_IDENTIFIER?.trim();
-  const configuredProjectId = process.env.BOLO_EAS_PROJECT_ID?.trim() || config.extra?.eas?.projectId;
-  const configuredOwner = process.env.BOLO_EXPO_OWNER?.trim() || config.owner;
+  const envProjectId = process.env.BOLO_EAS_PROJECT_ID?.trim();
+  const envOwner = process.env.BOLO_EXPO_OWNER?.trim();
+  const configuredProjectId = envProjectId || config.extra?.eas?.projectId;
+  const configuredOwner = envOwner || config.owner;
   const identifier = configuredIdentifier || DEFAULT_IDENTIFIER;
   const isProduction = process.env.EAS_BUILD_PROFILE === 'production';
 
@@ -19,7 +21,7 @@ module.exports = ({ config }) => {
   if (configuredOwner && !OWNER_PATTERN.test(configuredOwner)) {
     throw new Error('BOLO_EXPO_OWNER must be a valid Expo account name.');
   }
-  if (isProduction && (!configuredProjectId || !configuredOwner)) {
+  if (isProduction && (!envProjectId || !envOwner)) {
     throw new Error('Production builds require BOLO_EAS_PROJECT_ID and BOLO_EXPO_OWNER from the publisher\'s Expo account.');
   }
 

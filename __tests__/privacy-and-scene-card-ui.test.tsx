@@ -21,6 +21,11 @@ import { scenes } from '../src/data/scenes';
 import { showAppAlert } from '../src/lib/app-alert';
 import { openPublicPage } from '../src/lib/public-pages';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 const openPublicPageMock = openPublicPage as jest.MockedFunction<typeof openPublicPage>;
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 
@@ -74,7 +79,7 @@ describe('privacy and scene-card rendered UI', () => {
 
   it('exposes the real scene card as a descriptive, tappable control', async () => {
     const onPress = jest.fn();
-    const scene = scenes[0];
+    const scene = expectDefined(scenes[0]);
     const view = await render(<SceneCard onPress={onPress} scene={scene} />);
 
     const card = view.getByRole('button', {

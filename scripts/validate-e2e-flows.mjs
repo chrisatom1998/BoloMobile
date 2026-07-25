@@ -3,6 +3,8 @@ import path from 'node:path';
 
 const root = path.resolve('.maestro');
 const flowDirectory = path.join(root, 'flows');
+const subflowDirectory = path.join(root, 'subflows');
+const expectedAppId = process.env.BOLO_APP_IDENTIFIER?.trim() || 'com.bolo.hindi';
 const files = (await readdir(flowDirectory)).filter((file) => file.endsWith('.yaml')).sort();
 if (files.length < 4) throw new Error(`Expected at least 4 Maestro flows; found ${files.length}.`);
 
@@ -22,11 +24,25 @@ const requiredCoverage = {
 const missing = Object.entries(requiredCoverage).filter(([, marker]) => !combined.includes(marker)).map(([name]) => name);
 if (missing.length) throw new Error(`Maestro coverage is missing: ${missing.join(', ')}.`);
 
-for (const file of files) {
-  const source = await readFile(path.join(flowDirectory, file), 'utf8');
-  if (!source.startsWith('appId: com.bolo.hindi\n')) throw new Error(`${file} does not target the Bolo bundle identifier.`);
-  if (!source.includes('\n---\n')) throw new Error(`${file} is missing a Maestro flow document separator.`);
+const subflowFiles = (await readdir(subflowDirectory)).filter((file) => file.endsWith('.yaml')).sort();
+const structuralTargets = [
+  ...files.map((file) => ({ file, directory: flowDirectory, label: `flows/${file}` })),
+  ...subflowFiles.map((file) => ({ file, directory: subflowDirectory, label: `subflows/${file}` })),
+];
+
+for (const { file, directory, label } of structuralTargets) {
+  const source = await readFile(path.join(directory, file), 'utf8');
+  // Maestro subflows may omit their own launch stanza, but when a file declares an appId it
+  // must be the identifier this build ships with.
+  if (source.startsWith('appId:')) {
+    if (!source.startsWith(`appId: ${expectedAppId}\n`)) {
+      throw new Error(`${label} does not target the Bolo bundle identifier (${expectedAppId}).`);
+    }
+  } else if (directory === flowDirectory) {
+    throw new Error(`${label} does not target the Bolo bundle identifier (${expectedAppId}).`);
+  }
+  if (!source.includes('\n---\n')) throw new Error(`${label} is missing a Maestro flow document separator.`);
 }
 
-console.log(`Validated ${files.length} Maestro device flows across all critical native journeys.`);
+console.log(`Validated ${files.length} Maestro device flows and ${subflowFiles.length} subflows across all critical native journeys.`);
 

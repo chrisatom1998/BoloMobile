@@ -3,6 +3,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
+import { duePhraseList, reviewIntervals } from '@/lib/learning';
 import { clearObservability } from '@/lib/observability';
 import { updatePracticeWidget } from '@/lib/practice-widget';
 import {
@@ -11,7 +12,9 @@ import {
   createAiConsentRecord,
   dateKey,
   defaultLearnerProfile,
+  defaultPhraseReview,
   defaultReminderSettings,
+  defaultSceneProgress,
   emptyPractice,
   MAX_DAILY_PRACTICE_SECONDS,
   sanitizeClientId,
@@ -26,6 +29,7 @@ import {
   sanitizeReminder,
   sanitizeSceneProgress,
   sanitizeStreakDays,
+  storageEntries,
   storageKeys,
   type PersistedState,
 } from '@/lib/storage';
@@ -40,13 +44,16 @@ type SceneCompletion = {
   weakPhrases: string[];
 };
 
-type AppStateValue = Omit<PersistedState, 'aiConsent'> & {
+type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   aiConsent: boolean;
   hydrated: boolean;
   streak: number;
   dailySteps: number;
   duePhrases: SavedPhrase[];
   reviewStreak: number;
+};
+
+type AppActions = {
   setGoal: (goal: 5 | 10 | 15) => void;
   completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
@@ -64,6 +71,8 @@ type AppStateValue = Omit<PersistedState, 'aiConsent'> & {
   clearAllData: () => Promise<void>;
 };
 
+type AppStateValue = AppStateSlices & AppActions;
+
 const initialState: PersistedState = {
   phrases: [],
   goal: 10,
@@ -80,7 +89,8 @@ const initialState: PersistedState = {
   reminder: defaultReminderSettings(),
 };
 
-const AppStateContext = createContext<AppStateValue | null>(null);
+const AppStateContext = createContext<AppStateSlices | null>(null);
+const AppActionsContext = createContext<AppActions | null>(null);
 
 function currentPractice(state: PersistedState) {
   return state.practice.date === dateKey() ? state.practice : emptyPractice();
@@ -125,11 +135,7 @@ function addDays(key: string, days: number) {
 }
 
 async function persistState(state: PersistedState, keys: PersistedKey[]) {
-  const entries: [string, string][] = keys.map((key) => {
-    const value = state[key];
-    return [storageKeys[key], typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value)];
-  });
-  await AsyncStorage.multiSet(entries);
+  await AsyncStorage.multiSet(storageEntries(state, keys));
 }
 
 function reportPersistenceFailure(error: unknown, message = 'Your last change was not saved and has been restored. Check available storage and try again.') {
@@ -175,30 +181,31 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       try {
         const pairs = await AsyncStorage.multiGet(Object.values(storageKeys));
         const stored = Object.fromEntries(pairs);
-        const clientId = sanitizeClientId(stored[storageKeys.clientId]);
+        const readStored = (key: string) => stored[key] ?? null;
+        const clientId = sanitizeClientId(readStored(storageKeys.clientId));
         const next: PersistedState = {
-          phrases: sanitizePhrases(stored[storageKeys.phrases]),
-          goal: sanitizeGoal(stored[storageKeys.goal]),
-          practice: sanitizePractice(stored[storageKeys.practice]),
-          streakDays: sanitizeStreakDays(stored[storageKeys.streakDays]),
+          phrases: sanitizePhrases(readStored(storageKeys.phrases)),
+          goal: sanitizeGoal(readStored(storageKeys.goal)),
+          practice: sanitizePractice(readStored(storageKeys.practice)),
+          streakDays: sanitizeStreakDays(readStored(storageKeys.streakDays)),
           clientId,
-          aiConsent: sanitizeAiConsent(stored[storageKeys.aiConsent]),
-          chatHistory: sanitizeChatHistory(stored[storageKeys.chatHistory]),
-          learnerProfile: sanitizeLearnerProfile(stored[storageKeys.learnerProfile]),
-          sceneProgress: sanitizeSceneProgress(stored[storageKeys.sceneProgress]),
-          phraseReviews: sanitizePhraseReviews(stored[storageKeys.phraseReviews]),
-          practiceHistory: sanitizePracticeHistory(stored[storageKeys.practiceHistory]),
-          reviewStreakDays: sanitizeStreakDays(stored[storageKeys.reviewStreakDays]),
-          reminder: sanitizeReminder(stored[storageKeys.reminder]),
+          aiConsent: sanitizeAiConsent(readStored(storageKeys.aiConsent)),
+          chatHistory: sanitizeChatHistory(readStored(storageKeys.chatHistory)),
+          learnerProfile: sanitizeLearnerProfile(readStored(storageKeys.learnerProfile)),
+          sceneProgress: sanitizeSceneProgress(readStored(storageKeys.sceneProgress)),
+          phraseReviews: sanitizePhraseReviews(readStored(storageKeys.phraseReviews)),
+          practiceHistory: sanitizePracticeHistory(readStored(storageKeys.practiceHistory)),
+          reviewStreakDays: sanitizeStreakDays(readStored(storageKeys.reviewStreakDays)),
+          reminder: sanitizeReminder(readStored(storageKeys.reminder)),
         };
         if (active) {
           setState(next);
           setHydrated(true);
-          if (clientId !== stored[storageKeys.clientId]) {
-            void enqueuePersistence(() => AsyncStorage.setItem(storageKeys.clientId, clientId));
+          if (clientId !== readStored(storageKeys.clientId)) {
+            void enqueuePersistence(() => AsyncStorage.setItem(storageKeys.clientId, clientId)).catch(reportPersistenceFailure);
           }
-          if (stored[storageKeys.aiConsent] && !next.aiConsent) {
-            void enqueuePersistence(() => AsyncStorage.removeItem(storageKeys.aiConsent));
+          if (readStored(storageKeys.aiConsent) && !next.aiConsent) {
+            void enqueuePersistence(() => AsyncStorage.removeItem(storageKeys.aiConsent)).catch(reportPersistenceFailure);
           }
         }
       } catch (error) {
@@ -253,7 +260,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (!hydrated) return;
     updatePracticeWidget({
       streak: calculateStreak(state.streakDays, completedToday(state.practice)),
-      dueReviews: state.phrases.filter((phrase) => (state.phraseReviews[phrase.hi]?.dueAt ?? dateKey()) <= dateKey()).length,
+      dueReviews: duePhraseList(state.phrases, state.phraseReviews).length,
       minutesToday: Math.floor(state.practice.seconds / 60),
     });
   }, [hydrated, state.phraseReviews, state.phrases, state.practice, state.streakDays]);
@@ -292,14 +299,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         : [...current.phrases, phrase].slice(-100);
       const phraseReviews = { ...current.phraseReviews };
       if (exists) delete phraseReviews[phrase.hi];
-      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? {
-        mastery: 0,
-        intervalDays: 0,
-        dueAt: dateKey(),
-        lastReviewedAt: null,
-        correctReviews: 0,
-        totalReviews: 0,
-      };
+      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
       return { ...current, phrases, phraseReviews };
     }, ['phrases', 'phraseReviews']);
   }, [commit]);
@@ -314,10 +314,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const checkpointScene = useCallback((sceneId: string, nextBeatIndex: number) => {
     commit((current) => {
-      const previous = current.sceneProgress[sceneId] ?? {
-        completions: 0, bestScore: 0, bestAccuracy: 0, totalCorrect: 0, totalAnswers: 0,
-        lastPracticedAt: null, lastBeatIndex: 0, weakPhrases: [],
-      };
+      const previous = current.sceneProgress[sceneId] ?? defaultSceneProgress();
       return {
         ...current,
         sceneProgress: {
@@ -337,10 +334,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         chaiDone: current.practice.chaiDone || sceneId === 'chai',
         seconds: elapsed.total,
       };
-      const previous = current.sceneProgress[sceneId] ?? {
-        completions: 0, bestScore: 0, bestAccuracy: 0, totalCorrect: 0, totalAnswers: 0,
-        lastPracticedAt: null, lastBeatIndex: 0, weakPhrases: [],
-      };
+      const previous = current.sceneProgress[sceneId] ?? defaultSceneProgress();
       const correct = Math.max(0, Math.round(result?.correct ?? 0));
       const total = Math.max(correct, Math.round(result?.total ?? 0));
       const accuracy = total > 0 ? Math.round(correct / total * 100) : 0;
@@ -365,12 +359,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const reviewPhrase = useCallback((hi: string, remembered: boolean) => {
     commit((current) => {
       if (!current.phrases.some((phrase) => phrase.hi === hi)) return current;
-      const previous = current.phraseReviews[hi] ?? {
-        mastery: 0, intervalDays: 0, dueAt: dateKey(), lastReviewedAt: null, correctReviews: 0, totalReviews: 0,
-      };
+      const previous = current.phraseReviews[hi] ?? defaultPhraseReview();
       const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
-      const intervals = [0, 1, 3, 7, 14, 30];
-      const intervalDays = remembered ? intervals[mastery] : 0;
+      const intervalDays = remembered ? reviewIntervals[mastery] ?? 0 : 0;
       const today = dateKey();
       const reviewStreakDays = [...new Set([...current.reviewStreakDays, today])].sort().slice(-400);
       return {
@@ -454,10 +445,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       practice: emptyPractice(),
       clientId: sanitizeClientId(null),
     };
-    const entries = (Object.keys(storageKeys) as PersistedKey[]).map((key): [string, string] => {
-      const value = next[key];
-      return [storageKeys[key], typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value)];
-    });
+    const entries = storageEntries(next, Object.keys(storageKeys) as PersistedKey[]);
     try {
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
       await clearObservability();
@@ -470,14 +458,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
   }, [enqueuePersistence]);
 
-  const value = useMemo<AppStateValue>(() => ({
-    ...state,
-    aiConsent: state.aiConsent !== null,
-    hydrated,
-    streak: calculateStreak(state.streakDays, completedToday(state.practice)),
-    dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
-    duePhrases: state.phrases.filter((phrase) => (state.phraseReviews[phrase.hi]?.dueAt ?? dateKey()) <= dateKey()).slice(0, 5),
-    reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
+  const actions = useMemo<AppActions>(() => ({
     setGoal,
     completeOnboarding,
     updateLearnerProfile,
@@ -493,13 +474,39 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setAiConsent,
     setReminder,
     clearAllData,
-  }), [state, hydrated, setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, clearAllData]);
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, clearAllData]);
 
-  return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+  const value = useMemo<AppStateSlices>(() => ({
+    ...state,
+    aiConsent: state.aiConsent !== null,
+    hydrated,
+    streak: calculateStreak(state.streakDays, completedToday(state.practice)),
+    dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
+    duePhrases: duePhraseList(state.phrases, state.phraseReviews).slice(0, 5),
+    reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
+  }), [state, hydrated]);
+
+  return (
+    <AppActionsContext.Provider value={actions}>
+      <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>
+    </AppActionsContext.Provider>
+  );
 }
 
-export function useAppState() {
+export function useAppStateValue() {
   const value = useContext(AppStateContext);
-  if (!value) throw new Error('useAppState must be used within AppStateProvider.');
+  if (!value) throw new Error('useAppStateValue must be used within AppStateProvider.');
   return value;
+}
+
+export function useAppActions() {
+  const actions = useContext(AppActionsContext);
+  if (!actions) throw new Error('useAppActions must be used within AppStateProvider.');
+  return actions;
+}
+
+export function useAppState(): AppStateValue {
+  const value = useAppStateValue();
+  const actions = useAppActions();
+  return useMemo(() => ({ ...value, ...actions }), [value, actions]);
 }

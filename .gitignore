@@ -46,3 +46,7 @@ example
 # generated native folders
 /ios
 /android
+
+# local build output and dev scratch captures
+builds/
+artifacts/

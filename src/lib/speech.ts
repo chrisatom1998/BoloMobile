@@ -1,4 +1,5 @@
 import { playAiVoiceAudio } from '@/lib/ai-voice-player';
+import { rememberBoundedEntry } from '@/lib/bounded-set';
 import { canonicalLessonAudioText, hasOfflineSpeech, playOfflineSpeech } from '@/lib/offline-voice-player';
 import { splitAiVoiceText } from '@/lib/speech-text';
 import { requestAiVoiceAudio, type AiVoiceAudio } from '@/services/bolo-api';
@@ -10,6 +11,7 @@ const GENERATED_SPEECH_ATTEMPTS = 2;
 const aiVoiceCache = new Map<string, AiVoiceAudio>();
 const pendingAudioPreloads = new Map<string, Promise<AiVoiceAudio>>();
 let activeSpeechController: AbortController | null = null;
+let activeSpeechRun: Promise<void> | null = null;
 
 type SpeechChunk = {
   text: string;
@@ -50,7 +52,7 @@ export function splitSpeechByLanguage(text: string, requestedLanguage?: AshaResp
       const next = nearbyScriptLanguage(languages, index + 1, 1);
       if (previous === 'hi' && next === 'hi') resolved[index] = 'hi';
       else if (
-        /^\d/u.test(tokens[index])
+        /^\d/u.test(tokens[index] ?? '')
         && ((previous === 'hi' && next !== 'en') || (next === 'hi' && previous !== 'en'))
       ) resolved[index] = 'hi';
       else resolved[index] = defaultLanguage;
@@ -64,11 +66,11 @@ export function splitSpeechByLanguage(text: string, requestedLanguage?: AshaResp
   }
 
   const segments: { text: string; language: 'en' | 'hi' }[] = [];
-  for (let index = 0; index < tokens.length; index += 1) {
+  for (const [index, token] of tokens.entries()) {
     const language = resolved[index] ?? defaultLanguage;
     const previous = segments.at(-1);
-    if (previous?.language === language) previous.text += tokens[index];
-    else segments.push({ text: tokens[index], language });
+    if (previous?.language === language) previous.text += token;
+    else segments.push({ text: token, language });
   }
 
   return segments.flatMap((segment) => splitAiVoiceText(segment.text).flatMap((chunk) => {
@@ -90,13 +92,7 @@ function requestSpeechAudio(text: string, signal?: AbortSignal, language?: 'hi')
 }
 
 function rememberAudio(key: string, audio: AiVoiceAudio) {
-  aiVoiceCache.delete(key);
-  aiVoiceCache.set(key, audio);
-  while (aiVoiceCache.size > AI_VOICE_CACHE_LIMIT) {
-    const oldest = aiVoiceCache.keys().next().value as string | undefined;
-    if (oldest === undefined) break;
-    aiVoiceCache.delete(oldest);
-  }
+  rememberBoundedEntry(aiVoiceCache, key, audio, AI_VOICE_CACHE_LIMIT);
 }
 
 function startAudioPreload(text: string, language?: 'hi') {
@@ -229,11 +225,16 @@ export async function speakText(
   audioMode: VoiceAudioMode = 'playback',
 ) {
   const chunks = splitSpeechByLanguage(text, requestedLanguage);
-  stopSpeaking();
+  void stopSpeaking();
   if (!chunks.length || signal?.aborted) return;
 
   const controller = new AbortController();
   activeSpeechController = controller;
+  // `stopSpeaking` resolves once this run has finished unwinding, so callers can
+  // await it before handing the audio session to another player.
+  let markRunSettled = () => {};
+  const run = new Promise<void>((resolve) => { markRunSettled = resolve; });
+  activeSpeechRun = run;
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
 
@@ -250,8 +251,7 @@ export async function speakText(
     prepareChunk(0);
     prepareChunk(1);
 
-    for (let index = 0; index < chunks.length; index += 1) {
-      const { text: chunk, language } = chunks[index];
+    for (const [index, { text: chunk, language }] of chunks.entries()) {
       if (controller.signal.aborted) return;
       prepareChunk(index + 1);
       if (hasOfflineSpeech(chunk)) {
@@ -272,12 +272,24 @@ export async function speakText(
   } finally {
     signal?.removeEventListener('abort', abort);
     if (activeSpeechController === controller) activeSpeechController = null;
+    if (activeSpeechRun === run) activeSpeechRun = null;
+    markRunSettled();
   }
 }
 
 export { hasOfflineSpeech } from '@/lib/offline-voice-player';
 
-export function stopSpeaking() {
+/**
+ * Cancels the active speech run. Cancellation itself is synchronous; when a run
+ * is still unwinding this returns a promise that resolves once that run has
+ * released its player, so an awaiting caller can safely take over the audio
+ * session. Teardown is bounded by the player's own abort and timeout handling,
+ * and the returned promise never rejects.
+ */
+export function stopSpeaking(): Promise<void> | undefined {
   activeSpeechController?.abort();
   activeSpeechController = null;
+  const pendingRun = activeSpeechRun;
+  activeSpeechRun = null;
+  return pendingRun ?? undefined;
 }

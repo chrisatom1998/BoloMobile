@@ -75,6 +75,33 @@ export const defaultReminderSettings = (): ReminderSettings => ({
   notificationId: null,
 });
 
+export const defaultSceneProgress = (): SceneProgress => ({
+  completions: 0,
+  bestScore: 0,
+  bestAccuracy: 0,
+  totalCorrect: 0,
+  totalAnswers: 0,
+  lastPracticedAt: null,
+  lastBeatIndex: 0,
+  weakPhrases: [],
+});
+
+export const defaultPhraseReview = (dueAt = dateKey()): PhraseReview => ({
+  mastery: 0,
+  intervalDays: 0,
+  dueAt,
+  lastReviewedAt: null,
+  correctReviews: 0,
+  totalReviews: 0,
+});
+
+export function storageEntries(state: PersistedState, keys: (keyof typeof storageKeys)[]): [string, string][] {
+  return keys.map((key) => {
+    const value = state[key];
+    return [storageKeys[key], typeof value === 'string' || typeof value === 'number' ? String(value) : JSON.stringify(value)];
+  });
+}
+
 export function dateKey(value = new Date()): string {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, '0');
@@ -140,6 +167,7 @@ function newestUniqueMessages(messages: ChatMessage[]): ChatMessage[] {
   const newest: ChatMessage[] = [];
   for (let index = messages.length - 1; index >= 0 && newest.length < MAX_CHAT_HISTORY_MESSAGES; index -= 1) {
     const message = messages[index];
+    if (message === undefined) continue;
     if (seen.has(message.id)) continue;
     seen.add(message.id);
     newest.push(message);

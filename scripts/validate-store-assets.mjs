@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pngInfo } from './lib/png.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 
@@ -14,22 +15,8 @@ const specs = [
   { path: 'assets/store/play-store-feature.png', width: 1024, height: 500, colorType: 2 },
 ];
 
-function pngInfo(relativePath) {
-  const file = readFileSync(resolve(root, relativePath));
-  const signature = file.subarray(0, 8).toString('hex');
-  if (signature !== '89504e470d0a1a0a' || file.subarray(12, 16).toString('ascii') !== 'IHDR') {
-    throw new Error(`${relativePath} is not a valid PNG.`);
-  }
-  return {
-    width: file.readUInt32BE(16),
-    height: file.readUInt32BE(20),
-    bitDepth: file.readUInt8(24),
-    colorType: file.readUInt8(25),
-  };
-}
-
 for (const spec of specs) {
-  const info = pngInfo(spec.path);
+  const info = pngInfo(resolve(root, spec.path), spec.path);
   if (info.width !== spec.width || info.height !== spec.height) {
     throw new Error(`${spec.path} must be ${spec.width}x${spec.height}; found ${info.width}x${info.height}.`);
   }

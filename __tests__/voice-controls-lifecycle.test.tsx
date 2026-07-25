@@ -263,7 +263,7 @@ describe('voice control lifecycle', () => {
     await fireEvent.press(view.getByText('Report feedback'));
 
     const prompt = alert.mock.calls.find(([title]) => title.startsWith('Report Asha'));
-    const submit = (prompt?.[2] as { onPress?: () => void }[] | undefined)?.[0].onPress;
+    const submit = (prompt?.[2] as { onPress?: () => void }[] | undefined)?.[0]?.onPress;
     await act(async () => {
       submit?.();
       submit?.();
@@ -302,7 +302,7 @@ describe('voice control lifecycle', () => {
     await fireEvent.press(view.getByLabelText('Stop recording'));
     await fireEvent.press(view.getByText('Report feedback'));
     const prompt = alert.mock.calls.find(([title]) => title.startsWith('Report Asha'));
-    const submit = (prompt?.[2] as { onPress?: () => void }[] | undefined)?.[0].onPress;
+    const submit = (prompt?.[2] as { onPress?: () => void }[] | undefined)?.[0]?.onPress;
     await act(async () => {
       submit?.();
       await Promise.resolve();

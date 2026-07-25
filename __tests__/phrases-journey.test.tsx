@@ -44,6 +44,11 @@ const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 describe('PhrasesScreen primary journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -100,7 +105,7 @@ describe('PhrasesScreen primary journey', () => {
     );
     expect(mockRemovePhrase).not.toHaveBeenCalled();
 
-    const actions = showAppAlertMock.mock.calls[0][2] as { onPress?: () => void; text: string }[];
+    const actions = expectDefined(showAppAlertMock.mock.calls[0])[2] as { onPress?: () => void; text: string }[];
     actions.find(({ text }) => text === 'Remove')?.onPress?.();
     expect(mockRemovePhrase).toHaveBeenCalledWith('नमस्ते');
   });

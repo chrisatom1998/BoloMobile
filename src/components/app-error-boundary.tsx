@@ -7,17 +7,17 @@ import { makeStyles, radius, spacing } from '@/theme';
 type State = { failed: boolean };
 
 export class AppErrorBoundary extends Component<PropsWithChildren, State> {
-  state: State = { failed: false };
+  override state: State = { failed: false };
 
   static getDerivedStateFromError(): State {
     return { failed: true };
   }
 
-  componentDidCatch(_error: Error, _info: ErrorInfo) {
+  override componentDidCatch(_error: Error, _info: ErrorInfo) {
     observe('runtime_error');
   }
 
-  render() {
+  override render() {
     if (!this.state.failed) return this.props.children;
     return <ErrorFallback onRetry={() => this.setState({ failed: false })} />;
   }

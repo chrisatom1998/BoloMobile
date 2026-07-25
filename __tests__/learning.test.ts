@@ -3,6 +3,11 @@ import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, 
 import { defaultLearnerProfile } from '../src/lib/storage';
 import type { PhraseReview, SavedPhrase, SceneProgress } from '../src/state/app-state-types';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 const progress = (overrides: Partial<SceneProgress> = {}): SceneProgress => ({
   completions: 0,
   bestScore: 0,
@@ -19,7 +24,7 @@ describe('adaptive learning', () => {
   it('prioritizes a resumable scene before unstarted goal-aligned scenes', () => {
     const profile = { ...defaultLearnerProfile(), completed: true, primaryGoal: 'travel' as const };
     const result = recommendedScenes(profile, { restaurant: progress({ lastBeatIndex: 1 }) });
-    expect(result[0].id).toBe('restaurant');
+    expect(expectDefined(result[0]).id).toBe('restaurant');
     expect(result.slice(1).every((scene) => scene.category === 'Travel')).toBe(true);
   });
 

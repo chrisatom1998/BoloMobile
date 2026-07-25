@@ -8,7 +8,7 @@ export const sceneCategories = ['All', 'Food', 'Travel', 'Everyday', 'Health', '
 export type SceneCategory = Exclude<(typeof sceneCategories)[number], 'All'>;
 export type Scene = { id: string; category: SceneCategory; words: [string, string, string]; place: string; title: string; subtitle: string; level: string; emoji: string; color: string; beats: Beat[] };
 
-const coreScenes: Scene[] = [
+const coreScenes: [Scene, ...Scene[]] = [
 {id:'chai',category:'Food',words:['चाय','गरम','स्वागत'],place:'Delhi · 8:10 AM',title:'The chai stop',subtitle:'Order tea like a local',level:'Beginner',emoji:'☕',color:'#e66d3f',beats:[
 {npc:'नमस्ते! क्या लेंगे?',translation:'Hello! What will you have?',prompt:'Ask for one cup of tea.',tip:'Use “एक” for one and “दीजिए” to make the request polite.',choices:[
 {hi:'एक चाय दीजिए।',latin:'Ek chai dijiye.',en:'One tea, please.',correct:true,reply:'ज़रूर! चीनी कम या ज़्यादा?'},
@@ -39,9 +39,9 @@ const coreScenes: Scene[] = [
 ];
 
 /** Lessons whose Hindi audio is shipped in the original core catalog. */
-export const bundledScenes: Scene[] = [...coreScenes, ...additionalScenes];
+export const bundledScenes: [Scene, ...Scene[]] = [...coreScenes, ...additionalScenes];
 
-export const scenes: Scene[] = [...bundledScenes, ...plannedLessons];
+export const scenes: [Scene, ...Scene[]] = [...bundledScenes, ...plannedLessons];
 
 export function getScene(id: string): Scene | undefined {
   return scenes.find((scene) => scene.id === id);

@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pngInfo } from './lib/png.mjs';
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
@@ -41,17 +42,23 @@ if (resolvedConfig.extra?.eas?.projectId !== projectId || resolvedConfig.owner !
 }
 
 const storeConfig = require(resolve(root, 'store.config.js'));
-const publicPagesSource = readFileSync(resolve(root, 'src/lib/public-pages.ts'), 'utf8');
 const publicPages = {
   privacy: resolvedConfig.extra?.publicPrivacyUrl,
   support: resolvedConfig.extra?.publicSupportUrl,
   terms: resolvedConfig.extra?.publicTermsUrl,
 };
-const publicPageHtml = new Map();
 const storeInfo = storeConfig.apple?.info?.['en-US'];
 
 if (storeInfo?.privacyPolicyUrl !== publicPages.privacy || storeInfo?.supportUrl !== publicPages.support) {
   throw new Error('Apple metadata legal URLs must match the production Expo configuration.');
+}
+
+// Compare against the values declared in the in-app module rather than its exact source
+// formatting, so quote style and whitespace changes cannot break the release gate.
+const publicPagesSource = readFileSync(resolve(root, 'src/lib/public-pages.ts'), 'utf8');
+function inAppPublicPageUrl(page) {
+  const match = publicPagesSource.match(new RegExp(`\\b${page}\\s*:\\s*(['"\`])([^'"\`]+)\\1`));
+  return match?.[2];
 }
 
 for (const [page, url] of Object.entries(publicPages)) {
@@ -60,63 +67,11 @@ for (const [page, url] of Object.entries(publicPages)) {
   if (parsed.protocol !== 'https:' || parsed.searchParams.get('page') !== page) {
     throw new Error(`The production ${page} URL must be HTTPS and identify the ${page} page.`);
   }
-  if (!publicPagesSource.includes(`${page}: '${url}'`)) {
+  const inAppUrl = inAppPublicPageUrl(page);
+  if (!inAppUrl) throw new Error(`The in-app ${page} URL could not be read from src/lib/public-pages.ts.`);
+  if (inAppUrl !== url) {
     throw new Error(`The in-app ${page} URL does not match the production Expo configuration.`);
   }
-  let response;
-  try {
-    response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10_000) });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'unknown network error';
-    throw new Error(`${url} could not be loaded within 10 seconds: ${message}`);
-  }
-  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}.`);
-  if (!response.headers.get('content-type')?.toLowerCase().includes('text/html')) {
-    throw new Error(`${url} did not return an HTML page.`);
-  }
-  const html = await response.text();
-  if (!html.includes('<title>Bolo Hindi</title>') || !html.includes('id="root"')) {
-    throw new Error(`${url} did not return the Bolo public-site shell.`);
-  }
-  publicPageHtml.set(page, html);
-}
-
-const privacyHtml = publicPageHtml.get('privacy') || '';
-const bundleMatch = privacyHtml.match(/<script[^>]+type=["']module["'][^>]+src=["']([^"']+)["']/i)
-  || privacyHtml.match(/<script[^>]+src=["']([^"']+)["'][^>]+type=["']module["']/i);
-if (!bundleMatch) throw new Error('The public privacy page did not reference its application bundle.');
-const publicBundleUrl = new URL(bundleMatch[1], publicPages.privacy);
-let bundleResponse;
-try {
-  bundleResponse = await fetch(publicBundleUrl, { redirect: 'follow', signal: AbortSignal.timeout(10_000) });
-} catch (error) {
-  const message = error instanceof Error ? error.message : 'unknown network error';
-  throw new Error(`The public privacy bundle could not be loaded within 10 seconds: ${message}`);
-}
-if (!bundleResponse.ok) throw new Error(`The public privacy bundle returned HTTP ${bundleResponse.status}.`);
-const publicBundle = await bundleResponse.text();
-const requiredPrivacyFacts = [
-  'WebRTC media stream',
-  'short-lived OpenAI Realtime credential',
-  'audio track disabled',
-  'Send turn',
-  'segments microphone audio in memory without creating a recording file',
-  'Support requests contain the name, email',
-  'up to 100 recent typed and transcribed Asha chat messages',
-  'unencrypted storage on this device',
-  'Clear chat',
-  'does not delete reports',
-];
-for (const fact of requiredPrivacyFacts) {
-  if (!publicBundle.includes(fact)) {
-    throw new Error(`The deployed public policy is stale: missing “${fact}”.`);
-  }
-}
-
-function pngSize(relativePath) {
-  const file = readFileSync(resolve(root, relativePath));
-  if (file.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error(`${relativePath} is not a PNG.`);
-  return { width: file.readUInt32BE(16), height: file.readUInt32BE(20), colorType: file.readUInt8(25) };
 }
 
 const screenshots = [
@@ -125,10 +80,10 @@ const screenshots = [
 ];
 for (const screenshot of screenshots) {
   if (!existsSync(resolve(root, screenshot.path))) throw new Error(`Missing shipping-build screenshot: ${screenshot.path}`);
-  const info = pngSize(screenshot.path);
-  if (info.width !== screenshot.width || info.height !== screenshot.height || info.colorType !== 2) {
+  const info = pngInfo(resolve(root, screenshot.path), screenshot.path);
+  if (info.width !== screenshot.width || info.height !== screenshot.height || info.bitDepth !== 8 || info.colorType !== 2) {
     throw new Error(`${screenshot.path} must be an opaque ${screenshot.width}x${screenshot.height} PNG.`);
   }
 }
 
-console.log('Public release validation passed: identity, EAS linkage, metadata, legal URLs, and eight store screenshots are complete.');
+console.log('Public release validation passed: identity, EAS linkage, metadata, legal URLs, and eight store screenshots are complete. Run "npm run release:validate:live" for the deployed public-site checks.');

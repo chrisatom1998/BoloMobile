@@ -19,6 +19,11 @@ class MockWebAudio {
   });
 }
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 const originalAudio = Object.getOwnPropertyDescriptor(globalThis, 'Audio');
 let players: MockWebAudio[] = [];
 let audioConstructor: jest.Mock;
@@ -56,14 +61,15 @@ describe('AI voice web replay', () => {
 
     expect(audioConstructor).toHaveBeenCalledTimes(1);
     expect(players).toHaveLength(1);
-    expect(players[0].preload).toBe('auto');
-    expect(players[0].playStarts).toEqual([0, 0]);
-    expect(players[0].play).toHaveBeenCalledTimes(2);
-    expect(players[0].removeAttribute).not.toHaveBeenCalled();
+    const player = expectDefined(players[0]);
+    expect(player.preload).toBe('auto');
+    expect(player.playStarts).toEqual([0, 0]);
+    expect(player.play).toHaveBeenCalledTimes(2);
+    expect(player.removeAttribute).not.toHaveBeenCalled();
 
     webAiVoicePlayer.clearAiVoicePlaybackCache();
-    expect(players[0].removeAttribute).toHaveBeenCalledWith('src');
-    expect(players[0].load).toHaveBeenCalledTimes(1);
+    expect(player.removeAttribute).toHaveBeenCalledWith('src');
+    expect(player.load).toHaveBeenCalledTimes(1);
   });
 
   it('applies one tenth playback speed', async () => {
@@ -71,6 +77,6 @@ describe('AI voice web replay', () => {
 
     await webAiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal, 0.1);
 
-    expect(players[0].playbackRate).toBe(0.1);
+    expect(expectDefined(players[0]).playbackRate).toBe(0.1);
   });
 });

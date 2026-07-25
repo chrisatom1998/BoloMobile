@@ -34,7 +34,7 @@ export function JournalMotif({ accessibilityLabel, size = 'corner', style }: Jou
   const styles = useStyles();
   const panel = size === 'panel';
   return (
-    <View accessibilityLabel={accessibilityLabel} accessible={Boolean(accessibilityLabel)} pointerEvents="none" style={[styles.motif, styles[`motif${size[0].toUpperCase()}${size.slice(1)}` as 'motifCorner'], style]}>
+    <View accessibilityLabel={accessibilityLabel} accessible={Boolean(accessibilityLabel)} pointerEvents="none" style={[styles.motif, styles[`motif${size.charAt(0).toUpperCase()}${size.slice(1)}` as 'motifCorner'], style]}>
       <View style={[styles.petals, styles.petalsOne, panel && styles.petalsOnePanel]} />
       <View style={[styles.petals, styles.petalsTwo, panel && styles.petalsTwoPanel]} />
       <View style={[styles.leaf, styles.leafOne, panel && styles.leafOnePanel]} />

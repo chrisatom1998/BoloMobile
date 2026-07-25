@@ -3,8 +3,8 @@ import { AI_VOICE_TEXT_LIMIT } from '@/services/bolo-api';
 function preferredSplit(text: string): number {
   const minimum = Math.floor(AI_VOICE_TEXT_LIMIT * 0.55);
   for (let index = AI_VOICE_TEXT_LIMIT; index >= minimum; index -= 1) {
-    if (/\s/u.test(text[index])) return index;
-    if (/[.!?।,;:]/u.test(text[index - 1])) return index;
+    if (/\s/u.test(text[index] ?? '')) return index;
+    if (/[.!?।,;:]/u.test(text[index - 1] ?? '')) return index;
   }
   return AI_VOICE_TEXT_LIMIT;
 }

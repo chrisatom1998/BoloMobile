@@ -27,16 +27,19 @@ export function appendContinuationText(existing: string, continuation: string) {
 
   for (let length = maximum; length >= 1; length -= 1) {
     const baseStart = baseTokens.length - length;
-    const matches = Array.from({ length }, (_, index) => (
-      baseTokens[baseStart + index].normalized === nextTokens[index].normalized
-    )).every(Boolean);
+    const matches = Array.from({ length }, (_, index) => {
+      const baseToken = baseTokens[baseStart + index];
+      const nextToken = nextTokens[index];
+      return baseToken !== undefined && nextToken !== undefined && baseToken.normalized === nextToken.normalized;
+    }).every(Boolean);
     if (matches) {
       overlap = length;
       break;
     }
   }
 
-  const remainder = overlap > 0 ? next.slice(nextTokens[overlap - 1].end).trimStart() : next;
+  const overlapEnd = overlap > 0 ? nextTokens[overlap - 1]?.end : undefined;
+  const remainder = overlapEnd === undefined ? next : next.slice(overlapEnd).trimStart();
   if (!remainder) return base;
   return /^[,.;:!?।]/u.test(remainder) ? `${base}${remainder}` : `${base} ${remainder}`;
 }

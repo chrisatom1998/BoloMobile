@@ -15,6 +15,11 @@ import {
 } from '../src/services/bolo-api';
 import type { ChatMessage } from '../src/state/app-state-types';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 describe('connected coaching contract', () => {
   it('uses the Expo public API URL override and normalizes a trailing slash', () => {
     const previous = process.env.EXPO_PUBLIC_BOLO_API_URL;
@@ -50,9 +55,9 @@ describe('connected coaching contract', () => {
         audioBase64: 'SUQzBAAAAAA=',
         mimeType: 'audio/mpeg',
       });
-      const [, init] = fetchMock.mock.calls[0];
+      const [, init] = expectDefined(fetchMock.mock.calls[0]);
       const payload = JSON.parse(String(init?.body)) as { text: string; coach?: string };
-      expect(fetchMock.mock.calls[0][0]).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed/api/phrase-audio');
+      expect(expectDefined(fetchMock.mock.calls[0])[0]).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed/api/phrase-audio');
       expect(payload.text).toHaveLength(AI_VOICE_TEXT_LIMIT);
       expect(payload.coach).toBeUndefined();
     } finally {
@@ -71,7 +76,7 @@ describe('connected coaching contract', () => {
 
     try {
       await requestAiVoiceAudio('सीट 12A मिल गई है।', undefined, 'hi');
-      const [, init] = fetchMock.mock.calls[0];
+      const [, init] = expectDefined(fetchMock.mock.calls[0]);
       expect(JSON.parse(String(init?.body))).toEqual({
         text: 'सीट 12A मिल गई है।',
         language: 'hi',
@@ -113,7 +118,7 @@ describe('connected coaching contract', () => {
     expect(payload.languageMode).toBe(MOBILE_LANGUAGE_MODE);
     expect(payload.text).toHaveLength(500);
     expect(payload.messages).toHaveLength(10);
-    expect(payload.messages[0].text.startsWith('2-')).toBe(true);
+    expect(expectDefined(payload.messages[0]).text.startsWith('2-')).toBe(true);
     expect(payload.messages.every((message) => message.text.length <= 600)).toBe(true);
   });
 
@@ -223,7 +228,7 @@ describe('connected coaching contract', () => {
         latin: 'Aap kaise hain?',
         en: 'How are you?',
       });
-      const [, init] = fetchMock.mock.calls[0];
+      const [, init] = expectDefined(fetchMock.mock.calls[0]);
       const payload = JSON.parse(String(init?.body)) as { messages: unknown[]; text: string };
       expect(payload.messages).toEqual([]);
       expect(payload.text).not.toContain('Never use Devanagari.');
@@ -258,7 +263,7 @@ describe('connected coaching contract', () => {
         en: 'I am shopping for clothes.',
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [, init] = fetchMock.mock.calls[0];
+      const [, init] = expectDefined(fetchMock.mock.calls[0]);
       const payload = JSON.parse(String(init?.body)) as { responseLanguage?: string; text: string };
       expect(payload.responseLanguage).toBeUndefined();
       expect(payload.text).toContain('Phrase: "मैं कपड़ों की खरीदारी कर रहा हूँ"');
@@ -405,7 +410,7 @@ describe('connected coaching contract', () => {
     try {
       await expect(deleteMobileData('client-12345678')).resolves.toEqual({ deleted: true, reportsDeleted: 2 });
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0];
+      const [url, init] = expectDefined(fetchMock.mock.calls[0]);
       expect(url).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed/api/delete-mobile-data');
       expect(init).toMatchObject({
         method: 'POST',

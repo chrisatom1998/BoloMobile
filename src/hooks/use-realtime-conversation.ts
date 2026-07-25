@@ -5,6 +5,7 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { rememberBoundedId } from '@/lib/bounded-set';
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { appendContinuationText, continuationTail } from '@/lib/continuation-text';
@@ -72,26 +73,6 @@ function isNoActiveResponseCancellationError(message: string) {
   return /(?:no active response|no response.*(?:in progress|found)|response.*not found)/i.test(message);
 }
 
-function rememberCompletedInputItem(items: Set<string>, itemId: string | null) {
-  if (!itemId) return;
-  items.add(itemId);
-  while (items.size > 24) {
-    const oldest = items.values().next().value as string | undefined;
-    if (oldest === undefined) break;
-    items.delete(oldest);
-  }
-}
-
-function rememberBoundedId(items: Set<string>, id: string | null) {
-  if (!id) return;
-  items.add(id);
-  while (items.size > 24) {
-    const oldest = items.values().next().value as string | undefined;
-    if (oldest === undefined) break;
-    items.delete(oldest);
-  }
-}
-
 export function useRealtimeConversation({ clientId, responseLanguage = 'en', onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete }: Options) {
   const [status, setStatus] = useState<RealtimeVoiceStatus>('disconnected');
   const peerRef = useRef<RealtimePeerSession | null>(null);
@@ -155,13 +136,47 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     turnWatchdogRef.current = null;
   }, []);
 
+  // Output-audio bookkeeping is rebuilt from scratch by every site that starts,
+  // abandons, or finishes a response, so it always resets together.
+  const resetResponseOutputRefs = useCallback(() => {
+    outputAudioStartedRef.current = false;
+    outputAudioStoppedRef.current = false;
+    outputClearRequestedRef.current = false;
+  }, []);
+
+  // Releases the response-lifecycle bookkeeping for a turn that is completely
+  // finished, so the next `response.created` can claim it again. Cancellation,
+  // watchdog, and transcript state stay explicit at each call site.
+  const resetResponseLifecycleRefs = useCallback(() => {
+    responseCompletedRef.current = false;
+    responseCreatedRef.current = false;
+    activeResponseIdRef.current = null;
+    continuationPendingRef.current = false;
+    incompleteContinuationCountRef.current = 0;
+    stalledResponseRetryCountRef.current = 0;
+    resetResponseOutputRefs();
+    turnFinalizedRef.current = false;
+    inputCommitPendingRef.current = false;
+  }, [resetResponseOutputRefs]);
+
+  // Clears everything a turn accumulates, including the learner transcript and
+  // Asha's reply. Sites that also tear down cancellation, id caches, timing, or
+  // the watchdog keep those extras next to this call.
+  const resetTurnRefs = useCallback(() => {
+    responseTextRef.current = '';
+    transcriptRef.current = '';
+    completedReplyRef.current = '';
+    inputItemIdRef.current = null;
+    resetResponseLifecycleRefs();
+  }, [resetResponseLifecycleRefs]);
+
   const publishTranscript = useCallback((speaker: RealtimeTranscriptUpdate['speaker'], text: string) => {
     callbacksRef.current.onTranscriptChange?.({ speaker, text: text.trim() });
   }, []);
 
   const publishCompletedInputTranscript = useCallback((itemId: string, transcript: string) => {
     if (publishedInputTranscriptIdsRef.current.has(itemId)) return;
-    rememberCompletedInputItem(publishedInputTranscriptIdsRef.current, itemId);
+    rememberBoundedId(publishedInputTranscriptIdsRef.current, itemId);
     callbacksRef.current.onInputTranscriptComplete?.({ itemId, transcript });
   }, []);
 
@@ -219,28 +234,14 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     canonicalPlaybackRef.current = null;
     peer?.setMicrophoneEnabled(false);
     peer?.close();
-    responseTextRef.current = '';
-    transcriptRef.current = '';
-    completedReplyRef.current = '';
-    inputItemIdRef.current = null;
-    responseCompletedRef.current = false;
-    responseCreatedRef.current = false;
-    activeResponseIdRef.current = null;
+    resetTurnRefs();
     pendingResponseCancellationRef.current = null;
     ignoredCancellationErrorEventIdsRef.current.clear();
-    continuationPendingRef.current = false;
-    incompleteContinuationCountRef.current = 0;
-    stalledResponseRetryCountRef.current = 0;
-    outputAudioStartedRef.current = false;
-    outputAudioStoppedRef.current = false;
-    outputClearRequestedRef.current = false;
-    turnFinalizedRef.current = false;
-    inputCommitPendingRef.current = false;
     turnStartedAtRef.current = 0;
     updateStatus('disconnected');
     callbacksRef.current.onError(message);
     void resetVoiceAudioMode().catch(() => undefined);
-  }, [clearTurnWatchdog, updateStatus]);
+  }, [clearTurnWatchdog, resetTurnRefs, updateStatus]);
 
   const armTurnWatchdog = useCallback((timeoutMs: number, message: string, retryStalledResponse = false) => {
     clearTurnWatchdog();
@@ -298,9 +299,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     activeResponseIdRef.current = null;
     continuationPendingRef.current = false;
     incompleteContinuationCountRef.current = 0;
-    outputAudioStartedRef.current = false;
-    outputAudioStoppedRef.current = false;
-    outputClearRequestedRef.current = false;
+    resetResponseOutputRefs();
     turnFinalizedRef.current = false;
     publishTranscript('asha', '');
     try {
@@ -313,32 +312,22 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     } catch {
       failStalledTurn('Asha could not retry the voice response. Start a new live voice session and try again.');
     }
-  }, [armTurnWatchdog, clearTurnWatchdog, failStalledTurn, publishTranscript, sendResponseCreate, settlePendingResponseCancellation]);
+  }, [armTurnWatchdog, clearTurnWatchdog, failStalledTurn, publishTranscript, resetResponseOutputRefs, sendResponseCreate, settlePendingResponseCancellation]);
 
   const unlockCompletedTurn = useCallback(() => {
     if (!responseCompletedRef.current || !outputAudioStoppedRef.current || !turnFinalizedRef.current) return;
     clearTurnWatchdog();
-    responseCompletedRef.current = false;
-    responseCreatedRef.current = false;
-    activeResponseIdRef.current = null;
     settlePendingResponseCancellation();
-    continuationPendingRef.current = false;
-    incompleteContinuationCountRef.current = 0;
-    stalledResponseRetryCountRef.current = 0;
-    outputAudioStartedRef.current = false;
-    outputAudioStoppedRef.current = false;
-    outputClearRequestedRef.current = false;
-    turnFinalizedRef.current = false;
-    inputCommitPendingRef.current = false;
+    resetResponseLifecycleRefs();
     updateStatus('ready');
-  }, [clearTurnWatchdog, settlePendingResponseCancellation, updateStatus]);
+  }, [clearTurnWatchdog, resetResponseLifecycleRefs, settlePendingResponseCancellation, updateStatus]);
 
   const finalizeTurn = useCallback(() => {
     const spokenReply = completedReplyRef.current.trim();
     const transcript = transcriptRef.current.trim();
     if (!spokenReply || !transcript || !inputItemIdRef.current) return;
     const reply = spokenReply;
-    rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+    rememberBoundedId(completedInputItemIdsRef.current, inputItemIdRef.current);
     inputItemIdRef.current = null;
     completedReplyRef.current = '';
     transcriptRef.current = '';
@@ -371,9 +360,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           peerRef.current = null;
           peer.close();
           responseCompletedRef.current = false;
-          outputAudioStartedRef.current = false;
-          outputAudioStoppedRef.current = false;
-          outputClearRequestedRef.current = false;
+          resetResponseOutputRefs();
           turnFinalizedRef.current = false;
           updateStatus('disconnected');
           void resetVoiceAudioMode().catch(() => undefined);
@@ -382,7 +369,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
       }
     }
     unlockCompletedTurn();
-  }, [clearTurnWatchdog, settlePendingResponseCancellation, unlockCompletedTurn, updateStatus]);
+  }, [clearTurnWatchdog, resetResponseOutputRefs, settlePendingResponseCancellation, unlockCompletedTurn, updateStatus]);
 
   const playCanonicalReply = useCallback((reply: string) => {
     canonicalPlaybackRef.current?.abort();
@@ -425,10 +412,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     responseTextRef.current = '';
     responseCompletedRef.current = false;
     responseCreatedRef.current = false;
-    continuationPendingRef.current = false;
-    outputAudioStartedRef.current = false;
-    outputAudioStoppedRef.current = false;
-    outputClearRequestedRef.current = false;
+    resetResponseOutputRefs();
     const spokenTail = continuationTail(completedReplyRef.current);
     try {
       sendResponseCreate(`Continue the previous reply exactly where it stopped. The already-spoken ending is ${JSON.stringify(spokenTail)}. Begin after that ending and do not repeat it. Complete the unfinished sentence first, using no more than 12 words. ${HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS}`);
@@ -440,7 +424,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     } catch {
       failStalledTurn('Asha could not continue the incomplete voice response. Please try again.');
     }
-  }, [armTurnWatchdog, failStalledTurn, sendResponseCreate]);
+  }, [armTurnWatchdog, failStalledTurn, resetResponseOutputRefs, sendResponseCreate]);
 
   const handleServerEvent = useCallback((raw: string) => {
     let event: RealtimeEvent;
@@ -481,7 +465,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         connectResolveRef.current?.();
         updateStatus('ready');
         break;
-      case 'conversation.item.input_audio_transcription.completed':
+      case 'conversation.item.input_audio_transcription.completed': {
         if (!event.item_id || completedInputItemIdsRef.current.has(event.item_id)) break;
         const belongsToFailedResponse = failedResponseInputItemIdsRef.current.delete(event.item_id);
         if (!belongsToFailedResponse && inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
@@ -491,7 +475,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
             publishTranscript('you', event.transcript);
             publishCompletedInputTranscript(event.item_id, event.transcript.trim());
           }
-          rememberCompletedInputItem(completedInputItemIdsRef.current, event.item_id);
+          rememberBoundedId(completedInputItemIdsRef.current, event.item_id);
           break;
         }
         if (!inputItemIdRef.current) inputItemIdRef.current = event.item_id;
@@ -501,7 +485,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           publishCompletedInputTranscript(event.item_id, transcriptRef.current);
           if (completedReplyRef.current) finalizeTurn();
         } else if (statusRef.current === 'responding') {
-          rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+          rememberBoundedId(completedInputItemIdsRef.current, inputItemIdRef.current);
           inputItemIdRef.current = null;
           responseTextRef.current = '';
           completedReplyRef.current = '';
@@ -510,6 +494,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           finishTurnWithoutResult();
         }
         break;
+      }
       case 'conversation.item.input_audio_transcription.delta':
         if (!event.item_id || completedInputItemIdsRef.current.has(event.item_id)) break;
         if (inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
@@ -519,19 +504,19 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           publishTranscript('you', transcriptRef.current);
         }
         break;
-      case 'conversation.item.input_audio_transcription.failed':
+      case 'conversation.item.input_audio_transcription.failed': {
         if (event.item_id && completedInputItemIdsRef.current.has(event.item_id)) break;
         const failedAfterResponseFailure = event.item_id
           ? failedResponseInputItemIdsRef.current.delete(event.item_id)
           : false;
         if (!failedAfterResponseFailure && event.item_id && inputItemIdRef.current && event.item_id !== inputItemIdRef.current) break;
         if (failedAfterResponseFailure) {
-          rememberCompletedInputItem(completedInputItemIdsRef.current, event.item_id ?? null);
+          rememberBoundedId(completedInputItemIdsRef.current, event.item_id ?? null);
           break;
         }
         if (event.item_id && !inputItemIdRef.current) inputItemIdRef.current = event.item_id;
         if (statusRef.current === 'responding') {
-          rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+          rememberBoundedId(completedInputItemIdsRef.current, inputItemIdRef.current);
           inputItemIdRef.current = null;
           responseTextRef.current = '';
           completedReplyRef.current = '';
@@ -540,7 +525,8 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           finishTurnWithoutResult();
         }
         break;
-      case 'response.created':
+      }
+      case 'response.created': {
         // Every response this client creates carries turn/attempt metadata.
         // Requiring that metadata here prevents a late response from a prior
         // turn from claiming the active response ID for the new turn.
@@ -564,9 +550,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         responseTextRef.current = '';
         responseCompletedRef.current = false;
         responseCreatedRef.current = true;
-        outputAudioStartedRef.current = false;
-        outputAudioStoppedRef.current = false;
-        outputClearRequestedRef.current = false;
+        resetResponseOutputRefs();
         turnFinalizedRef.current = false;
         updateStatus('responding');
         if (!cancellationPending) {
@@ -577,6 +561,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           );
         }
         break;
+      }
       case 'output_audio_buffer.started':
         if (statusRef.current !== 'responding' || !outputBelongsToActiveResponse(event)) break;
         outputAudioStartedRef.current = true;
@@ -708,9 +693,9 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         }
         if (responseStatus !== 'completed' || failure) {
           if (inputItemIdRef.current && !publishedInputTranscriptIdsRef.current.has(inputItemIdRef.current)) {
-            rememberCompletedInputItem(failedResponseInputItemIdsRef.current, inputItemIdRef.current);
+            rememberBoundedId(failedResponseInputItemIdsRef.current, inputItemIdRef.current);
           } else {
-            rememberCompletedInputItem(completedInputItemIdsRef.current, inputItemIdRef.current);
+            rememberBoundedId(completedInputItemIdsRef.current, inputItemIdRef.current);
           }
           inputItemIdRef.current = null;
           responseTextRef.current = '';
@@ -773,9 +758,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           responseCompletedRef.current = false;
           responseCreatedRef.current = false;
           activeResponseIdRef.current = null;
-          outputAudioStartedRef.current = false;
-          outputAudioStoppedRef.current = false;
-          outputClearRequestedRef.current = false;
+          resetResponseOutputRefs();
           turnFinalizedRef.current = false;
           turnStartedAtRef.current = 0;
           try {
@@ -799,16 +782,14 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           finishTurnWithoutResult();
         } else if (statusRef.current !== 'disconnected') {
           responseCompletedRef.current = false;
-          outputAudioStartedRef.current = false;
-          outputAudioStoppedRef.current = false;
-          outputClearRequestedRef.current = false;
+          resetResponseOutputRefs();
           turnFinalizedRef.current = false;
           updateStatus('ready');
         }
         break;
       }
     }
-  }, [armTurnWatchdog, clearTurnWatchdog, failStalledTurn, finalizeTurn, finishTurnWithoutResult, outputBelongsToActiveResponse, playCanonicalReply, publishCompletedInputTranscript, publishTranscript, requestIncompleteContinuation, responseMatchesCurrentAttempt, responseMetadataMatchesCurrentAttempt, sendResponseCreate, settlePendingResponseCancellation, startStalledResponseRetry, unlockCompletedTurn, updateStatus]);
+  }, [armTurnWatchdog, clearTurnWatchdog, failStalledTurn, finalizeTurn, finishTurnWithoutResult, outputBelongsToActiveResponse, playCanonicalReply, publishCompletedInputTranscript, publishTranscript, requestIncompleteContinuation, resetResponseOutputRefs, responseMatchesCurrentAttempt, responseMetadataMatchesCurrentAttempt, sendResponseCreate, settlePendingResponseCancellation, startStalledResponseRetry, unlockCompletedTurn, updateStatus]);
 
   const disconnect = useCallback(() => {
     lifecycleRef.current += 1;
@@ -826,32 +807,18 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     connectRejectRef.current = null;
     connectPromiseRef.current = null;
     rejectConnection?.(new Error('The live voice session ended before it was ready.'));
-    responseTextRef.current = '';
-    transcriptRef.current = '';
-    completedReplyRef.current = '';
-    inputItemIdRef.current = null;
+    resetTurnRefs();
     completedInputItemIdsRef.current.clear();
     publishedInputTranscriptIdsRef.current.clear();
     failedResponseInputItemIdsRef.current.clear();
-    responseCompletedRef.current = false;
-    responseCreatedRef.current = false;
-    activeResponseIdRef.current = null;
     expectedCancelledResponseIdsRef.current.clear();
     ignoredCancellationErrorEventIdsRef.current.clear();
     pendingResponseCancellationRef.current = null;
-    continuationPendingRef.current = false;
-    incompleteContinuationCountRef.current = 0;
-    stalledResponseRetryCountRef.current = 0;
-    outputAudioStartedRef.current = false;
-    outputAudioStoppedRef.current = false;
-    outputClearRequestedRef.current = false;
-    turnFinalizedRef.current = false;
-    inputCommitPendingRef.current = false;
     clearTurnWatchdog();
     turnStartedAtRef.current = 0;
     updateStatus('disconnected');
     void resetVoiceAudioMode().catch(() => undefined);
-  }, [clearTurnWatchdog, updateStatus]);
+  }, [clearTurnWatchdog, resetTurnRefs, updateStatus]);
 
   const connect = useCallback(async () => {
     if (peerRef.current && statusRef.current !== 'disconnected') return;
@@ -994,24 +961,10 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     // The connected WebRTC call owns the iOS PlayAndRecord session. Rewriting
     // it here races its native activation state after Asha's prior reply.
     // Playback players keep that session active until the call disconnects.
-    transcriptRef.current = '';
-    completedReplyRef.current = '';
-    inputItemIdRef.current = null;
-    responseTextRef.current = '';
-    responseCompletedRef.current = false;
-    responseCreatedRef.current = false;
-    activeResponseIdRef.current = null;
+    resetTurnRefs();
     settlePendingResponseCancellation();
     responseAttemptRef.current = 0;
     turnGenerationRef.current += 1;
-    continuationPendingRef.current = false;
-    incompleteContinuationCountRef.current = 0;
-    stalledResponseRetryCountRef.current = 0;
-    outputAudioStartedRef.current = false;
-    outputAudioStoppedRef.current = false;
-    outputClearRequestedRef.current = false;
-    turnFinalizedRef.current = false;
-    inputCommitPendingRef.current = false;
     clearTurnWatchdog();
     publishTranscript('you', '');
     publishTranscript('asha', '');
@@ -1020,7 +973,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     peer.setMicrophoneEnabled(true);
     turnStartedAtRef.current = Date.now();
     updateStatus('recording');
-  }, [clearTurnWatchdog, connect, disconnect, publishTranscript, sendEvent, settlePendingResponseCancellation, updateStatus]);
+  }, [clearTurnWatchdog, connect, disconnect, publishTranscript, resetTurnRefs, sendEvent, settlePendingResponseCancellation, updateStatus]);
 
   const finishTurn = useCallback(() => {
     if (statusRef.current !== 'recording') return;

@@ -30,6 +30,8 @@ jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }))
 
 jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
+  useAppStateValue: () => mockAppState,
+  useAppActions: () => mockAppState,
 }));
 
 jest.mock('@/lib/speech', () => ({
@@ -179,7 +181,7 @@ describe('previously uncovered audit screens', () => {
   it('renders the progress dashboard for an empty learning history', async () => {
     const view = await render(<ProgressScreen />);
 
-    expect(view.getByText('Your Hindi is becoming instinct.')).toBeTruthy();
+    expect(view.getByText('Your Hindi is taking root.')).toBeTruthy();
     expect(view.getByText('Last 7 days')).toBeTruthy();
   });
 

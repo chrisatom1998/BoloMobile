@@ -6,6 +6,11 @@ import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 import { darkColors } from '../src/theme';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 const mockRouterBack = jest.fn();
 const longDevanagariReply = 'आप कैसे हैं? धन्यवाद, आशा। ज़रूर। आप कैसे हैं? धन्यवाद, आशा। ज़रूर।';
 
@@ -518,7 +523,7 @@ describe('generated-message reporting', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText(/Report reply:/u));
 
-    const firstReason = (alert.mock.calls[0][2] as { onPress?: () => void }[])[0].onPress;
+    const firstReason = (alert.mock.calls[0]?.[2] as { onPress?: () => void }[] | undefined)?.[0]?.onPress;
     await act(async () => {
       firstReason?.();
       firstReason?.();
@@ -537,7 +542,7 @@ describe('generated-message reporting', () => {
 
     await fireEvent.press(view.getByLabelText(/Report reply:/u));
     const retryPrompt = alert.mock.calls.findLast(([title]) => title === 'Report Asha\u2019s reply');
-    const retryReason = (retryPrompt?.[2] as { onPress?: () => void }[] | undefined)?.[0].onPress;
+    const retryReason = (retryPrompt?.[2] as { onPress?: () => void }[] | undefined)?.[0]?.onPress;
     await act(async () => {
       retryReason?.();
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
@@ -561,7 +566,7 @@ describe('generated-message reporting', () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText(/Report reply:/u));
-    const reason = (alert.mock.calls[0][2] as { onPress?: () => void }[])[0].onPress;
+    const reason = (alert.mock.calls[0]?.[2] as { onPress?: () => void }[] | undefined)?.[0]?.onPress;
     await act(async () => {
       reason?.();
       await Promise.resolve();
@@ -893,7 +898,7 @@ describe('live coaching state', () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     const listenActions = view.getAllByLabelText(/Read reply aloud/u);
-    await fireEvent.press(listenActions[listenActions.length - 1]);
+    await fireEvent.press(expectDefined(listenActions[listenActions.length - 1]));
     expect(speech.speakText).toHaveBeenCalledWith('Hello there.');
 
     await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
@@ -953,8 +958,9 @@ describe('live audio control exclusion', () => {
 
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.getByLabelText('Message Asha').props.editable).toBe(true);
-    expect(view.getAllByLabelText(/Read reply aloud:/u)[0].props.accessibilityState?.disabled
-      ?? view.getAllByLabelText(/Read reply aloud:/u)[0].props.disabled).toBe(false);
+    const firstListen = expectDefined(view.getAllByLabelText(/Read reply aloud:/u)[0]);
+    expect(firstListen.props.accessibilityState?.disabled
+      ?? firstListen.props.disabled).toBe(false);
 
     await view.unmount();
     await flushMicrotasks();

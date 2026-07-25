@@ -78,9 +78,11 @@ export function romanizeDevanagari(text: string) {
 
   for (let index = 0; index < characters.length; index += 1) {
     const character = characters[index];
+    if (character === undefined) continue;
 
-    if (INDEPENDENT_VOWELS[character]) {
-      result += INDEPENDENT_VOWELS[character];
+    const independentVowel = INDEPENDENT_VOWELS[character];
+    if (independentVowel !== undefined) {
+      result += independentVowel;
       continue;
     }
 
@@ -107,16 +109,19 @@ export function romanizeDevanagari(text: string) {
       continue;
     }
 
-    if (VOWEL_SIGNS[character]) {
-      result += VOWEL_SIGNS[character];
+    const vowelSign = VOWEL_SIGNS[character];
+    if (vowelSign !== undefined) {
+      result += vowelSign;
       continue;
     }
-    if (MARKS[character]) {
-      result += MARKS[character];
+    const mark = MARKS[character];
+    if (mark !== undefined) {
+      result += mark;
       continue;
     }
-    if (DIGITS[character]) {
-      result += DIGITS[character];
+    const digit = DIGITS[character];
+    if (digit !== undefined) {
+      result += digit;
       continue;
     }
     if (character === '।' || character === '॥') {

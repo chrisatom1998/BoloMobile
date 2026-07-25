@@ -17,6 +17,11 @@ import {
   sanitizeStreakDays,
 } from '../src/lib/storage';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 describe('local progress storage', () => {
   it('uses local calendar dates and crosses month boundaries safely', () => {
     const value = new Date(2026, 6, 1, 23, 30);
@@ -98,7 +103,7 @@ describe('local progress storage', () => {
     const history = sanitizeChatHistory(JSON.stringify(messages));
 
     expect(history).toHaveLength(MAX_CHAT_HISTORY_MESSAGES);
-    expect(history[0].id).toBe('message-5');
+    expect(expectDefined(history[0]).id).toBe('message-5');
     expect(history.at(-1)).toEqual({ id: 'message-104', role: 'asha', text: 'Replacement' });
   });
 
@@ -110,7 +115,7 @@ describe('local progress storage', () => {
     ]);
 
     expect(appended).toHaveLength(3);
-    expect(appended[2].text).toHaveLength(MAX_CHAT_MESSAGE_CHARACTERS);
+    expect(expectDefined(appended[2]).text).toHaveLength(MAX_CHAT_MESSAGE_CHARACTERS);
     expect(appendChatHistory(current, [
       { id: 'you-3', role: 'you', text: 'Valid half.' },
       { id: '', role: 'asha', text: 'Invalid half.' },

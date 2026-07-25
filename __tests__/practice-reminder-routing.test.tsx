@@ -28,6 +28,11 @@ jest.mock('expo-notifications', () => ({
 
 import { practiceReminderRoute, usePracticeReminderRouting } from '../src/hooks/use-practice-reminder-routing';
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
 function response(identifier = 'reminder-1', url: unknown = '/review', actionIdentifier = 'default'): MockNotificationResponse {
   return {
     actionIdentifier,
@@ -56,7 +61,7 @@ describe('practice reminder routing', () => {
     expect(mockSetNotificationHandler).toHaveBeenCalledWith({
       handleNotification: expect.any(Function),
     });
-    await expect(mockSetNotificationHandler.mock.calls[0][0].handleNotification()).resolves.toEqual({
+    await expect(expectDefined(mockSetNotificationHandler.mock.calls[0])[0].handleNotification()).resolves.toEqual({
       shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: true,

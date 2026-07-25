@@ -30,10 +30,14 @@ export function recommendedScenes(profile: LearnerProfile, progress: Record<stri
   }).slice(0, limit);
 }
 
+export const reviewIntervals = [0, 1, 3, 7, 14, 30];
+
+export function duePhraseList(phrases: SavedPhrase[], reviews: Record<string, PhraseReview>, today = dateKey()) {
+  return phrases.filter((phrase) => (reviews[phrase.hi]?.dueAt ?? today) <= today);
+}
+
 export function dueSavedPhrases(phrases: SavedPhrase[], reviews: Record<string, PhraseReview>, limit = 5) {
-  const today = dateKey();
-  return phrases
-    .filter((phrase) => (reviews[phrase.hi]?.dueAt ?? today) <= today)
+  return duePhraseList(phrases, reviews)
     .sort((a, b) => (reviews[a.hi]?.mastery ?? 0) - (reviews[b.hi]?.mastery ?? 0))
     .slice(0, limit);
 }

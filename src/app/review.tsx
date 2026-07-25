@@ -3,9 +3,10 @@ import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { useSpeakText } from '@/hooks/use-speak-text';
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
@@ -15,11 +16,11 @@ export default function ReviewScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
+  const { audioError, speak } = useSpeakText();
   const session = useMemo(() => (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5)), [duePhrases, phraseReviews, phrases]);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
-  const [audioError, setAudioError] = useState('');
   const phrase = session[index];
 
   useEffect(() => () => { void stopSpeaking(); }, []);
@@ -37,14 +38,9 @@ export default function ReviewScreen() {
     setIndex((value) => value + 1);
   }
 
-  async function playPhrase(playbackRate = 1) {
+  function playPhrase(playbackRate = 1) {
     if (!phrase || (!aiConsent && !hasOfflineSpeech(phrase.hi))) return;
-    setAudioError('');
-    try {
-      await speakText(phrase.hi, undefined, playbackRate);
-    } catch (error) {
-      setAudioError(error instanceof Error ? error.message : 'Bolo could not play the voice.');
-    }
+    void speak(phrase.hi, undefined, playbackRate);
   }
 
   if (session.length === 0) {
@@ -86,8 +82,8 @@ export default function ReviewScreen() {
             {showHindi ? <Text style={styles.hindi}>{phrase.hi}</Text> : null}
             {showLatin ? <Text style={styles.latin}>{phrase.latin}</Text> : null}
             <View style={styles.audioRow}>
-              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase()} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
-              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => void playPhrase(0.72)} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase()} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
             {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>

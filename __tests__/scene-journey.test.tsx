@@ -121,7 +121,7 @@ describe('SceneScreen primary journey', () => {
   });
 
   it('saves and removes the current natural answer', async () => {
-    const target = scenes[0].beats[0].choices.find((choice) => choice.correct)!;
+    const target = scenes[0]?.beats[0]?.choices.find((choice) => choice.correct)!;
     const view = await render(<SceneScreen />);
     await fireEvent.press(view.getByLabelText(/One tea, please\./u));
 

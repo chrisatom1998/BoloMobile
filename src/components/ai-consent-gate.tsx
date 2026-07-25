@@ -1,5 +1,5 @@
 import { ShieldCheck } from 'lucide-react-native';
-import { type PropsWithChildren, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
@@ -8,7 +8,7 @@ import { observe, observeOncePerSession } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
-export function AiConsentGate({ children }: PropsWithChildren) {
+export function AiConsentGate({ children }: { children?: ReactNode }) {
   const { colors } = useTheme();
   const styles = useStyles();
   const { aiConsent, setAiConsent } = useAppState();
