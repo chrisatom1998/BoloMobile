@@ -349,11 +349,13 @@ describe('AI voice speech orchestration', () => {
   });
 
   it('retries a failed Hindi clip once and completes the rest of the reply', async () => {
-    const text = 'You can say, मुझे पानी चाहिए। Then smile.';
+    // Keep this generated-speech fixture outside the bundled lesson-audio
+    // catalog: bundled clips exercise the native offline player instead.
+    const text = 'You can say, मुझे थोड़ी मदद चाहिए। Then smile.';
     const chunks = splitSpeechByLanguage(text);
     expect(chunks).toEqual([
       { text: 'You can say,', language: undefined },
-      { text: 'मुझे पानी चाहिए।', language: 'hi' },
+      { text: 'मुझे थोड़ी मदद चाहिए।', language: 'hi' },
       { text: 'Then smile.', language: undefined },
     ]);
     const audio = new Map(chunks.map(({ text: chunk }, index) => [chunk, {
@@ -362,7 +364,7 @@ describe('AI voice speech orchestration', () => {
     }]));
     const hindiFailure = new Error('temporary Hindi synthesis failure');
     const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio').mockImplementation((chunk) => {
-      if (chunk === 'मुझे पानी चाहिए।' && requestSpy.mock.calls.filter(([value]) => value === chunk).length === 1) {
+      if (chunk === 'मुझे थोड़ी मदद चाहिए।' && requestSpy.mock.calls.filter(([value]) => value === chunk).length === 1) {
         return Promise.reject(hindiFailure);
       }
       return Promise.resolve(audio.get(chunk)!);
@@ -371,10 +373,10 @@ describe('AI voice speech orchestration', () => {
 
     await expect(speakText(text)).resolves.toBeUndefined();
 
-    expect(requestSpy.mock.calls.filter(([chunk]) => chunk === 'मुझे पानी चाहिए।')).toHaveLength(2);
+    expect(requestSpy.mock.calls.filter(([chunk]) => chunk === 'मुझे थोड़ी मदद चाहिए।')).toHaveLength(2);
     expect(playbackSpy.mock.calls.map(([value]) => value.audioBase64)).toEqual([
       audio.get('You can say,')?.audioBase64,
-      audio.get('मुझे पानी चाहिए।')?.audioBase64,
+      audio.get('मुझे थोड़ी मदद चाहिए।')?.audioBase64,
       audio.get('Then smile.')?.audioBase64,
     ]);
   });

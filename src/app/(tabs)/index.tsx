@@ -127,6 +127,14 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      <PressableFeedback accessibilityLabel="Browse 10 ordered lesson plans with 100 lessons" accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.lessonPlansLink}>
+        <View>
+          <Text style={styles.lessonPlansEyebrow}>Guided curriculum</Text>
+          <Text style={styles.lessonPlansTitle}>10 ordered plans · 100 new lessons</Text>
+        </View>
+        <Text style={styles.lessonPlansArrow}>→</Text>
+      </PressableFeedback>
+
       <View style={styles.sectionHeading}>
         <View>
           <Text style={styles.sectionEyebrow}>Guided practice</Text>
@@ -213,6 +221,10 @@ const useStyles = makeStyles((c) => ({
   pathTitle: { color: c.ink, fontSize: 15, fontWeight: '900', textAlign: 'left' },
   pathMeta: { color: c.muted, fontSize: 12, lineHeight: 16, textAlign: 'left' },
   pathArrow: { color: c.ink, fontSize: 16, lineHeight: 18, fontWeight: '900', marginTop: 1, textAlign: 'left' },
+  lessonPlansLink: { width: '100%', minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.gold, borderWidth: 1, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
+  lessonPlansEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+  lessonPlansTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 18, lineHeight: 23, fontWeight: '700', marginTop: 2 },
+  lessonPlansArrow: { color: c.forestText, fontSize: 24, fontWeight: '900' },
   listFooter: { marginTop: spacing.xl },
   goalFooter: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm },
   goalFooterTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
