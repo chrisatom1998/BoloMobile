@@ -20,4 +20,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx expo customize tsconfig.json
       - run: npm run verify
