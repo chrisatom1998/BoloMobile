@@ -53,6 +53,7 @@ function AppNavigator() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
           <Stack.Screen name="review" options={{ title: 'Quick review' }} />
+          <Stack.Screen name="lesson-plans" options={{ title: 'Lesson plans', headerLargeTitle: true }} />
           <Stack.Screen name="settings" options={{ title: 'Settings', headerLargeTitle: true }} />
           <Stack.Screen name="diagnostics" options={{ title: 'Private diagnostics' }} />
           <Stack.Screen name="privacy" options={{ title: 'Privacy & data use' }} />

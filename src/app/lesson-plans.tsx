@@ -1,0 +1,86 @@
+import { useRouter } from 'expo-router';
+import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { ScrollView, Text, View } from 'react-native';
+
+import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { lessonPlans } from '@/data/lesson-plans';
+import { useAppState } from '@/state/app-state';
+import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
+
+export default function LessonPlansScreen() {
+  const router = useRouter();
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
+  const { sceneProgress } = useAppState();
+
+  return (
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
+      <View style={styles.heading}>
+        <View style={styles.headingCopy}>
+          <JournalKicker>Guided curriculum</JournalKicker>
+          <JournalDisplay style={styles.title}>One path, 100 small wins.</JournalDisplay>
+          <Text style={styles.intro}>Move in order, one useful Hindi phrase at a time. Each plan has ten focused lessons, with ten practice turns in each lesson.</Text>
+        </View>
+        <JournalMotif accessibilityLabel="Lesson plans journal motif" size="tile" />
+      </View>
+
+      <View accessibilityLabel="Ten ordered lesson plans" style={styles.plans}>
+        {lessonPlans.map((plan) => {
+          const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+          const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
+          const currentIndex = nextIndex < 0 ? plan.lessonIds.length - 1 : nextIndex;
+          const nextLessonId = plan.lessonIds[currentIndex];
+          const percent = Math.round(completed / plan.lessonIds.length * 100);
+          return (
+            <PressableFeedback
+              accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${completed} of ${plan.lessonIds.length} lessons complete`}
+              accessibilityRole="button"
+              key={plan.id}
+              onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLessonId } })}
+              style={styles.planCard}
+            >
+              <View style={[styles.planAccent, { backgroundColor: plan.color }]} />
+              <View style={styles.planTopline}>
+                <Text style={styles.planOrder}>Plan {String(plan.order).padStart(2, '0')}</Text>
+                <Text style={styles.planMeta}>{completed}/{plan.lessonIds.length} complete</Text>
+              </View>
+              <View style={styles.planTitleRow}>
+                <Text style={styles.planEmoji}>{plan.emoji}</Text>
+                <View style={styles.planCopy}>
+                  <Text style={styles.planTitle}>{plan.title}</Text>
+                  <Text style={styles.planSubtitle}>{plan.subtitle}</Text>
+                </View>
+              </View>
+              <View accessibilityLabel={`${percent} percent complete`} style={styles.track}>
+                <View style={[styles.fill, { backgroundColor: plan.color, width: `${percent}%` }]} />
+              </View>
+              <Text style={styles.planAction}>{nextIndex < 0 ? 'Practice the final 10-turn lesson again →' : `Continue with lesson ${currentIndex + 1} · 10 turns →`}</Text>
+            </PressableFeedback>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+}
+
+const useStyles = makeStyles((c) => ({
+  content: { padding: spacing.lg, paddingTop: 18, paddingBottom: spacing.xxl, gap: spacing.lg },
+  heading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
+  headingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  title: { maxWidth: 260, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  intro: { maxWidth: 310, color: c.muted, fontSize: 14, lineHeight: 20 },
+  plans: { width: '100%', gap: spacing.md },
+  planCard: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
+  planAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  planTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  planOrder: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
+  planMeta: { color: c.muted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  planEmoji: { fontSize: 28 },
+  planCopy: { minWidth: 0, flex: 1, gap: 2 },
+  planTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  planSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  track: { width: '100%', height: 7, overflow: 'hidden', borderRadius: radius.pill, backgroundColor: c.backgroundWarm },
+  fill: { height: '100%', borderRadius: radius.pill },
+  planAction: { color: c.forestText, fontSize: 13, fontWeight: '900' },
+}));

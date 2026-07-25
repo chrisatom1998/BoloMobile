@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import ts from 'typescript';
 
 const root = resolve(import.meta.dirname, '..');
-const sourceFiles = ['scenes.ts', 'additional-scenes.ts'];
+const sourceFiles = ['scenes.ts', 'additional-scenes.ts', 'lesson-plans.ts'];
 const outputDirectory = join(root, 'assets/audio/hindi-core');
 const generatedModule = join(root, 'src/data/offline-hindi-audio.ts');
 const spokenPropertyNames = new Set(['hi', 'npc', 'reply']);
