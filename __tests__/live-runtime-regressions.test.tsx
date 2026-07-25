@@ -4,7 +4,7 @@ import { Alert, Animated, Dimensions, FlatList, Pressable as MockPressable, Styl
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
-import { darkColors } from '../src/theme';
+import { lightColors } from '../src/theme';
 
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
@@ -305,14 +305,14 @@ describe('live consent layout', () => {
 });
 
 describe('live theme styles', () => {
-  it('uses the dark palette for the chat list, bubbles, and composer', () => {
-    const styles = createLiveStyles(darkColors);
+  it('paints the chat list, bubbles, and composer from the active palette', () => {
+    const styles = createLiveStyles(lightColors);
 
-    expect(styles.list.backgroundColor).toBe(darkColors.background);
-    expect(styles.ashaMessage.backgroundColor).toBe(darkColors.paperRaised);
-    expect(styles.messageText.color).toBe(darkColors.ink);
-    expect(styles.composer.backgroundColor).toBe(darkColors.paperRaised);
-    expect(styles.input.backgroundColor).toBe(darkColors.backgroundWarm);
+    expect(styles.list.backgroundColor).toBe(lightColors.background);
+    expect(styles.ashaMessage.backgroundColor).toBe(lightColors.paperRaised);
+    expect(styles.messageText.color).toBe(lightColors.ink);
+    expect(styles.composer.backgroundColor).toBe(lightColors.paperRaised);
+    expect(styles.input.backgroundColor).toBe(lightColors.backgroundWarm);
   });
 });
 

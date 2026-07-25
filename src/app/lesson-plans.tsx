@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
@@ -73,8 +74,7 @@ export default function LessonPlansScreen() {
 function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router: ReturnType<typeof useRouter>; sceneProgress: Record<string, SceneProgress> }) {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
-  const { fontScale } = useWindowDimensions();
-  const largeTextLayout = fontScale >= 1.4;
+  const largeTextLayout = useLargeTextLayout();
   const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
   const nextLessonIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
   const currentIndex = nextLessonIndex < 0 ? plan.lessonIds.length - 1 : nextLessonIndex;

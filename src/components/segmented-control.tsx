@@ -1,6 +1,7 @@
 import { Tabs } from 'heroui-native/tabs';
-import { Pressable, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { makeStyles, spacing } from '@/theme';
 
 export type SegmentOption<T extends string> = {
@@ -41,8 +42,8 @@ export function SegmentedControl<T extends string>({
   value,
 }: SegmentedControlProps<T>) {
   const styles = useStyles();
-  const { fontScale } = useWindowDimensions();
-  const usesStackedLayout = stackedAtLargeText && fontScale >= 1.4;
+  const largeTextLayout = useLargeTextLayout();
+  const usesStackedLayout = stackedAtLargeText && largeTextLayout;
 
   if (usesStackedLayout) {
     return (

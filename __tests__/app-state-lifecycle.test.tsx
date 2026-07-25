@@ -22,8 +22,10 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
+jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
 
 import { showAppAlert } from '../src/lib/app-alert';
+import { observe } from '../src/lib/observability';
 import { AI_CONSENT_VERSION, createAiConsentRecord, dateKey, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppStateValue } from '../src/state/app-state';
 
@@ -34,6 +36,7 @@ const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage
   removeItem: jest.Mock;
 };
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
+const observeMock = observe as jest.MockedFunction<typeof observe>;
 
 function StateProbe() {
   const state = useAppStateValue();
@@ -81,6 +84,7 @@ describe('AppStateProvider hydration', () => {
     expect(snapshot.aiConsent).toBe(false);
     expect(snapshot.clientId).not.toBe('loading-client');
     expect(warning).toHaveBeenCalledWith('Bolo could not load local progress.', expect.any(Error));
+    expect(observeMock).toHaveBeenCalledWith('runtime_error');
     expect(showAppAlertMock).toHaveBeenCalledWith(
       'Could not load saved progress',
       expect.stringContaining('temporary defaults'),

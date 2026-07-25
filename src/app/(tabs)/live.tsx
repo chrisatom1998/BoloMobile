@@ -2,19 +2,21 @@ import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowLeft, MessageCircle, Send, Sprout, Trash2, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { ChatMessageRow } from '@/components/chat-message-row';
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
+import { LiveComposer } from '@/components/live-composer';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import type { RealtimeInputTranscript, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
@@ -63,12 +65,11 @@ export default function LiveScreen() {
   const { fontScale, height: windowHeight, width: windowWidth } = useWindowDimensions();
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
   const compactVoiceLayout = windowHeight < 760;
-  const largeTextLayout = fontScale >= 1.4;
+  const largeTextLayout = useLargeTextLayout();
   const { elapsedSeconds } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, phraseReviews = {}, phrases = [], togglePhrase } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>(learnerProfile?.responseLanguage ?? 'en');
-  const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
@@ -268,12 +269,11 @@ export default function LiveScreen() {
     );
   }, [busy, chatHistory.length, clearSavedChat, realtimeLocked]);
 
-  const sendText = useCallback(async (forced?: string) => {
-    const text = (forced ?? input).trim().slice(0, 500);
+  const sendText = useCallback(async (raw: string) => {
+    const text = raw.trim().slice(0, 500);
     if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     scrollAfterContentChangeRef.current = true;
-    setInput('');
     setPendingUserMessage(userMessage);
     setBusy(true);
     setError('');
@@ -309,7 +309,11 @@ export default function LiveScreen() {
         if (mountedRef.current) setBusy(false);
       }
     }
-  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, input, realtimeLocked, recordTurn, responseLanguage]);
+  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
+
+  const submitMessage = useCallback((text: string) => {
+    void sendText(text);
+  }, [sendText]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     realtimeStatusRef.current = status;
@@ -424,69 +428,66 @@ export default function LiveScreen() {
                   </Pressable>
                 </View>
               </View>
-
-              <>
-                  <View accessibilityLabel="Asha, your Hindi practice partner" style={[styles.portraitStage, { width: heroContentWidth }]}>
-                    <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.portraitStageImage} transition={0} />
-                    <View style={styles.portraitStageLabel}><Text style={styles.portraitStageLabelText}>With Asha</Text></View>
-                  </View>
-                  <SegmentedControl
-                    accessibilityLabel="Asha voice language"
-                    disabled={languageControlLocked}
-                    disabledHint="End the current request or live voice session to change Asha voice language."
-                    onValueChange={changeResponseLanguage}
-                    options={[
-                      { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
-                      { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
-                    ]}
-                    stackedAtLargeText
-                    style={[styles.languageSelector, { width: heroContentWidth }]}
-                    value={responseLanguage}
-                  />
-                  <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}> 
-                    <View style={styles.liveVoiceBadge}>
-                      <View style={styles.liveVoiceDot} />
-                      <Text style={styles.liveVoiceText}>Live voice</Text>
+              <View accessibilityLabel="Asha, your Hindi practice partner" style={[styles.portraitStage, { width: heroContentWidth }]}>
+                <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.portraitStageImage} transition={0} />
+                <View style={styles.portraitStageLabel}><Text style={styles.portraitStageLabelText}>With Asha</Text></View>
+              </View>
+              <SegmentedControl
+                accessibilityLabel="Asha voice language"
+                disabled={languageControlLocked}
+                disabledHint="End the current request or live voice session to change Asha voice language."
+                onValueChange={changeResponseLanguage}
+                options={[
+                  { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
+                  { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
+                ]}
+                stackedAtLargeText
+                style={[styles.languageSelector, { width: heroContentWidth }]}
+                value={responseLanguage}
+              />
+              <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}> 
+                <View style={styles.liveVoiceBadge}>
+                  <View style={styles.liveVoiceDot} />
+                  <Text style={styles.liveVoiceText}>Live voice</Text>
+                </View>
+                <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} size="minimal" />
+                <View style={styles.heroCopy}>
+                  <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
+                  {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
+                </View>
+              </View>
+              {realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
+                <Pressable
+                  accessibilityHint="Opens your saved phrases for review."
+                  accessibilityLabel={`Review pronunciation reference for ${studioPhrase.hi}`}
+                  accessibilityRole="button"
+                  onPress={() => router.push('/phrases')}
+                  style={[styles.studioPhrase, { width: heroContentWidth }]}
+                >
+                  <View style={styles.studioPhraseHeading}>
+                    <View>
+                      <Text style={styles.studioPhraseEyebrow}>Featured phrase</Text>
+                      <Text style={styles.studioPhraseEnglish}>{studioPhrase.en}</Text>
                     </View>
-                    <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={busy || !aiConsent} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} size="minimal" />
-                    <View style={styles.heroCopy}>
-                      <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
-                      {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
+                    <View style={styles.studioListenIcon}><Volume2 color={colors.forestText} size={18} /></View>
+                  </View>
+                  <View style={styles.studioPhraseLine} />
+                  <Text style={styles.studioPhraseHindi}>{studioPhrase.hi}</Text>
+                  <Text style={styles.studioPhraseLatin}>{studioPhrase.latin}</Text>
+                  <View style={styles.studioPhraseFooter}>
+                    <Text style={styles.studioPhraseCue}>Say “chee-nee kam” gently; pause after “kam.”</Text>
+                    <View style={styles.studioMastery}>
+                      <Sprout color={colors.forestText} size={15} />
+                      <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `${studioPhraseMastery}/5 roots` : 'Plant a root'}</Text>
                     </View>
                   </View>
-                  {realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
-                    <Pressable
-                      accessibilityHint="Opens your saved phrases for review."
-                      accessibilityLabel={`Review pronunciation reference for ${studioPhrase.hi}`}
-                      accessibilityRole="button"
-                      onPress={() => router.push('/phrases')}
-                      style={[styles.studioPhrase, { width: heroContentWidth }]}
-                    >
-                      <View style={styles.studioPhraseHeading}>
-                        <View>
-                          <Text style={styles.studioPhraseEyebrow}>Featured phrase</Text>
-                          <Text style={styles.studioPhraseEnglish}>{studioPhrase.en}</Text>
-                        </View>
-                        <View style={styles.studioListenIcon}><Volume2 color={colors.forestText} size={18} /></View>
-                      </View>
-                      <View style={styles.studioPhraseLine} />
-                      <Text style={styles.studioPhraseHindi}>{studioPhrase.hi}</Text>
-                      <Text style={styles.studioPhraseLatin}>{studioPhrase.latin}</Text>
-                      <View style={styles.studioPhraseFooter}>
-                        <Text style={styles.studioPhraseCue}>Say “chee-nee kam” gently; pause after “kam.”</Text>
-                        <View style={styles.studioMastery}>
-                          <Sprout color={colors.forestText} size={15} />
-                          <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `${studioPhraseMastery}/5 roots` : 'Plant a root'}</Text>
-                        </View>
-                      </View>
-                    </Pressable>
-                  ) : null}
-                  <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
-                    <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
-                    <Text accessibilityLiveRegion="polite" style={styles.captionText}>{captionText}</Text>
-                  </CaptionReveal>
-                  {!aiConsent ? <Text style={[styles.heroConsentHint, { width: Math.min(330, heroContentWidth) }]}>Review the consent card below to enable connected coaching.</Text> : null}
-              </>
+                </Pressable>
+              ) : null}
+              <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
+                <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
+                <Text accessibilityLiveRegion="polite" style={styles.captionText}>{captionText}</Text>
+              </CaptionReveal>
+              {!aiConsent ? <Text style={[styles.heroConsentHint, { width: Math.min(330, heroContentWidth) }]}>Review the consent card below to enable connected coaching.</Text> : null}
             </View>
 
             <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact]} testID="ask-asha-sheet">
@@ -571,29 +572,14 @@ export default function LiveScreen() {
                   accessibilityState={{ disabled: busy || realtimeLocked }}
                   isDisabled={busy || realtimeLocked}
                   key={example}
-                  onPress={() => void sendText(example)}
+                  onPress={() => submitMessage(example)}
                   style={[styles.example, (busy || realtimeLocked) && styles.disabled]}
                 >
                   <Text style={styles.exampleText}>{example}</Text>
                 </PressableFeedback>
               ))}
             </ScrollView>
-            <View style={styles.inputRow}>
-              <TextInput
-                accessibilityLabel="Message Asha"
-                testID="message-asha-input"
-                editable={!busy && !realtimeLocked}
-                maxLength={500}
-                multiline
-                onChangeText={setInput}
-                onSubmitEditing={() => void sendText()}
-                placeholder="Ask in English or Hindi…"
-                placeholderTextColor={colors.muted}
-                style={styles.input}
-                value={input}
-              />
-              <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: busy || realtimeLocked || !input.trim() }} disabled={busy || realtimeLocked || !input.trim()} onPress={() => void sendText()} style={[styles.sendButton, (busy || realtimeLocked || !input.trim()) && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
-            </View>
+            <LiveComposer disabled={busy || realtimeLocked} onSend={submitMessage} styles={styles} />
           </>
         ) : (
           <Text accessibilityLabel="Review the consent card above to enable connected coaching." style={styles.consentHint}>

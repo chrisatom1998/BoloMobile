@@ -151,6 +151,21 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
+  it('opens the session with the weakest due phrase', async () => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste, chai]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 3 },
+      [chai.hi]: { ...defaultPhraseReview(today), mastery: 1 },
+    }));
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Phrase 1 of 2')).toBeTruthy());
+
+    expect(view.getByText('Mastery 1/5')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByText(chai.hi)).toBeTruthy();
+  });
+
   it('keeps raising mastery across repeated correct reviews', async () => {
     const today = dateKey();
     asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste]));

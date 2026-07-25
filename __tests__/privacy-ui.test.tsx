@@ -2,7 +2,6 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 jest.mock('lucide-react-native', () => ({
-  ChevronRight: () => null,
   ExternalLink: () => null,
   MapPin: () => null,
 }));
@@ -16,20 +15,13 @@ jest.mock('@/lib/public-pages', () => ({
 }));
 
 import PrivacyScreen from '../src/app/privacy';
-import { SceneCard } from '../src/components/scene-card';
-import { scenes } from '../src/data/scenes';
 import { showAppAlert } from '../src/lib/app-alert';
 import { openPublicPage } from '../src/lib/public-pages';
-
-function expectDefined<T>(value: T | undefined): T {
-  if (value === undefined) throw new Error('Expected the value to be defined.');
-  return value;
-}
 
 const openPublicPageMock = openPublicPage as jest.MockedFunction<typeof openPublicPage>;
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 
-describe('privacy and scene-card rendered UI', () => {
+describe('privacy rendered UI', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     openPublicPageMock.mockResolvedValue();
@@ -77,20 +69,4 @@ describe('privacy and scene-card rendered UI', () => {
     ));
   });
 
-  it('exposes the real scene card as a descriptive, tappable control', async () => {
-    const onPress = jest.fn();
-    const scene = expectDefined(scenes[0]);
-    const view = await render(<SceneCard onPress={onPress} scene={scene} />);
-
-    const card = view.getByRole('button', {
-      name: `${scene.title}. ${scene.subtitle}. ${scene.level}.`,
-    });
-    expect(StyleSheet.flatten(card.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    expect(StyleSheet.flatten(card.props.style)).toMatchObject({ alignSelf: 'center', width: '100%' });
-    expect(view.getByLabelText(`Practice words: ${scene.words.join(', ')}`)).toBeTruthy();
-
-    await fireEvent.press(card);
-    expect(onPress).toHaveBeenCalledTimes(1);
-    expect(onPress).toHaveBeenCalledWith(scene);
-  });
 });

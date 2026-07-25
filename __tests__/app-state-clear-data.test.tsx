@@ -23,7 +23,9 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
+jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
 
+import { observe } from '../src/lib/observability';
 import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
@@ -167,6 +169,7 @@ describe('AppStateProvider clearAllData', () => {
     await waitFor(() => expect(view.getByTestId('clear-error').props.children).toContain('existing local data was left in place'));
 
     expect(readSnapshot(view)).toEqual(before);
+    expect(observe).toHaveBeenCalledWith('runtime_error');
     expect(Object.fromEntries(asyncStorage.__store)).toEqual(original);
     await view.unmount();
     warning.mockRestore();
