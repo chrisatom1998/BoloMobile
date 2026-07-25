@@ -174,6 +174,22 @@ describe('connected coaching contract', () => {
     expect(hindi.responseLanguage).toBe('hi');
   });
 
+  it('never instructs Asha away from Devanagari in either response language', () => {
+    const instructions = (['en', 'hi'] as const).map((responseLanguage) => expectDefined(buildMobileChatPayload({
+      text: 'How do I say thank you?',
+      messages: [],
+      clientId: 'client-12345678',
+      responseLanguage,
+    }).text));
+
+    expect(expectDefined(instructions[1])).toContain('Respond in natural Hindi written in Devanagari');
+    for (const instruction of instructions) {
+      expect(instruction).toContain('Devanagari');
+      expect(instruction).not.toMatch(/never use devanagari/iu);
+      expect(instruction).not.toMatch(/(?:romani[sz]ed?|latin script) only/iu);
+    }
+  });
+
   it('keeps the full maximum-length learner message when a response-language instruction is added', () => {
     const learnerText = 'x'.repeat(500);
     const payload = buildMobileChatPayload({
