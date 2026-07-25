@@ -24,8 +24,6 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
-jest.mock('@/components/scene-card', () => ({ SceneCard: () => null }));
-
 jest.mock('@/state/app-state', () => ({
   useAppState: () => ({
     dailySteps: 0,
@@ -46,7 +44,7 @@ describe('home accessibility', () => {
     const view = await render(<HomeScreen />);
     const settings = view.getByLabelText('Settings');
     const fiveMinuteGoal = view.getByLabelText('5 minute daily goal');
-    const allScenes = view.getByLabelText(/^All scenes,/u);
+    const firstPlan = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
     const topbar = view.getByTestId('today-topbar');
 
     expect(StyleSheet.flatten(settings.props.style).minHeight).toBeGreaterThanOrEqual(48);
@@ -54,11 +52,10 @@ describe('home accessibility', () => {
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minWidth).toBeGreaterThanOrEqual(48);
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
-    expect(StyleSheet.flatten(allScenes.props.style).minHeight).toBeGreaterThanOrEqual(48);
-    expect(allScenes.props.accessibilityState).toEqual({ selected: true });
+    expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
 
-    const list = view.getByTestId('today-scene-list');
+    const list = view.getByTestId('today-guided-plan-list');
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
   });
 });
