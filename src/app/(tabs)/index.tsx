@@ -3,18 +3,16 @@ import { Image } from 'expo-image';
 import { Button } from 'heroui-native/button';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { Bookmark, Ear, Mic, Sprout } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, View } from 'react-native';
+import { useCallback, useMemo } from 'react';
+import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
 
-import { SceneCard } from '@/components/scene-card';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
-import { sceneCategories, scenes, type Scene, type SceneCategory } from '@/data/scenes';
+import { getScene, scenes, type Scene } from '@/data/scenes';
+import { lessonPlans } from '@/data/lesson-plans';
 import { recommendedScenes } from '@/lib/learning';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, maxContentWidth, radius, spacing, useSharedStyles } from '@/theme';
-
-type Filter = 'All' | SceneCategory;
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 
@@ -23,13 +21,14 @@ export default function HomeScreen() {
   const state = useAppState();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
+  const { fontScale } = useWindowDimensions();
+  const largeTextLayout = fontScale >= 1.4;
   const { dailySteps, duePhrases, goal, learnerProfile, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
-  const [filter, setFilter] = useState<Filter>('All');
   const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const recommendations = useMemo(() => recommendedScenes(profile, sceneProgress), [profile, sceneProgress]);
-  const visibleScenes = useMemo(() => filter === 'All' ? scenes : scenes.filter((scene) => scene.category === filter), [filter]);
   const openScene = useCallback((scene: Scene) => router.push({ pathname: '/scene/[id]', params: { id: scene.id } }), [router]);
+  const openPlan = useCallback((planId: string) => router.push({ pathname: '/lesson-plans', params: { planId } }), [router]);
   const goalPercent = Math.min(100, Math.round(practice.seconds / (goal * 60) * 100));
   const resumed = recommendations.find((scene) => (sceneProgress[scene.id]?.lastBeatIndex ?? 0) > 0);
   const recommended = resumed ?? recommendations[0] ?? scenes[0];
@@ -148,23 +147,13 @@ export default function HomeScreen() {
       <View style={styles.sectionHeading}>
         <View>
           <Text style={styles.sectionEyebrow}>Guided practice</Text>
-          <Text style={styles.sectionTitle}>Choose a moment</Text>
+          <Text style={styles.sectionTitle}>Choose a path</Text>
         </View>
-        <Text style={styles.catalogMeta}>{visibleScenes.length} scenes</Text>
+        <Text style={styles.catalogMeta}>10 plans · 100 lessons</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
-        {sceneCategories.map((category) => {
-          const count = category === 'All' ? scenes.length : scenes.filter((scene) => scene.category === category).length;
-          const active = filter === category;
-          return (
-            <Pressable key={category} accessibilityLabel={`${category} scenes, ${count}`} accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => setFilter(category)} style={[styles.filter, active && styles.filterActive]}>
-              <Text style={[styles.filterText, active && styles.filterTextActive]}>{category} · {count}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <Text style={styles.sectionDescription}>Start with an ordered module, then take its ten lessons one useful turn at a time.</Text>
     </View>
-  ), [duePhrases.length, featuredMastery, featuredPhrase, filter, goal, goalPercent, minutesToday, primary, router, streak, styles, visibleScenes.length]);
+  ), [duePhrases.length, featuredMastery, featuredPhrase, goal, goalPercent, minutesToday, primary, router, streak, styles]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
@@ -172,19 +161,52 @@ export default function HomeScreen() {
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.list}
-      data={visibleScenes}
-      keyExtractor={(scene) => scene.id}
-      renderItem={({ item }) => (
-        <View style={styles.sceneCell}>
-          <SceneCard progress={sceneProgress[item.id]} scene={item} onPress={openScene} />
-        </View>
-      )}
+      data={lessonPlans}
+      keyExtractor={(plan) => plan.id}
+      renderItem={({ item: plan }) => {
+        const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+        const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
+        const nextLesson = nextIndex < 0 ? plan.lessonIds[plan.lessonIds.length - 1] : plan.lessonIds[nextIndex];
+        const nextScene = nextLesson ? getScene(nextLesson) : undefined;
+        const percent = Math.round(completed / plan.lessonIds.length * 100);
+        return (
+          <View style={styles.planCell}>
+            <PressableFeedback
+              accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${completed} of ${plan.lessonIds.length} lessons complete`}
+              accessibilityRole="button"
+              onPress={() => openPlan(plan.id)}
+              style={[styles.planCard, largeTextLayout && styles.planCardLarge]}
+            >
+              <View style={[styles.planAccent, { backgroundColor: plan.color }]} />
+              <View style={styles.planTopline}>
+                <Text style={styles.planOrder}>Plan {String(plan.order).padStart(2, '0')}</Text>
+                <Text style={styles.planMeta}>{completed}/{plan.lessonIds.length} complete</Text>
+              </View>
+              <View style={[styles.planTitleRow, largeTextLayout && styles.planTitleRowLarge]}>
+                <Text style={styles.planEmoji}>{plan.emoji}</Text>
+                <View style={styles.planCopy}>
+                  <Text style={styles.planTitle}>{plan.title}</Text>
+                  <Text style={styles.planSubtitle}>{plan.subtitle}</Text>
+                </View>
+              </View>
+              <View accessibilityLabel={`${percent} percent complete`} style={styles.planTrack}>
+                <View style={[styles.planTrackFill, { backgroundColor: plan.color, width: `${percent}%` }]} />
+              </View>
+              <Text style={styles.planAction}>
+                {nextIndex < 0
+                  ? 'All 10 lessons complete · review again →'
+                  : `Next: lesson ${nextIndex + 1} · ${nextScene?.title ?? 'continue'} · 10 turns →`}
+              </Text>
+            </PressableFeedback>
+          </View>
+        );
+      }}
       ListHeaderComponent={header}
       ListFooterComponent={goalFooter}
       ListFooterComponentStyle={styles.listFooter}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       style={sharedStyles.screen}
-      testID="today-scene-list"
+      testID="today-guided-plan-list"
     />
   );
 }
@@ -193,7 +215,7 @@ const useStyles = makeStyles((c) => ({
   list: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.lg, paddingTop: 18, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'center', gap: spacing.lg, marginBottom: spacing.lg },
-  sceneCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' },
+  planCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' },
   topbar: { width: '100%', minHeight: 214, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   intro: { minWidth: 0, flex: 1, maxWidth: 200, paddingTop: spacing.lg, gap: spacing.lg },
   brandCopy: { minWidth: 0, flexShrink: 1 },
@@ -265,9 +287,20 @@ const useStyles = makeStyles((c) => ({
   sectionHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.sm },
   sectionTitle: { color: c.ink, fontSize: 24, lineHeight: 30, fontWeight: '900', marginTop: spacing.xs, textAlign: 'left' },
   catalogMeta: { color: c.muted, fontSize: 13, fontWeight: '700', marginBottom: 3, textAlign: 'center' },
-  filters: { gap: spacing.sm, justifyContent: 'center', paddingBottom: spacing.xs },
-  filter: { minHeight: 48, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  filterActive: { backgroundColor: c.neutralSurface, borderColor: c.neutralSurface },
-  filterText: { color: c.muted, fontSize: 13, fontWeight: '800' },
-  filterTextActive: { color: c.neutralSurfaceText },
+  sectionDescription: { alignSelf: 'stretch', color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
+  planCard: { width: '100%', minHeight: 148, position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
+  planCardLarge: { minHeight: 176, padding: spacing.lg, gap: spacing.md },
+  planAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  planTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  planOrder: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
+  planMeta: { color: c.muted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  planTitleRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  planTitleRowLarge: { alignItems: 'flex-start' },
+  planEmoji: { fontSize: 28 },
+  planCopy: { minWidth: 0, flex: 1, gap: 2 },
+  planTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  planSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  planTrack: { width: '100%', height: 7, overflow: 'hidden', borderRadius: radius.pill, backgroundColor: c.backgroundWarm },
+  planTrackFill: { height: '100%', borderRadius: radius.pill },
+  planAction: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '900' },
 }));

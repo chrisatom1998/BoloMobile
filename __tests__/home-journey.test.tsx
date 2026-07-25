@@ -36,29 +36,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
-jest.mock('@/components/scene-card', () => {
-  const React = require('react') as typeof import('react');
-  const { Pressable, Text } = require('react-native') as typeof import('react-native');
-  return {
-    SceneCard: ({ scene, onPress }: { scene: { id: string; title: string }; onPress: (scene: { id: string; title: string }) => void }) => React.createElement(
-      Pressable,
-      {
-        accessibilityLabel: `Open scene ${scene.id}`,
-        accessibilityRole: 'button',
-        onPress: () => onPress(scene),
-        testID: `scene-card-${scene.id}`,
-      },
-      React.createElement(Text, null, scene.title),
-    ),
-  };
-});
-
 jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
 }));
 
 import HomeScreen from '../src/app/(tabs)/index';
-import { scenes } from '../src/data/scenes';
 
 describe('HomeScreen primary journey', () => {
   beforeEach(() => {
@@ -69,38 +51,36 @@ describe('HomeScreen primary journey', () => {
     mockAppState.practice = { chaiDone: true, date: '2026-07-16', liveDone: false, seconds: 300 };
   });
 
-  it('routes to Settings, the language garden, live coaching, and the selected scene', async () => {
+  it('routes to Settings, the language garden, live coaching, and a selected plan', async () => {
     const view = await render(<HomeScreen />);
 
     await fireEvent.press(view.getByLabelText('Settings'));
     await fireEvent.press(view.getByLabelText('Practice saved phrase नमस्ते'));
     await fireEvent.press(view.getByLabelText('Practice with Asha'));
-    await fireEvent.press(view.getByLabelText('Open scene chai'));
+    await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete'));
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/settings');
     expect(mockRouterPush).toHaveBeenNthCalledWith(2, '/phrases');
     expect(mockRouterPush).toHaveBeenNthCalledWith(3, '/live');
     expect(mockRouterPush).toHaveBeenNthCalledWith(4, {
-      pathname: '/scene/[id]',
-      params: { id: 'chai' },
+      pathname: '/lesson-plans',
+      params: { planId: 'essentials' },
     });
   });
 
-  it('filters the catalog to the selected category', async () => {
-    const travelCount = scenes.filter((scene) => scene.category === 'Travel').length;
-    const travelFilter = `Travel scenes, ${travelCount}`;
+  it('shows ordered plans first and opens the selected plan lessons', async () => {
     const view = await render(<HomeScreen />);
 
-    expect(view.getByLabelText('Open scene chai')).toBeTruthy();
-    await fireEvent.press(view.getByLabelText(travelFilter));
+    expect(view.getByTestId('today-guided-plan-list')).toBeTruthy();
+    expect(view.getByText('10 plans · 100 lessons')).toBeTruthy();
+    expect(view.queryByText('Choose a moment')).toBeNull();
 
-    expect(view.getByLabelText(travelFilter).props.accessibilityState).toEqual({ selected: true });
-    expect(view.queryByLabelText('Open scene chai')).toBeNull();
-    // FlatList virtualizes the expanded catalog, so assert the filtered
-    // collection's visible entry rather than its complete rendered length.
-    expect(view.getAllByTestId(/^scene-card-/u).length).toBeGreaterThan(0);
-    expect(view.getByTestId('scene-card-rickshaw')).toBeTruthy();
-    expect(view.getByTestId('scene-card-plan-getting-around-01')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete'));
+
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/lesson-plans',
+      params: { planId: 'essentials' },
+    });
   });
 
   it('updates the daily goal selection and renders progress from persisted practice', async () => {
