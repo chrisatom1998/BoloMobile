@@ -50,3 +50,4 @@ example
 # local build output and dev scratch captures
 builds/
 artifacts/
+coverage/

@@ -78,7 +78,7 @@
     "metadata:push": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs metadata:push --profile production",
     "release:validate": "node ./scripts/validate-release.mjs",
     "release:validate:live": "node ./scripts/validate-release-live.mjs",
-    "verify": "npm run lint && npm run typecheck && npm test && npm run store:validate && npm run e2e:validate"
+    "verify": "npm run lint && npm run typecheck && npm run test:coverage && npm run store:validate && npm run e2e:validate"
   },
   "jest": {
     "preset": "jest-expo",
@@ -100,10 +100,10 @@
     ],
     "coverageThreshold": {
       "global": {
-        "statements": 82,
-        "branches": 70,
-        "functions": 77,
-        "lines": 86
+        "statements": 84,
+        "branches": 72,
+        "functions": 80,
+        "lines": 88
       }
     }
   },
