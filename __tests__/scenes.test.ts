@@ -40,6 +40,30 @@ describe('Bolo scenario catalog', () => {
     }
   });
 
+  it('gives every planned lesson a distinct mix of guided-practice goals', () => {
+    const plannedScenes = scenes.filter((scene) => scene.id.startsWith('plan-'));
+    const goalMarkers = [
+      'Listen for the sound',
+      'Recall before you look',
+      'Match the English idea',
+      'Use a polite response',
+      'Rebuild the phrase',
+      'Say it softly to yourself',
+      'Picture the moment',
+    ];
+
+    for (const scene of plannedScenes) {
+      const prompts = scene.beats.map((beat) => beat.prompt);
+      expect(new Set(prompts).size).toBe(scene.beats.length);
+      for (const marker of goalMarkers) {
+        expect(prompts.some((prompt) => prompt.includes(marker))).toBe(true);
+      }
+      expect(scene.beats.every((beat) => beat.choices.find((choice) => choice.correct)?.en === scene.subtitle)).toBe(true);
+    }
+
+    expect(new Set(plannedScenes.flatMap((scene) => scene.beats.map((beat) => beat.prompt))).size).toBe(1000);
+  });
+
   it('bundles offline audio for every playable Hindi line', () => {
     const spokenLines = scenes.flatMap((scene) => [
       ...scene.words,

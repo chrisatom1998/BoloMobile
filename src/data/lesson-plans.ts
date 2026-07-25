@@ -25,48 +25,64 @@ export type LessonPlan = Omit<LessonPlanSeed, 'lessons'> & {
   lessonIds: string[];
 };
 
-const practiceTurns = [
-  {
-    prompt: (meaning: string) => `Listen, then choose the phrase for “${meaning}”`,
-    tip: 'Start by matching the meaning. You can replay Asha before you answer.',
-  },
-  {
-    prompt: (meaning: string) => `Choose the natural Hindi for “${meaning}”`,
-    tip: 'Look for the phrase that carries the complete idea, not just one familiar word.',
-  },
-  {
-    prompt: (meaning: string) => `Keep the meaning in mind: “${meaning}”`,
-    tip: 'Read the Romanized Hindi out loud once, then choose the same phrase in Devanagari.',
-  },
-  {
-    prompt: (meaning: string) => `Use this phrase politely: “${meaning}”`,
-    tip: 'Notice the polite rhythm. Small words such as कृपया make a practical phrase warmer.',
-  },
-  {
-    prompt: (meaning: string) => `Quick recall: how would you say “${meaning}”?`,
-    tip: 'Try answering before you compare the choices. This is how recall starts to feel automatic.',
-  },
-  {
-    prompt: (meaning: string) => `Hear it again, then answer: “${meaning}”`,
-    tip: 'Listen for the end of the phrase—the final word often holds the sentence together.',
-  },
-  {
-    prompt: (meaning: string) => `In a real conversation, say: “${meaning}”`,
-    tip: 'Imagine the place named at the top of the lesson. A small mental scene makes the phrase stick.',
-  },
-  {
-    prompt: (meaning: string) => `Choose it with confidence: “${meaning}”`,
-    tip: 'You have seen this phrase a few times now. Trust the pattern you recognize.',
-  },
-  {
-    prompt: (meaning: string) => `One more check: “${meaning}”`,
-    tip: 'Aim for a calm, useful answer—not perfect memorization on the first try.',
-  },
-  {
-    prompt: (meaning: string) => `Finish the practice set: “${meaning}”`,
-    tip: 'This final recall helps move the phrase from recognition into ready-to-use memory.',
-  },
-] as const;
+type GuidedPracticeContext = {
+  lesson: LessonSeed;
+  plan: LessonPlanSeed;
+  lessonIndex: number;
+};
+
+type GuidedPracticeTurn = {
+  prompt: string;
+  tip: string;
+};
+
+const practiceActivities: readonly ((context: GuidedPracticeContext) => GuidedPracticeTurn)[] = [
+  ({ lesson, plan, lessonIndex }) => ({
+    prompt: `Listen for the sound of “${lesson.hi}”, then choose the phrase for “${lesson.en}” in ${plan.title}, lesson ${lessonIndex + 1}.`,
+    tip: `Replay Asha, then let the sound of ${lesson.title.toLowerCase()} lead you to the matching answer.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Recall before you look: at ${plan.place}, how would you say “${lesson.en}” while practicing ${lesson.title}?`,
+    tip: `Form the answer silently first; the choices are here to check your memory, not replace it.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Match the English idea “${lesson.en}” to the Hindi response that fits ${lesson.title} on the ${plan.title} path.`,
+    tip: `Read each English gloss completely so a familiar-looking Hindi word does not distract you.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Use a polite response in this ${plan.place} moment: choose the clearest Hindi for “${lesson.en}” in ${lesson.title}.`,
+    tip: `Imagine saying it with a calm tone; respectful delivery begins with choosing the full phrase.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Rebuild the phrase from beginning to end, then choose the natural Hindi for “${lesson.en}” in ${lesson.title} (${plan.title}).`,
+    tip: `Notice which words belong together before you choose; a natural order makes the whole message clear.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Say it softly to yourself, checking the rhythm, then select the Hindi for “${lesson.en}” as you work through ${lesson.title} in ${plan.title}.`,
+    tip: `Use the Romanized line to self-check one sound at a time, then compare it with the Devanagari choice.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Picture the moment at ${plan.place}: give a short response for “${lesson.en}” by choosing the phrase from ${lesson.title}.`,
+    tip: `A small scene gives the phrase a purpose—imagine who needs to hear this response.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Choose the complete message you would use for “${lesson.en}” when ${lesson.title.toLowerCase()} comes up on the ${plan.title} path.`,
+    tip: `Look for the choice that says the entire useful idea, rather than only one word from it.`,
+  }),
+  ({ lesson, plan, lessonIndex }) => ({
+    prompt: `Compare the meanings carefully: which Hindi choice carries “${lesson.en}” for ${lesson.title}, lesson ${lessonIndex + 1} of ${plan.title}?`,
+    tip: `Rule out answers that belong to another situation, then choose the phrase that matches this exact meaning.`,
+  }),
+  ({ lesson, plan }) => ({
+    prompt: `Make one confident selection: what would you say for “${lesson.en}” while following the ${plan.title} lesson “${lesson.title}”?`,
+    tip: `Trust the phrase you can picture yourself using; this final check turns recognition into a ready response.`,
+  }),
+];
+
+function guidedPracticeTurns(context: GuidedPracticeContext, planIndex: number) {
+  const startingActivity = (planIndex * 3 + context.lessonIndex) % practiceActivities.length;
+  return practiceActivities.map((_, turnIndex) => practiceActivities[(startingActivity + turnIndex) % practiceActivities.length]!(context));
+}
 
 const planSeeds: LessonPlanSeed[] = [
   {
@@ -231,7 +247,7 @@ export const lessonPlans: LessonPlan[] = planSeeds.map((plan, planIndex) => ({
   lessonIds: plan.lessons.map((_, lessonIndex) => lessonId(plan.id, lessonIndex)),
 }));
 
-export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.map((lesson, lessonIndex) => {
+export const plannedLessons: Scene[] = planSeeds.flatMap((plan, planIndex) => plan.lessons.map((lesson, lessonIndex) => {
   const incorrectChoices = lesson.hi === 'मुझे मदद चाहिए।'
     ? [
       { hi: 'मैं तैयार नहीं हूँ।', latin: 'Main taiyaar nahin hoon.', en: 'I am not ready.' },
@@ -251,10 +267,10 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
     level: plan.level,
     emoji: plan.emoji,
     color: plan.color,
-    beats: practiceTurns.map((practice) => ({
+    beats: guidedPracticeTurns({ lesson, plan, lessonIndex }, planIndex).map((practice) => ({
       npc: 'यह वाक्य बोलिए।',
       translation: 'Say this useful phrase.',
-      prompt: practice.prompt(lesson.en),
+      prompt: practice.prompt,
       tip: practice.tip,
       choices: [
         { hi: lesson.hi, latin: lesson.latin, en: lesson.en, correct: true, reply: 'बहुत अच्छा।' },
