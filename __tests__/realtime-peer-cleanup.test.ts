@@ -422,6 +422,7 @@ describe('Realtime peer setup cleanup', () => {
       onMessage: jest.fn(),
       signal: new AbortController().signal,
     });
+    expect(RTCPeerConnection).toHaveBeenCalledWith({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     peer.iceConnectionState = 'disconnected';
     peerHandlers.get('iceconnectionstatechange')?.();
     jest.advanceTimersByTime(9_999);
@@ -444,6 +445,7 @@ describe('Realtime peer setup cleanup', () => {
       onMessage: jest.fn(),
       signal: new AbortController().signal,
     });
+    expect(globalThis.RTCPeerConnection).toHaveBeenCalledWith({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     peer.iceConnectionState = 'disconnected';
     peerHandlers.get('iceconnectionstatechange')?.();
     jest.advanceTimersByTime(9_999);
