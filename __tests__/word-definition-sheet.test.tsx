@@ -52,4 +52,21 @@ describe('WordDefinitionSheet', () => {
 
     await waitFor(() => expect(view.getByText('Tea is the object being requested.')).toBeTruthy());
   });
+
+  it('requests an initial word once when the lookup fails and only retries on demand', async () => {
+    mockContextualDefinition
+      .mockRejectedValueOnce(new Error('Bolo is unavailable right now.'))
+      .mockResolvedValueOnce('Here, it means one.');
+    const view = await render(
+      <WordDefinitionSheet clientId="client-12345678" initialWord="एक" onClose={jest.fn()} phrase="एक चाय दीजिए।" visible />,
+    );
+
+    await waitFor(() => expect(view.getByText('Bolo is unavailable right now.')).toBeTruthy());
+    expect(mockContextualDefinition).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Retry explanation for एक' }));
+
+    await waitFor(() => expect(view.getByText('Here, it means one.')).toBeTruthy());
+    expect(mockContextualDefinition).toHaveBeenCalledTimes(2);
+  });
 });

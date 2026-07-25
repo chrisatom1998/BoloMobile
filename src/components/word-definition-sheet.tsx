@@ -30,13 +30,17 @@ export function WordDefinitionSheet({
   const words = useMemo(() => hindiWordTokens(sourcePhrase), [sourcePhrase]);
   const requestRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
+  const autoExplainedRef = useRef<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [definitions, setDefinitions] = useState<Record<string, DefinitionState>>({});
+  const definitionsRef = useRef(definitions);
+  definitionsRef.current = definitions;
 
   useEffect(() => {
     requestRef.current?.abort();
     requestRef.current = null;
     requestIdRef.current += 1;
+    autoExplainedRef.current = null;
     setSelectedWord(null);
     setDefinitions({});
   }, [sourcePhrase, visible]);
@@ -45,7 +49,7 @@ export function WordDefinitionSheet({
 
   const explain = useCallback(async (word: string) => {
     setSelectedWord(word);
-    const cached = definitions[word];
+    const cached = definitionsRef.current[word];
     if (cached?.loading || cached?.explanation) return;
 
     requestRef.current?.abort();
@@ -67,13 +71,16 @@ export function WordDefinitionSheet({
     } finally {
       if (requestRef.current === controller) requestRef.current = null;
     }
-  }, [clientId, definitions, sourcePhrase]);
+  }, [clientId, sourcePhrase]);
 
   const selectedDefinition = selectedWord ? definitions[selectedWord] : undefined;
   const romanization = sourcePhrase ? romanizeDevanagari(sourcePhrase) : '';
 
   useEffect(() => {
-    if (visible && initialWord && words.includes(initialWord)) void explain(initialWord);
+    if (!visible || !initialWord || !words.includes(initialWord)) return;
+    if (autoExplainedRef.current === initialWord) return;
+    autoExplainedRef.current = initialWord;
+    void explain(initialWord);
   }, [explain, initialWord, visible, words]);
 
   return (
