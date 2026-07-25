@@ -1,5 +1,6 @@
 import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens } from '@/lib/contextual-word-definition';
 import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { observe } from '@/lib/observability';
 
@@ -175,6 +176,28 @@ export function buildMobileChatPayload(input: MobileChatInput) {
 
 export function sendMobileChat(input: MobileChatInput, signal?: AbortSignal) {
   return post('/api/mobile-chat', buildMobileChatPayload(input), isMobileChatResponse, signal);
+}
+
+export async function getContextualWordDefinition(input: {
+  clientId: string;
+  phrase: string;
+  word: string;
+}, signal?: AbortSignal) {
+  const phrase = hindiSourcePhrase(input.phrase);
+  const word = input.word.trim();
+  if (!phrase || !hindiWordTokens(phrase).includes(word)) {
+    throw new BoloApiError('Choose a Hindi word from this phrase.');
+  }
+  const result = await sendMobileChat({
+    clientId: input.clientId,
+    messages: [],
+    text: buildContextualWordDefinitionPrompt({ phrase, word }),
+  }, signal);
+  const explanation = result.reply.trim();
+  if (!isBoundedText(explanation, 600) || /[\u0900-\u097f]/u.test(explanation)) {
+    throw new BoloApiError('Bolo could not explain that word. Please try again.');
+  }
+  return explanation;
 }
 
 function parsedSavedPhrase(value: unknown): SavedPhrase | null {

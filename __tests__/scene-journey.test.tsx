@@ -9,6 +9,7 @@ const mockMarkSceneComplete = jest.fn();
 const mockTogglePhrase = jest.fn();
 const mockAppState = {
   aiConsent: true,
+  clientId: 'client-12345678',
   markSceneComplete: mockMarkSceneComplete,
   phrases: [] as { en: string; hi: string; latin: string }[],
   togglePhrase: mockTogglePhrase,
@@ -135,6 +136,16 @@ describe('SceneScreen primary journey', () => {
     expect(remove.props.accessibilityState).toEqual({ selected: true });
     await fireEvent.press(remove);
     expect(mockTogglePhrase).toHaveBeenLastCalledWith(target);
+  });
+
+  it('shows a Hindi-only word tray after revealing the correct lesson phrase', async () => {
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(/One tea, please\./u));
+
+    expect(view.getByText('Unpack the answer')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Explain एक in the answer' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Explain चाय in the answer' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Explain One in the answer' })).toBeNull();
   });
 
   it('renders AI playback failures as alerts and stops playback on unmount', async () => {
