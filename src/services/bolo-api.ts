@@ -1,10 +1,12 @@
+import Constants from 'expo-constants';
+
 import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens } from '@/lib/contextual-word-definition';
 import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { observe } from '@/lib/observability';
 
-const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
+const FALLBACK_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_AI_AUDIO_BASE64_CHARACTERS = 8_000_000;
 const MAX_TRANSCRIPT_CHARACTERS = 1_200;
@@ -15,13 +17,21 @@ export const OPENAI_REALTIME_MODEL = 'gpt-realtime-2.1' as const;
 export const AI_VOICE_TEXT_LIMIT = 240;
 export type ReportReason = 'unsafe_or_inappropriate' | 'incorrect_or_misleading';
 
+function configuredApiUrl() {
+  const configured = Constants.expoConfig?.extra?.boloApiUrl;
+  if (typeof configured !== 'string') return FALLBACK_API_URL;
+  const trimmed = configured.trim().replace(/\/$/u, '');
+  return trimmed.startsWith('https://') ? trimmed : FALLBACK_API_URL;
+}
+
 export function getBoloApiUrl() {
+  const defaultApiUrl = configuredApiUrl();
   const override = process.env.EXPO_PUBLIC_BOLO_API_URL?.trim().replace(/\/$/u, '');
   if (override && !override.startsWith('https://')) {
     console.warn('Ignoring EXPO_PUBLIC_BOLO_API_URL: the Bolo API URL must use https://');
-    return DEFAULT_API_URL;
+    return defaultApiUrl;
   }
-  return override || DEFAULT_API_URL;
+  return override || defaultApiUrl;
 }
 
 export type AiVoiceAudio = {

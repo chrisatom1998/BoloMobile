@@ -34,8 +34,12 @@ AuthKey_*.p8
 
 # Source-only project material not needed by the native build
 __tests__/
+.github/
+.maestro/
+design-system/
 store/
 scripts/
+website/
 README.md
 LICENSE
 AGENTS.md

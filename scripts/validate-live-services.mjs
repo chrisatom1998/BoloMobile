@@ -3,8 +3,10 @@
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
-const API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
-const PUBLIC_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai/';
+const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
+const DEFAULT_PUBLIC_SITE_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai';
+const API_URL = (process.env.BOLO_API_URL || DEFAULT_API_URL).trim().replace(/\/+$/u, '');
+const PUBLIC_URL = `${(process.env.BOLO_PUBLIC_SITE_URL || DEFAULT_PUBLIC_SITE_URL).trim().replace(/\/+$/u, '')}/`;
 const PASSES = 3;
 const REQUEST_TIMEOUT_MS = 45_000;
 const OVERALL_TIMEOUT_MS = 10 * 60_000;

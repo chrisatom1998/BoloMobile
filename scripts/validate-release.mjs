@@ -53,12 +53,17 @@ if (storeInfo?.privacyPolicyUrl !== publicPages.privacy || storeInfo?.supportUrl
   throw new Error('Apple metadata legal URLs must match the production Expo configuration.');
 }
 
-// Compare against the values declared in the in-app module rather than its exact source
-// formatting, so quote style and whitespace changes cannot break the release gate.
+// The in-app module resolves these URLs from the Expo configuration at runtime, so the release
+// gate checks that wiring plus the built-in fallbacks it uses when the extra block is missing.
 const publicPagesSource = readFileSync(resolve(root, 'src/lib/public-pages.ts'), 'utf8');
-function inAppPublicPageUrl(page) {
+const extraKeys = { privacy: 'publicPrivacyUrl', support: 'publicSupportUrl', terms: 'publicTermsUrl' };
+function inAppFallbackUrl(page) {
   const match = publicPagesSource.match(new RegExp(`\\b${page}\\s*:\\s*(['"\`])([^'"\`]+)\\1`));
   return match?.[2];
+}
+
+if (!publicPagesSource.includes('Constants.expoConfig?.extra')) {
+  throw new Error('src/lib/public-pages.ts must read its URLs from the resolved Expo configuration.');
 }
 
 for (const [page, url] of Object.entries(publicPages)) {
@@ -67,11 +72,23 @@ for (const [page, url] of Object.entries(publicPages)) {
   if (parsed.protocol !== 'https:' || parsed.searchParams.get('page') !== page) {
     throw new Error(`The production ${page} URL must be HTTPS and identify the ${page} page.`);
   }
-  const inAppUrl = inAppPublicPageUrl(page);
-  if (!inAppUrl) throw new Error(`The in-app ${page} URL could not be read from src/lib/public-pages.ts.`);
-  if (inAppUrl !== url) {
-    throw new Error(`The in-app ${page} URL does not match the production Expo configuration.`);
+  if (!publicPagesSource.includes(extraKeys[page])) {
+    throw new Error(`src/lib/public-pages.ts must read the ${page} URL from extra.${extraKeys[page]}.`);
   }
+  const fallbackUrl = inAppFallbackUrl(page);
+  if (!fallbackUrl) throw new Error(`The in-app ${page} fallback URL could not be read from src/lib/public-pages.ts.`);
+  if (!process.env.BOLO_PUBLIC_SITE_URL?.trim() && fallbackUrl !== url) {
+    throw new Error(`The in-app ${page} fallback URL does not match the production Expo configuration.`);
+  }
+}
+
+const resolvedApiUrl = resolvedConfig.extra?.boloApiUrl;
+if (typeof resolvedApiUrl !== 'string' || new URL(resolvedApiUrl).protocol !== 'https:') {
+  throw new Error('The production Bolo API URL must be an HTTPS URL exposed through the Expo configuration.');
+}
+const apiSource = readFileSync(resolve(root, 'src/services/bolo-api.ts'), 'utf8');
+if (!apiSource.includes('Constants.expoConfig?.extra?.boloApiUrl')) {
+  throw new Error('src/services/bolo-api.ts must read its API base from extra.boloApiUrl.');
 }
 
 const screenshots = [
