@@ -5,10 +5,12 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
+import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { getScene } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { observe } from '@/lib/observability';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { hindiWordTokens } from '@/lib/contextual-word-definition';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
@@ -20,7 +22,7 @@ export default function SceneScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const scene = useMemo(() => getScene(id), [id]);
-  const { aiConsent, checkpointScene, learnerProfile, markSceneComplete, phrases, sceneProgress, togglePhrase } = useAppState();
+  const { aiConsent, checkpointScene, clientId, learnerProfile, markSceneComplete, phrases, sceneProgress, togglePhrase } = useAppState();
   const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
   const savedBeatIndex = scene ? sceneProgress?.[scene.id]?.lastBeatIndex ?? 0 : 0;
   const [beatIndex, setBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
@@ -32,6 +34,7 @@ export default function SceneScreen() {
   const [audioError, setAudioError] = useState('');
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
   const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
+  const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
 
   useEffect(() => {
     observe('scene_started');
@@ -98,6 +101,7 @@ export default function SceneScreen() {
     checkpointScene?.(activeScene.id, beatIndex + 1);
     setBeatIndex((value) => value + 1);
     setPicked(null);
+    setWordDefinitionWord(null);
   }
 
   function replay() {
@@ -106,6 +110,7 @@ export default function SceneScreen() {
     resetTimer();
     setBeatIndex(0);
     setPicked(null);
+    setWordDefinitionWord(null);
     setScore(0);
     setCorrectCount(0);
     setHearts(3);
@@ -203,15 +208,36 @@ export default function SceneScreen() {
       )}
 
       {picked !== null ? (
-        <View style={styles.saveRow}>
-          <View style={styles.saveCopy}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-          <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, saved && styles.saveButtonActive]}>
-            <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
-          </Pressable>
-        </View>
+        <>
+          <View style={styles.saveRow}>
+            <View style={styles.saveCopy}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+            <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, saved && styles.saveButtonActive]}>
+              <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
+            </Pressable>
+          </View>
+          <View style={styles.wordTray}>
+            <Text style={styles.wordTrayTitle}>Unpack the answer</Text>
+            <Text style={styles.wordTrayHint}>Tap a Hindi word for its meaning in this phrase.</Text>
+            <View style={styles.wordTokenWrap}>
+              {hindiWordTokens(target.hi).map((word) => (
+                <Pressable
+                  accessibilityHint={aiConsent ? 'Opens a contextual English explanation.' : 'Agree to connected AI processing to unpack this word.'}
+                  accessibilityLabel={`Explain ${word} in the answer`}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: !aiConsent }}
+                  disabled={!aiConsent}
+                  key={word}
+                  onPress={() => setWordDefinitionWord(word)}
+                  style={[styles.wordToken, !aiConsent && styles.disabled]}
+                ><Text style={styles.wordTokenText}>{word}</Text></Pressable>
+              ))}
+            </View>
+          </View>
+        </>
       ) : null}
 
       {aiConsent ? <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} /> : null}
+      {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} visible /> : null}
     </ScrollView>
   );
 }
@@ -265,6 +291,12 @@ const useStyles = makeStyles((c) => ({
   saveMeaning: { color: c.muted, fontSize: 13 },
   saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center' },
   saveButtonActive: { backgroundColor: c.brand },
+  wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
+  wordTrayTitle: { color: c.brandText, fontSize: 17, lineHeight: 23, fontWeight: '900' },
+  wordTrayHint: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  wordToken: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  wordTokenText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   finishHindi: { color: c.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },

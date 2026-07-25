@@ -12,11 +12,13 @@ import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
+import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import type { RealtimeInputTranscript, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
@@ -133,6 +135,7 @@ export default function LiveScreen() {
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
+  const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
@@ -546,6 +549,8 @@ export default function LiveScreen() {
         }}
         renderItem={({ item }) => {
           const displayText = romanizeDevanagari(item.text);
+          const sourcePhrase = hindiSourcePhrase(item.text);
+          const isPending = item.id === pendingUserMessage?.id;
           return (
             <View style={[styles.messageRow, item.role === 'you' && styles.messageRowYou]}>
               <View style={[styles.message, item.role === 'you' ? styles.userMessage : styles.ashaMessage]}>
@@ -566,6 +571,7 @@ export default function LiveScreen() {
                 {item.role === 'asha' || item.id !== welcome.id ? (
                   <View style={styles.messageActions}>
                     {item.id !== welcome.id ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" onPress={() => openPhrasePicker(item)} style={styles.smallAction}><BookmarkPlus color={item.role === 'you' ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, item.role === 'you' && styles.userText]}>Save selection</Text></Pressable> : null}
+                    {item.id !== welcome.id && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={() => setWordDefinitionPhrase(sourcePhrase)} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, item.role === 'you' && styles.userText]}>Words</Text></Pressable> : null}
                     {item.role === 'asha' ? (
                       <>
                         <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${messageActionExcerpt(displayText)}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={() => void playReply(item.text, item.language)} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
@@ -637,6 +643,7 @@ export default function LiveScreen() {
         ) : <Text style={styles.consentHint}>Review the consent card above to enable connected coaching.</Text>}
       </View>
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
+      {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} visible /> : null}
     </KeyboardAvoidingView>
   );
 }

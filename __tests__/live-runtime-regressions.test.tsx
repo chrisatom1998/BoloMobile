@@ -218,12 +218,14 @@ jest.mock('@/lib/speech', () => ({
 }));
 
 jest.mock('@/services/bolo-api', () => ({
+  getContextualWordDefinition: jest.fn(),
   prepareSavedPhraseFromText: jest.fn(),
   reportGeneratedMessage: jest.fn(),
   sendMobileChat: jest.fn(),
 }));
 
 const boloApi = jest.requireMock('@/services/bolo-api') as {
+  getContextualWordDefinition: jest.Mock;
   prepareSavedPhraseFromText: jest.Mock;
   reportGeneratedMessage: jest.Mock;
   sendMobileChat: jest.Mock;
@@ -769,6 +771,22 @@ describe('live coaching state', () => {
       sourceText: 'आप कैसे हैं?',
       text: selectedText,
     }, expect.any(AbortSignal));
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('opens Hindi-only word analysis from a completed Romanized Asha reply', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
+
+    const words = view.getAllByLabelText(/Explore Hindi words:/u)
+      .find((candidate) => String(candidate.props.accessibilityLabel).includes('Dhanyavaad'));
+    if (!words) throw new Error('The completed Asha Words action was not rendered.');
+    await fireEvent.press(words);
+
+    expect(view.getByText('Word by word')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Explain आप' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Explain Chris' })).toBeNull();
     await view.unmount();
     await flushMicrotasks();
   });
