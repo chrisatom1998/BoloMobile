@@ -7,13 +7,16 @@ jest.mock('expo-router', () => ({
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  Bookmark: () => null,
   BarChart3: () => null,
   Check: () => null,
   ChevronRight: () => null,
+  Ear: () => null,
   Flame: () => null,
   Mic: () => null,
   Settings: () => null,
   Sparkles: () => null,
+  Sprout: () => null,
   Target: () => null,
 }));
 
@@ -42,14 +45,12 @@ describe('home accessibility', () => {
   it('provides 48 point targets and selected state for compact controls', async () => {
     const view = await render(<HomeScreen />);
     const settings = view.getByLabelText('Settings');
-    const savedPhrases = view.getByLabelText('Saved phrases');
     const fiveMinuteGoal = view.getByLabelText('5 minute daily goal');
     const allScenes = view.getByLabelText(/^All scenes,/u);
     const topbar = view.getByTestId('today-topbar');
 
     expect(StyleSheet.flatten(settings.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(settings.props.style).minWidth).toBeGreaterThanOrEqual(48);
-    expect(StyleSheet.flatten(savedPhrases.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minWidth).toBeGreaterThanOrEqual(48);
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });

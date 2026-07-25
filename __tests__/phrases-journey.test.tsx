@@ -12,6 +12,7 @@ const mockAppState = {
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
+  Leaf: () => null,
   Search: () => null,
   Trash2: () => null,
   Volume2: () => null,

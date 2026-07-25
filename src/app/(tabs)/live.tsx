@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowLeft, BookmarkPlus, Flag, MessageCircle, Send, Trash2, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, BookmarkPlus, Flag, MessageCircle, Send, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -118,11 +118,12 @@ export default function LiveScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const { fontScale, height: windowHeight, width: windowWidth } = useWindowDimensions();
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
   const compactVoiceLayout = windowHeight < 760;
+  const largeTextLayout = fontScale >= 1.4;
   const { elapsedSeconds } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, phrases, togglePhrase } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, phraseReviews = {}, phrases = [], togglePhrase } = useAppState();
   const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>(learnerProfile?.responseLanguage ?? 'en');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -154,6 +155,8 @@ export default function LiveScreen() {
   const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
   const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
   const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
+  const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
+  const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
   const transcriptTurnDisabled = !aiConsent || busy || realtimeStatus === 'connecting' || realtimeStatus === 'responding';
   const transcriptTurnLabel = {
     disconnected: 'Connect with Asha',
@@ -178,14 +181,14 @@ export default function LiveScreen() {
   const languageControlLocked = busy || realtimeOwnsAudio;
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const voiceHeroTitle = {
-    disconnected: 'Tap to connect',
+    disconnected: 'Speak with Asha',
     connecting: 'Connecting to Asha',
     ready: 'Ready when you are',
     recording: 'Asha is listening',
     responding: 'Asha is responding',
   }[realtimeStatus];
   const voiceHeroBody = {
-    disconnected: '',
+    disconnected: 'Tap the orb, then say the phrase naturally in Hindi.',
     connecting: 'Opening a private live voice session…',
     ready: 'Tap the orb, then speak your Hindi naturally.',
     recording: 'Tap the orb again when you finish your turn.',
@@ -302,6 +305,7 @@ export default function LiveScreen() {
     void stopSpeaking();
     setLiveCaption('');
     selectedChatTextRef.current.clear();
+    setWordDefinitionPhrase(null);
     clearChatHistory();
   }, [clearChatHistory]);
 
@@ -449,9 +453,9 @@ export default function LiveScreen() {
         testID="live-chat-list"
         ListHeaderComponent={(
           <View>
-            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, { paddingTop: insets.top + spacing.sm }]} testID="voice-conversation-hero">
-              <View style={[styles.topbar, { width: heroContentWidth }]}>
-                <View style={styles.headerIdentity}>
+            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, largeTextLayout && styles.voiceHeroLarge, { paddingTop: insets.top + spacing.sm }]} testID="voice-conversation-hero">
+              <View style={[styles.topbar, largeTextLayout && styles.topbarLarge, largeTextLayout && { minHeight: Math.ceil(260 * fontScale) }, { width: heroContentWidth }]}>
+                <View style={[styles.headerIdentity, largeTextLayout && styles.headerIdentityLarge]}>
                   <Image
                     accessible={false}
                     cachePolicy="memory-disk"
@@ -461,13 +465,13 @@ export default function LiveScreen() {
                     testID="asha-header-portrait"
                     transition={0}
                   />
-                  <View style={styles.headerCopy}>
+                  <View style={[styles.headerCopy, largeTextLayout && styles.headerCopyLarge]}>
                     <JournalKicker>Asha · your practice partner</JournalKicker>
-                    <JournalDisplay numberOfLines={2} style={styles.headerTitle}>Let’s begin with a little courage.</JournalDisplay>
-                    <Text numberOfLines={1} style={styles.headerSubtitle}>Conversational Hindi coach · {responseLanguageName} replies</Text>
+                    <JournalDisplay numberOfLines={largeTextLayout ? undefined : 2} style={[styles.headerTitle, largeTextLayout && styles.headerTitleLarge]}>Let’s begin with a little courage.</JournalDisplay>
+                    <Text numberOfLines={largeTextLayout ? undefined : 1} style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Conversational Hindi coach · {responseLanguageName} replies</Text>
                   </View>
                 </View>
-                <View style={styles.headerActions}>
+                <View style={[styles.headerActions, largeTextLayout && styles.headerActionsLarge]}>
                   <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
                     <View style={styles.privateDot} />
                     <Text style={styles.privateText}>Private</Text>
@@ -495,6 +499,7 @@ export default function LiveScreen() {
                       { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
                       { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
                     ]}
+                    stackedAtLargeText
                     style={[styles.languageSelector, { width: heroContentWidth }]}
                     value={responseLanguage}
                   />
@@ -509,6 +514,33 @@ export default function LiveScreen() {
                       {voiceHeroBody ? <Text style={styles.heroBody}>{voiceHeroBody}</Text> : null}
                     </View>
                   </View>
+                  {realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
+                    <Pressable
+                      accessibilityHint="Opens your saved phrases for review."
+                      accessibilityLabel={`Review pronunciation reference for ${studioPhrase.hi}`}
+                      accessibilityRole="button"
+                      onPress={() => router.push('/phrases')}
+                      style={[styles.studioPhrase, { width: heroContentWidth }]}
+                    >
+                      <View style={styles.studioPhraseHeading}>
+                        <View>
+                          <Text style={styles.studioPhraseEyebrow}>Featured phrase</Text>
+                          <Text style={styles.studioPhraseEnglish}>{studioPhrase.en}</Text>
+                        </View>
+                        <View style={styles.studioListenIcon}><Volume2 color={colors.forestText} size={18} /></View>
+                      </View>
+                      <View style={styles.studioPhraseLine} />
+                      <Text style={styles.studioPhraseHindi}>{studioPhrase.hi}</Text>
+                      <Text style={styles.studioPhraseLatin}>{studioPhrase.latin}</Text>
+                      <View style={styles.studioPhraseFooter}>
+                        <Text style={styles.studioPhraseCue}>Say “chee-nee kam” gently; pause after “kam.”</Text>
+                        <View style={styles.studioMastery}>
+                          <Sprout color={colors.forestText} size={15} />
+                          <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `${studioPhraseMastery}/5 roots` : 'Plant a root'}</Text>
+                        </View>
+                      </View>
+                    </Pressable>
+                  ) : null}
                   <CaptionReveal style={[styles.captionBlock, { width: heroContentWidth }]}>
                     <Text style={styles.captionLabel}>{liveCaptionLabel}</Text>
                     <Text accessibilityLiveRegion="polite" style={styles.captionText}>{captionText}</Text>
@@ -640,7 +672,11 @@ export default function LiveScreen() {
               <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: busy || realtimeLocked || !input.trim() }} disabled={busy || realtimeLocked || !input.trim()} onPress={() => void sendText()} style={[styles.sendButton, (busy || realtimeLocked || !input.trim()) && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
             </View>
           </>
-        ) : <Text style={styles.consentHint}>Review the consent card above to enable connected coaching.</Text>}
+        ) : (
+          <Text accessibilityLabel="Review the consent card above to enable connected coaching." style={styles.consentHint}>
+            {largeTextLayout ? 'Review consent above to enable coaching.' : 'Review the consent card above to enable connected coaching.'}
+          </Text>
+        )}
       </View>
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
       {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} visible /> : null}
@@ -662,13 +698,20 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
     overflow: 'hidden',
   },
   voiceHeroCompact: { gap: spacing.xs, minHeight: 430, paddingBottom: spacing.md },
+  voiceHeroLarge: { minHeight: 0, overflow: 'visible' },
   topbar: { minHeight: 86, alignSelf: 'center', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', paddingRight: 158, position: 'relative' },
+  topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
   headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  headerIdentityLarge: { flex: 0 },
   ashaPortrait: { width: 1, height: 1, opacity: 0, flexShrink: 0, borderRadius: radius.pill, backgroundColor: c.brandSoft },
   headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2, overflow: 'hidden' },
+  headerCopyLarge: { overflow: 'visible' },
   headerTitle: { alignSelf: 'stretch', marginTop: spacing.xs, maxWidth: 260, fontSize: 29, lineHeight: 35, textAlign: 'left' },
+  headerTitleLarge: { maxWidth: '100%' },
   headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.muted, fontSize: 11, lineHeight: 15, textAlign: 'left' },
+  headerSubtitleLarge: { flexShrink: 0 },
   headerActions: { position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerActionsLarge: { alignSelf: 'flex-end', flexWrap: 'wrap', justifyContent: 'flex-end', position: 'relative', right: undefined },
   privateBadge: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10 },
   privateDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
   privateText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
@@ -691,6 +734,18 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   captionLabel: { color: c.forestText, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center' },
   captionText: { minWidth: 0, alignSelf: 'stretch', color: c.ink, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: 'center' },
   heroConsentHint: { minWidth: 0, alignSelf: 'center', flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.md },
+  studioPhraseHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  studioPhraseEyebrow: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
+  studioPhraseEnglish: { color: c.ink, fontFamily: 'Georgia', fontSize: 20, lineHeight: 26, fontWeight: '700' },
+  studioListenIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
+  studioPhraseLine: { height: 1, backgroundColor: c.line },
+  studioPhraseHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 24, lineHeight: 32, fontWeight: '700' },
+  studioPhraseLatin: { color: c.brandText, fontSize: 14, fontWeight: '900' },
+  studioPhraseFooter: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  studioPhraseCue: { minWidth: 0, flex: 1, color: c.muted, fontSize: 12, lineHeight: 17 },
+  studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
+  studioMasteryText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
   askSection: { minHeight: 116, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.lineStrong },

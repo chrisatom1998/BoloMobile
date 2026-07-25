@@ -1,5 +1,5 @@
 import { Tabs } from 'heroui-native/tabs';
-import { type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { makeStyles, spacing } from '@/theme';
 
@@ -16,6 +16,8 @@ type SegmentedControlProps<T extends string> = {
   disabledHint?: string;
   onValueChange: (value: T) => void;
   options: readonly SegmentOption<T>[];
+  /** Reflows options into full-width rows when a compact segmented row cannot safely fit Dynamic Type. */
+  stackedAtLargeText?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
   value: T;
@@ -33,11 +35,38 @@ export function SegmentedControl<T extends string>({
   disabledHint,
   onValueChange,
   options,
+  stackedAtLargeText = false,
   style,
   testID,
   value,
 }: SegmentedControlProps<T>) {
   const styles = useStyles();
+  const { fontScale } = useWindowDimensions();
+  const usesStackedLayout = stackedAtLargeText && fontScale >= 1.4;
+
+  if (usesStackedLayout) {
+    return (
+      <View accessibilityLabel={accessibilityLabel} accessibilityRole="tablist" style={[styles.stackedList, style]} testID={testID}>
+        {options.map((option) => {
+          const selected = value === option.value;
+          return (
+            <Pressable
+              accessibilityHint={disabled ? disabledHint : undefined}
+              accessibilityLabel={`${accessibilityLabel}: ${option.accessibilityLabel ?? option.label}`}
+              accessibilityRole="tab"
+              accessibilityState={{ disabled, selected }}
+              disabled={disabled}
+              key={option.value}
+              onPress={() => onValueChange(option.value)}
+              style={({ pressed }) => [styles.stackedTrigger, selected && styles.stackedTriggerSelected, disabled && styles.stackedTriggerDisabled, pressed && !disabled && styles.stackedTriggerPressed]}
+            >
+              <Text style={[styles.stackedLabel, selected && styles.stackedLabelSelected, disabled && styles.labelDisabled]}>{option.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -122,5 +151,40 @@ const useStyles = makeStyles((c) => ({
   },
   labelDisabled: {
     color: c.mutedSoft,
+  },
+  stackedList: {
+    alignSelf: 'stretch',
+    gap: spacing.sm,
+  },
+  stackedTrigger: {
+    minHeight: 48,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    borderColor: c.line,
+    borderWidth: 1,
+    backgroundColor: c.paper,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  stackedTriggerSelected: {
+    borderColor: c.neutralSurface,
+    backgroundColor: c.neutralSurface,
+  },
+  stackedTriggerDisabled: {
+    opacity: 0.45,
+  },
+  stackedTriggerPressed: {
+    opacity: 0.82,
+  },
+  stackedLabel: {
+    color: c.muted,
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  stackedLabelSelected: {
+    color: c.neutralSurfaceText,
   },
 }));

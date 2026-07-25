@@ -27,6 +27,7 @@ jest.mock('lucide-react-native', () => ({
   MessageCircle: () => null,
   Send: () => null,
   Sparkles: () => null,
+  Sprout: () => null,
   Trash2: () => null,
   Volume2: () => null,
   X: () => null,
@@ -322,8 +323,8 @@ describe('immersive live conversation design', () => {
 
     expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#F6F3ED');
     expect(view.getByText('Conversational Hindi coach · English replies')).toBeTruthy();
-    expect(view.getByText('Tap to connect')).toBeTruthy();
-    expect(view.getByText('Tap to connect').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByText('Tap the orb, then speak naturally.')).toBeTruthy();
+    expect(view.getByText('Tap the orb, then speak naturally.').props.accessibilityLiveRegion).toBe('polite');
     expect(view.queryByText('Tap the orb and ask anything in Hindi.')).toBeNull();
     expect(view.queryByText('Live Asha caption')).toBeNull();
     expect(view.queryByLabelText('Open text phrase help')).toBeNull();
