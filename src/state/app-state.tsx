@@ -3,8 +3,8 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
-import { duePhraseList, reviewIntervals } from '@/lib/learning';
-import { clearObservability } from '@/lib/observability';
+import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
+import { clearObservability, observe } from '@/lib/observability';
 import { updatePracticeWidget } from '@/lib/practice-widget';
 import {
   appendChatHistory,
@@ -140,6 +140,7 @@ async function persistState(state: PersistedState, keys: PersistedKey[]) {
 
 function reportPersistenceFailure(error: unknown, message = 'Your last change was not saved and has been restored. Check available storage and try again.') {
   console.warn('Bolo could not save local progress.', error);
+  observe('runtime_error');
   showAppAlert('Could not save on this device', message);
 }
 
@@ -210,6 +211,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
       } catch (error) {
         console.warn('Bolo could not load local progress.', error);
+        observe('runtime_error');
         if (active) {
           const fallback = { ...initialState, clientId: sanitizeClientId(null) };
           setState(fallback);
@@ -452,6 +454,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       setState(next);
     } catch (error) {
       console.warn('Bolo could not clear local data.', error);
+      observe('runtime_error');
       throw new Error('Bolo could not clear local data. Your existing local data was left in place.');
     } finally {
       clearingAllDataRef.current = false;
@@ -482,7 +485,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     hydrated,
     streak: calculateStreak(state.streakDays, completedToday(state.practice)),
     dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
-    duePhrases: duePhraseList(state.phrases, state.phraseReviews).slice(0, 5),
+    duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews),
     reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
   }), [state, hydrated]);
 

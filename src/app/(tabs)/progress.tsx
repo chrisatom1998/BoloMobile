@@ -2,15 +2,13 @@ import { useRouter, type Href } from 'expo-router';
 import { Award, Check, Leaf, Share2, Sprout, Volume2 } from 'lucide-react-native';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { useMemo } from 'react';
-import { Share, ScrollView, Text, View, type ImageStyle, type TextStyle, type ViewStyle } from 'react-native';
+import { Share, ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { showAppAlert } from '@/lib/app-alert';
 import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme, type ThemeColors } from '@/theme';
-
-type ProgressStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
+import { makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 
 export default function ProgressScreen() {
   const router = useRouter();
@@ -153,18 +151,16 @@ export default function ProgressScreen() {
   );
 }
 
-export const createProgressStyles = (c: ThemeColors) => {
-  const isDarkSurface = c.shadowOpacityScale === 0;
-  return ({
+export const createProgressStyles = (c: ThemeColors) => ({
   content: { alignItems: 'center', padding: spacing.lg, paddingTop: 18, paddingBottom: spacing.xxl, gap: spacing.lg },
   pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs, paddingTop: spacing.xs },
   pageTitle: { maxWidth: 225, fontSize: 30, lineHeight: 36, textAlign: 'left' },
-  hero: { width: '100%', position: 'relative', overflow: 'hidden', alignItems: 'flex-start', borderRadius: 26, borderCurve: 'continuous', backgroundColor: isDarkSurface ? c.heroBase : c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm, boxShadow: '0 10px 24px rgba(0, 0, 0, 0.09)' },
+  hero: { width: '100%', position: 'relative', overflow: 'hidden', alignItems: 'flex-start', borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm, boxShadow: '0 10px 24px rgba(0, 0, 0, 0.09)' },
   heroIcon: { width: 46, height: 46, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center' },
   heroGlyph: { position: 'absolute', right: -6, bottom: -48, color: c.heroGlyph, fontSize: 156, lineHeight: 180, fontWeight: '900' },
-  heroTitle: { color: isDarkSurface ? c.white : c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 32, fontWeight: '700', textAlign: 'left' },
-  heroBody: { color: isDarkSurface ? c.heroSubtle : c.muted, fontSize: 14, lineHeight: 21, textAlign: 'left' },
+  heroTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 32, fontWeight: '700', textAlign: 'left' },
+  heroBody: { color: c.muted, fontSize: 14, lineHeight: 21, textAlign: 'left' },
   heroFootnote: { borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   heroFootnoteText: { color: c.ink, fontSize: 12, fontWeight: '800' },
   gardenCard: { width: '100%', backgroundColor: c.paper, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.lg, gap: spacing.lg },
@@ -217,7 +213,6 @@ export const createProgressStyles = (c: ThemeColors) => {
   milestoneTitle: { color: c.ink, fontSize: 15, fontWeight: '800' },
   shareButton: { minHeight: 48, overflow: 'hidden', borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.forest, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
   shareText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
-} satisfies ProgressStyles);
-};
+} satisfies NamedStyles);
 
 const useStyles = makeStyles(createProgressStyles);

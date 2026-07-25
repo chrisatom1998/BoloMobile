@@ -4,11 +4,12 @@ import { Button } from 'heroui-native/button';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { Bookmark, Ear, Mic, Sprout } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene, scenes, type Scene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { recommendedScenes } from '@/lib/learning';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
@@ -21,8 +22,7 @@ export default function HomeScreen() {
   const state = useAppState();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const { fontScale } = useWindowDimensions();
-  const largeTextLayout = fontScale >= 1.4;
+  const largeTextLayout = useLargeTextLayout();
   const { dailySteps, duePhrases, goal, learnerProfile, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
@@ -260,16 +260,6 @@ const useStyles = makeStyles((c) => ({
   gardenCueBody: { color: c.muted, fontSize: 12, lineHeight: 17 },
   gardenCueArrow: { color: c.forestText, fontSize: 22, fontWeight: '900' },
   sectionEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase', textAlign: 'left' },
-  todayTitle: { color: c.ink, fontSize: 17, lineHeight: 21, fontWeight: '900', marginTop: 2, textAlign: 'left' },
-  progressLink: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  progressLinkText: { color: c.forestText, fontSize: 12, fontWeight: '900' },
-  pathActions: { width: '100%', flexDirection: 'row', gap: spacing.sm },
-  pathAction: { minWidth: 0, minHeight: 78, flex: 1, borderRadius: 16, borderCurve: 'continuous', alignItems: 'flex-start', justifyContent: 'center', gap: 3, padding: spacing.sm },
-  pathActionForest: { backgroundColor: c.forestSoft },
-  pathActionBrand: { backgroundColor: c.brandSoft },
-  pathTitle: { color: c.ink, fontSize: 15, fontWeight: '900', textAlign: 'left' },
-  pathMeta: { color: c.muted, fontSize: 12, lineHeight: 16, textAlign: 'left' },
-  pathArrow: { color: c.ink, fontSize: 16, lineHeight: 18, fontWeight: '900', marginTop: 1, textAlign: 'left' },
   lessonPlansLink: { width: '100%', minHeight: 72, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.gold, borderWidth: 1, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
   lessonPlansEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   lessonPlansTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 18, lineHeight: 23, fontWeight: '700', marginTop: 2 },

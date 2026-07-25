@@ -61,7 +61,7 @@ export default function SceneScreen() {
   const correct = picked !== null && beat.choices[picked]?.correct === true;
 
   function play(text: string) {
-    if ((!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) || pronunciationBusy) return;
+    if ((!aiConsent && !hasOfflineSpeech(text)) || pronunciationBusy) return;
     void speak(text);
   }
 
@@ -157,13 +157,13 @@ export default function SceneScreen() {
           <View style={styles.asha}><Text style={styles.ashaText}>आ</Text></View>
           <View style={styles.bubble}>
             <Pressable
-              accessibilityHint={!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false) ? 'Agree to connected AI processing to enable this voice.' : pronunciationBusy ? 'Finish pronunciation practice before playing another voice.' : 'Bundled lesson audio works offline.'}
+              accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc) ? 'Agree to connected AI processing to enable this voice.' : pronunciationBusy ? 'Finish pronunciation practice before playing another voice.' : 'Bundled lesson audio works offline.'}
               accessibilityLabel="Hear Asha"
               accessibilityRole="button"
-              accessibilityState={{ disabled: (!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy }}
-              disabled={(!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy}
+              accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
+              disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
               onPress={() => play(beat.npc)}
-              style={[styles.speaker, ((!aiConsent && !(hasOfflineSpeech?.(beat.npc) ?? false)) || pronunciationBusy) && styles.disabled]}
+              style={[styles.speaker, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
             ><Volume2 color={colors.ink} size={18} /></Pressable>
             <Text style={styles.npc}>{beat.npc}</Text>
             <Text style={styles.translation}>{beat.translation}</Text>

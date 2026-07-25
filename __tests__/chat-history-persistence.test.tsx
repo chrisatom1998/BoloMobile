@@ -23,12 +23,14 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 jest.mock('../src/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
+jest.mock('../src/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
 
 const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default as {
   __store: Map<string, string>;
   multiSet: jest.Mock;
 };
 const { showAppAlert } = jest.requireMock('../src/lib/app-alert') as { showAppAlert: jest.Mock };
+const { observe } = jest.requireMock('../src/lib/observability') as { observe: jest.Mock };
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -123,6 +125,7 @@ describe('chat history provider persistence', () => {
         expect.stringContaining('not saved'),
       ));
       await waitFor(() => expect(view.getByTestId('history').props.children).toBe('empty'));
+      expect(observe).toHaveBeenCalledWith('runtime_error');
       expect(asyncStorage.__store.has(storageKeys.chatHistory)).toBe(false);
       await view.unmount();
     } finally {

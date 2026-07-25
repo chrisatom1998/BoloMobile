@@ -61,65 +61,6 @@ export const lightColors = {
 
 export type ThemeColors = { [Key in keyof typeof lightColors]: typeof lightColors[Key] extends string ? string : number };
 
-export const darkColors: ThemeColors = {
-  background: '#0D1513',
-  backgroundWarm: '#141E1B',
-  paper: '#18211F',
-  paperRaised: '#1E2826',
-  line: '#2A3431',
-  lineStrong: '#3B4643',
-
-  ink: '#F2EFE9',
-  muted: '#AAB4B0',
-  mutedSoft: '#8B9591',
-
-  brand: '#C2532F',
-  brandDark: '#F0A184',
-  brandText: '#F0A184',
-  brandSoft: '#3A2018',
-
-  forest: '#12786A',
-  forestDark: '#0F6355',
-  forestText: '#5FC7A6',
-  forestSoft: '#16413A',
-
-  danger: '#F09A88',
-  dangerSurface: '#A63F2F',
-  dangerSoft: '#331914',
-  dangerLine: '#6B3125',
-
-  success: '#5FC7A6',
-  successSurface: '#1C6650',
-  successSoft: '#14322A',
-
-  gold: '#E7AC3D',
-  goldSoft: '#3A2E12',
-
-  neutralSurface: '#F2EFE9',
-  neutralSurfaceText: '#0D1513',
-
-  night: '#243330',
-  white: '#FFFFFF',
-  black: '#000000',
-
-  // Ambient shadows read as muddy smears on dark surfaces; elevation comes from borders instead.
-  shadowOpacityScale: 0,
-
-  heroBase: '#0A110F',
-  heroRaised: '#161E1C',
-  heroLine: 'rgba(255, 255, 255, 0.11)',
-  heroMuted: '#9AA5A1',
-  heroSegmentIdle: '#C1C8C5',
-  heroBody: '#FFF2EA',
-  heroSubtle: '#BFC9C6',
-  heroOverlay: 'rgba(20, 33, 31, 0.4)',
-  heroGlyph: 'rgba(255, 255, 255, 0.16)',
-
-  orb: '#D45F3F',
-  orbActive: '#C25535',
-  orbRecording: '#B44B2E',
-};
-
 /** The app intentionally uses this light palette on every device appearance. */
 export const colors = lightColors;
 
@@ -156,7 +97,7 @@ export function useTheme() {
   return fixedLightTheme;
 }
 
-type NamedStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
+export type NamedStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
 
 const styleCache = new WeakMap<object, WeakMap<object, NamedStyles>>();
 

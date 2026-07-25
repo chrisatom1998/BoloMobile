@@ -3,11 +3,12 @@ import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
 import { BookOpen, Leaf, Trash2, Volume2 } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Text, View } from 'react-native';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { scenes, type SceneCategory } from '@/data/scenes';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
@@ -46,8 +47,7 @@ export default function PhrasesScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
-  const { fontScale } = useWindowDimensions();
-  const largeTextLayout = fontScale >= 1.4;
+  const largeTextLayout = useLargeTextLayout();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
   const { audioError, speak } = useSpeakText();
   const [query, setQuery] = useState('');
@@ -67,7 +67,7 @@ export default function PhrasesScreen() {
   useEffect(() => () => { void stopSpeaking(); }, []);
 
   function playPhrase(text: string, playbackRate = 1) {
-    if (!aiConsent && !(hasOfflineSpeech?.(text) ?? false)) return;
+    if (!aiConsent && !hasOfflineSpeech(text)) return;
     void speak(text, undefined, playbackRate);
   }
 
@@ -139,7 +139,7 @@ export default function PhrasesScreen() {
         </View>
       ) : <Text style={styles.noResults}>No phrases match this search and filter.</Text>}
       renderItem={({ item }) => {
-        const offline = hasOfflineSpeech?.(item.hi) ?? false;
+        const offline = hasOfflineSpeech(item.hi);
         const canListen = aiConsent || offline;
         const review = reviews[item.hi];
         const mastery = review?.mastery ?? 0;
