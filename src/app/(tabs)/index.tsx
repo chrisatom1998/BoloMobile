@@ -4,7 +4,7 @@ import { Button } from 'heroui-native/button';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { Bookmark, Ear, Mic, Sprout } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Pressable, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, StatusBar, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene, scenes, type Scene } from '@/data/scenes';
@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const state = useAppState();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
+  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const largeTextLayout = useLargeTextLayout();
   const { dailySteps, duePhrases, goal, learnerProfile, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
@@ -136,8 +137,8 @@ export default function HomeScreen() {
           <View style={styles.gardenCueIcon}><Sprout color={styles.gardenCueIconText.color} size={21} /></View>
           <View style={styles.gardenCueCopy}>
             <Text style={styles.gardenCueEyebrow}>Language garden</Text>
-            <Text style={styles.gardenCueHindi}>{featuredPhrase.hi}</Text>
-            <Text style={styles.gardenCueLatin}>{featuredPhrase.latin}</Text>
+            {profile.scriptPreference !== 'latin' ? <Text style={styles.gardenCueHindi}>{featuredPhrase.hi}</Text> : null}
+            {profile.scriptPreference !== 'devanagari' ? <Text style={styles.gardenCueLatin}>{featuredPhrase.latin}</Text> : null}
             <Text style={styles.gardenCueBody}>{featuredMastery ? `${featuredMastery}/5 roots strong` : duePhrases.length ? 'Ready to water today' : 'A phrase worth keeping close'}</Text>
           </View>
           <Text style={styles.gardenCueArrow}>→</Text>
@@ -153,14 +154,14 @@ export default function HomeScreen() {
       </View>
       <Text style={styles.sectionDescription}>Start with an ordered module, then take its ten lessons one useful turn at a time.</Text>
     </View>
-  ), [duePhrases.length, featuredMastery, featuredPhrase, goal, goalPercent, minutesToday, primary, router, streak, styles]);
+  ), [duePhrases.length, featuredMastery, featuredPhrase, goal, goalPercent, minutesToday, primary, profile.scriptPreference, router, streak, styles]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]}
       data={lessonPlans}
       keyExtractor={(plan) => plan.id}
       renderItem={({ item: plan }) => {
@@ -234,7 +235,7 @@ const useStyles = makeStyles((c) => ({
   nextBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
   goalSummary: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
   todayLabel: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'left' },
-  streakChip: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  streakChip: { minHeight: 44, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   streakChipIcon: { color: c.forestText },
   streakChipText: { color: c.forestText, fontSize: 12, fontWeight: '900' },
   progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm },

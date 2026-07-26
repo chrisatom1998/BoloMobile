@@ -1,8 +1,8 @@
 import { AudioModule } from 'expo-audio';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BookOpenText, Check, Languages, Mic, Route, Sparkles } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StatusBar, Text, View } from 'react-native';
 
 import { useAppState } from '@/state/app-state';
 import { observe } from '@/lib/observability';
@@ -46,16 +46,18 @@ function ChoiceRow<T extends string | number>({ choices, label, onChange, value 
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { completeOnboarding } = useAppState();
+  const { completeOnboarding, goal: savedGoal, learnerProfile } = useAppState();
+  const { recalibrate } = useLocalSearchParams<{ recalibrate?: string }>();
   const { colors } = useTheme();
   const styles = useStyles();
+  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const sharedStyles = useSharedStyles();
-  const [level, setLevel] = useState<LearnerLevel>('new');
-  const [scriptPreference, setScriptPreference] = useState<ScriptPreference>('both');
-  const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>('conversation');
-  const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>('en');
-  const [goal, setGoal] = useState<5 | 10 | 15>(10);
-  const [microphoneTested, setMicrophoneTested] = useState(false);
+  const [level, setLevel] = useState<LearnerLevel>(() => learnerProfile.level);
+  const [scriptPreference, setScriptPreference] = useState<ScriptPreference>(() => learnerProfile.scriptPreference);
+  const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>(() => learnerProfile.primaryGoal);
+  const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>(() => learnerProfile.responseLanguage);
+  const [goal, setGoal] = useState<5 | 10 | 15>(() => savedGoal);
+  const [microphoneTested, setMicrophoneTested] = useState(() => learnerProfile.microphoneTested);
   const [microphoneStatus, setMicrophoneStatus] = useState('You can test this later in live practice.');
 
   async function testMicrophone() {
@@ -72,7 +74,7 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(spacing.xl, androidStatusInset + spacing.md) }]} style={sharedStyles.screen}>
       <View style={styles.brandMark}><Text style={styles.brandMarkText}>ब</Text></View>
       <View style={styles.intro}>
         <Text style={sharedStyles.eyebrow}>Welcome to Bolo</Text>
@@ -135,8 +137,9 @@ export default function OnboardingScreen() {
       </View>
 
       <Pressable accessibilityRole="button" onPress={finish} style={sharedStyles.primaryButton}>
-        <Text style={sharedStyles.primaryButtonText}>Build my practice plan</Text>
+        <Text style={sharedStyles.primaryButtonText}>{recalibrate ? 'Save my practice plan' : 'Build my practice plan'}</Text>
       </Pressable>
+      {recalibrate ? <Pressable accessibilityRole="button" onPress={() => router.replace('/settings')} style={styles.cancelButton}><Text style={styles.cancelText}>Cancel</Text></Pressable> : null}
     </ScrollView>
   );
 }
@@ -162,5 +165,7 @@ const useStyles = makeStyles((c) => ({
   detail: { color: c.muted, fontSize: 14, lineHeight: 20 },
   secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   secondaryText: { color: c.forestText, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+  cancelButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  cancelText: { color: c.forestText, fontSize: 15, fontWeight: '800' },
   status: { color: c.muted, fontSize: 13, lineHeight: 18 },
 }));

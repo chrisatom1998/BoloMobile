@@ -143,6 +143,7 @@ export default function SettingsScreen() {
         <Text style={styles.choiceLabel}>Hindi display</Text>
         <SegmentedControl
           accessibilityLabel="Hindi display preference"
+          stackedAtLargeText
           onValueChange={(scriptPreference) => updateLearnerProfile({ scriptPreference })}
           options={[
             { label: 'Both', value: 'both' },
@@ -154,6 +155,7 @@ export default function SettingsScreen() {
         <Text style={styles.choiceLabel}>Asha replies</Text>
         <SegmentedControl
           accessibilityLabel="Asha reply language preference"
+          stackedAtLargeText
           onValueChange={(responseLanguage) => updateLearnerProfile({ responseLanguage })}
           options={[
             { label: 'English', value: 'en' },
@@ -161,7 +163,7 @@ export default function SettingsScreen() {
           ]}
           value={learnerProfile.responseLanguage}
         />
-        <Pressable accessibilityRole="button" onPress={() => router.push('/onboarding' as Href)} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push('/onboarding?recalibrate=1' as Href)} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
       </View>
 
       <View style={styles.card}>
@@ -172,6 +174,7 @@ export default function SettingsScreen() {
         <SegmentedControl
           accessibilityLabel="Practice reminder time"
           compact
+          stackedAtLargeText
           disabled={savingReminder}
           disabledHint="Bolo is updating your reminder."
           onValueChange={(next) => void changeReminder(next === 'off' ? undefined : Number(next))}

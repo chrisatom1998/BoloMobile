@@ -1,12 +1,13 @@
 import { useRouter, type Href } from 'expo-router';
-import { Award, Check, Leaf, Share2, Sprout, Volume2 } from 'lucide-react-native';
+import { Award, Check, Leaf, Share2, Sprout } from 'lucide-react-native';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { useMemo } from 'react';
-import { Share, ScrollView, Text, View } from 'react-native';
+import { Platform, Share, ScrollView, StatusBar, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { showAppAlert } from '@/lib/app-alert';
 import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
+import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppStateValue } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 
@@ -15,7 +16,9 @@ export default function ProgressScreen() {
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const { duePhrases, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
+  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+  const { duePhrases, learnerProfile, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
+  const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const { week, maxMinutes } = useMemo(() => {
     const days = weeklyPractice(practiceHistory);
     return { week: days, maxMinutes: Math.max(1, ...days.map((day) => day.seconds / 60)) };
@@ -27,6 +30,7 @@ export default function ProgressScreen() {
     completedScenes: Object.values(sceneProgress).filter((item) => item.completions > 0).length,
   }), [sceneProgress]);
   const reviewedThisWeek = week.reduce((total, day) => total + day.reviews, 0);
+  const hasLearningActivity = practiceHistory.some((day) => day.seconds > 0 || day.reviews > 0) || completedScenes > 0;
   const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
   const featuredMastery = featuredPhrase ? phraseReviews[featuredPhrase.hi]?.mastery ?? 0 : 0;
 
@@ -41,7 +45,7 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]} style={sharedStyles.screen}>
       <View style={styles.pageHeading}>
         <View style={styles.pageHeadingCopy}>
           <JournalKicker>Your language garden</JournalKicker>
@@ -57,6 +61,16 @@ export default function ProgressScreen() {
         <Text style={styles.heroBody}>Every small recall makes useful Hindi easier to find when you need it.</Text>
         <View style={styles.heroFootnote}><Text style={styles.heroFootnoteText}>{streak ? `${streak} day practice streak` : 'Start a calm practice streak today'}</Text></View>
       </View>
+
+      {!hasLearningActivity ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateTitle}>Your garden starts with one small turn.</Text>
+          <Text style={styles.emptyStateBody}>Complete a scene or save a phrase, and your practice pattern will grow here.</Text>
+          <PressableFeedback accessibilityRole="button" onPress={() => router.push('/' as Href)} style={styles.emptyStateButton}>
+            <Text style={styles.emptyStateButtonText}>Choose today’s practice</Text>
+          </PressableFeedback>
+        </View>
+      ) : null}
 
       <View style={styles.gardenCard}>
         <View style={styles.cardTitleRow}>
@@ -87,10 +101,10 @@ export default function ProgressScreen() {
           <View style={styles.featuredPhraseHeading}>
             <View style={styles.featuredPhraseIcon}><Sprout color={colors.forestText} size={20} /></View>
             <Text style={styles.gardenEyebrow}>Featured phrase</Text>
-            <View style={styles.featuredListen}><Volume2 color={colors.forestText} size={17} /></View>
+            <View style={styles.featuredListen}><Text style={styles.featuredNavigate}>→</Text></View>
           </View>
-          <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text>
-          <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text>
+          {profile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
+          {profile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
           <Text style={styles.featuredEnglish}>{featuredPhrase.en}</Text>
           <View style={styles.featuredMasteryRow}>
             <Text style={styles.featuredMasteryLabel}>Mastery</Text>
@@ -163,6 +177,11 @@ export const createProgressStyles = (c: ThemeColors) => ({
   heroBody: { color: c.muted, fontSize: 14, lineHeight: 21, textAlign: 'left' },
   heroFootnote: { borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   heroFootnoteText: { color: c.ink, fontSize: 12, fontWeight: '800' },
+  emptyState: { width: '100%', borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, gap: spacing.sm, padding: spacing.lg },
+  emptyStateTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 28, fontWeight: '700' },
+  emptyStateBody: { color: c.muted, fontSize: 14, lineHeight: 21 },
+  emptyStateButton: { alignSelf: 'flex-start', minHeight: 44, borderRadius: radius.pill, backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  emptyStateButtonText: { color: c.white, fontSize: 14, fontWeight: '900' },
   gardenCard: { width: '100%', backgroundColor: c.paper, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.lg, gap: spacing.lg },
   gardenEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   gardenMeta: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'right' },
@@ -177,6 +196,7 @@ export const createProgressStyles = (c: ThemeColors) => ({
   featuredPhraseHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   featuredPhraseIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.goldSoft, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   featuredListen: { marginLeft: 'auto', width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
+  featuredNavigate: { color: c.forestText, fontSize: 20, fontWeight: '900' },
   featuredHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 28, lineHeight: 36, fontWeight: '700' },
   featuredLatin: { color: c.brandText, fontSize: 15, fontWeight: '900' },
   featuredEnglish: { color: c.muted, fontSize: 15, lineHeight: 21 },

@@ -28,8 +28,17 @@ export function showAppAlert(
   }
 
   const menu = choices.map((button, index) => `${index + 1}. ${button.text}`).join('\n');
-  const selection = window.prompt(`${alertContent}\n\n${menu}`);
-  const selectedIndex = Number(selection) - 1;
-  if (Number.isInteger(selectedIndex) && choices[selectedIndex]) choices[selectedIndex].onPress?.();
-  else cancel?.onPress?.();
+  while (true) {
+    const selection = window.prompt(`${alertContent}\n\n${menu}`);
+    if (selection === null) {
+      cancel?.onPress?.();
+      return;
+    }
+    const selectedIndex = Number(selection) - 1;
+    if (Number.isInteger(selectedIndex) && choices[selectedIndex]) {
+      choices[selectedIndex].onPress?.();
+      return;
+    }
+    window.alert('Choose one of the numbered options, or cancel.');
+  }
 }

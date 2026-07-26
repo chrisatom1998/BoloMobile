@@ -26,62 +26,79 @@ export type LessonPlan = Omit<LessonPlanSeed, 'lessons'> & {
 };
 
 type GuidedPracticeContext = {
-  lesson: LessonSeed;
+  focusLesson: LessonSeed;
   plan: LessonPlanSeed;
   lessonIndex: number;
+  target: LessonSeed;
+  turnIndex: number;
 };
 
 type GuidedPracticeTurn = {
+  target: LessonSeed;
   prompt: string;
   tip: string;
 };
 
 const practiceActivities: readonly ((context: GuidedPracticeContext) => GuidedPracticeTurn)[] = [
-  ({ lesson, plan, lessonIndex }) => ({
-    prompt: `Listen for the sound of “${lesson.hi}”, then choose the phrase for “${lesson.en}” in ${plan.title}, lesson ${lessonIndex + 1}.`,
-    tip: `Replay Asha, then let the sound of ${lesson.title.toLowerCase()} lead you to the matching answer.`,
+  ({ target, plan, lessonIndex }) => ({
+    target,
+    prompt: `Listen for the sound of “${target.hi}”, then choose the phrase for “${target.en}” in ${plan.title}, lesson ${lessonIndex + 1}.`,
+    tip: `Replay Asha, then let the sound of ${target.title.toLowerCase()} lead you to the matching answer.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Recall before you look: at ${plan.place}, how would you say “${lesson.en}” while practicing ${lesson.title}?`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Recall before you look: at ${plan.place}, how would you say “${target.en}” while practicing ${target.title}?`,
     tip: `Form the answer silently first; the choices are here to check your memory, not replace it.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Match the English idea “${lesson.en}” to the Hindi response that fits ${lesson.title} on the ${plan.title} path.`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Match the English idea “${target.en}” to the Hindi response that fits ${target.title} on the ${plan.title} path.`,
     tip: `Read each English gloss completely so a familiar-looking Hindi word does not distract you.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Use a polite response in this ${plan.place} moment: choose the clearest Hindi for “${lesson.en}” in ${lesson.title}.`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Use a polite response in this ${plan.place} moment: choose the clearest Hindi for “${target.en}” in ${target.title}.`,
     tip: `Imagine saying it with a calm tone; respectful delivery begins with choosing the full phrase.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Rebuild the phrase from beginning to end, then choose the natural Hindi for “${lesson.en}” in ${lesson.title} (${plan.title}).`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Rebuild the phrase from beginning to end, then choose the natural Hindi for “${target.en}” in ${target.title} (${plan.title}).`,
     tip: `Notice which words belong together before you choose; a natural order makes the whole message clear.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Say it softly to yourself, checking the rhythm, then select the Hindi for “${lesson.en}” as you work through ${lesson.title} in ${plan.title}.`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Say it softly to yourself, checking the rhythm, then select the Hindi for “${target.en}” as you work through ${target.title} in ${plan.title}.`,
     tip: `Use the Romanized line to self-check one sound at a time, then compare it with the Devanagari choice.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Picture the moment at ${plan.place}: give a short response for “${lesson.en}” by choosing the phrase from ${lesson.title}.`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Picture the moment at ${plan.place}: give a short response for “${target.en}” by choosing the phrase from ${target.title}.`,
     tip: `A small scene gives the phrase a purpose—imagine who needs to hear this response.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Choose the complete message you would use for “${lesson.en}” when ${lesson.title.toLowerCase()} comes up on the ${plan.title} path.`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Choose the complete message you would use for “${target.en}” when ${target.title.toLowerCase()} comes up on the ${plan.title} path.`,
     tip: `Look for the choice that says the entire useful idea, rather than only one word from it.`,
   }),
-  ({ lesson, plan, lessonIndex }) => ({
-    prompt: `Compare the meanings carefully: which Hindi choice carries “${lesson.en}” for ${lesson.title}, lesson ${lessonIndex + 1} of ${plan.title}?`,
+  ({ target, plan, lessonIndex }) => ({
+    target,
+    prompt: `Compare the meanings carefully: which Hindi choice carries “${target.en}” for ${target.title}, lesson ${lessonIndex + 1} of ${plan.title}?`,
     tip: `Rule out answers that belong to another situation, then choose the phrase that matches this exact meaning.`,
   }),
-  ({ lesson, plan }) => ({
-    prompt: `Make one confident selection: what would you say for “${lesson.en}” while following the ${plan.title} lesson “${lesson.title}”?`,
+  ({ target, plan }) => ({
+    target,
+    prompt: `Make one confident selection: what would you say for “${target.en}” while following the ${plan.title} lesson “${target.title}”?`,
     tip: `Trust the phrase you can picture yourself using; this final check turns recognition into a ready response.`,
   }),
 ];
 
 function guidedPracticeTurns(context: GuidedPracticeContext, planIndex: number) {
   const startingActivity = (planIndex * 3 + context.lessonIndex) % practiceActivities.length;
-  return practiceActivities.map((_, turnIndex) => practiceActivities[(startingActivity + turnIndex) % practiceActivities.length]!(context));
+  return practiceActivities.map((_, turnIndex) => {
+    const target = context.plan.lessons[(context.lessonIndex + turnIndex) % context.plan.lessons.length]!;
+    const practice = practiceActivities[(startingActivity + turnIndex) % practiceActivities.length]!({ ...context, target, turnIndex });
+    return { ...practice, prompt: `${practice.prompt} Focus: ${context.focusLesson.title}.` };
+  });
 }
 
 const planSeeds: LessonPlanSeed[] = [
@@ -248,11 +265,16 @@ export const lessonPlans: LessonPlan[] = planSeeds.map((plan, planIndex) => ({
 }));
 
 export const plannedLessons: Scene[] = planSeeds.flatMap((plan, planIndex) => plan.lessons.map((lesson, lessonIndex) => {
-  const incorrectChoices = lesson.hi === 'मुझे मदद चाहिए।'
+  const incorrectChoicesFor = (target: LessonSeed) => target.hi === 'मुझे मदद चाहिए।'
     ? [
       { hi: 'मैं तैयार नहीं हूँ।', latin: 'Main taiyaar nahin hoon.', en: 'I am not ready.' },
       { hi: 'कृपया दरवाज़ा बंद कीजिए।', latin: 'Kripya darwaaza band kijiye.', en: 'Please close the door.' },
     ] as const
+    : target.hi === 'कृपया दरवाज़ा बंद कीजिए।'
+      ? [
+        { hi: 'मुझे मदद चाहिए।', latin: 'Mujhe madad chahiye.', en: 'I need help.' },
+        { hi: 'मैं तैयार नहीं हूँ।', latin: 'Main taiyaar nahin hoon.', en: 'I am not ready.' },
+      ] as const
     : [
       { hi: 'मुझे मदद चाहिए।', latin: 'Mujhe madad chahiye.', en: 'I need help.' },
       { hi: 'कृपया दरवाज़ा बंद कीजिए।', latin: 'Kripya darwaaza band kijiye.', en: 'Please close the door.' },
@@ -267,15 +289,15 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan, planIndex) => pl
     level: plan.level,
     emoji: plan.emoji,
     color: plan.color,
-    beats: guidedPracticeTurns({ lesson, plan, lessonIndex }, planIndex).map((practice) => ({
+    beats: guidedPracticeTurns({ focusLesson: lesson, plan, lessonIndex, target: lesson, turnIndex: 0 }, planIndex).map((practice) => ({
       npc: 'यह वाक्य बोलिए।',
       translation: 'Say this useful phrase.',
       prompt: practice.prompt,
       tip: practice.tip,
       choices: [
-        { hi: lesson.hi, latin: lesson.latin, en: lesson.en, correct: true, reply: 'बहुत अच्छा।' },
-        { ...incorrectChoices[0], correct: false, reply: 'करीब है—फिर से कोशिश कीजिए।' },
-        { ...incorrectChoices[1], correct: false, reply: 'अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।' },
+        { hi: practice.target.hi, latin: practice.target.latin, en: practice.target.en, correct: true, reply: 'बहुत अच्छा।' },
+        { ...incorrectChoicesFor(practice.target)[0], correct: false, reply: 'करीब है—फिर से कोशिश कीजिए।' },
+        { ...incorrectChoicesFor(practice.target)[1], correct: false, reply: 'अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।' },
       ],
     })),
   };

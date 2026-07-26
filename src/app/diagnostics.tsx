@@ -9,9 +9,11 @@ export default function DiagnosticsScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const [snapshot, setSnapshot] = useState<ObservabilitySnapshot>({ days: {} });
+  const [loading, setLoading] = useState(true);
   useFocusEffect(useCallback(() => {
     let active = true;
-    void getObservabilitySnapshot().then((value) => { if (active) setSnapshot(value); });
+    setLoading(true);
+    void getObservabilitySnapshot().then((value) => { if (active) setSnapshot(value); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []));
   const rows = Object.entries(snapshot.days).sort(([a], [b]) => b.localeCompare(a));
@@ -22,7 +24,7 @@ export default function DiagnosticsScreen() {
         <Text style={styles.title}>Content-free, local diagnostics</Text>
         <Text style={styles.body}>Bolo stores only daily event counts and total request duration for up to 30 days. It never puts messages, transcripts, audio, phrases, identifiers, or error text in these counters. Nothing here is uploaded.</Text>
       </View>
-      {rows.length ? rows.map(([day, events]) => (
+      {loading ? <Text accessibilityLiveRegion="polite" style={styles.empty}>Loading diagnostics…</Text> : rows.length ? rows.map(([day, events]) => (
         <View key={day} style={styles.card}>
           <Text style={styles.day}>{day}</Text>
           {Object.entries(events).map(([event, counter]) => (

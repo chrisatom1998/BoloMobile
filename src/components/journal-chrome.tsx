@@ -30,11 +30,11 @@ type JournalMotifProps = {
 };
 
 /** A small, purely native decorative motif inspired by block-print textiles. */
-export function JournalMotif({ accessibilityLabel, size = 'corner', style }: JournalMotifProps) {
+export function JournalMotif({ accessibilityLabel: _accessibilityLabel, size = 'corner', style }: JournalMotifProps) {
   const styles = useStyles();
   const panel = size === 'panel';
   return (
-    <View accessibilityLabel={accessibilityLabel} accessible={Boolean(accessibilityLabel)} pointerEvents="none" style={[styles.motif, styles[`motif${size.charAt(0).toUpperCase()}${size.slice(1)}` as 'motifCorner'], style]}>
+    <View accessible={false} pointerEvents="none" style={[styles.motif, styles[`motif${size.charAt(0).toUpperCase()}${size.slice(1)}` as 'motifCorner'], style]}>
       <View style={[styles.petals, styles.petalsOne, panel && styles.petalsOnePanel]} />
       <View style={[styles.petals, styles.petalsTwo, panel && styles.petalsTwoPanel]} />
       <View style={[styles.leaf, styles.leafOne, panel && styles.leafOnePanel]} />

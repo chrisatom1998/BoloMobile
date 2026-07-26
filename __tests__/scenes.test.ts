@@ -40,7 +40,7 @@ describe('Bolo scenario catalog', () => {
     }
   });
 
-  it('gives every planned lesson a distinct mix of guided-practice goals', () => {
+  it('gives every planned lesson a distinct mix of guided-practice goals and phrases', () => {
     const plannedScenes = scenes.filter((scene) => scene.id.startsWith('plan-'));
     const goalMarkers = [
       'Listen for the sound',
@@ -58,7 +58,8 @@ describe('Bolo scenario catalog', () => {
       for (const marker of goalMarkers) {
         expect(prompts.some((prompt) => prompt.includes(marker))).toBe(true);
       }
-      expect(scene.beats.every((beat) => beat.choices.find((choice) => choice.correct)?.en === scene.subtitle)).toBe(true);
+      const practicePhrases = scene.beats.map((beat) => beat.choices.find((choice) => choice.correct)?.hi);
+      expect(new Set(practicePhrases).size).toBe(scene.beats.length);
     }
 
     expect(new Set(plannedScenes.flatMap((scene) => scene.beats.map((beat) => beat.prompt))).size).toBe(1000);

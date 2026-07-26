@@ -115,7 +115,7 @@ const useStyles = makeStyles((c) => ({
     boxShadow: '0 3px 10px rgba(0, 0, 0, 0.04)',
   },
   listCompact: {
-    minHeight: 42,
+    minHeight: 48,
     borderRadius: 14,
     padding: 3,
   },
@@ -129,7 +129,7 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: spacing.sm,
   },
   triggerCompact: {
-    minHeight: 34,
+    minHeight: 44,
     borderRadius: 11,
   },
   indicator: {

@@ -2,11 +2,12 @@ import { fireEvent, render } from '@testing-library/react-native';
 
 const mockRouterPush = jest.fn();
 const mockRouterReplace = jest.fn();
+const mockRouterBack = jest.fn();
 let mockPlanId: string | undefined = 'essentials';
 
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => ({ planId: mockPlanId }),
-  useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
+  useRouter: () => ({ back: mockRouterBack, push: mockRouterPush, replace: mockRouterReplace }),
 }));
 
 jest.mock('@/components/journal-chrome', () => {
@@ -42,7 +43,7 @@ describe('lesson plan navigation', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
 
     await fireEvent.press(view.getByLabelText('Back to all lesson plans'));
-    expect(mockRouterReplace).toHaveBeenCalledWith('/lesson-plans');
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
   });
 
   it('shows plans on the index and routes plan selection to its detail screen', async () => {

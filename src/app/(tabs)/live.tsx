@@ -1,8 +1,8 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowLeft, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
+import { ArrowLeft, MessageCircle, Sprout, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -66,10 +66,13 @@ export default function LiveScreen() {
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
   const compactVoiceLayout = windowHeight < 760;
   const largeTextLayout = useLargeTextLayout();
-  const { elapsedSeconds } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, phraseReviews = {}, phrases = [], togglePhrase } = useAppState();
+  const [practiceStarted, setPracticeStarted] = useState(false);
+  const [screenFocused, setScreenFocused] = useState(true);
+  const { elapsedSeconds } = useForegroundTimer(practiceStarted && screenFocused);
+  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
-  const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>(learnerProfile?.responseLanguage ?? 'en');
+  const [fallbackResponseLanguage, setFallbackResponseLanguage] = useState<AshaResponseLanguage>('en');
+  const responseLanguage: AshaResponseLanguage = learnerProfile?.responseLanguage ?? fallbackResponseLanguage;
   const [busy, setBusy] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
@@ -94,6 +97,13 @@ export default function LiveScreen() {
     () => pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, pendingUserMessage],
   );
+  useFocusEffect(useCallback(() => {
+    setScreenFocused(true);
+    return () => {
+      setScreenFocused(false);
+      void stopSpeaking();
+    };
+  }, []));
   const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
   const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
   const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
@@ -203,6 +213,7 @@ export default function LiveScreen() {
     appendChatMessages(additions);
     if (!practiced.current) {
       practiced.current = true;
+      setPracticeStarted(true);
       markLiveTurn();
     }
   }, [appendChatMessages, markLiveTurn]);
@@ -220,6 +231,7 @@ export default function LiveScreen() {
     appendChatMessages([{ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language }]);
     if (!practiced.current) {
       practiced.current = true;
+      setPracticeStarted(true);
       markLiveTurn();
     }
   }, [appendChatMessages, markLiveTurn]);
@@ -237,8 +249,9 @@ export default function LiveScreen() {
     setLiveCaption('');
     setError('');
     clearAudioError();
-    setResponseLanguage(nextLanguage);
-  }, [clearAudioError, languageControlLocked, responseLanguage]);
+    if (typeof updateLearnerProfile === 'function') updateLearnerProfile({ responseLanguage: nextLanguage });
+    else setFallbackResponseLanguage(nextLanguage);
+  }, [clearAudioError, languageControlLocked, responseLanguage, updateLearnerProfile]);
 
   const clearSavedChat = useCallback(() => {
     void stopSpeaking();
@@ -248,8 +261,9 @@ export default function LiveScreen() {
     clearChatHistory();
   }, [clearChatHistory]);
 
-  const rememberSelectedChatText = useCallback((messageId: string, selection: { sourceText: string; text: string }) => {
-    selectedChatTextRef.current.set(messageId, selection);
+  const rememberSelectedChatText = useCallback((messageId: string, selection: { sourceText: string; text: string } | null) => {
+    if (selection) selectedChatTextRef.current.set(messageId, selection);
+    else selectedChatTextRef.current.delete(messageId);
   }, []);
 
   const openPhrasePicker = useCallback((message: ChatMessage) => {
@@ -387,7 +401,7 @@ export default function LiveScreen() {
   }, [phrases, togglePhrase]);
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.screen}>
       <StatusBar style="dark" />
       <FlatList
         ref={listRef}
@@ -424,7 +438,10 @@ export default function LiveScreen() {
                     <View style={styles.privateDot} />
                     <Text style={styles.privateText}>Private</Text>
                   </View>
-                  <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={router.back} style={styles.headerButton}>
+                  <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={() => {
+                    if (typeof router.canGoBack !== 'function' || router.canGoBack()) router.back();
+                    else router.replace('/');
+                  }} style={styles.headerButton}>
                     <ArrowLeft color={colors.ink} size={19} />
                   </Pressable>
                   <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
@@ -473,13 +490,13 @@ export default function LiveScreen() {
                       <Text style={styles.studioPhraseEyebrow}>Featured phrase</Text>
                       <Text style={styles.studioPhraseEnglish}>{studioPhrase.en}</Text>
                     </View>
-                    <View style={styles.studioListenIcon}><Volume2 color={colors.forestText} size={18} /></View>
+                    <View style={styles.studioListenIcon}><Text style={styles.studioNavigate}>→</Text></View>
                   </View>
                   <View style={styles.studioPhraseLine} />
                   <Text style={styles.studioPhraseHindi}>{studioPhrase.hi}</Text>
                   <Text style={styles.studioPhraseLatin}>{studioPhrase.latin}</Text>
                   <View style={styles.studioPhraseFooter}>
-                    <Text style={styles.studioPhraseCue}>Say “chee-nee kam” gently; pause after “kam.”</Text>
+                    <Text style={styles.studioPhraseCue}>Say “{studioPhrase.latin}” naturally, then pause before you continue.</Text>
                     <View style={styles.studioMastery}>
                       <Sprout color={colors.forestText} size={15} />
                       <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `${studioPhraseMastery}/5 roots` : 'Plant a root'}</Text>
@@ -592,7 +609,7 @@ export default function LiveScreen() {
         )}
       </View>
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
-      {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} visible /> : null}
+      {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} responseLanguage={responseLanguage} scriptPreference={learnerProfile?.scriptPreference} visible /> : null}
     </KeyboardAvoidingView>
   );
 }
@@ -628,8 +645,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   privateBadge: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10 },
   privateDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
   privateText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
-  headerButton: { width: 36, height: 36, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
-  chatButton: { width: 36, height: 36, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
+  headerButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
+  chatButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
   languageSelector: { alignSelf: 'center' },
   portraitStage: { alignSelf: 'center', height: 174, overflow: 'hidden', borderRadius: 25, borderCurve: 'continuous', backgroundColor: c.brandSoft },
   portraitStageImage: { width: '100%', height: '100%' },
@@ -652,6 +669,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioPhraseEyebrow: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
   studioPhraseEnglish: { color: c.ink, fontFamily: 'Georgia', fontSize: 20, lineHeight: 26, fontWeight: '700' },
   studioListenIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
+  studioNavigate: { color: c.forestText, fontSize: 20, fontWeight: '900' },
   studioPhraseLine: { height: 1, backgroundColor: c.line },
   studioPhraseHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 24, lineHeight: 32, fontWeight: '700' },
   studioPhraseLatin: { color: c.brandText, fontSize: 14, fontWeight: '900' },
@@ -681,7 +699,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   messageLabel: { color: c.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   messageText: { alignSelf: 'stretch', color: c.ink, fontSize: 16, lineHeight: 23, margin: 0, padding: 0 },
   userText: { color: c.white },
-  messageActions: { flexDirection: 'row', gap: spacing.sm, paddingTop: spacing.xs },
+  messageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingTop: spacing.xs },
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
   transcriptFooter: { backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },

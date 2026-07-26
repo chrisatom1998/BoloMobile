@@ -27,7 +27,7 @@ function SelectableChatText({
 }: {
   accessibilityLabel: string;
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
-  onSelectedText: (selection: { sourceText: string; text: string }) => void;
+  onSelectedText: (selection: { sourceText: string; text: string } | null) => void;
   sourceText: string;
   style: StyleProp<TextStyle>;
   text: string;
@@ -39,9 +39,15 @@ function SelectableChatText({
 
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
-    if (end <= start) return;
+    if (end <= start) {
+      onSelectedText(null);
+      return;
+    }
     const excerpt = text.slice(start, end).trim();
-    if (!excerpt) return;
+    if (!excerpt) {
+      onSelectedText(null);
+      return;
+    }
     onSelectedText({
       sourceText: sourceTextForDisplayedSelection({ displayText: text, end, sourceText, start }),
       text: excerpt,
@@ -91,7 +97,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenWordDefinition: (sourcePhrase: string) => void;
   onPlayReply: (message: ChatMessage) => void;
   onReport: (message: ChatMessage) => void;
-  onSelectedText: (messageId: string, selection: { sourceText: string; text: string }) => void;
+  onSelectedText: (messageId: string, selection: { sourceText: string; text: string } | null) => void;
   realtimeOwnsAudio: boolean;
   reported: boolean;
   reporting: boolean;
@@ -103,7 +109,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const excerpt = useMemo(() => messageActionExcerpt(displayText), [displayText]);
   const isYou = message.role === 'you';
 
-  const selectedText = useCallback((selection: { sourceText: string; text: string }) => {
+  const selectedText = useCallback((selection: { sourceText: string; text: string } | null) => {
     onSelectedText(message.id, selection);
   }, [message.id, onSelectedText]);
   const openPhrasePicker = useCallback(() => onOpenPhrasePicker(message), [message, onOpenPhrasePicker]);
@@ -131,7 +137,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
         {message.role === 'asha' || !isWelcome ? (
           <View style={styles.messageActions}>
             {!isWelcome ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${excerpt}`} accessibilityRole="button" onPress={openPhrasePicker} style={styles.smallAction}><BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, isYou && styles.userText]}>Save selection</Text></Pressable> : null}
-            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
+            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens a word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
             {message.role === 'asha' ? (
               <>
                 <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={playReply} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
