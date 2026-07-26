@@ -17,7 +17,7 @@ const requiredCoverage = {
   consent: 'I agree and want to continue',
   'microphone denial': 'microphone: deny',
   'live background cleanup': 'pressKey: Home',
-  'saved phrase persistence': 'Saved phrases',
+  'saved phrase persistence': 'चीनी कम, कृपया।',
   'data deletion': 'Delete my Bolo data',
   'offline startup': 'setAirplaneMode: enabled',
 };
@@ -45,4 +45,3 @@ for (const { file, directory, label } of structuralTargets) {
 }
 
 console.log(`Validated ${files.length} Maestro device flows and ${subflowFiles.length} subflows across all critical native journeys.`);
-

@@ -60,8 +60,12 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
     cancelAnimation(ripple);
     if (reducedMotion) {
       breath.value = withTiming(1, { duration: 180 });
-      ripple.value = withTiming(status === 'recording' ? 1 : 0, { duration: 180 });
-      return;
+      // Keep a visible, static listening ring when motion is reduced.
+      ripple.value = withTiming(status === 'recording' ? 0.35 : 0, { duration: 180 });
+      return () => {
+        cancelAnimation(breath);
+        cancelAnimation(ripple);
+      };
     }
     if (status === 'ready' || status === 'connecting') {
       ripple.value = withTiming(0, { duration: 220 });
@@ -72,13 +76,19 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
         ),
         -1,
       );
-      return;
+      return () => {
+        cancelAnimation(breath);
+        cancelAnimation(ripple);
+      };
     }
     if (status === 'recording') {
       breath.value = withTiming(1.04, { duration: 220 });
       ripple.value = 0;
       ripple.value = withRepeat(withTiming(1, { duration: RING_MS, easing: Easing.out(Easing.quad) }), -1);
-      return;
+      return () => {
+        cancelAnimation(breath);
+        cancelAnimation(ripple);
+      };
     }
     if (status === 'responding') {
       ripple.value = withTiming(0, { duration: 220 });
@@ -89,21 +99,22 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
         ),
         -1,
       );
-      return;
+      return () => {
+        cancelAnimation(breath);
+        cancelAnimation(ripple);
+      };
     }
     breath.value = withTiming(1, { duration: 260 });
     ripple.value = withTiming(0, { duration: 260 });
-    return undefined;
+    return () => {
+      cancelAnimation(breath);
+      cancelAnimation(ripple);
+    };
   }, [breath, reducedMotion, ripple, status]);
-
-  useEffect(() => () => {
-    cancelAnimation(breath);
-    cancelAnimation(ripple);
-  }, [breath, ripple]);
 
   const orbStyle = useAnimatedStyle(() => ({ transform: [{ scale: breath.value }] }));
   const rippleStyle = useAnimatedStyle(() => ({
-    opacity: 0.85 - ripple.value * 0.65,
+    opacity: 0.85 * (1 - ripple.value),
     transform: [{ scale: 1 + ripple.value * 0.18 }],
   }));
 
@@ -184,7 +195,7 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
       </Animated.View>
       {connected ? (
         <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
-          <X color={colors.white} size={18} />
+          <X color={colors.danger} size={18} />
         </Pressable>
       ) : null}
     </View>
@@ -194,17 +205,19 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
 const useStyles = makeStyles((c) => ({
   stage: { width: 282, height: 282, alignItems: 'center', justifyContent: 'center' },
   stageCompact: { width: 220, height: 220 },
-  stageMinimal: { width: 144, height: 104, paddingRight: 48 },
+  // The 88pt orb is centered in this stage. 200pt leaves an 8pt gap before
+  // the 48pt end control, so its hit rectangle cannot steal an orb tap.
+  stageMinimal: { width: 200, height: 104 },
   ring: { position: 'absolute', borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: c.lineStrong },
   ringOuter: { width: 278, height: 278 },
   ringOuterCompact: { width: 216, height: 216 },
-  ringOuterMinimal: { width: 96, height: 96, opacity: 0.8 },
+  ringOuterMinimal: { width: 104, height: 104, opacity: 0.2 },
   ringMiddle: { width: 238, height: 238 },
   ringMiddleCompact: { width: 190, height: 190 },
-  ringMiddleMinimal: { width: 88, height: 88, opacity: 0.85 },
+  ringMiddleMinimal: { width: 96, height: 96, opacity: 0.3 },
   ringInner: { width: 204, height: 204 },
   ringInnerCompact: { width: 164, height: 164 },
-  ringInnerMinimal: { width: 80, height: 80, opacity: 0.9 },
+  ringInnerMinimal: { width: 88, height: 88, opacity: 0.4 },
   ringInnerRecording: { borderWidth: 1.5, borderColor: c.brand },
   orb: { width: 168, height: 168, borderRadius: radius.pill, backgroundColor: c.orb, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: c.orb, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.35, shadowRadius: 34, elevation: 8 },
   orbCompact: { width: 148, height: 148 },
@@ -214,8 +227,8 @@ const useStyles = makeStyles((c) => ({
   orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.17)' },
   orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '900' },
   orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },
-  endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.danger, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center' },
+  endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
-  endButtonMinimal: { right: 0, top: '50%', marginTop: -24 },
+  endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
   disabled: { opacity: 0.5 },
 }));

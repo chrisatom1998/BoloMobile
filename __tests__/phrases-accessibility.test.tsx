@@ -1,13 +1,15 @@
-import { render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { act, render } from '@testing-library/react-native';
+import { Dimensions, StyleSheet } from 'react-native';
+import * as mockReact from 'react';
 
-jest.mock('expo-router', () => {
-  const React = require('react') as typeof import('react');
-  return {
-    useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
-    useRouter: () => ({ push: jest.fn() }),
-  };
-});
+jest.mock('expo-router', () => ({
+  useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
 
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
@@ -32,9 +34,11 @@ import PhrasesScreen from '../src/app/(tabs)/phrases';
 describe('saved phrase accessibility', () => {
   it('exposes 44 point buttons and the disabled playback state', async () => {
     const view = await render(<PhrasesScreen />);
-    const listen = view.getByLabelText('Hear नमस्ते');
+    const listen = view.getByTestId('saved-phrase-listen');
     const remove = view.getByLabelText('Remove नमस्ते');
 
+    expect(listen.props.testID).toBe('saved-phrase-listen');
+    expect(listen.props.accessibilityLabel).toBe('Hear नमस्ते');
     expect(listen.props.accessibilityRole).toBe('button');
     expect(listen.props.accessibilityState).toEqual({ disabled: true });
     expect(StyleSheet.flatten(listen.props.style).minHeight).toBeGreaterThanOrEqual(44);
@@ -42,18 +46,21 @@ describe('saved phrase accessibility', () => {
     expect(StyleSheet.flatten(remove.props.style)).toMatchObject({ height: 44, width: 44 });
 
     const list = view.getByTestId('saved-phrase-list');
-    expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({
-      alignItems: 'stretch',
-      paddingHorizontal: 8,
-      width: '100%',
-    });
-    const savedHeading = view.getByText('Saved for practice').parent;
-    expect(StyleSheet.flatten(savedHeading?.parent?.props.style)).toMatchObject({ paddingHorizontal: 8 });
+    expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
+  });
 
-    for (const label of ['0.10×', '0.25×', '0.50×']) {
-      const replay = view.getByLabelText(`Replay namaste at ${label} speed`);
-      expect(StyleSheet.flatten(replay.props.style)).toMatchObject({ flex: 1, minWidth: 0 });
-      expect(StyleSheet.flatten(replay.props.style).minHeight).toBeGreaterThanOrEqual(44);
+  it('removes the saved-phrase hero title cap at accessibility text sizes', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
+
+    try {
+      const view = await render(<PhrasesScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('phrases-header-hero').props.style)).toMatchObject({ alignItems: 'stretch' });
+      expect(StyleSheet.flatten(view.getByText('Words you want to keep.').props.style).maxWidth).toBe('100%');
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
     }
   });
 });

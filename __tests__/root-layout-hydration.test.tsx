@@ -14,6 +14,10 @@ jest.mock('@/hooks/use-practice-reminder-routing', () => ({
   usePracticeReminderRouting: jest.fn(),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  SafeAreaProvider: ({ children }: PropsWithChildren) => children,
+}));
+
 jest.mock('expo-router', () => {
   const React = jest.requireActual('react');
   const { View } = jest.requireActual('react-native');

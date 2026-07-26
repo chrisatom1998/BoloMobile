@@ -77,7 +77,7 @@ export function SegmentedControl<T extends string>({
       value={value}
       variant="primary"
     >
-      <Tabs.List accessibilityLabel={accessibilityLabel} style={[styles.list, compact && styles.listCompact]}>
+      <Tabs.List accessibilityLabel={accessibilityLabel} style={[styles.list, compact && styles.listCompact, disabled && styles.listDisabled]}>
         <Tabs.Indicator pointerEvents="none" style={[styles.indicator, compact && styles.indicatorCompact]} />
         {options.map((option) => (
           <Tabs.Trigger
@@ -115,9 +115,12 @@ const useStyles = makeStyles((c) => ({
     boxShadow: '0 3px 10px rgba(0, 0, 0, 0.04)',
   },
   listCompact: {
-    minHeight: 48,
+    minHeight: 50,
     borderRadius: 14,
     padding: 3,
+  },
+  listDisabled: {
+    opacity: 0.55,
   },
   trigger: {
     zIndex: 1,

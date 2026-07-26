@@ -1,0 +1,17 @@
+appId: com.bolo.hindi
+---
+- tapOn:
+    text: "Bolo, http://.*:8081"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*(Your Hindi plan in one minute|This is the developer menu).*"
+    timeout: 30000
+- tapOn:
+    text: "Continue"
+    optional: true
+- tapOn:
+    text: "Close"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true

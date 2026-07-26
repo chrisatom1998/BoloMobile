@@ -1,7 +1,9 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import * as mockReact from 'react';
+import { Dimensions, StyleSheet } from 'react-native';
 
-const mockRouter = { push: jest.fn(), replace: jest.fn() };
+const mockRouter = { back: jest.fn(), push: jest.fn(), replace: jest.fn() };
+let mockOnboardingMode: string | undefined;
 const mockCompleteOnboarding = jest.fn();
 const mockReviewPhrase = jest.fn();
 const mockDiagnosticsSnapshot = {
@@ -16,8 +18,12 @@ let mockAppState: Record<string, unknown>;
 
 jest.mock('expo-router', () => ({
   useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => ({ mode: mockOnboardingMode }),
   useRouter: () => mockRouter,
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 jest.mock('expo-audio', () => ({
@@ -65,6 +71,7 @@ const phrase = { hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?',
 describe('previously uncovered audit screens', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOnboardingMode = undefined;
     mockAppState = {
       aiConsent: false,
       completeOnboarding: mockCompleteOnboarding,
@@ -179,6 +186,35 @@ describe('previously uncovered audit screens', () => {
     expect(mockCompleteOnboarding).toHaveBeenCalledWith(expect.any(Object), 5);
   });
 
+  it('seeds recalibration from saved preferences and offers a cancel exit', async () => {
+    mockOnboardingMode = 'recalibrate';
+    mockAppState.goal = 5;
+    mockAppState.learnerProfile = {
+      completed: true,
+      level: 'intermediate',
+      microphoneTested: true,
+      primaryGoal: 'travel',
+      responseLanguage: 'hi',
+      scriptPreference: 'latin',
+    };
+    const view = await render(<OnboardingScreen />);
+
+    expect(view.getByRole('radio', { name: 'Intermediate' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole('radio', { name: 'Hindi first' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole('radio', { name: '5 minutes' }).props.accessibilityState).toEqual({ checked: true });
+    await fireEvent.press(view.getByRole('button', { name: 'Cancel recalibration' }));
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps review controls reachable in a scrolling Dynamic Type layout', async () => {
+    const view = await render(<ReviewScreen />);
+    expect(view.getByTestId('review-scroll').props.contentContainerStyle).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByRole('button', { name: 'Got it' })).toBeTruthy();
+  });
+
   it('renders the progress dashboard for an empty learning history', async () => {
     const view = await render(<ProgressScreen />);
 
@@ -192,5 +228,20 @@ describe('previously uncovered audit screens', () => {
     expect(styles.hero.backgroundColor).toBe(lightColors.paperRaised);
     expect(styles.heroTitle.color).toBe(lightColors.ink);
     expect(styles.heroBody.color).toBe(lightColors.muted);
+  });
+
+  it('stacks the progress heading and uncaps its title at accessibility text sizes', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
+
+    try {
+      const view = await render(<ProgressScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('progress-page-heading').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByText('What is taking root.').props.style).maxWidth).toBe('100%');
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
   });
 });

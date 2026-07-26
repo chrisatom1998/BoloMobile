@@ -6,6 +6,7 @@ import { HeroUINativeProvider } from 'heroui-native/provider';
 import { useEffect } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppErrorBoundary } from '@/components/app-error-boundary';
 import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
@@ -16,13 +17,15 @@ import { makeStyles, spacing, useTheme } from '@/theme';
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <HeroUINativeProvider>
-        <AppErrorBoundary>
-          <AppStateProvider>
-            <AppNavigator />
-          </AppStateProvider>
-        </AppErrorBoundary>
-      </HeroUINativeProvider>
+      <SafeAreaProvider>
+        <HeroUINativeProvider>
+          <AppErrorBoundary>
+            <AppStateProvider>
+              <AppNavigator />
+            </AppStateProvider>
+          </AppErrorBoundary>
+        </HeroUINativeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

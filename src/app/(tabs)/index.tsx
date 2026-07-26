@@ -4,7 +4,8 @@ import { Button } from 'heroui-native/button';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { Bookmark, Ear, Mic, Sprout } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Platform, Pressable, StatusBar, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene, scenes, type Scene } from '@/data/scenes';
@@ -22,8 +23,12 @@ export default function HomeScreen() {
   const state = useAppState();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const largeTextLayout = useLargeTextLayout();
+  const { width: windowWidth } = useWindowDimensions();
+  // Preserve the normal editorial composition on standard phones, but keep
+  // the absolutely-positioned motif out of the greeting on narrow devices.
+  const stackedTopbarLayout = largeTextLayout || windowWidth <= 375;
+  const insets = useSafeAreaInsets();
   const { dailySteps, duePhrases, goal, learnerProfile, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
@@ -67,12 +72,12 @@ export default function HomeScreen() {
 
   const header = useMemo(() => (
     <View style={styles.headerContent}>
-      <View style={styles.topbar} testID="today-topbar">
-        <JournalMotif accessibilityLabel="Bolo journal motif" size="panel" style={styles.headerMotif} />
-        <View style={styles.intro}>
+      <View style={[styles.topbar, stackedTopbarLayout && styles.topbarLarge]} testID="today-topbar">
+        <JournalMotif accessibilityLabel="Bolo journal motif" size="panel" style={[styles.headerMotif, stackedTopbarLayout && styles.headerMotifLarge]} />
+        <View style={[styles.intro, stackedTopbarLayout && styles.introLarge]}>
           <View style={styles.brandCopy}>
             <JournalKicker>A quiet practice</JournalKicker>
-            <JournalDisplay style={styles.greeting}>Make Hindi yours.</JournalDisplay>
+            <JournalDisplay style={[styles.greeting, stackedTopbarLayout && styles.greetingLarge]}>Make Hindi yours.</JournalDisplay>
             <Text style={styles.brandTagline}>One useful moment at a time.</Text>
           </View>
           <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton}>
@@ -82,40 +87,40 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={styles.practiceArc}>
+      <View style={styles.practiceArc} testID="today-practice-arc">
         <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.practicePortrait} transition={0} />
         <View style={styles.practiceArcCopy}>
-          <View style={styles.practiceArcHeading}>
-            <View style={styles.practiceArcTitleCopy}>
+          <View style={[styles.practiceArcHeading, largeTextLayout && styles.practiceArcHeadingLarge]}>
+            <View style={[styles.practiceArcTitleCopy, largeTextLayout && styles.practiceArcTitleCopyLarge]}>
               <JournalKicker>Today · a small practice</JournalKicker>
-              <JournalDisplay style={styles.practiceArcTitle}>Let one phrase take root.</JournalDisplay>
+              <JournalDisplay style={[styles.practiceArcTitle, largeTextLayout && styles.practiceArcTitleLarge]}>Let one phrase take root.</JournalDisplay>
             </View>
-            <Pressable accessibilityLabel="View progress" accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={styles.streakChip}>
+            <Pressable accessibilityLabel="View progress" accessibilityRole="button" onPress={() => router.push('/progress' as Href)} style={[styles.streakChip, largeTextLayout && styles.streakChipLarge]}>
               <Sprout color={styles.streakChipIcon.color} size={15} />
               <Text style={styles.streakChipText}>{streak} day streak</Text>
             </Pressable>
           </View>
           <Text style={styles.nextBody}>{primary.body}</Text>
-          <View accessibilityLabel="Today’s gentle practice arc" style={styles.arcSteps}>
-            <View style={styles.arcStep}>
+          <View accessibilityLabel="Today’s gentle practice arc" style={[styles.arcSteps, largeTextLayout && styles.arcStepsLarge]} testID="today-practice-steps">
+            <View style={[styles.arcStep, largeTextLayout && styles.arcStepLarge]}>
               <View style={styles.arcIcon}><Ear color={styles.arcIconText.color} size={19} /></View>
               <Text style={styles.arcStepLabel}>Listen</Text>
             </View>
-            <View style={styles.arcConnector} />
-            <View style={styles.arcStep}>
+            <View style={[styles.arcConnector, largeTextLayout && styles.arcConnectorLarge]} />
+            <View style={[styles.arcStep, largeTextLayout && styles.arcStepLarge]}>
               <View style={[styles.arcIcon, styles.arcIconActive]}><Mic color={styles.arcIconTextActive.color} size={19} /></View>
               <Text style={[styles.arcStepLabel, styles.arcStepLabelActive]}>Speak</Text>
             </View>
-            <View style={styles.arcConnector} />
-            <View style={styles.arcStep}>
+            <View style={[styles.arcConnector, largeTextLayout && styles.arcConnectorLarge]} />
+            <View style={[styles.arcStep, largeTextLayout && styles.arcStepLarge]}>
               <View style={styles.arcIcon}><Bookmark color={styles.arcIconText.color} size={19} /></View>
               <Text style={styles.arcStepLabel}>Save</Text>
             </View>
           </View>
-          <Button accessibilityLabel={primary.action} accessibilityRole="button" onPress={primary.onPress} size="md" style={styles.nextButton} variant="secondary">
+          <Button accessibilityLabel={primary.action} accessibilityRole="button" onPress={primary.onPress} size="md" style={[styles.nextButton, largeTextLayout && styles.nextButtonLarge]} testID="today-next-practice" variant="secondary">
             <Button.Label style={styles.nextButtonText}>{primary.action}</Button.Label>
           </Button>
-          <View style={styles.goalSummary}>
+          <View style={[styles.goalSummary, largeTextLayout && styles.goalSummaryLarge]} testID="today-goal-summary">
             <Text style={styles.todayLabel}>Today · {goalPercent}% of {goal} min</Text>
             <Text style={styles.todayLabel}>{minutesToday} min practiced</Text>
           </View>
@@ -154,14 +159,17 @@ export default function HomeScreen() {
       </View>
       <Text style={styles.sectionDescription}>Start with an ordered module, then take its ten lessons one useful turn at a time.</Text>
     </View>
-  ), [duePhrases.length, featuredMastery, featuredPhrase, goal, goalPercent, minutesToday, primary, profile.scriptPreference, router, streak, styles]);
+  ), [duePhrases.length, featuredMastery, featuredPhrase, goal, goalPercent, largeTextLayout, minutesToday, primary, profile.scriptPreference, router, stackedTopbarLayout, streak, styles]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.list, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]}
+      contentContainerStyle={[
+        styles.list,
+        Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
+      ]}
       data={lessonPlans}
       keyExtractor={(plan) => plan.id}
       renderItem={({ item: plan }) => {
@@ -217,12 +225,16 @@ const useStyles = makeStyles((c) => ({
   separator: { height: spacing.md },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'center', gap: spacing.lg, marginBottom: spacing.lg },
   planCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' },
-  topbar: { width: '100%', minHeight: 214, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  topbar: { width: '100%', minHeight: 214, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingRight: 166 },
+  topbarLarge: { minHeight: 0, flexDirection: 'column', alignItems: 'stretch', gap: spacing.md, paddingRight: 0 },
   intro: { minWidth: 0, flex: 1, maxWidth: 200, paddingTop: spacing.lg, gap: spacing.lg },
+  introLarge: { flex: 0, maxWidth: '100%', paddingTop: 0 },
   brandCopy: { minWidth: 0, flexShrink: 1 },
   greeting: { marginTop: spacing.xs, maxWidth: 200, fontSize: 27, lineHeight: 33 },
+  greetingLarge: { maxWidth: '100%' },
   brandTagline: { color: c.muted, fontSize: 14, lineHeight: 20, marginTop: spacing.sm, textAlign: 'left' },
   headerMotif: { position: 'absolute', right: 0, top: -2, width: 158, height: 196 },
+  headerMotifLarge: { position: 'relative', right: undefined, top: undefined, alignSelf: 'flex-end', width: 158, height: 196 },
   settingsButton: { alignSelf: 'flex-start', minHeight: 48, minWidth: 48, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md, boxShadow: '0 4px 12px rgba(33, 37, 33, 0.08)' },
   settingsDots: { color: c.brandText, fontSize: 15, fontWeight: '900', letterSpacing: 1.2 },
   settingsLabel: { color: c.muted, fontSize: 13, fontWeight: '800' },
@@ -230,18 +242,25 @@ const useStyles = makeStyles((c) => ({
   practicePortrait: { width: '100%', height: 142 },
   practiceArcCopy: { width: '100%', alignItems: 'stretch', gap: spacing.md, padding: spacing.lg },
   practiceArcHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  practiceArcHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   practiceArcTitleCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  practiceArcTitleCopyLarge: { flex: 0 },
   practiceArcTitle: { maxWidth: 270, fontSize: 28, lineHeight: 34, textAlign: 'left' },
+  practiceArcTitleLarge: { maxWidth: '100%' },
   nextBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
   goalSummary: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
+  goalSummaryLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   todayLabel: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'left' },
   streakChip: { minHeight: 44, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  streakChipLarge: { alignSelf: 'flex-start' },
   streakChipIcon: { color: c.forestText },
   streakChipText: { color: c.forestText, fontSize: 12, fontWeight: '900' },
   progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm },
   progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
   arcSteps: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
+  arcStepsLarge: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
   arcStep: { minWidth: 0, flex: 1, alignItems: 'center', gap: 5 },
+  arcStepLarge: { flex: 0, flexDirection: 'row', justifyContent: 'flex-start', gap: spacing.md },
   arcIcon: { width: 42, height: 42, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center' },
   arcIconActive: { backgroundColor: c.neutralSurface, borderColor: c.gold, borderWidth: 2 },
   arcIconText: { color: c.forestText },
@@ -249,7 +268,9 @@ const useStyles = makeStyles((c) => ({
   arcStepLabel: { color: c.muted, fontSize: 11, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   arcStepLabelActive: { color: c.ink },
   arcConnector: { height: 1, flex: 0.42, backgroundColor: c.gold },
+  arcConnectorLarge: { display: 'none' },
   nextButton: { minHeight: 52, alignSelf: 'stretch', backgroundColor: c.neutralSurface, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  nextButtonLarge: { minHeight: 52 },
   nextButtonText: { color: c.white, fontSize: 14, fontWeight: '800' },
   gardenCue: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.md },
   gardenCueIcon: { width: 46, height: 46, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 1, backgroundColor: c.goldSoft, alignItems: 'center', justifyContent: 'center' },

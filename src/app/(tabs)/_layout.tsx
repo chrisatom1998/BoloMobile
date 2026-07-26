@@ -15,6 +15,7 @@ export default function PrimaryTabsLayout() {
   return (
     <NativeTabs
       backgroundColor={colors.paperRaised}
+      disableTransparentOnScrollEdge
       minimizeBehavior="onScrollDown"
       shadowColor={colors.lineStrong}
       tintColor={colors.brand}

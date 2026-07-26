@@ -98,6 +98,19 @@ describe('ReviewScreen session stability', () => {
     expect(view.getByText('1 of 1 remembered')).toBeTruthy();
   });
 
+  it('ignores a repeated grade from the same rendered phrase', async () => {
+    mockAppState.duePhrases = [phraseA, phraseB];
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    const gotIt = view.getByRole('button', { name: 'Got it' });
+
+    await fireEvent.press(gotIt);
+    await fireEvent.press(gotIt);
+
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledTimes(1);
+    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+  });
+
   it('disables Listen without consent or bundled audio and surfaces playback failures', async () => {
     mockAppState.aiConsent = false;
     mockAppState.duePhrases = [phraseA];

@@ -1,14 +1,7 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
-jest.mock('expo-router', () => {
-  const React = require('react') as typeof import('react');
-  return {
-    useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
-    useRouter: () => ({ push: jest.fn() }),
-  };
-});
-
+const mockReact = jest.requireActual('react');
 const mockRemovePhrase = jest.fn();
 const mockPhrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
 // A phrase with no review record is due immediately; schedule this one for
@@ -33,6 +26,15 @@ jest.mock('lucide-react-native', () => ({
   Search: () => null,
   Trash2: () => null,
   Volume2: () => null,
+}));
+
+jest.mock('expo-router', () => ({
+  useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
+  useRouter: () => ({ push: jest.fn() }),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 jest.mock('@/components/ai-consent-gate', () => ({
