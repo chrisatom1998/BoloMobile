@@ -25,13 +25,17 @@ jest.mock('expo-audio', () => ({
   setAudioModeAsync: jest.fn(),
 }));
 
+jest.mock('@/lib/ai-audio-normalizer', () => ({
+  normalizeAiVoiceAudioFile: jest.fn(),
+}));
+
 jest.mock('expo-file-system', () => {
   const files: MockFile[] = [];
-  const File = jest.fn().mockImplementation((_cache: string, name: string) => {
+  const File = jest.fn().mockImplementation((cacheOrUri: string, name?: string) => {
     const file: MockFile = {
       delete: jest.fn(),
       exists: true,
-      uri: `file:///cache/${name}`,
+      uri: name ? `${cacheOrUri}${name}` : cacheOrUri,
       write: jest.fn(),
     };
     files.push(file);
@@ -46,6 +50,7 @@ jest.mock('expo-file-system', () => {
 });
 
 import * as aiVoicePlayer from '../src/lib/ai-voice-player';
+import * as aiAudioNormalizer from '../src/lib/ai-audio-normalizer';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 import { hasOfflineSpeech } from '../src/lib/offline-voice-player';
 import { splitAiVoiceText } from '../src/lib/speech-text';
@@ -57,6 +62,7 @@ const expoAudio = jest.requireMock('expo-audio') as {
   createAudioPlayer: jest.Mock;
   setAudioModeAsync: jest.Mock;
 };
+const aiAudioNormalizerMock = jest.mocked(aiAudioNormalizer);
 const expoFileSystem = jest.requireMock('expo-file-system') as {
   File: jest.Mock;
   __mockFiles: MockFile[];
@@ -118,6 +124,7 @@ describe('AI voice native playback', () => {
     jest.clearAllMocks();
     expoFileSystem.__mockFiles.length = 0;
     expoAudio.setAudioModeAsync.mockResolvedValue(undefined);
+    aiAudioNormalizerMock.normalizeAiVoiceAudioFile.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -151,6 +158,7 @@ describe('AI voice native playback', () => {
       keepAudioSessionActive: false,
     });
     expect(native.player.volume).toBe(1);
+    expect(aiAudioNormalizerMock.normalizeAiVoiceAudioFile).not.toHaveBeenCalled();
     expect(native.player.play).toHaveBeenCalledTimes(1);
     expect(native.player.pause).toHaveBeenCalledTimes(1);
     expect(native.player.release).not.toHaveBeenCalled();
@@ -210,6 +218,49 @@ describe('AI voice native playback', () => {
       keepAudioSessionActive: true,
     });
     expect(native.player.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays a locally normalized iOS file for a canonical live reply', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
+    aiAudioNormalizerMock.normalizeAiVoiceAudioFile.mockResolvedValue(
+      'file:///cache/bolo-ai-voice-normalized.caf',
+    );
+
+    await aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'bm9ybWFsaXplLW1l',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal, 1, 'realtimePlayback');
+
+    const source = expectDefined(expoFileSystem.__mockFiles[0]);
+    const normalized = expectDefined(expoFileSystem.__mockFiles[1]);
+    expect(aiAudioNormalizerMock.normalizeAiVoiceAudioFile).toHaveBeenCalledWith(source.uri);
+    expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(normalized.uri, {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
+
+    aiVoicePlayer.clearAiVoicePlaybackCache();
+    expect(source.delete).toHaveBeenCalledTimes(1);
+    expect(normalized.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the original MP3 when iOS normalization is unavailable', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
+    aiAudioNormalizerMock.normalizeAiVoiceAudioFile.mockResolvedValue(null);
+
+    await aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'ZmFsbGJhY2stYXVkaW8=',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal, 1, 'realtimePlayback');
+
+    const source = expectDefined(expoFileSystem.__mockFiles[0]);
+    expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(source.uri, {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
+    expect(expoFileSystem.File).toHaveBeenCalledTimes(1);
   });
 
   it('rebuilds an idle prepared clip when its audio-session retention changes', async () => {
