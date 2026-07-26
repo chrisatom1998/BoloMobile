@@ -27,7 +27,10 @@ export default function SceneScreen() {
   const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const savedBeatIndex = scene ? sceneProgress?.[scene.id]?.lastBeatIndex ?? 0 : 0;
-  const [beatIndex, setBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
+  // Snapshot where this run started: score/correct only count beats answered after
+  // the checkpoint, so completion totals must exclude the beats skipped by resume.
+  const [initialBeatIndex, setInitialBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
+  const [beatIndex, setBeatIndex] = useState(initialBeatIndex);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -90,7 +93,7 @@ export default function SceneScreen() {
       markSceneComplete(activeScene.id, elapsedSeconds(), {
         score,
         correct: correctCount,
-        total: activeScene.beats.length,
+        total: activeScene.beats.length - initialBeatIndex,
         weakPhrases,
       });
       observe('scene_completed');
@@ -108,6 +111,7 @@ export default function SceneScreen() {
     void stopSpeaking();
     clearAudioError();
     resetTimer();
+    setInitialBeatIndex(0);
     setBeatIndex(0);
     setPicked(null);
     setWordDefinitionWord(null);

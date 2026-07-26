@@ -1,4 +1,9 @@
+jest.mock('@/lib/observability', () => ({ observe: jest.fn() }));
+
+import { observe } from '../src/lib/observability';
 import { BoloApiError, sendMobileChat } from '../src/services/bolo-api';
+
+const observeMock = observe as jest.MockedFunction<typeof observe>;
 
 const input = {
   text: 'Help me practice Hindi.',
@@ -116,6 +121,22 @@ describe('Bolo API shared failure boundary', () => {
     await rejection;
     expect(pending.fetchMock).toHaveBeenCalledTimes(1);
     expect(pending.requestSignal()?.aborted).toBe(true);
+  });
+
+  it('counts only real failures in diagnostics, not caller cancellations', async () => {
+    observeMock.mockClear();
+    const caller = new AbortController();
+    installPendingFetch();
+    const request = sendMobileChat(input, caller.signal).catch((cause: unknown) => cause);
+    caller.abort();
+    await request;
+    expect(observeMock).not.toHaveBeenCalled();
+
+    globalThis.fetch = jest.fn(async () => {
+      throw new TypeError('network down');
+    }) as unknown as typeof fetch;
+    await sendMobileChat(input).catch(() => undefined);
+    expect(observeMock).toHaveBeenCalledWith('ai_request_failed', expect.any(Number));
   });
 
   it('aborts at the 30-second request deadline', async () => {

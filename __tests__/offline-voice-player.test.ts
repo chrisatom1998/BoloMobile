@@ -20,7 +20,7 @@ jest.mock('@/data/offline-hindi-audio', () => ({
   offlineHindiAudio: { 'saved phrase': 42 },
 }));
 
-import { playOfflineSpeech } from '../src/lib/offline-voice-player';
+import { hasOfflineSpeech, playOfflineSpeech } from '../src/lib/offline-voice-player';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 
 const setAudioModeMock = setAudioModeAsync as jest.MockedFunction<typeof setAudioModeAsync>;
@@ -40,6 +40,10 @@ describe('offline voice playback speed', () => {
     await expect(playOfflineSpeech('saved phrase', new AbortController().signal, 0.1)).resolves.toBe(true);
 
     expect(mockPlayer.setPlaybackRate).toHaveBeenCalledWith(0.1);
+    expect(jest.mocked(createAudioPlayer)).toHaveBeenCalledWith(42, {
+      updateInterval: 100,
+      keepAudioSessionActive: false,
+    });
   });
 
   it('preserves the active WebRTC session for bundled phrase playback', async () => {
@@ -69,5 +73,12 @@ describe('offline voice playback speed', () => {
     controller.abort();
     await expect(playback).resolves.toBe(true);
     timeoutSpy.mockRestore();
+  });
+
+  it('ignores Object.prototype keys arriving as speech text', async () => {
+    for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+      expect(hasOfflineSpeech(key)).toBe(false);
+      expect(await playOfflineSpeech(key, new AbortController().signal)).toBe(false);
+    }
   });
 });

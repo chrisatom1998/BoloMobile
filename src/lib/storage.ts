@@ -299,11 +299,13 @@ function sanitizePhraseReviewEntry(value: unknown): PhraseReview | null {
 export function sanitizePhraseReviews(value: string | null): Record<string, PhraseReview> {
   const parsed = parseJson(value);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  // Keep the LAST 200 entries: JSON round-trips preserve insertion order, so the
+  // newest reviews sit at the end and are the ones worth preserving.
   return Object.fromEntries(Object.entries(parsed).flatMap(([phrase, entry]) => {
     if (!phrase.trim() || phrase.length > 300) return [];
     const review = sanitizePhraseReviewEntry(entry);
     return review ? [[phrase, review]] : [];
-  }).slice(0, 200));
+  }).slice(-200));
 }
 
 export function sanitizePracticeHistory(value: string | null): PracticeDay[] {

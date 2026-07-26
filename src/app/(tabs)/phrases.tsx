@@ -11,6 +11,7 @@ import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
+import { dueSavedPhrases } from '@/lib/learning';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
@@ -48,11 +49,12 @@ export default function PhrasesScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
-  const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
+  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
   const { audioError, speak } = useSpeakText();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
-  const due = useMemo(() => duePhrases ?? [], [duePhrases]);
+  // List all due phrases here, not the 5-phrase review-session cap from duePhrases.
+  const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases]);
   const reviews = phraseReviews ?? {};
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const dueSet = useMemo(() => new Set(due.map((phrase) => phrase.hi)), [due]);
@@ -183,9 +185,11 @@ export default function PhrasesScreen() {
 }
 
 const useStyles = makeStyles((c) => ({
-  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.lg, paddingTop: 18, paddingBottom: spacing.xxl },
+  // Let saved-phrase cards use a little more of the screen without changing
+  // the visual margins of the header controls above them.
+  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.md, paddingTop: 18, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
-  header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, paddingHorizontal: spacing.sm },
   headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm },
   headerCopy: { alignItems: 'flex-start', gap: spacing.xs },
   headerTitle: { maxWidth: 310, fontSize: 30, lineHeight: 36, textAlign: 'left' },
@@ -206,7 +210,7 @@ const useStyles = makeStyles((c) => ({
   savedTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 21, fontWeight: '700', textAlign: 'left' },
   savedCount: { color: c.muted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'], textAlign: 'right' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', gap: 5, paddingHorizontal: spacing.lg, paddingVertical: 14, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
+  card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', overflow: 'hidden', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', gap: 5, paddingHorizontal: spacing.md, paddingVertical: 14, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
   cardLarge: { alignItems: 'stretch', gap: spacing.md, overflow: 'visible' },
   cardDue: { borderColor: c.gold, borderWidth: 1.5 },
   cardHeader: { width: '100%', minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
@@ -233,10 +237,10 @@ const useStyles = makeStyles((c) => ({
   masteryMeter: { flexDirection: 'row', gap: 4 },
   mastery: { color: c.mutedSoft, fontSize: 11, lineHeight: 16, fontWeight: '800', textTransform: 'uppercase' },
   masteryDue: { color: c.brandText },
-  actions: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: spacing.xs, paddingTop: spacing.xs },
-  speedButton: { minWidth: 54, height: 34, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
-  speedButtonLarge: { height: 'auto', minHeight: 44, paddingVertical: spacing.sm },
-  speedText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
+  actions: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'nowrap', justifyContent: 'space-between', gap: spacing.xs, paddingTop: spacing.xs },
+  speedButton: { flex: 1, minWidth: 0, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  speedButtonLarge: { minHeight: 44, paddingVertical: spacing.sm },
+  speedText: { color: c.forestText, flexShrink: 1, fontSize: 11, fontWeight: '900' },
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
   emptyIcon: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },

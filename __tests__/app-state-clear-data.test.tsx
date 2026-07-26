@@ -25,7 +25,12 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
 
+jest.mock('@/lib/practice-reminder', () => ({
+  cancelPracticeReminder: jest.fn(async (current: { enabled: boolean }) => ({ ...current, enabled: false, notificationId: null })),
+}));
+
 import { observe } from '../src/lib/observability';
+import { cancelPracticeReminder } from '../src/lib/practice-reminder';
 import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
@@ -129,6 +134,22 @@ describe('AppStateProvider clearAllData', () => {
     expect(asyncStorage.__store.get(storageKeys.phrases)).toBe('[]');
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.practice) ?? 'null')).toEqual(emptyPractice());
     expect(asyncStorage.__store.get(storageKeys.streakDays)).toBe('[]');
+    await view.unmount();
+  });
+
+  it('cancels the scheduled daily reminder before wiping its notification id', async () => {
+    seedEveryStorageKey();
+    const reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'notif-123' };
+    asyncStorage.__store.set(storageKeys.reminder, JSON.stringify(reminder));
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).clientId).toBe('client-old-12345'));
+
+    await fireEvent.press(view.getByLabelText('Clear all provider data'));
+    await waitFor(() => expect(readSnapshot(view).clientId).not.toBe('client-old-12345'));
+
+    expect(cancelPracticeReminder).toHaveBeenCalledTimes(1);
+    expect(cancelPracticeReminder).toHaveBeenCalledWith(reminder);
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.reminder) ?? 'null')).toMatchObject({ enabled: false, notificationId: null });
     await view.unmount();
   });
 

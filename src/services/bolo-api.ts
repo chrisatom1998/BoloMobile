@@ -154,7 +154,9 @@ async function post<T>(
     observe('ai_request_succeeded', Date.now() - startedAt);
     return payload;
   } catch (error) {
-    observe('ai_request_failed', Date.now() - startedAt);
+    // A caller-initiated cancel (screen unmount, replaying another phrase) is not
+    // a failure; only timeouts, network errors, and bad responses count.
+    if (!signal?.aborted) observe('ai_request_failed', Date.now() - startedAt);
     if (error instanceof BoloApiError) throw error;
     if (error instanceof Error && error.name === 'AbortError') {
       if (signal?.aborted) throw new BoloApiError('The request was canceled.');

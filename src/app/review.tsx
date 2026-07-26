@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { useSpeakText } from '@/hooks/use-speak-text';
@@ -17,7 +17,11 @@ export default function ReviewScreen() {
   const sharedStyles = useSharedStyles();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
   const { audioError, speak } = useSpeakText();
-  const session = useMemo(() => (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5)), [duePhrases, phraseReviews, phrases]);
+  // Grading a phrase re-derives duePhrases, and a live list would shift under the
+  // advancing index. Lock the displayed session at the first grade instead of at
+  // mount so a screen rendered before hydration still picks up the due list.
+  const [lockedSession, setLockedSession] = useState<typeof duePhrases | null>(null);
+  const session = lockedSession ?? (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5));
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
@@ -30,6 +34,7 @@ export default function ReviewScreen() {
 
   function grade(remembered: boolean) {
     if (!phrase) return;
+    if (!lockedSession) setLockedSession(session);
     reviewPhrase(phrase.hi, remembered);
     if (remembered) hapticSuccess();
     else hapticWarning();

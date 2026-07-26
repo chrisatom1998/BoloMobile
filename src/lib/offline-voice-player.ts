@@ -71,9 +71,10 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
   if (signal.aborted) return true;
   const player = createAudioPlayer(source, {
     updateInterval: 100,
-    // A lesson clip can play while the live WebRTC call remains connected.
-    // Keep iOS capture available for the learner's next orb turn.
-    keepAudioSessionActive: true,
+    // Only canonical playback inside a live WebRTC turn retains the shared
+    // iOS PlayAndRecord session. Ordinary Phrase and Review playback needs a
+    // fresh standalone playback session.
+    keepAudioSessionActive: audioMode === 'realtimePlayback',
   });
   const rate = normalizedPlaybackRate(playbackRate);
   try {

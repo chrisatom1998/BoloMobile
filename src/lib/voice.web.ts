@@ -12,3 +12,7 @@ export async function setVoiceAudioMode(_mode: VoiceAudioMode) {
 export function resetVoiceAudioMode() {
   return setVoiceAudioMode('idle');
 }
+
+export function isRealtimeVoiceSessionActive() {
+  return false;
+}

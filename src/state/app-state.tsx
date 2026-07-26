@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import { showAppAlert } from '@/lib/app-alert';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
+import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { updatePracticeWidget } from '@/lib/practice-widget';
 import {
   appendChatHistory,
@@ -302,6 +303,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const phraseReviews = { ...current.phraseReviews };
       if (exists) delete phraseReviews[phrase.hi];
       else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
+      // The 100-phrase cap can drop the oldest phrase; drop its review entry too
+      // so orphans never accumulate in storage.
+      const kept = new Set(phrases.map((saved) => saved.hi));
+      for (const hi of Object.keys(phraseReviews)) {
+        if (!kept.has(hi)) delete phraseReviews[hi];
+      }
       return { ...current, phrases, phraseReviews };
     }, ['phrases', 'phraseReviews']);
   }, [commit]);
@@ -449,8 +456,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     };
     const entries = storageEntries(next, Object.keys(storageKeys) as PersistedKey[]);
     try {
+      // Cancel the scheduled daily reminder before wiping its notificationId,
+      // otherwise the OS notification keeps firing with no way to turn it off.
+      if (state.reminder.notificationId) await cancelPracticeReminder(state.reminder);
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
-      await clearObservability();
+      // Storage now holds the defaults; update in-memory state before anything
+      // else can fail so the two never diverge.
       setState(next);
     } catch (error) {
       console.warn('Bolo could not clear local data.', error);
@@ -459,7 +470,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } finally {
       clearingAllDataRef.current = false;
     }
-  }, [enqueuePersistence]);
+    try {
+      await clearObservability();
+    } catch (error) {
+      console.warn('Bolo could not clear stored diagnostics.', error);
+    }
+  }, [enqueuePersistence, state.reminder]);
 
   const actions = useMemo<AppActions>(() => ({
     setGoal,

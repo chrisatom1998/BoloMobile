@@ -4,7 +4,7 @@ jest.mock('expo-audio', () => ({
 
 import { setAudioModeAsync } from 'expo-audio';
 
-import { ASHA_VOICE_PROFILE, resetVoiceAudioMode, setVoiceAudioMode } from '../src/lib/voice';
+import { ASHA_VOICE_PROFILE, isRealtimeVoiceSessionActive, resetVoiceAudioMode, setVoiceAudioMode } from '../src/lib/voice';
 
 const setAudioModeMock = setAudioModeAsync as jest.MockedFunction<typeof setAudioModeAsync>;
 
@@ -23,10 +23,15 @@ describe('Asha voice service', () => {
 
   it('owns each native audio-session transition used by Asha surfaces', async () => {
     await setVoiceAudioMode('playback');
+    expect(isRealtimeVoiceSessionActive()).toBe(false);
     await setVoiceAudioMode('recording');
+    expect(isRealtimeVoiceSessionActive()).toBe(false);
     await setVoiceAudioMode('realtime');
+    expect(isRealtimeVoiceSessionActive()).toBe(true);
     await setVoiceAudioMode('realtimePlayback');
+    expect(isRealtimeVoiceSessionActive()).toBe(true);
     await resetVoiceAudioMode();
+    expect(isRealtimeVoiceSessionActive()).toBe(false);
 
     expect(setAudioModeMock.mock.calls).toEqual([
       [{ allowsRecording: false, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],

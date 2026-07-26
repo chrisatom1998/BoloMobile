@@ -12,6 +12,7 @@ const mockAppState = {
   clientId: 'client-12345678',
   markSceneComplete: mockMarkSceneComplete,
   phrases: [] as { en: string; hi: string; latin: string }[],
+  sceneProgress: {} as Record<string, { lastBeatIndex: number }>,
   togglePhrase: mockTogglePhrase,
 };
 
@@ -66,6 +67,7 @@ describe('SceneScreen primary journey', () => {
     mockSceneId = 'chai';
     mockAppState.aiConsent = true;
     mockAppState.phrases = [];
+    mockAppState.sceneProgress = {};
     mockElapsedSeconds.mockReturnValue(42);
     speakTextMock.mockResolvedValue();
   });
@@ -99,6 +101,34 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  it('scores a resumed scene only over the beats answered after the checkpoint', async () => {
+    mockAppState.sceneProgress = { chai: { lastBeatIndex: 1 } };
+    const view = await render(<SceneScreen />);
+    expect(view.getByText('Turn 2 of 2')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText(/Less sugar, please\./u));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42, {
+      correct: 1,
+      score: 50,
+      total: 1,
+      weakPhrases: [],
+    });
+
+    await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+    expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText(/One tea, please\./u));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(/Less sugar, please\./u));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(mockMarkSceneComplete).toHaveBeenLastCalledWith('chai', 42, {
+      correct: 2,
+      score: 100,
+      total: 2,
+      weakPhrases: [],
+    });
   });
 
   it('shows a safe not-found route and returns to the scene catalog', async () => {

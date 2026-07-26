@@ -51,4 +51,11 @@ describe('privacy-preserving observability', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(Object.values((await getObservabilitySnapshot()).days)[0]?.consent_viewed?.count).toBe(1);
   });
+
+  it('does not resurrect diagnostics cleared while a write is still in flight', async () => {
+    observe('scene_completed');
+    await clearObservability();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await getObservabilitySnapshot()).toEqual({ days: {} });
+  });
 });

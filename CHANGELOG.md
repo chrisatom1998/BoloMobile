@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Snapshotted the quick-review session at mount so grading a phrase no longer shrinks the live due list underneath the advancing card index, which skipped phrases, produced "2 of 1 remembered" summaries, and could drop the learner into an unrequested low-mastery session instead of the completion screen.
+- Scored resumed scenes over the beats actually answered after the checkpoint instead of the full beat count, which permanently understated best accuracy and practice-history answer totals.
+- Cancelled the scheduled daily practice reminder during "Delete my Bolo data" so the OS notification can no longer keep firing with no way to turn it off after its stored identifier is wiped.
+- Updated in-memory state immediately after the data-deletion write succeeds and made the diagnostics wipe best-effort, so a diagnostics-clear failure can no longer leave the UI showing deleted data while claiming nothing was removed.
+- Queued the diagnostics clear behind pending counter writes so an in-flight event can no longer re-create the diagnostics snapshot right after the user deletes it.
+- Gated the review screen's Listen/Slow buttons on AI consent or bundled offline audio, matching every other screen, and surfaced playback failures instead of rejecting silently.
+- Counted realtime voice connection successes/failures only for actual connection attempts instead of once per completed or failed voice turn, and stopped counting caller-cancelled AI requests as failures, so the private diagnostics counters reflect reality.
+- Listed and labeled all due phrases on the saved-phrases screen instead of the review session's five-phrase cap, which hid genuinely due phrases from the Due filter and header count.
+- Dropped review records for phrases evicted by the 100-phrase cap and kept the newest (not oldest) 200 review entries at hydration, so long-term use can no longer silently reset recent phrases' mastery.
+- Used own-property lookups for bundled offline lesson audio so AI reply text matching an Object.prototype key can no longer crash playback or bypass the consent gate.
 - Settled the AI voice playback promise before pausing the player so a decoder-invalidated native player can no longer leave the Listen flow hanging forever.
 - Rejected a pending live voice connection when the Realtime service reports an error during configuration, instead of showing a false "ready" state that a later timeout tore down.
 - Reported a text-to-speech failure after a successful typed chat turn as a distinct playback problem instead of presenting it as a failed send.

@@ -3,9 +3,18 @@ import type { PropsWithChildren } from 'react';
 
 const mockRemovePhrase = jest.fn();
 const mockPhrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
+// A phrase with no review record is due immediately; schedule this one for
+// tomorrow so the header's "everything reviewed" branch stays reachable.
+const reviewedTomorrow = () => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const key = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+  return { [mockPhrase.hi]: { mastery: 0, intervalDays: 1, dueAt: key, lastReviewedAt: null, correctReviews: 1, totalReviews: 1 } };
+};
 const mockAppState = {
   aiConsent: true,
   learnerProfile: { scriptPreference: 'devanagari' },
+  phraseReviews: {} as ReturnType<typeof reviewedTomorrow>,
   phrases: [] as (typeof mockPhrase)[],
   removePhrase: mockRemovePhrase,
 };
@@ -53,6 +62,7 @@ describe('PhrasesScreen primary journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAppState.aiConsent = true;
+    mockAppState.phraseReviews = reviewedTomorrow();
     mockAppState.phrases = [];
     speakTextMock.mockResolvedValue();
   });
@@ -63,6 +73,15 @@ describe('PhrasesScreen primary journey', () => {
     expect(view.getByText('Your phrase book is ready')).toBeTruthy();
     expect(view.getByText(/Save useful answers from any scene/u)).toBeTruthy();
     expect(view.queryByText('Saved phrases')).toBeNull();
+  });
+
+  it('labels every due phrase, not just the first five', async () => {
+    mockAppState.phrases = Array.from({ length: 8 }, (_, index) => ({ en: `English ${index}`, hi: `हिन्दी-${index}`, latin: `latin-${index}` }));
+    mockAppState.phraseReviews = {};
+    const view = await render(<PhrasesScreen />);
+
+    expect(view.getByText('A quick practice keeps 8 phrases fresh.')).toBeTruthy();
+    expect(view.getAllByText(/Due now/u)).toHaveLength(8);
   });
 
   it('always renders the Romanized phrase and English meaning on each saved card', async () => {

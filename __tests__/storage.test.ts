@@ -73,6 +73,15 @@ describe('local progress storage', () => {
       .toBe(MAX_DAILY_PRACTICE_SECONDS);
   });
 
+  it('keeps the newest phrase reviews when the stored map exceeds the cap', () => {
+    const review = { mastery: 1, intervalDays: 1, dueAt: dateKey(), lastReviewedAt: null, correctReviews: 1, totalReviews: 1 };
+    const stored = Object.fromEntries(Array.from({ length: 250 }, (_, index) => [`phrase-${index}`, review]));
+    const result = sanitizePhraseReviews(JSON.stringify(stored));
+    expect(Object.keys(result)).toHaveLength(200);
+    expect(result['phrase-0']).toBeUndefined();
+    expect(result['phrase-249']).toEqual(review);
+  });
+
   it('deduplicates phrases and only keeps valid records', () => {
     const value = JSON.stringify([
       { hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' },

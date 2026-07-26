@@ -41,10 +41,18 @@ const VOICE_AUDIO_MODES = {
   },
 } as const;
 
+let currentVoiceAudioMode: VoiceAudioMode = 'idle';
+
 export async function setVoiceAudioMode(mode: VoiceAudioMode) {
   await setAudioModeAsync(VOICE_AUDIO_MODES[mode]);
+  currentVoiceAudioMode = mode;
 }
 
 export function resetVoiceAudioMode() {
   return setVoiceAudioMode('idle');
+}
+
+/** Whether a still-mounted live WebRTC call owns the iOS audio session. */
+export function isRealtimeVoiceSessionActive() {
+  return currentVoiceAudioMode === 'realtime' || currentVoiceAudioMode === 'realtimePlayback';
 }

@@ -50,6 +50,7 @@ import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 import { hasOfflineSpeech } from '../src/lib/offline-voice-player';
 import { splitAiVoiceText } from '../src/lib/speech-text';
 import { preloadSpeech, speakText, splitSpeechByLanguage, stopSpeaking } from '../src/lib/speech';
+import { resetVoiceAudioMode, setVoiceAudioMode } from '../src/lib/voice';
 import * as boloApi from '../src/services/bolo-api';
 
 const expoAudio = jest.requireMock('expo-audio') as {
@@ -147,7 +148,7 @@ describe('AI voice native playback', () => {
     expect(file.write).toHaveBeenCalledWith('SUQzBAAAAAA=', { encoding: 'base64' });
     expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(file.uri, {
       updateInterval: 100,
-      keepAudioSessionActive: true,
+      keepAudioSessionActive: false,
     });
     expect(native.player.volume).toBe(1);
     expect(native.player.play).toHaveBeenCalledTimes(1);
@@ -204,7 +205,38 @@ describe('AI voice native playback', () => {
     }, new AbortController().signal, 1, 'realtimePlayback');
 
     expect(expoAudio.setAudioModeAsync).not.toHaveBeenCalled();
+    expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(expect.any(String), {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
     expect(native.player.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuilds an idle prepared clip when its audio-session retention changes', async () => {
+    const normal = installPlayer();
+    normal.player.play.mockImplementation(() => normal.emit({ didJustFinish: true }));
+    const audio: boloApi.AiVoiceAudio = {
+      audioBase64: 'c2Vzc2lvbi1zd2l0Y2g=',
+      mimeType: 'audio/mpeg',
+    };
+
+    await aiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal);
+
+    const realtime = installPlayer();
+    realtime.player.play.mockImplementation(() => realtime.emit({ didJustFinish: true }));
+    await aiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal, 1, 'realtimePlayback');
+
+    expect(expoAudio.createAudioPlayer).toHaveBeenNthCalledWith(1, expect.any(String), {
+      updateInterval: 100,
+      keepAudioSessionActive: false,
+    });
+    expect(expoAudio.createAudioPlayer).toHaveBeenNthCalledWith(2, expect.any(String), {
+      updateInterval: 100,
+      keepAudioSessionActive: true,
+    });
+    expect(normal.player.release).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
+    expect(realtime.player.release).not.toHaveBeenCalled();
   });
 
   it('caps the slow-playback watchdog at two minutes', async () => {
@@ -300,12 +332,25 @@ describe('AI voice native playback', () => {
 describe('AI voice speech orchestration', () => {
   beforeEach(async () => {
     await stopSpeaking();
+    await resetVoiceAudioMode();
     jest.restoreAllMocks();
   });
 
   afterEach(async () => {
     await stopSpeaking();
+    await resetVoiceAudioMode();
     jest.restoreAllMocks();
+  });
+
+  it('keeps a still-active Realtime session when a default Listen action starts playback', async () => {
+    const audio = { audioBase64: 'bGl2ZS10YWItbGlzdGVu', mimeType: 'audio/mpeg' as const };
+    await setVoiceAudioMode('realtime');
+    jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue(audio);
+    const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockResolvedValue();
+
+    await expect(speakText('A live tab listen request.')).resolves.toBeUndefined();
+
+    expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal), 1, 'realtimePlayback');
   });
 
   it('prefetches the next speech chunk while preserving playback order', async () => {
@@ -577,7 +622,7 @@ describe('lesson-consistent Hindi speech routing', () => {
     expect(requestSpy).not.toHaveBeenCalled();
     expect(expoAudio.createAudioPlayer).toHaveBeenLastCalledWith(expect.any(Number), {
       updateInterval: 100,
-      keepAudioSessionActive: true,
+      keepAudioSessionActive: false,
     });
     expect(native.player.play).toHaveBeenCalledTimes(1);
   });

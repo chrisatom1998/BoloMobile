@@ -316,6 +316,7 @@ export default function LiveScreen() {
   }, [sendText]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
+    const previous = realtimeStatusRef.current;
     realtimeStatusRef.current = status;
     setRealtimeStatus(status);
     if (status === 'recording') {
@@ -323,10 +324,13 @@ export default function LiveScreen() {
       setLiveAshaTranscript('');
       setLiveUserTranscript('');
     }
-    if (status === 'ready') observe('voice_connection_succeeded');
+    // The hook returns to 'ready' after every turn; only connecting -> ready is a new connection.
+    if (status === 'ready' && previous === 'connecting') observe('voice_connection_succeeded');
   }, []);
   const showRealtimeError = useCallback((message: string) => {
-    observe('voice_connection_failed');
+    // Turn-level errors (unreadable audio, transcription) also arrive here; only
+    // count failures that happen while a connection attempt is in flight.
+    if (realtimeStatusRef.current === 'connecting') observe('voice_connection_failed');
     setError(message);
   }, []);
   const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {

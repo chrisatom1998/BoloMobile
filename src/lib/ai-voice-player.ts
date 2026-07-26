@@ -13,7 +13,9 @@ type PreparedAudio = {
   file: File;
   hasStarted: boolean;
   inUse: number;
+  keepAudioSessionActive: boolean;
   player: AudioPlayer;
+  cached: boolean;
 };
 
 const preparedAudioCache = new Map<AiVoiceAudio, PreparedAudio>();
@@ -56,31 +58,40 @@ function evictPreparedAudio() {
   }
 }
 
-function getPreparedAudio(audio: AiVoiceAudio) {
-  const cached = preparedAudioCache.get(audio);
-  if (cached) {
-    preparedAudioCache.delete(audio);
-    preparedAudioCache.set(audio, cached);
-    return cached;
-  }
-
+function createPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean, cached: boolean) {
   const file = new File(Paths.cache, `bolo-ai-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
   try {
     file.write(audio.audioBase64, { encoding: 'base64' });
     const player = createAudioPlayer(file.uri, {
       updateInterval: 100,
-      // Realtime owns the microphone session between turns. Do not let a
-      // finished Asha reply deactivate that shared iOS audio session.
-      keepAudioSessionActive: true,
+      // Only WebRTC's canonical reply needs to retain its shared iOS session.
+      keepAudioSessionActive,
     });
     player.volume = 1;
-    const prepared = { audio, file, hasStarted: false, inUse: 0, player };
-    preparedAudioCache.set(audio, prepared);
+    const prepared = { audio, cached, file, hasStarted: false, inUse: 0, keepAudioSessionActive, player };
+    if (cached) preparedAudioCache.set(audio, prepared);
     return prepared;
   } catch (error) {
     deletePreparedFile(file);
     throw error;
   }
+}
+
+function getPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) {
+  const cached = preparedAudioCache.get(audio);
+  if (cached) {
+    if (cached.keepAudioSessionActive === keepAudioSessionActive) {
+      preparedAudioCache.delete(audio);
+      preparedAudioCache.set(audio, cached);
+      return cached;
+    }
+    // A player configured for standalone playback cannot safely be reused for
+    // an active WebRTC session (or vice versa). Never release a clip that is
+    // currently playing; use a one-shot player until it becomes idle.
+    if (cached.inUse > 0) return createPreparedAudio(audio, keepAudioSessionActive, false);
+    disposePreparedAudio(cached);
+  }
+  return createPreparedAudio(audio, keepAudioSessionActive, true);
 }
 
 export function clearAiVoicePlaybackCache() {
@@ -91,10 +102,11 @@ export function clearAiVoicePlaybackCache() {
 
 export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback'): Promise<void> {
   if (signal.aborted) return;
-  const prepared = getPreparedAudio(audio);
+  const prepared = getPreparedAudio(audio, audioMode === 'realtimePlayback');
   const rate = normalizedPlaybackRate(playbackRate);
   prepared.inUse += 1;
   evictPreparedAudio();
+  let disposed = false;
   try {
     await Promise.all([
       // The live WebRTC call already owns an active PlayAndRecord session.
@@ -150,9 +162,11 @@ export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal,
     });
   } catch (error) {
     disposePreparedAudio(prepared);
+    disposed = true;
     throw error;
   } finally {
     prepared.inUse = Math.max(0, prepared.inUse - 1);
+    if (!prepared.cached && !disposed) disposePreparedAudio(prepared);
     evictPreparedAudio();
   }
 }

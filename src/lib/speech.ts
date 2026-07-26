@@ -4,7 +4,7 @@ import { canonicalLessonAudioText, hasOfflineSpeech, playOfflineSpeech } from '@
 import { splitAiVoiceText } from '@/lib/speech-text';
 import { requestAiVoiceAudio, type AiVoiceAudio } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
-import type { VoiceAudioMode } from '@/lib/voice';
+import { isRealtimeVoiceSessionActive, type VoiceAudioMode } from '@/lib/voice';
 
 const AI_VOICE_CACHE_LIMIT = 24;
 const GENERATED_SPEECH_ATTEMPTS = 2;
@@ -224,6 +224,12 @@ export async function speakText(
   requestedLanguage?: AshaResponseLanguage,
   audioMode: VoiceAudioMode = 'playback',
 ) {
+  // A normal Listen action can arrive from a still-mounted non-Live tab while
+  // the Realtime call owns iOS's PlayAndRecord session. In that case, retain
+  // the call session rather than tearing it down for standalone playback.
+  const effectiveAudioMode = audioMode === 'playback' && isRealtimeVoiceSessionActive()
+    ? 'realtimePlayback'
+    : audioMode;
   const chunks = splitSpeechByLanguage(text, requestedLanguage);
   void stopSpeaking();
   if (!chunks.length || signal?.aborted) return;
@@ -255,7 +261,7 @@ export async function speakText(
       if (controller.signal.aborted) return;
       prepareChunk(index + 1);
       if (hasOfflineSpeech(chunk)) {
-        await playOfflineSpeech(chunk, controller.signal, playbackRate, audioMode);
+        await playOfflineSpeech(chunk, controller.signal, playbackRate, effectiveAudioMode);
         continue;
       }
       await playGeneratedSpeech(
@@ -263,7 +269,7 @@ export async function speakText(
         preparedAudio.get(index),
         controller.signal,
         playbackRate,
-        audioMode,
+        effectiveAudioMode,
       );
       preparedAudio.delete(index);
     }
