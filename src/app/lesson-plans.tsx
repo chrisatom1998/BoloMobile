@@ -84,7 +84,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.detailContent} style={sharedStyles.screen}>
-      <PressableFeedback accessibilityLabel="Back to all lesson plans" accessibilityRole="button" onPress={() => router.replace('/lesson-plans')} style={styles.backButton}>
+      <PressableFeedback accessibilityLabel="Back to all lesson plans" accessibilityRole="button" onPress={router.back} style={styles.backButton}>
         <Text style={styles.backButtonText}>← All lesson plans</Text>
       </PressableFeedback>
       <View style={styles.detailHeading}>

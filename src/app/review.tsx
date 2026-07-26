@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { observe } from '@/lib/observability';
@@ -16,7 +16,7 @@ export default function ReviewScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
-  const { audioError, speak } = useSpeakText();
+  const { audioError, clearAudioError, speak } = useSpeakText();
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
   // advancing index. Lock the displayed session at the first grade instead of at
   // mount so a screen rendered before hydration still picks up the due list.
@@ -25,6 +25,7 @@ export default function ReviewScreen() {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
+  const gradingRef = useRef(false);
   const phrase = session[index];
 
   useEffect(() => () => { void stopSpeaking(); }, []);
@@ -33,7 +34,9 @@ export default function ReviewScreen() {
   }, [index, session.length]);
 
   function grade(remembered: boolean) {
-    if (!phrase) return;
+    if (!phrase || gradingRef.current) return;
+    gradingRef.current = true;
+    clearAudioError();
     if (!lockedSession) setLockedSession(session);
     reviewPhrase(phrase.hi, remembered);
     if (remembered) hapticSuccess();
@@ -41,6 +44,7 @@ export default function ReviewScreen() {
     if (remembered) setCorrect((value) => value + 1);
     setRevealed(false);
     setIndex((value) => value + 1);
+    requestAnimationFrame(() => { gradingRef.current = false; });
   }
 
   function playPhrase(playbackRate = 1) {
@@ -76,10 +80,10 @@ export default function ReviewScreen() {
   const canListen = aiConsent || hasOfflineSpeech(phrase.hi);
 
   return (
-    <View style={styles.screen}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.screen} style={styles.screenScroll}>
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
-      <View style={styles.track}><View style={[styles.trackFill, { width: `${index / session.length * 100}%` }]} /></View>
-      <View accessibilityLabel={`Review phrase ${phrase.hi}`} style={styles.card}>
+      <View style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
+      <View accessible accessibilityLabel={`Review phrase ${phrase.hi}`} style={styles.card}>
         <Text style={sharedStyles.eyebrow}>Say this naturally</Text>
         <Text style={styles.prompt}>{phrase.en}</Text>
         {revealed ? (
@@ -102,12 +106,13 @@ export default function ReviewScreen() {
           <Pressable accessibilityRole="button" onPress={() => grade(true)} style={[styles.gradeButton, styles.gotItButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
         </View>
       ) : null}
-    </View>
+    </ScrollView>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  screen: { flex: 1, backgroundColor: c.background, padding: spacing.xl, gap: spacing.lg },
+  screen: { flexGrow: 1, backgroundColor: c.background, padding: spacing.xl, gap: spacing.lg },
+  screenScroll: { flex: 1, backgroundColor: c.background },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
   header: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
   progress: { color: c.ink, fontSize: 15, fontWeight: '900' },

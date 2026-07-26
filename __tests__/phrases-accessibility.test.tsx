@@ -1,6 +1,14 @@
 import { render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
+jest.mock('expo-router', () => {
+  const React = require('react') as typeof import('react');
+  return {
+    useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
+    useRouter: () => ({ push: jest.fn() }),
+  };
+});
+
 jest.mock('lucide-react-native', () => ({
   BookOpen: () => null,
   Leaf: () => null,
@@ -34,6 +42,18 @@ describe('saved phrase accessibility', () => {
     expect(StyleSheet.flatten(remove.props.style)).toMatchObject({ height: 44, width: 44 });
 
     const list = view.getByTestId('saved-phrase-list');
-    expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
+    expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({
+      alignItems: 'stretch',
+      paddingHorizontal: 8,
+      width: '100%',
+    });
+    const savedHeading = view.getByText('Saved for practice').parent;
+    expect(StyleSheet.flatten(savedHeading?.parent?.props.style)).toMatchObject({ paddingHorizontal: 8 });
+
+    for (const label of ['0.10×', '0.25×', '0.50×']) {
+      const replay = view.getByLabelText(`Replay namaste at ${label} speed`);
+      expect(StyleSheet.flatten(replay.props.style)).toMatchObject({ flex: 1, minWidth: 0 });
+      expect(StyleSheet.flatten(replay.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    }
   });
 });

@@ -16,6 +16,7 @@ const longDevanagariReply = 'आप कैसे हैं? धन्यवा�
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockRouterBack }),
+  useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
 }));
 
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
@@ -723,8 +724,8 @@ describe('live coaching state', () => {
     // receives its press. The last non-empty highlighted range must survive.
     await fireEvent(message, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
     await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
-    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Hello');
-    expect(view.getByText('Only the words you highlighted were copied here. Adjust them if needed, then let Bolo prepare the phrase details.')).toBeTruthy();
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Hello there.');
+    expect(view.getByText('Highlight words in chat before tapping Save, or trim the transcript here. Bolo will add a Romanized Hindi version and English meaning.')).toBeTruthy();
     await fireEvent.changeText(view.getByLabelText('Selected transcript text'), 'Aap kaise hain?');
     await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
     await flushMicrotasks();
@@ -781,7 +782,7 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
-  it('opens Hindi-only word analysis from a completed Romanized Asha reply', async () => {
+  it('opens Romanized word analysis from a completed English-mode Asha reply', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
 
@@ -791,7 +792,8 @@ describe('live coaching state', () => {
     await fireEvent.press(words);
 
     expect(view.getByText('Word by word')).toBeTruthy();
-    expect(view.getByRole('button', { name: 'Explain आप' })).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Explain Aap' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Explain आप' })).toBeNull();
     expect(view.queryByRole('button', { name: 'Explain Chris' })).toBeNull();
     await view.unmount();
     await flushMicrotasks();

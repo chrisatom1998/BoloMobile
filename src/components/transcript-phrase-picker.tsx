@@ -1,6 +1,6 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, Text, TextInput, View } from 'react-native';
 
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
@@ -20,6 +20,7 @@ type TranscriptPhrasePickerProps = {
 export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
+  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const initialText = highlightedText?.trim() || romanizeDevanagari(message.text.trim());
   const [selectedText, setSelectedText] = useState(initialText);
   const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
@@ -90,8 +91,8 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
 
   return (
     <Modal animationType="slide" onRequestClose={close} presentationStyle="pageSheet" visible>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
-        <ScrollView automaticallyAdjustKeyboardInsets contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.screen}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(spacing.xl, androidStatusInset + spacing.md) }]} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>Saved phrases</Text>
@@ -109,7 +110,6 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
             <Text style={styles.label}>Selected transcript text</Text>
             <TextInput
               accessibilityLabel="Selected transcript text"
-              autoFocus
               maxLength={500}
               multiline
               onChangeText={(value) => {

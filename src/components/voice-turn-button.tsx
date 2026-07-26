@@ -195,7 +195,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
         foregroundWaiterRef.current = null;
         if (startingRef.current && mountedRef.current) setError(FOREGROUND_EXIT_MESSAGE);
       }
-      if (recordingRef.current) void discardActiveRecording();
+      if (nextState === 'background' && recordingRef.current) void discardActiveRecording();
     });
     return () => subscription.remove();
   }, [discardActiveRecording]);

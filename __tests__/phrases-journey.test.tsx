@@ -1,6 +1,14 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
+jest.mock('expo-router', () => {
+  const React = require('react') as typeof import('react');
+  return {
+    useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
+    useRouter: () => ({ push: jest.fn() }),
+  };
+});
+
 const mockRemovePhrase = jest.fn();
 const mockPhrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
 // A phrase with no review record is due immediately; schedule this one for

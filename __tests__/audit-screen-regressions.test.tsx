@@ -16,6 +16,7 @@ let mockAppState: Record<string, unknown>;
 
 jest.mock('expo-router', () => ({
   useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
+  useLocalSearchParams: () => ({}),
   useRouter: () => mockRouter,
 }));
 

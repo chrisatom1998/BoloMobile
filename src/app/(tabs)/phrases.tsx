@@ -1,9 +1,9 @@
-import { useRouter, type Href } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
 import { BookOpen, Leaf, Trash2, Volume2 } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
-import { FlatList, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, Platform, StatusBar, Text, View } from 'react-native';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
@@ -48,6 +48,7 @@ export default function PhrasesScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
+  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const largeTextLayout = useLargeTextLayout();
   const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
   const { audioError, speak } = useSpeakText();
@@ -66,7 +67,7 @@ export default function PhrasesScreen() {
     });
   }, [filter, phrases, query]);
 
-  useEffect(() => () => { void stopSpeaking(); }, []);
+  useFocusEffect(useCallback(() => () => { void stopSpeaking(); }, []));
 
   function playPhrase(text: string, playbackRate = 1) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
@@ -128,7 +129,7 @@ export default function PhrasesScreen() {
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]}
       data={visible}
       keyExtractor={(phrase) => phrase.hi}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -187,7 +188,7 @@ export default function PhrasesScreen() {
 const useStyles = makeStyles((c) => ({
   // Let saved-phrase cards use a little more of the screen without changing
   // the visual margins of the header controls above them.
-  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.md, paddingTop: 18, paddingBottom: spacing.xxl },
+  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.sm, paddingTop: 18, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
   header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, paddingHorizontal: spacing.sm },
   headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm },
@@ -198,7 +199,7 @@ const useStyles = makeStyles((c) => ({
   dueCardLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   dueIcon: { width: 68, height: 68, borderRadius: 21, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   dueIconLarge: { alignSelf: 'flex-start', height: 'auto', minHeight: 68, minWidth: 68, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: 'auto' },
-  dueIconText: { color: '#38290D', fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  dueIconText: { color: c.forestText, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 4 },
   dueTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', textAlign: 'left' },
   dueBody: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },

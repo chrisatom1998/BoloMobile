@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, Heart, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -39,6 +39,7 @@ export default function SceneScreen() {
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
   const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
   const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
+  const advancingRef = useRef(false);
 
   useEffect(() => {
     observe('scene_started');
@@ -87,6 +88,8 @@ export default function SceneScreen() {
   }
 
   function next() {
+    if (advancingRef.current || picked === null) return;
+    advancingRef.current = true;
     void stopSpeaking();
     clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
@@ -98,6 +101,7 @@ export default function SceneScreen() {
       });
       observe('scene_completed');
       setDone(true);
+      advancingRef.current = false;
       return;
     }
     hapticSelect();
@@ -105,6 +109,7 @@ export default function SceneScreen() {
     setBeatIndex((value) => value + 1);
     setPicked(null);
     setWordDefinitionWord(null);
+    requestAnimationFrame(() => { advancingRef.current = false; });
   }
 
   function replay() {
@@ -134,7 +139,7 @@ export default function SceneScreen() {
         <View style={styles.finishStats}>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>scene score</Text></View>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{hearts}/3</Text><Text style={styles.finishLabel}>confidence</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{activeScene.beats.length}</Text><Text style={styles.finishLabel}>turns</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{activeScene.beats.length - initialBeatIndex}</Text><Text style={styles.finishLabel}>turns this run</Text></View>
         </View>
         <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton}><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Replay scene</Text></Pressable>
         <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose another scene</Text><ChevronRight color={colors.white} size={18} /></Pressable>
@@ -151,6 +156,8 @@ export default function SceneScreen() {
         <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={17} /><Text style={styles.hudText}>{score}</Text></View>
       </View>
       <View style={styles.track}><View style={[styles.trackFill, { width: `${(beatIndex + Number(picked !== null)) / activeScene.beats.length * 100}%`, backgroundColor: activeScene.color }]} /></View>
+
+      {initialBeatIndex > 0 ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Resuming from turn {initialBeatIndex + 1}. Your score below reflects this run.</Text> : null}
 
       {!aiConsent ? <AiConsentGate /> : null}
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
@@ -241,7 +248,7 @@ export default function SceneScreen() {
       ) : null}
 
       {aiConsent ? <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} /> : null}
-      {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} visible /> : null}
+      {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} scriptPreference={learnerProfile.scriptPreference} visible /> : null}
     </ScrollView>
   );
 }
@@ -255,6 +262,7 @@ const useStyles = makeStyles((c) => ({
   turn: { color: c.muted, fontSize: 13, fontWeight: '800' },
   track: { height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
   trackFill: { height: '100%', borderRadius: radius.pill },
+  resumeNotice: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '700', textAlign: 'center' },
   world: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 2, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg },
   worldTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   emoji: { fontSize: 30 },

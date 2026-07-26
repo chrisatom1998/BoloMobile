@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
-export function useForegroundTimer() {
+export function useForegroundTimer(enabled = true) {
   const accumulatedMs = useRef(0);
   const activeSince = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!enabled) return;
     if (AppState.currentState === 'active') activeSince.current = Date.now();
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
@@ -23,7 +24,7 @@ export function useForegroundTimer() {
       activeSince.current = null;
       subscription.remove();
     };
-  }, []);
+  }, [enabled]);
 
   const elapsedSeconds = useCallback(() => {
     const activeMs = activeSince.current === null ? 0 : Math.max(0, Date.now() - activeSince.current);
