@@ -9,6 +9,7 @@ tags:
     clearKeychain: true
     permissions:
       microphone: deny
+- runFlow: ../subflows/enter-development-build.yaml
 - assertVisible: "Your Hindi plan in one minute"
 - scrollUntilVisible:
     element:
@@ -24,35 +25,41 @@ tags:
 - runFlow: ../subflows/complete-onboarding.yaml
 - stopApp
 - launchApp
+- tapOn:
+    text: "Dismiss"
+    optional: true
 - assertNotVisible: "Your Hindi plan in one minute"
 - setAirplaneMode: enabled
 - scrollUntilVisible:
     element:
-      text: "Food scenes, 5"
+      text: "Start speaking, plan 1 of 10, 0 of 10 lessons complete"
     direction: DOWN
     visibilityPercentage: 50
     centerElement: true
     timeout: 20000
-- tapOn: "Food scenes, 5"
+- tapOn: "Start speaking, plan 1 of 10, 0 of 10 lessons complete"
 - scrollUntilVisible:
     element:
-      text: ".*The chai stop.*"
+      text: "A warm hello, lesson 1 of 10, Next lesson"
     direction: DOWN
     visibilityPercentage: 50
     centerElement: true
     timeout: 20000
-- tapOn: ".*The chai stop.*"
-- assertVisible: "Turn 1 of 2"
+- tapOn: "A warm hello, lesson 1 of 10, Next lesson"
+- assertVisible: "Turn 1 of 10"
 - scrollUntilVisible:
     element:
       text: "Hear Asha"
     direction: DOWN
     timeout: 20000
 - tapOn: "Hear Asha"
+- tapOn:
+    text: "Dismiss"
+    optional: true
 - scrollUntilVisible:
     element:
-      text: ".*एक चाय दीजिए।.*"
+      text: ".*नमस्ते।.*"
     direction: DOWN
     timeout: 20000
-- assertVisible: ".*एक चाय दीजिए।.*"
+- assertVisible: ".*नमस्ते।.*"
 - setAirplaneMode: disabled

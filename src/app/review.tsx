@@ -17,6 +17,7 @@ export default function ReviewScreen() {
   const sharedStyles = useSharedStyles();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
+  const gradedPhraseRef = useRef<string | null>(null);
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
   // advancing index. Lock the displayed session at the first grade instead of at
   // mount so a screen rendered before hydration still picks up the due list.
@@ -25,7 +26,6 @@ export default function ReviewScreen() {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
-  const gradingRef = useRef(false);
   const phrase = session[index];
 
   useEffect(() => () => { void stopSpeaking(); }, []);
@@ -34,17 +34,16 @@ export default function ReviewScreen() {
   }, [index, session.length]);
 
   function grade(remembered: boolean) {
-    if (!phrase || gradingRef.current) return;
-    gradingRef.current = true;
-    clearAudioError();
+    if (!phrase || gradedPhraseRef.current === phrase.hi) return;
+    gradedPhraseRef.current = phrase.hi;
     if (!lockedSession) setLockedSession(session);
+    clearAudioError();
     reviewPhrase(phrase.hi, remembered);
     if (remembered) hapticSuccess();
     else hapticWarning();
     if (remembered) setCorrect((value) => value + 1);
     setRevealed(false);
     setIndex((value) => value + 1);
-    requestAnimationFrame(() => { gradingRef.current = false; });
   }
 
   function playPhrase(playbackRate = 1) {
@@ -54,23 +53,23 @@ export default function ReviewScreen() {
 
   if (session.length === 0) {
     return (
-      <View style={styles.center}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
         <Text style={styles.title}>Save a phrase to start reviewing</Text>
         <Text style={styles.body}>Natural answers saved from scenes will become quick recall cards here.</Text>
         <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose a scene</Text></Pressable>
-      </View>
+      </ScrollView>
     );
   }
 
   if (!phrase) {
     return (
-      <View style={styles.center}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
         <View style={styles.doneMark}><Check color={colors.white} size={34} /></View>
         <Text style={sharedStyles.eyebrow}>Review complete</Text>
         <Text style={styles.title}>{correct} of {session.length} remembered</Text>
         <Text style={styles.body}>Bolo scheduled each phrase based on how it felt today.</Text>
         <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to today</Text></Pressable>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -80,7 +79,7 @@ export default function ReviewScreen() {
   const canListen = aiConsent || hasOfflineSpeech(phrase.hi);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.screen} style={styles.screenScroll}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.screen} testID="review-scroll">
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
       <View style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
       <View accessible accessibilityLabel={`Review phrase ${phrase.hi}`} style={styles.card}>
@@ -111,15 +110,14 @@ export default function ReviewScreen() {
 }
 
 const useStyles = makeStyles((c) => ({
-  screen: { flexGrow: 1, backgroundColor: c.background, padding: spacing.xl, gap: spacing.lg },
-  screenScroll: { flex: 1, backgroundColor: c.background },
-  center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
+  screen: { flexGrow: 1, backgroundColor: c.background, padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
+  center: { flexGrow: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
   header: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
   progress: { color: c.ink, fontSize: 15, fontWeight: '900' },
   mastery: { color: c.muted, fontSize: 14, fontWeight: '700' },
   track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
   trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
-  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 360, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 300, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   prompt: { color: c.ink, fontSize: 29, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
   hindi: { color: c.ink, fontSize: 34, lineHeight: 44, fontWeight: '900', textAlign: 'center' },

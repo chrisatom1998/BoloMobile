@@ -107,4 +107,15 @@ describe('realtime voice accessibility', () => {
     const regularEnd = StyleSheet.flatten(regular.getByLabelText('End live voice session').props.style);
     expect(regularEnd.right ?? 0).toBe(0);
   });
+
+  it('places the minimal end control beside the orb with visible palette colors', async () => {
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
+    const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
+    const end = StyleSheet.flatten(view.getByLabelText('End live voice session').props.style);
+
+    // The centered 88pt orb ends at x=144; the 48pt end control starts at
+    // x=152, leaving an 8pt non-overlapping gap in the 200pt stage.
+    expect(stage.width).toBe(200);
+    expect(end).toMatchObject({ backgroundColor: '#FBEDEA', borderColor: '#E4B5AE', right: 0, top: 28 });
+  });
 });

@@ -9,11 +9,12 @@ tags:
     clearState: true
     permissions:
       microphone: deny
+- runFlow: ../subflows/enter-development-build.yaml
 - tapOn:
     text: "Don’t Allow"
     optional: true
 - runFlow: ../subflows/complete-onboarding.yaml
-- tapOn: "Practice live with Asha"
+- openLink: "bolo://live"
 - assertNotVisible: "Live translate"
 - scrollUntilVisible:
     element:
@@ -51,7 +52,10 @@ tags:
       microphone: allow
 - stopApp
 - launchApp
-- tapOn: "Practice live with Asha"
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- openLink: "bolo://live"
 - tapOn:
     id: "realtime-voice-orb"
 - extendedWaitUntil:
@@ -59,10 +63,10 @@ tags:
     timeout: 30000
 - scrollUntilVisible:
     element:
-      text: "Go back"
+      text: "Go to Today"
     direction: UP
     timeout: 20000
-- tapOn: "Go back"
+- tapOn: "Go to Today"
 - tapOn: "Settings"
 - scrollUntilVisible:
     element:
@@ -76,4 +80,7 @@ tags:
 - pressKey: Home
 - launchApp:
     stopApp: false
+- tapOn:
+    text: "Dismiss"
+    optional: true
 - assertVisible: "Settings"

@@ -29,7 +29,6 @@ export const lightColors = {
   dangerLine: '#E4B5AE',
 
   success: '#1C6650',
-  successSurface: '#23745E',
   successSoft: '#EBF6F1',
 
   gold: '#E7AC3D',
@@ -44,14 +43,8 @@ export const lightColors = {
 
   shadowOpacityScale: 1,
 
-  heroBase: '#0D1513',
   heroRaised: '#18201E',
-  heroLine: 'rgba(255, 255, 255, 0.11)',
-  heroMuted: '#909B97',
-  heroSegmentIdle: '#C1C8C5',
-  heroBody: '#FFF2EA',
   heroSubtle: '#BFC9C6',
-  heroOverlay: 'rgba(20, 33, 31, 0.24)',
   heroGlyph: 'rgba(255, 255, 255, 0.18)',
 
   orb: '#E76B48',

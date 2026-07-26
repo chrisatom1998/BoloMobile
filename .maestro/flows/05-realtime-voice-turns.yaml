@@ -8,11 +8,12 @@ tags:
     clearState: true
     permissions:
       microphone: allow
+- runFlow: ../subflows/enter-development-build.yaml
 - tapOn:
     text: "Allow"
     optional: true
 - runFlow: ../subflows/complete-onboarding.yaml
-- tapOn: "Practice live with Asha"
+- openLink: "bolo://live"
 - scrollUntilVisible:
     element:
       text: "I agree and want to continue"

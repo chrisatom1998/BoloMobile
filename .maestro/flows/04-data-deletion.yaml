@@ -6,6 +6,7 @@ tags:
 ---
 - launchApp:
     clearState: true
+- runFlow: ../subflows/enter-development-build.yaml
 - runFlow: ../subflows/complete-onboarding.yaml
 - tapOn: "Settings"
 - scrollUntilVisible:
@@ -20,5 +21,7 @@ tags:
     timeout: 35000
 - stopApp
 - launchApp
+- tapOn:
+    text: "Dismiss"
+    optional: true
 - assertVisible: "Your Hindi plan in one minute"
-
