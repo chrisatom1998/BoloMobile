@@ -205,9 +205,7 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
 const useStyles = makeStyles((c) => ({
   stage: { width: 282, height: 282, alignItems: 'center', justifyContent: 'center' },
   stageCompact: { width: 220, height: 220 },
-  // The 88pt orb is centered in this stage. 200pt leaves an 8pt gap before
-  // the 48pt end control, so its hit rectangle cannot steal an orb tap.
-  stageMinimal: { width: 200, height: 104 },
+  stageMinimal: { width: '100%', height: 104 },
   ring: { position: 'absolute', borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: c.lineStrong },
   ringOuter: { width: 278, height: 278 },
   ringOuterCompact: { width: 216, height: 216 },

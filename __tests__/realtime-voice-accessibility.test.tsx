@@ -95,6 +95,20 @@ describe('realtime voice accessibility', () => {
     expect(orb.height).toBe(148);
   });
 
+  it('centers the minimal orb in a full-width stage', async () => {
+    mockVoiceStatus = 'disconnected';
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
+    const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
+    const orb = StyleSheet.flatten(view.getByLabelText('Start a voice conversation').props.style);
+
+    expect(stage.width).toBe('100%');
+    expect(stage.alignItems).toBe('center');
+    expect(stage.paddingLeft).toBeUndefined();
+    expect(stage.paddingRight).toBeUndefined();
+    expect(orb.width).toBe(88);
+    expect(orb.height).toBe(88);
+  });
+
   it('offsets the compact end button beyond the orb hit rect', async () => {
     const compact = await render(<RealtimeVoiceButton clientId="client-12345678" compact onError={jest.fn()} onTurnComplete={jest.fn()} />);
     const compactEnd = StyleSheet.flatten(compact.getByLabelText('End live voice session').props.style);
@@ -108,14 +122,12 @@ describe('realtime voice accessibility', () => {
     expect(regularEnd.right ?? 0).toBe(0);
   });
 
-  it('places the minimal end control beside the orb with visible palette colors', async () => {
+  it('places the minimal end control at the full-width stage edge with visible palette colors', async () => {
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
     const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
     const end = StyleSheet.flatten(view.getByLabelText('End live voice session').props.style);
 
-    // The centered 88pt orb ends at x=144; the 48pt end control starts at
-    // x=152, leaving an 8pt non-overlapping gap in the 200pt stage.
-    expect(stage.width).toBe(200);
+    expect(stage.width).toBe('100%');
     expect(end).toMatchObject({ backgroundColor: '#FBEDEA', borderColor: '#E4B5AE', right: 0, top: 28 });
   });
 });
