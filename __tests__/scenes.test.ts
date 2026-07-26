@@ -43,13 +43,16 @@ describe('Bolo scenario catalog', () => {
   it('gives every planned lesson a distinct mix of guided-practice goals and phrases', () => {
     const plannedScenes = scenes.filter((scene) => scene.id.startsWith('plan-'));
     const goalMarkers = [
-      'Listen for the sound',
-      'Recall before you look',
-      'Match the English idea',
-      'Use a polite response',
-      'Rebuild the phrase',
-      'Say it softly to yourself',
-      'Picture the moment',
+      'Listen first',
+      'Before peeking',
+      'Match the meaning',
+      'Set the tone',
+      'Piece it together',
+      'Whisper it',
+      'Picture yourself',
+      'Say the whole thought',
+      'Rule out',
+      'Lock it in',
     ];
 
     for (const scene of plannedScenes) {
