@@ -194,7 +194,7 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
 const useStyles = makeStyles((c) => ({
   stage: { width: 282, height: 282, alignItems: 'center', justifyContent: 'center' },
   stageCompact: { width: 220, height: 220 },
-  stageMinimal: { width: 144, height: 104, paddingRight: 48 },
+  stageMinimal: { width: 144, height: 104 },
   ring: { position: 'absolute', borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: c.lineStrong },
   ringOuter: { width: 278, height: 278 },
   ringOuterCompact: { width: 216, height: 216 },
@@ -216,6 +216,6 @@ const useStyles = makeStyles((c) => ({
   orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.danger, borderWidth: 1, borderColor: c.danger, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
-  endButtonMinimal: { right: 0, top: '50%', marginTop: -24 },
+  endButtonMinimal: { right: -32, top: '50%', marginTop: -24 },
   disabled: { opacity: 0.5 },
 }));

@@ -107,4 +107,18 @@ describe('realtime voice accessibility', () => {
     const regularEnd = StyleSheet.flatten(regular.getByLabelText('End live voice session').props.style);
     expect(regularEnd.right ?? 0).toBe(0);
   });
+
+  it('centers the minimal orb while keeping the end action outside its hit rect', async () => {
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
+    const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
+    const orb = StyleSheet.flatten(view.getByLabelText('Speak').props.style);
+    const end = StyleSheet.flatten(view.getByLabelText('End live voice session').props.style);
+
+    expect(stage.paddingRight ?? 0).toBe(0);
+    expect((stage.width - orb.width) / 2 + orb.width / 2).toBe(stage.width / 2);
+
+    const orbRight = (stage.width - orb.width) / 2 + orb.width;
+    const endLeft = stage.width - end.width - end.right;
+    expect(endLeft - orbRight).toBeGreaterThanOrEqual(8);
+  });
 });
