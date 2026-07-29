@@ -8,6 +8,7 @@ import type {
   ReminderSettings,
   SavedPhrase,
   SceneProgress,
+  MotionPreference,
 } from '@/state/app-state-types';
 
 export const storageKeys = {
@@ -24,6 +25,7 @@ export const storageKeys = {
   practiceHistory: 'bolo-practice-history',
   reviewStreakDays: 'bolo-review-streak-days',
   reminder: 'bolo-practice-reminder',
+  motionPreference: 'bolo-motion-preference',
 } as const;
 
 export const AI_CONSENT_VERSION = 8 as const;
@@ -59,7 +61,10 @@ export type PersistedState = {
   practiceHistory: PracticeDay[];
   reviewStreakDays: string[];
   reminder: ReminderSettings;
+  motionPreference: MotionPreference;
 };
+
+export const DEFAULT_MOTION_PREFERENCE: MotionPreference = 'gentle';
 
 export const defaultLearnerProfile = (): LearnerProfile => ({
   completed: false,
@@ -338,6 +343,12 @@ export function sanitizeReminder(value: string | null): ReminderSettings {
     minute: Number.isInteger(reminder.minute) ? Math.min(59, Math.max(0, reminder.minute as number)) : 0,
     notificationId: typeof reminder.notificationId === 'string' && reminder.notificationId.length <= 200 ? reminder.notificationId : null,
   };
+}
+
+export function sanitizeMotionPreference(value: string | null): MotionPreference {
+  return value === 'system' || value === 'lively' || value === 'reduced'
+    ? value
+    : DEFAULT_MOTION_PREFERENCE;
 }
 
 export function sanitizeGoal(value: string | null): 5 | 10 | 15 {

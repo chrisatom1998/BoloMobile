@@ -49,6 +49,7 @@ function StateHarness() {
     chatHistory: state.chatHistory,
     clientId: state.clientId,
     goal: state.goal,
+    motionPreference: state.motionPreference,
     phrases: state.phrases,
     practice: state.practice,
     streakDays: state.streakDays,
@@ -71,6 +72,7 @@ function StateHarness() {
       <Pressable accessibilityLabel="Add practice seconds" onPress={() => state.addPracticeSeconds(10)} />
       <Pressable accessibilityLabel="Mark live turn" onPress={() => state.markLiveTurn(10)} />
       <Pressable accessibilityLabel="Mark scene complete" onPress={() => state.markSceneComplete('chai', 10)} />
+      <Pressable accessibilityLabel="Use lively movement" onPress={() => state.setMotionPreference('lively')} />
     </View>
   );
 }
@@ -82,6 +84,7 @@ function seedEveryStorageKey() {
     [storageKeys.chatHistory]: JSON.stringify([{ id: 'asha-old', role: 'asha', text: 'Stored reply.', language: 'en' }]),
     [storageKeys.clientId]: 'client-old-12345',
     [storageKeys.goal]: '15',
+    [storageKeys.motionPreference]: 'lively',
     [storageKeys.phrases]: JSON.stringify([{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }]),
     [storageKeys.practice]: JSON.stringify({ date: today, chaiDone: true, liveDone: true, seconds: 120 }),
     [storageKeys.streakDays]: JSON.stringify([today]),
@@ -96,6 +99,7 @@ function readSnapshot(view: Awaited<ReturnType<typeof render>>) {
     chatHistory: unknown[];
     clientId: string;
     goal: number;
+    motionPreference: string;
     phrases: unknown[];
     practice: ReturnType<typeof emptyPractice>;
     streakDays: string[];
@@ -122,6 +126,7 @@ describe('AppStateProvider clearAllData', () => {
       chatHistory: [],
       clientId: expect.not.stringMatching(/^client-old-12345$/u),
       goal: 10,
+      motionPreference: 'gentle',
       phrases: [],
       practice: emptyPractice(),
       streakDays: [],
@@ -131,6 +136,7 @@ describe('AppStateProvider clearAllData', () => {
     expect(asyncStorage.__store.get(storageKeys.chatHistory)).toBe('[]');
     expect(asyncStorage.__store.get(storageKeys.clientId)).toBe(next.clientId);
     expect(asyncStorage.__store.get(storageKeys.goal)).toBe('10');
+    expect(asyncStorage.__store.get(storageKeys.motionPreference)).toBe('gentle');
     expect(asyncStorage.__store.get(storageKeys.phrases)).toBe('[]');
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.practice) ?? 'null')).toEqual(emptyPractice());
     expect(asyncStorage.__store.get(storageKeys.streakDays)).toBe('[]');
@@ -210,6 +216,17 @@ describe('AppStateProvider clearAllData', () => {
     await waitFor(() => expect(readSnapshot(view).practice.seconds).toBe(MAX_DAILY_PRACTICE_SECONDS));
     await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.practice) ?? 'null').seconds)
       .toBe(MAX_DAILY_PRACTICE_SECONDS));
+    await view.unmount();
+  });
+
+  it('persists movement choices through the shared app state', async () => {
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).motionPreference).toBe('gentle'));
+
+    await fireEvent.press(view.getByLabelText('Use lively movement'));
+
+    await waitFor(() => expect(readSnapshot(view).motionPreference).toBe('lively'));
+    await waitFor(() => expect(asyncStorage.__store.get(storageKeys.motionPreference)).toBe('lively'));
     await view.unmount();
   });
 });

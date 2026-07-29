@@ -13,11 +13,12 @@ type TranscriptPhrasePickerProps = {
   message: ChatMessage;
   onClose: () => void;
   onSave: (phrase: SavedPhrase) => void;
+  reducedMotion?: boolean;
   selectedText?: string;
   sourceText?: string;
 };
 
-export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
+export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
@@ -90,7 +91,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const canSave = hindi.trim().length > 0 && latin.trim().length > 0 && english.trim().length > 0 && !busy;
 
   return (
-    <Modal animationType="slide" onRequestClose={close} presentationStyle="pageSheet" visible>
+    <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={close} presentationStyle="pageSheet" visible>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.screen}>
         <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(spacing.xl, androidStatusInset + spacing.md) }]} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
           <View style={styles.header}>

@@ -13,16 +13,16 @@ tags:
     text: "Don’t Allow"
     optional: true
 - runFlow: ../subflows/complete-onboarding.yaml
-- tapOn: "Practice live with Asha"
+- tapOn: "Asha"
 - assertNotVisible: "Live translate"
 - scrollUntilVisible:
     element:
-      text: "I agree and want to continue"
+      text: "Enable live practice"
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
     timeout: 20000
-- tapOn: "I agree and want to continue"
+- tapOn: "Enable live practice"
 - tapOn:
     id: "message-asha-input"
 - inputText: "How do I say thank you?"
@@ -51,18 +51,13 @@ tags:
       microphone: allow
 - stopApp
 - launchApp
-- tapOn: "Practice live with Asha"
+- tapOn: "Asha"
 - tapOn:
     id: "realtime-voice-orb"
 - extendedWaitUntil:
     visible: ".*(Asha is listening|Live voice requires a physical iPhone).*"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Go back"
-    direction: UP
-    timeout: 20000
-- tapOn: "Go back"
+- tapOn: "Today"
 - tapOn: "Settings"
 - scrollUntilVisible:
     element:

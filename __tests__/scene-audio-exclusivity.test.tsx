@@ -40,6 +40,7 @@ jest.mock('@/hooks/use-foreground-timer', () => ({
 }));
 
 jest.mock('@/lib/speech', () => ({
+  hasOfflineSpeech: jest.fn(() => true),
   speakText: jest.fn(async () => undefined),
   stopSpeaking: jest.fn(async () => undefined),
 }));
@@ -66,6 +67,10 @@ describe('scene audio exclusivity', () => {
     const listen = view.getByLabelText('Hear Asha');
     const answer = view.getByLabelText(/^एक चाय दीजिए/u);
 
+    await waitFor(() => expect(speakTextMock).toHaveBeenCalledTimes(1));
+    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?\nHello! What will you have?');
+    speakTextMock.mockClear();
+
     await fireEvent.press(view.getByLabelText('Start pronunciation activity'));
     await waitFor(() => expect(listen.props.accessibilityState).toEqual({ disabled: true }));
     expect(answer.props.accessibilityState).toEqual({ disabled: true, selected: false });
@@ -77,6 +82,7 @@ describe('scene audio exclusivity', () => {
     await fireEvent.press(view.getByLabelText('Finish pronunciation activity'));
     await waitFor(() => expect(listen.props.accessibilityState).toEqual({ disabled: false }));
     await fireEvent.press(listen);
+    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?\nHello! What will you have?');
     expect(speakTextMock).toHaveBeenCalledTimes(1);
   });
 });

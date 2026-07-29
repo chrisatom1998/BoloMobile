@@ -7,6 +7,7 @@ import { FlatList, Platform, StatusBar, Text, View } from 'react-native';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { lessonPlans } from '@/data/lesson-plans';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
@@ -50,7 +51,7 @@ export default function PhrasesScreen() {
   const sharedStyles = useSharedStyles();
   const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const largeTextLayout = useLargeTextLayout();
-  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
+  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, sceneProgress: savedSceneProgress } = useAppState();
   const { audioError, speak } = useSpeakText();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
@@ -58,6 +59,33 @@ export default function PhrasesScreen() {
   const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases]);
   const reviews = phraseReviews ?? {};
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
+  const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
+  const nextLesson = useMemo(() => {
+    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
+    const resumed = catalog
+      .filter(({ lessonId }) => {
+        const progress = sceneProgress[lessonId];
+        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
+      })
+      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
+        if (!selected) return candidate;
+        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
+        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
+        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
+        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
+        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
+      }, undefined);
+    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
+    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
+    const lessonId = resumed?.lessonId
+      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
+      ?? plan.lessonIds[0]!;
+
+    return {
+      action: resumed ? 'Continue lesson' : incompletePlan ? 'Start next lesson' : 'Review a lesson',
+      lessonId,
+    };
+  }, [sceneProgress]);
   const dueSet = useMemo(() => new Set(due.map((phrase) => phrase.hi)), [due]);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -90,39 +118,43 @@ export default function PhrasesScreen() {
         </View>
         <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={styles.headerMotif} />
       </View>
-      <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
-        <View style={[styles.dueIcon, largeTextLayout && styles.dueIconLarge]}><Text style={styles.dueIconText}>{due.length}</Text></View>
-        <View style={styles.dueCopy}>
-          <Text style={styles.dueTitle}>Ready for review</Text>
-          <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'Everything is reviewed for today.'}</Text>
-        </View>
-      </PressableFeedback>
-      <SearchField onChange={setQuery} style={styles.searchField} value={query}>
-        <SearchField.Group style={styles.searchRow}>
-          <SearchField.SearchIcon iconProps={{ color: colors.muted, size: 18 }} />
-          <SearchField.Input accessibilityLabel="Search saved phrases" placeholder="Search phrases" placeholderTextColor={colors.muted} style={styles.search} />
-          <SearchField.ClearButton iconProps={{ color: colors.muted }} />
-        </SearchField.Group>
-      </SearchField>
-      <SegmentedControl
-        accessibilityLabel="Phrase category"
-        compact
-        onValueChange={setFilter}
-        options={[
-          { label: 'All', value: 'All' },
-          { label: 'Café', value: 'Food' },
-          { label: 'Social', value: 'Social' },
-          { label: 'Travel', value: 'Travel' },
-        ]}
-        stackedAtLargeText
-        style={styles.segmentedControl}
-        value={filter}
-      />
-      <View style={styles.savedHeading}>
-        <Text style={styles.savedTitle}>Saved for practice</Text>
-        <Text style={styles.savedCount}>{visible.length} total</Text>
-      </View>
-      {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
+      {phrases.length > 0 ? (
+        <>
+          <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
+            <View style={[styles.dueIcon, largeTextLayout && styles.dueIconLarge]}><Text style={styles.dueIconText}>{due.length}</Text></View>
+            <View style={styles.dueCopy}>
+              <Text style={styles.dueTitle}>Ready for review</Text>
+              <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'Everything is reviewed for today.'}</Text>
+            </View>
+          </PressableFeedback>
+          <SearchField onChange={setQuery} style={styles.searchField} value={query}>
+            <SearchField.Group style={styles.searchRow}>
+              <SearchField.SearchIcon iconProps={{ color: colors.muted, size: 18 }} />
+              <SearchField.Input accessibilityLabel="Search saved phrases" placeholder="Search phrases" placeholderTextColor={colors.muted} style={styles.search} />
+              <SearchField.ClearButton iconProps={{ color: colors.muted }} />
+            </SearchField.Group>
+          </SearchField>
+          <SegmentedControl
+            accessibilityLabel="Phrase category"
+            compact
+            onValueChange={setFilter}
+            options={[
+              { label: 'All', value: 'All' },
+              { label: 'Café', value: 'Food' },
+              { label: 'Social', value: 'Social' },
+              { label: 'Travel', value: 'Travel' },
+            ]}
+            stackedAtLargeText
+            style={styles.segmentedControl}
+            value={filter}
+          />
+          <View style={styles.savedHeading}>
+            <Text style={styles.savedTitle}>Saved for practice</Text>
+            <Text style={styles.savedCount}>{visible.length} total</Text>
+          </View>
+          {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
+        </>
+      ) : null}
     </View>
   );
 
@@ -137,8 +169,16 @@ export default function PhrasesScreen() {
       ListEmptyComponent={phrases.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}><BookOpen color={colors.white} size={28} /></View>
-          <Text style={styles.emptyTitle}>Your phrase book is ready</Text>
-          <Text style={styles.emptyBody}>Save useful answers from any scene and they will appear here for quick practice.</Text>
+          <Text style={styles.emptyBody}>Practice a lesson, then save any useful phrase you want to keep.</Text>
+          <PressableFeedback
+            accessibilityLabel={nextLesson.action}
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
+            style={styles.emptyAction}
+            testID="phrases-empty-lesson-action"
+          >
+            <Text style={styles.emptyActionText}>{nextLesson.action}</Text>
+          </PressableFeedback>
         </View>
       ) : <Text style={styles.noResults}>No phrases match this search and filter.</Text>}
       renderItem={({ item }) => {
@@ -245,7 +285,8 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
   emptyIcon: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { color: c.ink, fontSize: 24, fontWeight: '900', textAlign: 'center' },
   emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  emptyAction: { minWidth: 180, minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  emptyActionText: { color: c.white, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   noResults: { color: c.muted, fontSize: 15, textAlign: 'center', padding: spacing.xl },
 }));

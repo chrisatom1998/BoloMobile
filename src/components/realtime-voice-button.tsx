@@ -11,8 +11,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
+import type { EffectiveMotion } from '@/hooks/use-motion-preference';
 import { useRealtimeConversation, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
-import { useReducedMotion } from '@/hooks/use-reduced-motion';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
@@ -21,6 +21,7 @@ type Props = {
   clientId: string;
   compact?: boolean;
   disabled?: boolean;
+  motionMode?: EffectiveMotion;
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
   onError: (message: string) => void;
@@ -50,25 +51,29 @@ const THROB_MS = 700;
  * outward while recording, and a quick throb while Asha responds. All motion
  * lives on wrapper views so the Pressable keeps its static hit-target styles.
  */
-function useOrbMotion(status: RealtimeVoiceStatus) {
-  const reducedMotion = useReducedMotion();
+function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) {
   const breath = useSharedValue(1);
   const ripple = useSharedValue(0);
 
   useEffect(() => {
     cancelAnimation(breath);
     cancelAnimation(ripple);
-    if (reducedMotion) {
-      breath.value = withTiming(1, { duration: 180 });
-      ripple.value = withTiming(status === 'recording' ? 1 : 0, { duration: 180 });
+    if (motionMode === 'reduced') {
+      breath.value = 1;
+      ripple.value = status === 'recording' ? 0.45 : 0;
       return;
     }
+    const breathPeak = motionMode === 'lively' ? 1.07 : 1.045;
+    const breathMs = motionMode === 'lively' ? 2_100 : BREATH_MS;
+    const ringMs = motionMode === 'lively' ? 1_450 : RING_MS;
+    const throbPeak = motionMode === 'lively' ? 1.055 : 1.03;
+    const throbMs = motionMode === 'lively' ? 560 : THROB_MS;
     if (status === 'ready' || status === 'connecting') {
       ripple.value = withTiming(0, { duration: 220 });
       breath.value = withRepeat(
         withSequence(
-          withTiming(1.045, { duration: BREATH_MS / 2, easing: Easing.inOut(Easing.sin) }),
-          withTiming(1, { duration: BREATH_MS / 2, easing: Easing.inOut(Easing.sin) }),
+          withTiming(breathPeak, { duration: breathMs / 2, easing: Easing.inOut(Easing.sin) }),
+          withTiming(1, { duration: breathMs / 2, easing: Easing.inOut(Easing.sin) }),
         ),
         -1,
       );
@@ -77,15 +82,15 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
     if (status === 'recording') {
       breath.value = withTiming(1.04, { duration: 220 });
       ripple.value = 0;
-      ripple.value = withRepeat(withTiming(1, { duration: RING_MS, easing: Easing.out(Easing.quad) }), -1);
+      ripple.value = withRepeat(withTiming(1, { duration: ringMs, easing: Easing.out(Easing.quad) }), -1);
       return;
     }
     if (status === 'responding') {
       ripple.value = withTiming(0, { duration: 220 });
       breath.value = withRepeat(
         withSequence(
-          withTiming(1.03, { duration: THROB_MS / 2, easing: Easing.inOut(Easing.quad) }),
-          withTiming(0.99, { duration: THROB_MS / 2, easing: Easing.inOut(Easing.quad) }),
+          withTiming(throbPeak, { duration: throbMs / 2, easing: Easing.inOut(Easing.quad) }),
+          withTiming(0.99, { duration: throbMs / 2, easing: Easing.inOut(Easing.quad) }),
         ),
         -1,
       );
@@ -94,7 +99,7 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
     breath.value = withTiming(1, { duration: 260 });
     ripple.value = withTiming(0, { duration: 260 });
     return undefined;
-  }, [breath, reducedMotion, ripple, status]);
+  }, [breath, motionMode, ripple, status]);
 
   useEffect(() => () => {
     cancelAnimation(breath);
@@ -110,14 +115,14 @@ function useOrbMotion(status: RealtimeVoiceStatus) {
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting' || voice.status === 'responding';
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
   const { colors } = useTheme();
-  const { orbStyle, rippleStyle } = useOrbMotion(voice.status);
+  const { orbStyle, rippleStyle } = useOrbMotion(voice.status, motionMode);
   const minimal = size === 'minimal';
   const voiceIconSize = minimal ? 32 : 52;
 

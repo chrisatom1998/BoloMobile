@@ -23,6 +23,7 @@ import {
   sanitizeChatHistory,
   sanitizeGoal,
   sanitizeLearnerProfile,
+  sanitizeMotionPreference,
   sanitizePhraseReviews,
   sanitizePhrases,
   sanitizePractice,
@@ -34,7 +35,7 @@ import {
   storageKeys,
   type PersistedState,
 } from '@/lib/storage';
-import type { ChatMessage, LearnerProfile, ReminderSettings, SavedPhrase } from '@/state/app-state-types';
+import type { ChatMessage, LearnerProfile, MotionPreference, ReminderSettings, SavedPhrase } from '@/state/app-state-types';
 
 type PersistedKey = keyof typeof storageKeys;
 
@@ -69,6 +70,7 @@ type AppActions = {
   clearChatHistory: () => void;
   setAiConsent: (consent: boolean) => Promise<boolean>;
   setReminder: (reminder: ReminderSettings) => void;
+  setMotionPreference: (preference: MotionPreference) => void;
   clearAllData: () => Promise<void>;
 };
 
@@ -88,6 +90,7 @@ const initialState: PersistedState = {
   practiceHistory: [],
   reviewStreakDays: [],
   reminder: defaultReminderSettings(),
+  motionPreference: 'gentle',
 };
 
 const AppStateContext = createContext<AppStateSlices | null>(null);
@@ -199,6 +202,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           practiceHistory: sanitizePracticeHistory(readStored(storageKeys.practiceHistory)),
           reviewStreakDays: sanitizeStreakDays(readStored(storageKeys.reviewStreakDays)),
           reminder: sanitizeReminder(readStored(storageKeys.reminder)),
+          motionPreference: sanitizeMotionPreference(readStored(storageKeys.motionPreference)),
         };
         if (active) {
           setState(next);
@@ -446,6 +450,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     commit((current) => ({ ...current, reminder }), ['reminder']);
   }, [commit]);
 
+  const setMotionPreference = useCallback((motionPreference: MotionPreference) => {
+    commit((current) => ({ ...current, motionPreference }), ['motionPreference']);
+  }, [commit]);
+
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
@@ -492,8 +500,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     clearChatHistory,
     setAiConsent,
     setReminder,
+    setMotionPreference,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, clearAllData]);
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,

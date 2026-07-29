@@ -26,22 +26,7 @@ tags:
 - launchApp
 - assertNotVisible: "Your Hindi plan in one minute"
 - setAirplaneMode: enabled
-- scrollUntilVisible:
-    element:
-      text: "Food scenes, 5"
-    direction: DOWN
-    visibilityPercentage: 50
-    centerElement: true
-    timeout: 20000
-- tapOn: "Food scenes, 5"
-- scrollUntilVisible:
-    element:
-      text: ".*The chai stop.*"
-    direction: DOWN
-    visibilityPercentage: 50
-    centerElement: true
-    timeout: 20000
-- tapOn: ".*The chai stop.*"
+- openLink: bolo://scene/chai
 - assertVisible: "Turn 1 of 2"
 - scrollUntilVisible:
     element:

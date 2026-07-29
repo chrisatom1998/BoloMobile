@@ -12,15 +12,15 @@ tags:
     text: "Allow"
     optional: true
 - runFlow: ../subflows/complete-onboarding.yaml
-- tapOn: "Practice live with Asha"
+- tapOn: "Asha"
 - scrollUntilVisible:
     element:
-      text: "I agree and want to continue"
+      text: "Enable live practice"
     direction: DOWN
     visibilityPercentage: 100
     centerElement: true
     timeout: 20000
-- tapOn: "I agree and want to continue"
+- tapOn: "Enable live practice"
 - tapOn:
     id: "realtime-voice-orb"
 - tapOn:

@@ -7,22 +7,7 @@ tags:
 - launchApp:
     clearState: true
 - runFlow: ../subflows/complete-onboarding.yaml
-- scrollUntilVisible:
-    element:
-      text: "Food scenes, 5"
-    direction: DOWN
-    visibilityPercentage: 50
-    centerElement: true
-    timeout: 20000
-- tapOn: "Food scenes, 5"
-- scrollUntilVisible:
-    element:
-      text: ".*The chai stop.*"
-    direction: DOWN
-    visibilityPercentage: 50
-    centerElement: true
-    timeout: 20000
-- tapOn: ".*The chai stop.*"
+- openLink: bolo://scene/chai
 - scrollUntilVisible:
     element:
       text: ".*One tea, please.*"
@@ -71,7 +56,7 @@ tags:
 - assertVisible: "Scene complete"
 - stopApp
 - launchApp
-- tapOn: "Saved phrases"
+- tapOn: "Phrases"
 - assertVisible: "Phrases"
 - assertVisible: "चीनी कम, कृपया।"
 - tapOn: "Hear चीनी कम, कृपया।"

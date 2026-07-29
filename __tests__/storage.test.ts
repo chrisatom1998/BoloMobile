@@ -1,5 +1,6 @@
 import {
   AI_CONSENT_VERSION,
+  DEFAULT_MOTION_PREFERENCE,
   MAX_CHAT_HISTORY_MESSAGES,
   MAX_CHAT_MESSAGE_CHARACTERS,
   MAX_DAILY_PRACTICE_SECONDS,
@@ -11,6 +12,7 @@ import {
   previousDate,
   sanitizeClientId,
   sanitizeGoal,
+  sanitizeMotionPreference,
   sanitizeAiConsent,
   sanitizeChatHistory,
   sanitizePhraseReviews,
@@ -385,5 +387,15 @@ describe('practice reminder storage', () => {
     expect(sanitizeReminder('{"notificationId":"reminder-1"}').notificationId).toBe('reminder-1');
     expect(sanitizeReminder('{"notificationId":42}').notificationId).toBeNull();
     expect(sanitizeReminder(JSON.stringify({ notificationId: 'x'.repeat(201) })).notificationId).toBeNull();
+  });
+});
+
+describe('movement preference storage', () => {
+  it.each(['system', 'gentle', 'lively', 'reduced'] as const)('keeps the %s option', (preference) => {
+    expect(sanitizeMotionPreference(preference)).toBe(preference);
+  });
+
+  it.each([null, '', 'fast', '{"value":"lively"}'])('falls back to gentle for %p', (value) => {
+    expect(sanitizeMotionPreference(value)).toBe(DEFAULT_MOTION_PREFERENCE);
   });
 });

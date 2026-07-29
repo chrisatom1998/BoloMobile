@@ -1,8 +1,8 @@
 import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
-import { Activity, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Trash2 } from 'lucide-react-native';
+import { Activity, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { SegmentedControl } from '@/components/segmented-control';
@@ -10,9 +10,10 @@ import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
 import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '@/lib/practice-reminder';
-import { defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
+import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
+import type { MotionPreference } from '@/state/app-state-types';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
@@ -21,16 +22,26 @@ export function formatReminderTime(hour: number, minute = 0) {
   return `${normalizedHour % 12 || 12}:${String(normalizedMinute).padStart(2, '0')} ${normalizedHour >= 12 ? 'PM' : 'AM'}`;
 }
 
+const motionDescriptions: Record<MotionPreference, string> = {
+  system: 'Follows your iPhone’s Reduce Motion setting.',
+  gentle: 'Uses calm, short transitions. This is Bolo’s default.',
+  lively: 'Adds more movement to progress, feedback, captions, and the voice orb.',
+  reduced: 'Turns off nonessential movement.',
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
   const state = useAppState();
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
+  const { fontScale, width: windowWidth } = useWindowDimensions();
   const { aiConsent, clearAllData, clientId, setAiConsent } = state;
   const learnerProfile = state.learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const reminder = state.reminder ?? defaultReminderSettings();
-  const { setReminder, updateLearnerProfile } = state;
+  const motionPreference = state.motionPreference ?? DEFAULT_MOTION_PREFERENCE;
+  const stackMotionPreferences = fontScale >= 1.2 || windowWidth < 360;
+  const { setMotionPreference, setReminder, updateLearnerProfile } = state;
   const [deleting, setDeleting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [savingReminder, setSavingReminder] = useState(false);
@@ -168,11 +179,38 @@ export default function SettingsScreen() {
 
       <View style={styles.card}>
         <View style={styles.row}>
+          <View style={[styles.icon, { backgroundColor: colors.forest }]}><Sparkles color={colors.white} size={20} /></View>
+          <View style={styles.copy}><Text style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
+        </View>
+        <Text style={styles.choiceLabel}>Animation style</Text>
+        <SegmentedControl
+          accessibilityLabel="Movement preference"
+          columnCount={2}
+          compact
+          onValueChange={setMotionPreference}
+          options={[
+            { label: 'System', value: 'system' },
+            { label: 'Gentle', value: 'gentle' },
+            { label: 'Lively', value: 'lively' },
+            { label: 'Reduced', value: 'reduced' },
+          ]}
+          stacked={stackMotionPreferences}
+          stackedAtLargeText
+          testID="motion-preference-control"
+          value={motionPreference}
+        />
+        <Text accessibilityLiveRegion="polite" style={styles.detail}>{motionDescriptions[motionPreference]}</Text>
+        <Text style={styles.motionPriority}>Your iPhone’s Reduce Motion setting always takes priority.</Text>
+      </View>
+
+      <View style={styles.card}>
+        <View style={styles.row}>
         <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
           <View style={styles.copy}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
         </View>
         <SegmentedControl
           accessibilityLabel="Practice reminder time"
+          columnCount={2}
           compact
           stackedAtLargeText
           disabled={savingReminder}
@@ -184,6 +222,7 @@ export default function SettingsScreen() {
             { label: formatReminderTime(19), value: '19' },
             { label: formatReminderTime(20), value: '20' },
           ]}
+          testID="practice-reminder-control"
           value={reminder.enabled ? String(reminder.hour) as '9' | '19' | '20' : 'off'}
         />
       </View>
@@ -260,6 +299,7 @@ const useStyles = makeStyles((c) => ({
   title: { color: c.ink, fontSize: 16, fontWeight: '900' },
   body: { color: c.muted, fontSize: 13 },
   detail: { color: c.muted, fontSize: 14, lineHeight: 21 },
+  motionPriority: { color: c.muted, fontSize: 12, lineHeight: 18 },
   destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   destructiveText: { color: c.danger, fontSize: 15, fontWeight: '800' },
   disabled: { opacity: 0.5 },

@@ -21,7 +21,7 @@ jest.mock('lucide-react-native', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 59 }),
 }));
 
 jest.mock('@/state/app-state', () => ({
@@ -52,10 +52,13 @@ describe('home accessibility', () => {
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minWidth).toBeGreaterThanOrEqual(48);
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('0 percent of daily goal complete');
     expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
 
     const list = view.getByTestId('today-guided-plan-list');
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
+    expect(StyleSheet.flatten(list.props.contentContainerStyle).paddingTop).toBe(18);
+    expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
   });
 });

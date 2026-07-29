@@ -12,11 +12,15 @@ export type SegmentOption<T extends string> = {
 
 type SegmentedControlProps<T extends string> = {
   accessibilityLabel: string;
+  /** Reflows dense choices into one or two balanced columns instead of one cramped row. */
+  columnCount?: 1 | 2;
   compact?: boolean;
   disabled?: boolean;
   disabledHint?: string;
   onValueChange: (value: T) => void;
   options: readonly SegmentOption<T>[];
+  /** Forces a full-width vertical list for dense choices on narrow screens. */
+  stacked?: boolean;
   /** Reflows options into full-width rows when a compact segmented row cannot safely fit Dynamic Type. */
   stackedAtLargeText?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -31,11 +35,13 @@ type SegmentedControlProps<T extends string> = {
  */
 export function SegmentedControl<T extends string>({
   accessibilityLabel,
+  columnCount,
   compact = false,
   disabled = false,
   disabledHint,
   onValueChange,
   options,
+  stacked = false,
   stackedAtLargeText = false,
   style,
   testID,
@@ -43,7 +49,8 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   const styles = useStyles();
   const largeTextLayout = useLargeTextLayout();
-  const usesStackedLayout = stackedAtLargeText && largeTextLayout;
+  const usesStackedLayout = stacked || columnCount === 1 || (stackedAtLargeText && largeTextLayout);
+  const usesTwoColumnLayout = columnCount === 2 && !usesStackedLayout;
 
   if (usesStackedLayout) {
     return (
@@ -65,6 +72,49 @@ export function SegmentedControl<T extends string>({
             </Pressable>
           );
         })}
+      </View>
+    );
+  }
+
+  if (usesTwoColumnLayout) {
+    const optionRows = Array.from(
+      { length: Math.ceil(options.length / 2) },
+      (_, rowIndex) => options.slice(rowIndex * 2, rowIndex * 2 + 2),
+    );
+
+    return (
+      <View accessibilityLabel={accessibilityLabel} accessibilityRole="tablist" style={[styles.stackedList, style]} testID={testID}>
+        {optionRows.map((row, rowIndex) => (
+          <View
+            key={row.map((option) => option.value).join('-')}
+            style={styles.optionRow}
+            testID={testID ? `${testID}-row-${rowIndex + 1}` : undefined}
+          >
+            {row.map((option) => {
+              const selected = value === option.value;
+              return (
+                <Pressable
+                  accessibilityHint={disabled ? disabledHint : undefined}
+                  accessibilityLabel={`${accessibilityLabel}: ${option.accessibilityLabel ?? option.label}`}
+                  accessibilityRole="tab"
+                  accessibilityState={{ disabled, selected }}
+                  disabled={disabled}
+                  key={option.value}
+                  onPress={() => onValueChange(option.value)}
+                  style={({ pressed }) => [
+                    styles.stackedTrigger,
+                    styles.twoColumnTrigger,
+                    selected && styles.stackedTriggerSelected,
+                    disabled && styles.stackedTriggerDisabled,
+                    pressed && !disabled && styles.stackedTriggerPressed,
+                  ]}
+                >
+                  <Text style={[styles.stackedLabel, selected && styles.stackedLabelSelected, disabled && styles.labelDisabled]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
       </View>
     );
   }
@@ -157,6 +207,10 @@ const useStyles = makeStyles((c) => ({
     alignSelf: 'stretch',
     gap: spacing.sm,
   },
+  optionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
   stackedTrigger: {
     minHeight: 48,
     borderRadius: 16,
@@ -168,6 +222,9 @@ const useStyles = makeStyles((c) => ({
     justifyContent: 'center',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  twoColumnTrigger: {
+    flex: 1,
   },
   stackedTriggerSelected: {
     borderColor: c.neutralSurface,

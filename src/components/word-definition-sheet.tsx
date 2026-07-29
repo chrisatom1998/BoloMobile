@@ -18,6 +18,7 @@ export function WordDefinitionSheet({
   initialWord,
   onClose,
   phrase,
+  reducedMotion = false,
   responseLanguage,
   scriptPreference,
   visible,
@@ -26,6 +27,7 @@ export function WordDefinitionSheet({
   initialWord?: string | null;
   onClose: () => void;
   phrase: string;
+  reducedMotion?: boolean;
   /** @deprecated Supply scriptPreference from the learner profile instead. */
   responseLanguage?: 'en' | 'hi';
   scriptPreference?: ScriptPreference;
@@ -104,7 +106,7 @@ export function WordDefinitionSheet({
   }, [explain, initialWord, visible, words]);
 
   return (
-    <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
+    <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
       <View style={styles.screen}>
         <View style={styles.header}>
           <View style={styles.headerCopy}>

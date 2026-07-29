@@ -95,3 +95,39 @@ Dark mode is deliberately disabled (fixed light palette, `userInterfaceStyle: "l
 4. Practice-time accounting (#6) and the hardcoded cue (#5).
 5. Android safe-area/keyboard pass (#7 + live composer items).
 6. Word-sheet retry wedge (#8), then the medium list.
+
+---
+
+# Verification pass — 2026-07-26, after commit 3a5fc4c
+
+Re-verified every finding against the clean tree at c9f39bf. **Tally: 23 fixed, 12 partially fixed, 8 still present.**
+
+## Still present (unchanged by the fix commit)
+
+- **H1 — Due-count still capped at 5.** `app-state.tsx:504` still uses the default `limit: 5`; badge (`(tabs)/_layout.tsx:33`), CTA (`index.tsx:40-41`) disagree with Phrases' uncapped count; `9+` branch still dead. One-line fix.
+- **H2 — Live composer insets untouched.** Still `contentInsetAdjustmentBehavior="never"`, hand-rolled `insets.bottom` padding with no tab-bar height, no `keyboardVerticalOffset` (`live.tsx:404,408,583`).
+- **M3 — "Phrase saved" alert still fired in the same tick as sheet dismissal** (`live.tsx:399-400`); can no-op on iOS.
+- **L2 — Chat rows still announced as edit fields**, welcome-message hint still wrong, live-region label still truncated to 56 chars (`chat-message-row.tsx:12,58-73,130`).
+- **L5 — Home header motif can still overlap the greeting** on narrow devices (`index.tsx:221,225`).
+- **L7 — Modal slide-out still never plays** (conditionally mounted: `live.tsx:611-612`, `scene/[id].tsx:251`).
+- **L9 — Composer TextInput still has no disabled treatment**; non-stacked segmented disabled state still near-invisible.
+- **L10 — Pronunciation button still stuck on "Asha is thinking…" during feedback playback** (`pronunciation-recorder.tsx:97`).
+
+## Partially fixed — remaining gaps
+
+- **#6 practice time:** cross-tab leakage fixed (focus-gated), but crediting is still unmount-only — force-quit loses the session (`live.tsx:186-190`).
+- **H3 Android keyboard:** `behavior='height'` added, but no `softwareKeyboardLayoutMode`; may still under-lift on edge-to-edge Android.
+- **M6:** back button now guarded with `canGoBack()`, but a "Go back" arrow on a tab root now means "jump to Today", which the label doesn't say.
+- **M8:** review clears stale audio errors, but Phrases still shows playback errors in the off-screen list header (`phrases.tsx:125`).
+- **M9:** `[list,list]` stack fixed via `router.back`, but plan detail still shows the generic "Lesson plans" large title.
+- **M11:** reduced-motion recording ring now 0.20 opacity instead of 0 — visible but dimmest exactly when it should signal recording.
+- **M16 (new issue):** `+not-found.tsx` exists but its "Back to today" link is white text on the cream background with no button container — effectively invisible.
+- **M17:** phrase picker fixed; word-definition sheet header still under the Android status bar (header is a sibling above the inset ScrollView, `word-definition-sheet.tsx:109-118`).
+- **L3:** motifs now hidden from screen readers; the 156pt `ब` glyph on Progress still isn't.
+- **L6:** real portrait added, but the 1×1 invisible header image and its test assertion remain.
+- **L8:** progress empty state added; bar heights can now exceed 100% (rounded numerator over unrounded `maxMinutes`, e.g. 2/1.5 = 133% on a 90s max day); hearts still gate nothing; "{n} total" still shows the filtered count.
+- **L11:** orb animation cleanup and `dueIconText` color fixed; `commit()` side effects in the setState updater, `rgba(255,255,255,0.17)` orb highlight, unused hero tokens, and the unguarded scene route param remain.
+
+## Fixed and confirmed
+
+All other findings, including 7 of 8 criticals: invisible/overlapping end-session button (now solid `danger` red, stage widened so no orb overlap), recalibrate trap (seeds from profile + Cancel button), review scrollability, hardcoded cue (now uses the phrase's own `latin`), Android status-bar insets on all four screens, word-sheet retry wedge (+ "Try again" button), review/scene double-tap guards, `inactive`-state recording discard, response-language two-way sync, chat action-row wrap, phrase-picker double keyboard inset, script preference on Home/Progress/word sheet, fake speaker icons (now `→`), speech stopping on tab blur, settings segmented controls (stacked + 44pt), stale-selection save, scene resume notice with matching denominators, diagnostics loading state, web alert re-prompt loop, touch targets, review a11y label/progress bar.

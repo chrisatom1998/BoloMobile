@@ -29,6 +29,7 @@ function state(goal: 5 | 10 | 15): PersistedState {
     practiceHistory: [],
     reviewStreakDays: [],
     reminder: defaultReminderSettings(),
+    motionPreference: 'gentle',
   };
 }
 

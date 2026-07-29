@@ -180,10 +180,44 @@ describe('previously uncovered audit screens', () => {
   });
 
   it('renders the progress dashboard for an empty learning history', async () => {
+    mockAppState.duePhrases = [];
+    mockAppState.phrases = [];
     const view = await render(<ProgressScreen />);
 
-    expect(view.getByText('Your Hindi is taking root.')).toBeTruthy();
+    expect(view.getByText('Your first lesson')).toBeTruthy();
+    expect(view.getByText('A warm hello')).toBeTruthy();
+    expect(view.getByText('Plan 01 · Lesson 1 of 10 · 10 turns')).toBeTruthy();
+    expect(view.getByText('0 scenes learned · 0 reviews this week')).toBeTruthy();
+    expect(view.getByText('No practice streak yet')).toBeTruthy();
+    expect(view.getByText('No activity yet')).toBeTruthy();
+    expect(view.queryByText('Your Hindi is taking root.')).toBeNull();
+    expect(view.queryByText('Your garden starts with one small turn.')).toBeNull();
     expect(view.getByText('Last 7 days')).toBeTruthy();
+  });
+
+  it('shows an unfinished lesson and active streak as the first progress summary', async () => {
+    mockAppState.sceneProgress = {
+      'plan-essentials-02': {
+        bestAccuracy: 0,
+        bestScore: 0,
+        completions: 0,
+        lastBeatIndex: 3,
+        lastPracticedAt: '2026-07-28T12:00:00.000Z',
+        totalAnswers: 0,
+        totalCorrect: 0,
+        weakPhrases: [],
+      },
+    };
+    mockAppState.streak = 3;
+
+    const view = await render(<ProgressScreen />);
+
+    expect(view.getByText('Current lesson')).toBeTruthy();
+    expect(view.getByText('Say your name')).toBeTruthy();
+    expect(view.getByText('Plan 01 · Lesson 2 of 10 · Turn 4 of 10')).toBeTruthy();
+    expect(view.getByText('3-day practice streak')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Continue lesson: Say your name'));
+    expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-02' } });
   });
 
   it('keeps the progress hero legible against the active palette', () => {
@@ -192,5 +226,6 @@ describe('previously uncovered audit screens', () => {
     expect(styles.hero.backgroundColor).toBe(lightColors.paperRaised);
     expect(styles.heroTitle.color).toBe(lightColors.ink);
     expect(styles.heroBody.color).toBe(lightColors.muted);
+    expect(styles.content.paddingBottom).toBeGreaterThanOrEqual(100);
   });
 });

@@ -1,8 +1,9 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 const mockPush = jest.fn();
 const mockUseAppState = jest.fn();
+const mockSetMotionPreference = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -19,6 +20,7 @@ jest.mock('lucide-react-native', () => ({
   LockKeyhole: () => null,
   Languages: () => null,
   ShieldCheck: () => null,
+  Sparkles: () => null,
   Trash2: () => null,
 }));
 
@@ -108,7 +110,9 @@ describe('SettingsScreen lifecycle and UI', () => {
       aiConsent: true,
       clearAllData,
       clientId: 'client-12345678',
+      motionPreference: 'gentle',
       setAiConsent,
+      setMotionPreference: mockSetMotionPreference,
     });
     deleteMobileDataMock.mockResolvedValue({ deleted: true });
   });
@@ -116,6 +120,65 @@ describe('SettingsScreen lifecycle and UI', () => {
   it('formats midnight and noon using twelve-hour clock labels', () => {
     expect(formatReminderTime(0)).toBe('12:00 AM');
     expect(formatReminderTime(12)).toBe('12:00 PM');
+  });
+
+  it('offers four accessible movement choices and saves the selected option', async () => {
+    const view = await render(<SettingsScreen />);
+    const gentle = view.getByLabelText('Movement preference: Gentle');
+    const lively = view.getByLabelText('Movement preference: Lively');
+
+    expect(gentle.props.accessibilityState).toEqual({ disabled: false, selected: true });
+    expect(StyleSheet.flatten(lively.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(view.getByText('Your iPhone’s Reduce Motion setting always takes priority.')).toBeTruthy();
+
+    await fireEvent.press(lively);
+    expect(mockSetMotionPreference).toHaveBeenCalledWith('lively');
+  });
+
+  it('gives dense movement and reminder choices two balanced rows at default iPhone text size', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const defaultIPhone = { fontScale: 1, height: 852, scale: 3, width: 393 };
+    try {
+      Dimensions.set({ screen: defaultIPhone, window: defaultIPhone });
+      const view = await render(<SettingsScreen />);
+
+      for (const controlID of ['motion-preference-control', 'practice-reminder-control']) {
+        expect(view.getByTestId(`${controlID}-row-1`).children).toHaveLength(2);
+        expect(view.getByTestId(`${controlID}-row-2`).children).toHaveLength(2);
+      }
+
+      for (const label of [
+        'Movement preference: Lively',
+        'Movement preference: Reduced',
+        'Practice reminder time: 7:00 PM',
+        'Practice reminder time: 8:00 PM',
+      ]) {
+        expect(StyleSheet.flatten(view.getByLabelText(label).props.style).minHeight).toBeGreaterThanOrEqual(44);
+      }
+
+      await view.unmount();
+    } finally {
+      Dimensions.set({ screen: originalScreen, window: originalWindow });
+    }
+  });
+
+  it('stacks all four movement choices at moderate Dynamic Type on a narrow phone', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const narrow = { fontScale: 1.25, height: 844, scale: 1, width: 320 };
+    try {
+      Dimensions.set({ screen: narrow, window: narrow });
+      const view = await render(<SettingsScreen />);
+
+      const lively = view.getByLabelText('Movement preference: Lively');
+      expect(StyleSheet.flatten(lively.props.style).minHeight).toBeGreaterThanOrEqual(48);
+      expect(view.queryByTestId('motion-preference-control-row-1')).toBeNull();
+      expect(view.getByTestId('motion-preference-control').children).toHaveLength(4);
+      await view.unmount();
+    } finally {
+      Dimensions.set({ screen: originalScreen, window: originalWindow });
+    }
   });
 
   it('deletes remote reports before local data, then reports success', async () => {
