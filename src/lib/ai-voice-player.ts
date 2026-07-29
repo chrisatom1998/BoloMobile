@@ -1,6 +1,7 @@
 import { createAudioPlayer, type AudioPlayer, type AudioStatus } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 
+import { normalizeAiVoiceAudioFile } from '@/lib/ai-audio-normalizer';
 import { setVoiceAudioMode, type VoiceAudioMode } from '@/lib/voice';
 import type { AiVoiceAudio } from '@/services/bolo-api';
 
@@ -10,7 +11,7 @@ const MIN_PLAYBACK_RATE = 0.1;
 const PREPARED_AUDIO_CACHE_LIMIT = 4;
 type PreparedAudio = {
   audio: AiVoiceAudio;
-  file: File;
+  files: File[];
   hasStarted: boolean;
   inUse: number;
   keepAudioSessionActive: boolean;
@@ -25,11 +26,13 @@ function normalizedPlaybackRate(playbackRate: number) {
   return Math.min(2, Math.max(MIN_PLAYBACK_RATE, playbackRate));
 }
 
-function deletePreparedFile(file: File) {
-  try {
-    if (file.exists) file.delete();
-  } catch {
-    // Cache cleanup must not replace a useful playback result or error.
+function deletePreparedFiles(files: readonly File[]) {
+  for (const file of files) {
+    try {
+      if (file.exists) file.delete();
+    } catch {
+      // Cache cleanup must not replace a useful playback result or error.
+    }
   }
 }
 
@@ -47,7 +50,7 @@ function disposePreparedAudio(prepared: PreparedAudio) {
   } catch {
     // Release is best-effort because the cache entry is already unreachable.
   }
-  deletePreparedFile(prepared.file);
+  deletePreparedFiles(prepared.files);
 }
 
 function evictPreparedAudio() {
@@ -58,26 +61,38 @@ function evictPreparedAudio() {
   }
 }
 
-function createPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean, cached: boolean) {
+async function createPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) {
   const file = new File(Paths.cache, `bolo-ai-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
+  const files = [file];
   try {
     file.write(audio.audioBase64, { encoding: 'base64' });
-    const player = createAudioPlayer(file.uri, {
+    let playbackFile = file;
+    // Only canonical Asha replies inside a live WebRTC session are boosted.
+    // AVAudioFile processes the downloaded MP3 without touching AVAudioSession.
+    if (keepAudioSessionActive) {
+      const normalizedUri = await normalizeAiVoiceAudioFile(file.uri);
+      if (normalizedUri) {
+        const normalizedFile = new File(normalizedUri);
+        if (normalizedFile.exists) {
+          files.push(normalizedFile);
+          playbackFile = normalizedFile;
+        }
+      }
+    }
+    const player = createAudioPlayer(playbackFile.uri, {
       updateInterval: 100,
       // Only WebRTC's canonical reply needs to retain its shared iOS session.
       keepAudioSessionActive,
     });
     player.volume = 1;
-    const prepared = { audio, cached, file, hasStarted: false, inUse: 0, keepAudioSessionActive, player };
-    if (cached) preparedAudioCache.set(audio, prepared);
-    return prepared;
+    return { audio, cached: false, files, hasStarted: false, inUse: 0, keepAudioSessionActive, player };
   } catch (error) {
-    deletePreparedFile(file);
+    deletePreparedFiles(files);
     throw error;
   }
 }
 
-function getPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) {
+async function getPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) {
   const cached = preparedAudioCache.get(audio);
   if (cached) {
     if (cached.keepAudioSessionActive === keepAudioSessionActive) {
@@ -88,10 +103,26 @@ function getPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) 
     // A player configured for standalone playback cannot safely be reused for
     // an active WebRTC session (or vice versa). Never release a clip that is
     // currently playing; use a one-shot player until it becomes idle.
-    if (cached.inUse > 0) return createPreparedAudio(audio, keepAudioSessionActive, false);
+    if (cached.inUse > 0) return createPreparedAudio(audio, keepAudioSessionActive);
     disposePreparedAudio(cached);
   }
-  return createPreparedAudio(audio, keepAudioSessionActive, true);
+
+  const prepared = await createPreparedAudio(audio, keepAudioSessionActive);
+  // A superseding speech request can prepare the same cached audio while the
+  // first normalization is still running. Keep one cache owner and dispose the
+  // duplicate rather than leaking its native player and temporary files.
+  const raced = preparedAudioCache.get(audio);
+  if (raced) {
+    if (raced.keepAudioSessionActive === keepAudioSessionActive) {
+      disposePreparedAudio(prepared);
+      return raced;
+    }
+    if (raced.inUse > 0) return prepared;
+    disposePreparedAudio(raced);
+  }
+  prepared.cached = true;
+  preparedAudioCache.set(audio, prepared);
+  return prepared;
 }
 
 export function clearAiVoicePlaybackCache() {
@@ -102,7 +133,11 @@ export function clearAiVoicePlaybackCache() {
 
 export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback'): Promise<void> {
   if (signal.aborted) return;
-  const prepared = getPreparedAudio(audio, audioMode === 'realtimePlayback');
+  const prepared = await getPreparedAudio(audio, audioMode === 'realtimePlayback');
+  if (signal.aborted) {
+    if (!prepared.cached) disposePreparedAudio(prepared);
+    return;
+  }
   const rate = normalizedPlaybackRate(playbackRate);
   prepared.inUse += 1;
   evictPreparedAudio();

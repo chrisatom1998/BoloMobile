@@ -48,8 +48,8 @@ describe('app alerts', () => {
     const first = jest.fn();
     const second = jest.fn();
     const cancel = jest.fn();
-    const prompt = window.prompt as jest.MockedFunction<typeof window.prompt>;
-    prompt.mockReturnValue('2');
+    const confirm = window.confirm as jest.MockedFunction<typeof window.confirm>;
+    confirm.mockReturnValueOnce(false).mockReturnValueOnce(true);
 
     showWebAlert('Report reply', 'Choose the main problem.', [
       { text: 'Unsafe or inappropriate', onPress: first },
@@ -59,25 +59,6 @@ describe('app alerts', () => {
 
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
-    expect(cancel).not.toHaveBeenCalled();
-  });
-
-  it('keeps a multi-action alert open after an invalid choice', () => {
-    const selected = jest.fn();
-    const cancel = jest.fn();
-    const alert = window.alert as jest.MockedFunction<typeof window.alert>;
-    const prompt = window.prompt as jest.MockedFunction<typeof window.prompt>;
-    prompt.mockReturnValueOnce('typo').mockReturnValueOnce('1');
-
-    showWebAlert('Report reply', 'Choose the main problem.', [
-      { text: 'Unsafe or inappropriate', onPress: selected },
-      { text: 'Incorrect or misleading', onPress: jest.fn() },
-      { text: 'Cancel', style: 'cancel', onPress: cancel },
-    ]);
-
-    expect(prompt).toHaveBeenCalledTimes(2);
-    expect(alert).toHaveBeenCalledWith('Choose one of the numbered options, or cancel.');
-    expect(selected).toHaveBeenCalledTimes(1);
     expect(cancel).not.toHaveBeenCalled();
   });
 });

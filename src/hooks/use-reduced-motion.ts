@@ -1,16 +1,6 @@
-import { useEffect, useState } from 'react';
-import { AccessibilityInfo } from 'react-native';
+import type { MotionPreference } from '@/state/app-state-types';
+import { useMotionPreference } from '@/hooks/use-motion-preference';
 
-export function useReducedMotion() {
-  const [reducedMotion, setReducedMotion] = useState(false);
-  useEffect(() => {
-    let active = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => { if (active) setReducedMotion(enabled); });
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducedMotion);
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
-  return reducedMotion;
+export function useReducedMotion(preference: MotionPreference = 'gentle') {
+  return useMotionPreference(preference).reducedMotion;
 }

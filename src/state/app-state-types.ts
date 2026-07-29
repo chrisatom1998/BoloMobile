@@ -5,6 +5,7 @@ export type SavedPhrase = {
 };
 
 export type AshaResponseLanguage = 'en' | 'hi';
+export type MotionPreference = 'system' | 'gentle' | 'lively' | 'reduced';
 
 export type LearnerLevel = 'new' | 'beginner' | 'intermediate';
 export type ScriptPreference = 'both' | 'devanagari' | 'latin';

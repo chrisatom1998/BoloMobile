@@ -3,10 +3,12 @@ import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
 import { BookOpen, Leaf, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Platform, StatusBar, Text, View } from 'react-native';
+import { FlatList, Platform, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { lessonPlans } from '@/data/lesson-plans';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
@@ -48,16 +50,44 @@ export default function PhrasesScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const largeTextLayout = useLargeTextLayout();
-  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase } = useAppState();
-  const { audioError, speak } = useSpeakText();
+  const insets = useSafeAreaInsets();
+  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, sceneProgress: savedSceneProgress } = useAppState();
+  const { audioError, clearAudioError, speak } = useSpeakText();
+  const [audioPhrase, setAudioPhrase] = useState('');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   // List all due phrases here, not the 5-phrase review-session cap from duePhrases.
   const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases]);
   const reviews = phraseReviews ?? {};
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
+  const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
+  const nextLesson = useMemo(() => {
+    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
+    const resumed = catalog
+      .filter(({ lessonId }) => {
+        const progress = sceneProgress[lessonId];
+        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
+      })
+      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
+        if (!selected) return candidate;
+        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
+        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
+        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
+        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
+        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
+      }, undefined);
+    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
+    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
+    const lessonId = resumed?.lessonId
+      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
+      ?? plan.lessonIds[0]!;
+
+    return {
+      action: resumed ? 'Continue lesson' : incompletePlan ? 'Start next lesson' : 'Review a lesson',
+      lessonId,
+    };
+  }, [sceneProgress]);
   const dueSet = useMemo(() => new Set(due.map((phrase) => phrase.hi)), [due]);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -71,6 +101,8 @@ export default function PhrasesScreen() {
 
   function playPhrase(text: string, playbackRate = 1) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
+    clearAudioError();
+    setAudioPhrase(text);
     void speak(text, undefined, playbackRate);
   }
 
@@ -83,53 +115,59 @@ export default function PhrasesScreen() {
 
   const Header = (
     <View style={styles.header}>
-      <View style={styles.headerHero}>
-        <View style={styles.headerCopy}>
+      <View style={[styles.headerHero, largeTextLayout && styles.headerHeroLarge]} testID="phrases-header-hero">
+        <View style={[styles.headerCopy, largeTextLayout && styles.headerCopyLarge]}>
           <JournalKicker>Your language garden</JournalKicker>
-          <JournalDisplay style={styles.headerTitle}>Words you want to keep.</JournalDisplay>
+          <JournalDisplay style={[styles.headerTitle, largeTextLayout && styles.headerTitleLarge]}>Words you want to keep.</JournalDisplay>
         </View>
-        <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={styles.headerMotif} />
+        <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={[styles.headerMotif, largeTextLayout && styles.headerMotifLarge]} />
       </View>
-      <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
-        <View style={[styles.dueIcon, largeTextLayout && styles.dueIconLarge]}><Text style={styles.dueIconText}>{due.length}</Text></View>
-        <View style={styles.dueCopy}>
-          <Text style={styles.dueTitle}>Ready for review</Text>
-          <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'Everything is reviewed for today.'}</Text>
-        </View>
-      </PressableFeedback>
-      <SearchField onChange={setQuery} style={styles.searchField} value={query}>
-        <SearchField.Group style={styles.searchRow}>
-          <SearchField.SearchIcon iconProps={{ color: colors.muted, size: 18 }} />
-          <SearchField.Input accessibilityLabel="Search saved phrases" placeholder="Search phrases" placeholderTextColor={colors.muted} style={styles.search} />
-          <SearchField.ClearButton iconProps={{ color: colors.muted }} />
-        </SearchField.Group>
-      </SearchField>
-      <SegmentedControl
-        accessibilityLabel="Phrase category"
-        compact
-        onValueChange={setFilter}
-        options={[
-          { label: 'All', value: 'All' },
-          { label: 'Café', value: 'Food' },
-          { label: 'Social', value: 'Social' },
-          { label: 'Travel', value: 'Travel' },
-        ]}
-        stackedAtLargeText
-        style={styles.segmentedControl}
-        value={filter}
-      />
-      <View style={styles.savedHeading}>
-        <Text style={styles.savedTitle}>Saved for practice</Text>
-        <Text style={styles.savedCount}>{visible.length} total</Text>
-      </View>
-      {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
+      {phrases.length > 0 ? (
+        <>
+          <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
+            <View style={[styles.dueIcon, largeTextLayout && styles.dueIconLarge]}><Text style={styles.dueIconText}>{due.length}</Text></View>
+            <View style={styles.dueCopy}>
+              <Text style={styles.dueTitle}>Ready for review</Text>
+              <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'Everything is reviewed for today.'}</Text>
+            </View>
+          </PressableFeedback>
+          <SearchField onChange={setQuery} style={styles.searchField} value={query}>
+            <SearchField.Group style={styles.searchRow}>
+              <SearchField.SearchIcon iconProps={{ color: colors.muted, size: 18 }} />
+              <SearchField.Input accessibilityLabel="Search saved phrases" placeholder="Search phrases" placeholderTextColor={colors.muted} style={styles.search} />
+              <SearchField.ClearButton iconProps={{ color: colors.muted }} />
+            </SearchField.Group>
+          </SearchField>
+          <SegmentedControl
+            accessibilityLabel="Phrase category"
+            compact
+            onValueChange={setFilter}
+            options={[
+              { label: 'All', value: 'All' },
+              { label: 'Café', value: 'Food' },
+              { label: 'Social', value: 'Social' },
+              { label: 'Travel', value: 'Travel' },
+            ]}
+            stackedAtLargeText
+            style={styles.segmentedControl}
+            value={filter}
+          />
+          <View style={styles.savedHeading}>
+            <Text style={styles.savedTitle}>Saved for practice</Text>
+            <Text style={styles.savedCount}>{visible.length === phrases.length ? `${phrases.length} total` : `${visible.length} of ${phrases.length}`}</Text>
+          </View>
+        </>
+      ) : null}
     </View>
   );
 
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.content, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]}
+      contentContainerStyle={[
+        styles.content,
+        Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
+      ]}
       data={visible}
       keyExtractor={(phrase) => phrase.hi}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -137,8 +175,16 @@ export default function PhrasesScreen() {
       ListEmptyComponent={phrases.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}><BookOpen color={colors.white} size={28} /></View>
-          <Text style={styles.emptyTitle}>Your phrase book is ready</Text>
-          <Text style={styles.emptyBody}>Save useful answers from any scene and they will appear here for quick practice.</Text>
+          <Text style={styles.emptyBody}>Practice a lesson, then save any useful phrase you want to keep.</Text>
+          <PressableFeedback
+            accessibilityLabel={nextLesson.action}
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
+            style={styles.emptyAction}
+            testID="phrases-empty-lesson-action"
+          >
+            <Text style={styles.emptyActionText}>{nextLesson.action}</Text>
+          </PressableFeedback>
         </View>
       ) : <Text style={styles.noResults}>No phrases match this search and filter.</Text>}
       renderItem={({ item }) => {
@@ -155,7 +201,7 @@ export default function PhrasesScreen() {
                 <Text style={[styles.categoryText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>{category === 'Food' ? 'Café' : category}</Text>
               </View>
               <View style={styles.cardHeaderActions}>
-                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, category === 'Food' ? styles.listenButtonBrand : styles.listenButtonForest, !canListen && styles.disabled]}>
+                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, category === 'Food' ? styles.listenButtonBrand : styles.listenButtonForest, !canListen && styles.disabled]} testID="saved-phrase-listen">
                   <Volume2 color={category === 'Food' ? colors.brand : colors.forest} size={14} />
                   <Text style={[styles.listenText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>Listen</Text>
                 </PressableFeedback>
@@ -176,6 +222,7 @@ export default function PhrasesScreen() {
                 <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
               ))}
             </View>
+            {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
         );
       }}
@@ -188,18 +235,22 @@ export default function PhrasesScreen() {
 const useStyles = makeStyles((c) => ({
   // Let saved-phrase cards use a little more of the screen without changing
   // the visual margins of the header controls above them.
-  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.sm, paddingTop: 18, paddingBottom: spacing.xxl },
+  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.md, paddingTop: 18, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
   header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, paddingHorizontal: spacing.sm },
   headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm },
+  headerHeroLarge: { alignItems: 'stretch' },
   headerCopy: { alignItems: 'flex-start', gap: spacing.xs },
+  headerCopyLarge: { width: '100%' },
   headerTitle: { maxWidth: 310, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  headerTitleLarge: { maxWidth: '100%' },
   headerMotif: { borderRadius: 20 },
+  headerMotifLarge: { alignSelf: 'stretch' },
   dueCard: { width: '100%', minHeight: 146, overflow: 'hidden', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 14, padding: spacing.lg, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
   dueCardLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   dueIcon: { width: 68, height: 68, borderRadius: 21, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   dueIconLarge: { alignSelf: 'flex-start', height: 'auto', minHeight: 68, minWidth: 68, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: 'auto' },
-  dueIconText: { color: c.forestText, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  dueIconText: { color: c.ink, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 4 },
   dueTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', textAlign: 'left' },
   dueBody: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
@@ -245,7 +296,8 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
   emptyIcon: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  emptyTitle: { color: c.ink, fontSize: 24, fontWeight: '900', textAlign: 'center' },
   emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  emptyAction: { minWidth: 180, minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  emptyActionText: { color: c.white, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   noResults: { color: c.muted, fontSize: 15, textAlign: 'center', padding: spacing.xl },
 }));

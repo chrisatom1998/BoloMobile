@@ -2,12 +2,15 @@ import { useRouter, type Href } from 'expo-router';
 import { Award, Check, Leaf, Share2, Sprout } from 'lucide-react-native';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { useMemo } from 'react';
-import { Platform, Share, ScrollView, StatusBar, Text, View } from 'react-native';
+import { Platform, Share, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { getScene } from '@/data/scenes';
+import { lessonPlans } from '@/data/lesson-plans';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
-import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppStateValue } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 
@@ -16,12 +19,12 @@ export default function ProgressScreen() {
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+  const largeTextLayout = useLargeTextLayout();
+  const insets = useSafeAreaInsets();
   const { duePhrases, learnerProfile, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
-  const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const { week, maxMinutes } = useMemo(() => {
     const days = weeklyPractice(practiceHistory);
-    return { week: days, maxMinutes: Math.max(1, ...days.map((day) => day.seconds / 60)) };
+    return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.round(day.seconds / 60))) };
   }, [practiceHistory]);
   const { accuracy, categories, completedScenes, milestones } = useMemo(() => ({
     categories: categoryMastery(sceneProgress),
@@ -30,9 +33,60 @@ export default function ProgressScreen() {
     completedScenes: Object.values(sceneProgress).filter((item) => item.completions > 0).length,
   }), [sceneProgress]);
   const reviewedThisWeek = week.reduce((total, day) => total + day.reviews, 0);
-  const hasLearningActivity = practiceHistory.some((day) => day.seconds > 0 || day.reviews > 0) || completedScenes > 0;
+  const activeDaysThisWeek = week.filter((day) => day.seconds > 0 || day.reviews > 0).length;
+  const hasLearningActivity = practiceHistory.some((day) => day.seconds > 0 || day.reviews > 0)
+    || Object.values(sceneProgress).some((item) => item.completions > 0 || item.lastBeatIndex > 0)
+    || streak > 0
+    || reviewStreak > 0;
   const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
   const featuredMastery = featuredPhrase ? phraseReviews[featuredPhrase.hi]?.mastery ?? 0 : 0;
+  const lessonFocus = useMemo(() => {
+    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
+    const resumed = catalog
+      .filter(({ lessonId }) => {
+        const progress = sceneProgress[lessonId];
+        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
+      })
+      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
+        if (!selected) return candidate;
+        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
+        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
+        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
+        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
+        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
+      }, undefined);
+    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
+    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
+    const lessonId = resumed?.lessonId
+      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
+      ?? plan.lessonIds[0]!;
+    const lesson = getScene(lessonId);
+    const lessonIndex = Math.max(0, plan.lessonIds.indexOf(lessonId));
+    const progress = sceneProgress[lessonId];
+    const mode = resumed ? 'continue' : incompletePlan ? 'start' : 'review';
+    const turnCount = lesson?.beats.length ?? 10;
+    const currentTurn = Math.min(turnCount, (progress?.lastBeatIndex ?? 0) + 1);
+
+    return {
+      action: mode === 'continue' ? 'Continue lesson' : mode === 'start' ? 'Start lesson' : 'Review lesson',
+      lessonId,
+      metric: mode === 'continue'
+        ? `Plan ${String(plan.order).padStart(2, '0')} · Lesson ${lessonIndex + 1} of ${plan.lessonIds.length} · Turn ${currentTurn} of ${turnCount}`
+        : `Plan ${String(plan.order).padStart(2, '0')} · Lesson ${lessonIndex + 1} of ${plan.lessonIds.length} · ${turnCount} turns`,
+      mode,
+      title: lesson?.title ?? plan.title,
+    };
+  }, [sceneProgress]);
+  const streakLabel = streak > 0
+    ? `${streak}-day practice streak`
+    : hasLearningActivity
+      ? 'No active practice streak'
+      : 'No practice streak yet';
+  const weekActivityLabel = reviewedThisWeek > 0
+    ? `${reviewedThisWeek} phrase review${reviewedThisWeek === 1 ? '' : 's'}`
+    : activeDaysThisWeek > 0
+      ? `${activeDaysThisWeek} active day${activeDaysThisWeek === 1 ? '' : 's'}`
+      : 'No activity yet';
 
   function shareMilestones() {
     const achieved = milestones.filter((item) => item.achieved).map((item) => item.title);
@@ -45,40 +99,51 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]} style={sharedStyles.screen}>
-      <View style={styles.pageHeading}>
-        <View style={styles.pageHeadingCopy}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
+      <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
+        <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
           <JournalKicker>Your language garden</JournalKicker>
-          <JournalDisplay style={styles.pageTitle}>What is taking root.</JournalDisplay>
+          <JournalDisplay style={[styles.pageTitle, largeTextLayout && styles.pageTitleLarge]}>What is taking root.</JournalDisplay>
         </View>
-        <JournalMotif accessibilityLabel="Progress journal motif" size="tile" />
+        <JournalMotif accessibilityLabel="Progress journal motif" size="tile" style={largeTextLayout ? styles.pageHeadingMotifLarge : undefined} />
       </View>
 
       <View style={styles.hero}>
-        <Text pointerEvents="none" style={styles.heroGlyph}>ब</Text>
+        <Text accessible={false} importantForAccessibility="no" pointerEvents="none" style={styles.heroGlyph}>ब</Text>
         <View style={styles.heroIcon}><Sprout color={colors.goldSoft} size={25} /></View>
-        <Text style={styles.heroTitle}>{reviewedThisWeek ? `${reviewedThisWeek} phrase review${reviewedThisWeek === 1 ? '' : 's'} this week.` : 'Your Hindi is taking root.'}</Text>
-        <Text style={styles.heroBody}>Every small recall makes useful Hindi easier to find when you need it.</Text>
-        <View style={styles.heroFootnote}><Text style={styles.heroFootnoteText}>{streak ? `${streak} day practice streak` : 'Start a calm practice streak today'}</Text></View>
+        <Text style={styles.heroEyebrow}>
+          {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
+        </Text>
+        <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
+        <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
+        <View style={styles.heroFootnotes}>
+          <View style={styles.heroFootnote}><Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text></View>
+          <View style={[styles.heroFootnote, styles.heroFootnoteForest]}><Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text></View>
+        </View>
+        <PressableFeedback
+          accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
+          accessibilityRole="button"
+          onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
+          style={styles.heroAction}
+        >
+          <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
+        </PressableFeedback>
       </View>
 
-      {!hasLearningActivity ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateTitle}>Your garden starts with one small turn.</Text>
-          <Text style={styles.emptyStateBody}>Complete a scene or save a phrase, and your practice pattern will grow here.</Text>
-          <PressableFeedback accessibilityRole="button" onPress={() => router.push('/' as Href)} style={styles.emptyStateButton}>
-            <Text style={styles.emptyStateButtonText}>Choose today’s practice</Text>
-          </PressableFeedback>
-        </View>
-      ) : null}
+      <View style={styles.stats}>
+        <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
+        <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
+        <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>practice streak</Text></View>
+        <View style={styles.stat}><Text style={styles.statValue}>{reviewStreak}</Text><Text style={styles.statLabel}>review streak</Text></View>
+      </View>
 
       <View style={styles.gardenCard}>
         <View style={styles.cardTitleRow}>
           <View>
             <Text style={styles.gardenEyebrow}>This week</Text>
-            <Text style={styles.title}>Keep it blooming.</Text>
+            <Text style={styles.title}>Your practice pattern.</Text>
           </View>
-          <Text style={styles.gardenMeta}>{reviewedThisWeek ? `${reviewedThisWeek} reviews` : 'One gentle start'}</Text>
+          <Text style={styles.gardenMeta}>{weekActivityLabel}</Text>
         </View>
         <View accessibilityLabel="Weekly practice garden" style={styles.gardenWeek}>
           {week.map((day, index) => {
@@ -101,10 +166,9 @@ export default function ProgressScreen() {
           <View style={styles.featuredPhraseHeading}>
             <View style={styles.featuredPhraseIcon}><Sprout color={colors.forestText} size={20} /></View>
             <Text style={styles.gardenEyebrow}>Featured phrase</Text>
-            <View style={styles.featuredListen}><Text style={styles.featuredNavigate}>→</Text></View>
           </View>
-          {profile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
-          {profile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
+          {learnerProfile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
+          {learnerProfile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
           <Text style={styles.featuredEnglish}>{featuredPhrase.en}</Text>
           <View style={styles.featuredMasteryRow}>
             <Text style={styles.featuredMasteryLabel}>Mastery</Text>
@@ -114,13 +178,6 @@ export default function ProgressScreen() {
           <View style={styles.waterButton}><Text style={styles.waterButtonText}>{duePhrases.length ? 'Water this phrase' : 'Visit your phrase garden'}</Text></View>
         </PressableFeedback>
       ) : null}
-
-      <View style={styles.stats}>
-        <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>practice streak</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{reviewStreak}</Text><Text style={styles.statLabel}>review streak</Text></View>
-      </View>
 
       <View style={styles.card}>
         <View style={styles.cardTitleRow}>
@@ -166,22 +223,27 @@ export default function ProgressScreen() {
 }
 
 export const createProgressStyles = (c: ThemeColors) => ({
-  content: { alignItems: 'center', padding: spacing.lg, paddingTop: 18, paddingBottom: spacing.xxl, gap: spacing.lg },
+  content: { alignItems: 'center', padding: spacing.lg, paddingTop: 18, paddingBottom: 120, gap: spacing.lg },
   pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
+  pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs, paddingTop: spacing.xs },
+  pageHeadingCopyLarge: { flex: 0, width: '100%' },
   pageTitle: { maxWidth: 225, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  pageTitleLarge: { maxWidth: '100%' },
+  pageHeadingMotifLarge: { alignSelf: 'flex-end' },
   hero: { width: '100%', position: 'relative', overflow: 'hidden', alignItems: 'flex-start', borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm, boxShadow: '0 10px 24px rgba(0, 0, 0, 0.09)' },
   heroIcon: { width: 46, height: 46, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center' },
   heroGlyph: { position: 'absolute', right: -6, bottom: -48, color: c.heroGlyph, fontSize: 156, lineHeight: 180, fontWeight: '900' },
+  heroEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   heroTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 32, fontWeight: '700', textAlign: 'left' },
   heroBody: { color: c.muted, fontSize: 14, lineHeight: 21, textAlign: 'left' },
-  heroFootnote: { borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  heroFootnotes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  heroFootnote: { maxWidth: '100%', flexShrink: 1, borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   heroFootnoteText: { color: c.ink, fontSize: 12, fontWeight: '800' },
-  emptyState: { width: '100%', borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, gap: spacing.sm, padding: spacing.lg },
-  emptyStateTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 28, fontWeight: '700' },
-  emptyStateBody: { color: c.muted, fontSize: 14, lineHeight: 21 },
-  emptyStateButton: { alignSelf: 'flex-start', minHeight: 44, borderRadius: radius.pill, backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  emptyStateButtonText: { color: c.white, fontSize: 14, fontWeight: '900' },
+  heroFootnoteForest: { backgroundColor: c.forestSoft },
+  heroFootnoteForestText: { color: c.forestText },
+  heroAction: { minHeight: 48, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
+  heroActionText: { color: c.neutralSurfaceText, fontSize: 14, fontWeight: '900' },
   gardenCard: { width: '100%', backgroundColor: c.paper, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.lg, gap: spacing.lg },
   gardenEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   gardenMeta: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'right' },
@@ -196,7 +258,6 @@ export const createProgressStyles = (c: ThemeColors) => ({
   featuredPhraseHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   featuredPhraseIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.goldSoft, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   featuredListen: { marginLeft: 'auto', width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
-  featuredNavigate: { color: c.forestText, fontSize: 20, fontWeight: '900' },
   featuredHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 28, lineHeight: 36, fontWeight: '700' },
   featuredLatin: { color: c.brandText, fontSize: 15, fontWeight: '900' },
   featuredEnglish: { color: c.muted, fontSize: 15, lineHeight: 21 },

@@ -111,4 +111,12 @@ describe('AiConsentGate', () => {
     await fireEvent.press(view.getByRole('link', { name: 'Read the public Privacy Policy' }));
     await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Could not open Privacy Policy', 'Browser unavailable.'));
   });
+
+  it('supports screen-specific consent wording without changing the shared defaults', async () => {
+    const view = await render(<AiConsentGate actionLabel="Enable live practice" title="Before your first live turn" />);
+
+    expect(view.getByText('Before your first live turn')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Enable live practice' })).toBeTruthy();
+    expect(view.queryByText('Before using Asha')).toBeNull();
+  });
 });

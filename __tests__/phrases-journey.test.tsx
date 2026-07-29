@@ -1,11 +1,13 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
+const mockRouterPush = jest.fn();
+
 jest.mock('expo-router', () => {
   const React = require('react') as typeof import('react');
   return {
     useFocusEffect: (effect: () => void | (() => void)) => React.useEffect(effect, [effect]),
-    useRouter: () => ({ push: jest.fn() }),
+    useRouter: () => ({ push: mockRouterPush }),
   };
 });
 
@@ -25,6 +27,7 @@ const mockAppState = {
   phraseReviews: {} as ReturnType<typeof reviewedTomorrow>,
   phrases: [] as (typeof mockPhrase)[],
   removePhrase: mockRemovePhrase,
+  sceneProgress: {} as Record<string, { completions: number; lastBeatIndex: number; lastPracticedAt: string | null }>,
 };
 
 jest.mock('lucide-react-native', () => ({
@@ -33,6 +36,10 @@ jest.mock('lucide-react-native', () => ({
   Search: () => null,
   Trash2: () => null,
   Volume2: () => null,
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 jest.mock('@/components/ai-consent-gate', () => ({
@@ -72,15 +79,41 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.aiConsent = true;
     mockAppState.phraseReviews = reviewedTomorrow();
     mockAppState.phrases = [];
+    mockAppState.sceneProgress = {};
     speakTextMock.mockResolvedValue();
   });
 
-  it('renders the empty phrase-book state', async () => {
+  it('replaces empty review tools with one next-lesson action', async () => {
     const view = await render(<PhrasesScreen />);
 
-    expect(view.getByText('Your phrase book is ready')).toBeTruthy();
-    expect(view.getByText(/Save useful answers from any scene/u)).toBeTruthy();
-    expect(view.queryByText('Saved phrases')).toBeNull();
+    expect(view.getByText('Practice a lesson, then save any useful phrase you want to keep.')).toBeTruthy();
+    expect(view.queryByLabelText('Search saved phrases')).toBeNull();
+    expect(view.queryByLabelText('Phrase category')).toBeNull();
+    expect(view.queryByText('Ready for review')).toBeNull();
+    expect(view.queryByText('Saved for practice')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Start next lesson'));
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/scene/[id]',
+      params: { id: 'plan-essentials-01' },
+    });
+  });
+
+  it('continues the learner’s in-progress lesson from the empty state', async () => {
+    mockAppState.sceneProgress = {
+      'plan-essentials-03': {
+        completions: 0,
+        lastBeatIndex: 2,
+        lastPracticedAt: '2026-07-28T18:00:00.000Z',
+      },
+    };
+    const view = await render(<PhrasesScreen />);
+
+    await fireEvent.press(view.getByLabelText('Continue lesson'));
+    expect(mockRouterPush).toHaveBeenCalledWith({
+      pathname: '/scene/[id]',
+      params: { id: 'plan-essentials-03' },
+    });
   });
 
   it('labels every due phrase, not just the first five', async () => {

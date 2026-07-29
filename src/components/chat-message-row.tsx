@@ -21,13 +21,15 @@ function SelectableChatText({
   accessibilityLabel,
   accessibilityLiveRegion,
   onSelectedText,
+  onSelectionCollapsed,
   sourceText,
   style,
   text,
 }: {
   accessibilityLabel: string;
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
-  onSelectedText: (selection: { sourceText: string; text: string } | null) => void;
+  onSelectedText: (selection: { sourceText: string; text: string }) => void;
+  onSelectionCollapsed: () => void;
   sourceText: string;
   style: StyleProp<TextStyle>;
   text: string;
@@ -40,25 +42,23 @@ function SelectableChatText({
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
     if (end <= start) {
-      onSelectedText(null);
+      onSelectionCollapsed();
       return;
     }
     const excerpt = text.slice(start, end).trim();
-    if (!excerpt) {
-      onSelectedText(null);
-      return;
-    }
+    if (!excerpt) return;
     onSelectedText({
       sourceText: sourceTextForDisplayedSelection({ displayText: text, end, sourceText, start }),
       text: excerpt,
     });
-  }, [onSelectedText, sourceText, text]);
+  }, [onSelectedText, onSelectionCollapsed, sourceText, text]);
 
   return (
     <TextInput
-      accessibilityHint="Highlight any words, then use Save selection below."
+      accessibilityHint="Read-only message. Highlight words, then use Save selection below."
       accessibilityLabel={accessibilityLabel}
       accessibilityLiveRegion={accessibilityLiveRegion}
+      accessibilityRole="text"
       contextMenuHidden={false}
       multiline
       onContentSizeChange={(event) => {
@@ -83,6 +83,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenWordDefinition,
   onPlayReply,
   onReport,
+  onSelectionCollapsed,
   onSelectedText,
   realtimeOwnsAudio,
   reported,
@@ -97,7 +98,8 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenWordDefinition: (sourcePhrase: string) => void;
   onPlayReply: (message: ChatMessage) => void;
   onReport: (message: ChatMessage) => void;
-  onSelectedText: (messageId: string, selection: { sourceText: string; text: string } | null) => void;
+  onSelectedText: (messageId: string, selection: { sourceText: string; text: string }) => void;
+  onSelectionCollapsed: (messageId: string) => void;
   realtimeOwnsAudio: boolean;
   reported: boolean;
   reporting: boolean;
@@ -109,9 +111,10 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const excerpt = useMemo(() => messageActionExcerpt(displayText), [displayText]);
   const isYou = message.role === 'you';
 
-  const selectedText = useCallback((selection: { sourceText: string; text: string } | null) => {
+  const selectedText = useCallback((selection: { sourceText: string; text: string }) => {
     onSelectedText(message.id, selection);
   }, [message.id, onSelectedText]);
+  const selectionCollapsed = useCallback(() => onSelectionCollapsed(message.id), [message.id, onSelectionCollapsed]);
   const openPhrasePicker = useCallback(() => onOpenPhrasePicker(message), [message, onOpenPhrasePicker]);
   const openWordDefinition = useCallback(() => { if (sourcePhrase) onOpenWordDefinition(sourcePhrase); }, [onOpenWordDefinition, sourcePhrase]);
   const playReply = useCallback(() => onPlayReply(message), [message, onPlayReply]);
@@ -127,8 +130,9 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
         </View>
         <SelectableChatText
-          accessibilityLabel={`Selectable chat text: ${excerpt}`}
+          accessibilityLabel={`Selectable chat text: ${displayText}`}
           accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
+          onSelectionCollapsed={selectionCollapsed}
           onSelectedText={selectedText}
           sourceText={message.text}
           style={[styles.messageText, isYou && styles.userText]}
@@ -137,7 +141,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
         {message.role === 'asha' || !isWelcome ? (
           <View style={styles.messageActions}>
             {!isWelcome ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${excerpt}`} accessibilityRole="button" onPress={openPhrasePicker} style={styles.smallAction}><BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, isYou && styles.userText]}>Save selection</Text></Pressable> : null}
-            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens a word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
+            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
             {message.role === 'asha' ? (
               <>
                 <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={playReply} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>

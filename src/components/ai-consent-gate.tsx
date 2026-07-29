@@ -8,7 +8,17 @@ import { observe, observeOncePerSession } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
-export function AiConsentGate({ children }: { children?: ReactNode }) {
+type AiConsentGateProps = {
+  actionLabel?: string;
+  children?: ReactNode;
+  title?: string;
+};
+
+export function AiConsentGate({
+  actionLabel = 'I agree and want to continue',
+  children,
+  title = 'Before using Asha',
+}: AiConsentGateProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const { aiConsent, setAiConsent } = useAppState();
@@ -41,7 +51,7 @@ export function AiConsentGate({ children }: { children?: ReactNode }) {
   return (
     <View style={styles.card}>
       <View style={styles.icon}><ShieldCheck color={colors.white} size={22} /></View>
-      <Text style={styles.title}>Before using Asha</Text>
+      <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>
         Core lesson and saved-phrase audio is bundled with Bolo and works offline without sending text anywhere. After you agree, Bolo uses its service and OpenAI for generated Asha speech, submitted text, live voice turns, and pronunciation recordings. Typed coaching includes a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. Tap the glowing orb to begin each turn, then tap the orb again to send the turn. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Asha&apos;s spoken reply travels directly from OpenAI to the app. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
       </Text>
@@ -52,7 +62,7 @@ export function AiConsentGate({ children }: { children?: ReactNode }) {
         <Text style={styles.linkText}>Read the public Privacy Policy</Text>
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityState={{ disabled: saving }} disabled={saving} onPress={() => void accept()} style={[styles.button, saving && styles.disabled]}>
-        <Text style={styles.buttonText}>{saving ? 'Saving privacy choice…' : 'I agree and want to continue'}</Text>
+        <Text style={styles.buttonText}>{saving ? 'Saving privacy choice…' : actionLabel}</Text>
       </Pressable>
     </View>
   );
