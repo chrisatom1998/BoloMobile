@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StatusBar, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { hindiSourcePhrase, hindiWordTokens } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
@@ -19,8 +20,7 @@ export function WordDefinitionSheet({
   onClose,
   phrase,
   reducedMotion = false,
-  responseLanguage,
-  scriptPreference,
+  scriptPreference = 'both',
   visible,
 }: {
   clientId: string;
@@ -28,22 +28,20 @@ export function WordDefinitionSheet({
   onClose: () => void;
   phrase: string;
   reducedMotion?: boolean;
-  /** @deprecated Supply scriptPreference from the learner profile instead. */
-  responseLanguage?: 'en' | 'hi';
   scriptPreference?: ScriptPreference;
   visible: boolean;
 }) {
   const styles = useStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+  const insets = useSafeAreaInsets();
   const sourcePhrase = useMemo(() => hindiSourcePhrase(phrase), [phrase]);
   const words = useMemo(() => hindiWordTokens(sourcePhrase), [sourcePhrase]);
   const requestRef = useRef<AbortController | null>(null);
+  const requestWordRef = useRef<string | null>(null);
   const requestIdRef = useRef(0);
   const autoExplainedRef = useRef<string | null>(null);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [definitions, setDefinitions] = useState<Record<string, DefinitionState>>({});
   const definitionsRef = useRef(definitions);
-  const requestWordRef = useRef<string | null>(null);
   definitionsRef.current = definitions;
 
   useEffect(() => {
@@ -61,14 +59,19 @@ export function WordDefinitionSheet({
   const explain = useCallback(async (word: string) => {
     setSelectedWord(word);
     const cached = definitionsRef.current[word];
-    if (cached?.loading || cached?.explanation) return;
+    if (cached?.explanation || (cached?.loading && requestWordRef.current === word)) return;
 
-    const previousWord = requestWordRef.current;
+    const abortedWord = requestWordRef.current;
     requestRef.current?.abort();
-    if (previousWord && previousWord !== word) {
-      setDefinitions((current) => current[previousWord]?.loading
-        ? { ...current, [previousWord]: {} }
-        : current);
+    requestRef.current = null;
+    requestWordRef.current = null;
+    if (abortedWord) {
+      setDefinitions((current) => {
+        if (!current[abortedWord]?.loading) return current;
+        const next = { ...current };
+        delete next[abortedWord];
+        return next;
+      });
     }
     const controller = new AbortController();
     const requestId = requestIdRef.current + 1;
@@ -95,8 +98,10 @@ export function WordDefinitionSheet({
   }, [clientId, sourcePhrase]);
 
   const selectedDefinition = selectedWord ? definitions[selectedWord] : undefined;
-  const displayHindi = useCallback((text: string) => (scriptPreference ? scriptPreference === 'latin' : responseLanguage === 'en') ? romanizeDevanagari(text) : text, [responseLanguage, scriptPreference]);
-  const displaySourcePhrase = sourcePhrase ? displayHindi(sourcePhrase) : 'No Hindi words were found in this message.';
+  const romanization = sourcePhrase ? romanizeDevanagari(sourcePhrase) : '';
+  const displaySource = scriptPreference === 'latin' ? romanization : sourcePhrase;
+  const showRomanization = scriptPreference === 'both' && romanization;
+  const displayWord = useCallback((word: string) => scriptPreference === 'latin' ? romanizeDevanagari(word) : word, [scriptPreference]);
 
   useEffect(() => {
     if (!visible || !initialWord || !words.includes(initialWord)) return;
@@ -108,7 +113,7 @@ export function WordDefinitionSheet({
   return (
     <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
       <View style={styles.screen}>
-        <View style={styles.header}>
+        <View style={[styles.header, Platform.OS === 'android' && { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>Word by word</Text>
             <Text style={styles.title}>Unpack the Hindi.</Text>
@@ -117,29 +122,29 @@ export function WordDefinitionSheet({
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
         </View>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(spacing.lg, androidStatusInset + spacing.md) }]}>
+        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingBottom: insets.bottom + spacing.xxl }]}>
           <View style={styles.sourceCard}>
             <Text style={styles.sourceLabel}>Source phrase</Text>
-            <Text selectable style={styles.sourcePhrase}>{displaySourcePhrase}</Text>
+            <Text selectable style={styles.sourcePhrase}>{displaySource || 'No Hindi words were found in this message.'}</Text>
+            {showRomanization ? <Text selectable style={styles.romanization}>{romanization}</Text> : null}
           </View>
 
           {words.length ? (
             <View style={styles.tray}>
-              <Text style={styles.trayLabel}>Tap a word</Text>
+              <Text style={styles.trayLabel}>Tap a Hindi word</Text>
               <View style={styles.tokenWrap}>
                 {words.map((word) => {
                   const selected = word === selectedWord;
-                  const displayWord = displayHindi(word);
                   return (
                     <Pressable
-                      accessibilityLabel={`Explain ${displayWord}`}
+                      accessibilityLabel={`Explain ${displayWord(word)}`}
                       accessibilityRole="button"
                       accessibilityState={{ selected }}
                       key={word}
                       onPress={() => void explain(word)}
                       style={[styles.token, selected && styles.tokenSelected]}
                     >
-                      <Text style={[styles.tokenText, selected && styles.tokenTextSelected]}>{displayWord}</Text>
+                      <Text style={[styles.tokenText, selected && styles.tokenTextSelected]}>{displayWord(word)}</Text>
                     </Pressable>
                   );
                 })}
@@ -149,19 +154,19 @@ export function WordDefinitionSheet({
 
           {selectedWord ? (
             <View accessibilityLiveRegion="polite" style={styles.definitionCard}>
-              <Text style={styles.definitionLabel}>In this phrase, {displayHindi(selectedWord)}</Text>
+              <Text style={styles.definitionLabel}>In this phrase, {displayWord(selectedWord)}</Text>
               {selectedDefinition?.loading ? <Text style={styles.definitionBody}>Finding the useful meaning…</Text> : null}
               {selectedDefinition?.explanation ? <Text selectable style={styles.definitionBody}>{selectedDefinition.explanation}</Text> : null}
               {selectedDefinition?.error ? (
                 <>
                   <Text accessibilityRole="alert" style={styles.error}>{selectedDefinition.error}</Text>
-                  <Pressable accessibilityLabel={`Retry explanation for ${displayHindi(selectedWord)}`} accessibilityRole="button" onPress={() => void explain(selectedWord)} style={styles.retryButton}>
+                  <Pressable accessibilityLabel={`Retry explanation for ${displayWord(selectedWord)}`} accessibilityRole="button" onPress={() => void explain(selectedWord)} style={styles.retryButton}>
                     <Text style={styles.retryText}>Try again</Text>
                   </Pressable>
                 </>
               ) : null}
             </View>
-          ) : <Text style={styles.guidance}>Choose a word above. English stays here in the explanation, not in the word tray.</Text>}
+          ) : <Text style={styles.guidance}>Choose a Hindi word above. English stays here in the explanation, not in the word tray.</Text>}
         </ScrollView>
       </View>
     </Modal>
@@ -180,6 +185,7 @@ const useStyles = makeStyles((c) => ({
   sourceCard: { gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, padding: spacing.lg },
   sourceLabel: { color: c.forestText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   sourcePhrase: { color: c.ink, fontSize: 24, lineHeight: 34, fontWeight: '800' },
+  romanization: { color: c.muted, fontSize: 16, lineHeight: 23, fontWeight: '700' },
   tray: { gap: spacing.sm },
   trayLabel: { color: c.ink, fontSize: 17, lineHeight: 24, fontWeight: '900' },
   tokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

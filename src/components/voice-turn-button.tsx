@@ -195,6 +195,9 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
         foregroundWaiterRef.current = null;
         if (startingRef.current && mountedRef.current) setError(FOREGROUND_EXIT_MESSAGE);
       }
+      // iOS briefly reports `inactive` for notification banners and Control
+      // Center. Preserve the recording through that transient state; only a
+      // real background transition discards local microphone data.
       if (nextState === 'background' && recordingRef.current) void discardActiveRecording();
     });
     return () => subscription.remove();

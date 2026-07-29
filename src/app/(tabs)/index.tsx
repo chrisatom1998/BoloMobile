@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Button } from 'heroui-native/button';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Platform, Pressable, StatusBar, Text, View } from 'react-native';
+import { FlatList, Platform, Pressable, StatusBar, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
@@ -51,6 +51,8 @@ export default function HomeScreen() {
     ? Math.max(18, (StatusBar.currentHeight ?? 0) + spacing.md)
     : 18;
   const largeTextLayout = useLargeTextLayout();
+  const { width: windowWidth } = useWindowDimensions();
+  const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
   const { duePhrases, goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const profile = useMemo(() => learnerProfile ?? { ...defaultLearnerProfile(), completed: true }, [learnerProfile]);
@@ -211,7 +213,7 @@ export default function HomeScreen() {
 
   const header = useMemo(() => (
     <View style={styles.headerContent}>
-      <View style={[styles.topbar, largeTextLayout && styles.topbarLarge]} testID="today-topbar">
+      <View style={[styles.topbar, stackedTopbarLayout && styles.topbarLarge]} testID="today-topbar">
         <View style={styles.brandCopy}>
           <JournalKicker>A QUIET PRACTICE</JournalKicker>
           <JournalDisplay style={styles.greeting}>Make Hindi yours.</JournalDisplay>
@@ -284,7 +286,7 @@ export default function HomeScreen() {
         <Text style={styles.learningMeta}>{lessonPlans.length} plans · {lessonPlans.reduce((sum, plan) => sum + plan.lessonIds.length, 0)} lessons</Text>
       </View>
     </View>
-  ), [duePhrases.length, featuredMastery, featuredPhrase, featuredPhraseText, gardenSummary, largeTextLayout, lessonSelection, motionMode, openLesson, router, streak, styles]);
+  ), [duePhrases.length, featuredMastery, featuredPhrase, featuredPhraseText, gardenSummary, largeTextLayout, lessonSelection, motionMode, openLesson, router, stackedTopbarLayout, streak, styles]);
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
@@ -363,7 +365,7 @@ const useStyles = makeStyles((c) => ({
   footerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', gap: spacing.lg, marginTop: spacing.lg },
   planCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center' },
   topbar: { width: '100%', minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  topbarLarge: { alignItems: 'flex-start', flexWrap: 'wrap' },
+  topbarLarge: { minHeight: 0, flexDirection: 'column', alignItems: 'stretch', gap: spacing.md, paddingRight: 0 },
   intro: { minWidth: 0, flex: 1, maxWidth: 200, paddingTop: spacing.lg, gap: spacing.lg },
   brandCopy: { minWidth: 0, flex: 1 },
   greeting: { marginTop: 1, fontSize: 30, lineHeight: 36, letterSpacing: -0.6 },
@@ -408,10 +410,14 @@ const useStyles = makeStyles((c) => ({
   practicePortrait: { width: '100%', height: 142 },
   practiceArcCopy: { width: '100%', alignItems: 'stretch', gap: spacing.md, padding: spacing.lg },
   practiceArcHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  practiceArcHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   practiceArcTitleCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  practiceArcTitleCopyLarge: { flex: 0 },
   practiceArcTitle: { maxWidth: 270, fontSize: 28, lineHeight: 34, textAlign: 'left' },
+  practiceArcTitleLarge: { maxWidth: '100%' },
   nextBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
   goalSummary: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
+  goalSummaryLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   todayLabel: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'left' },
   streakChip: { backgroundColor: c.forestSoft },
   streakChipIcon: { color: c.forestText },
@@ -419,7 +425,9 @@ const useStyles = makeStyles((c) => ({
   progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm },
   progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
   arcSteps: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
+  arcStepsLarge: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
   arcStep: { minWidth: 0, flex: 1, alignItems: 'center', gap: 5 },
+  arcStepLarge: { flex: 0, flexDirection: 'row', justifyContent: 'flex-start', gap: spacing.md },
   arcIcon: { width: 42, height: 42, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center' },
   arcIconActive: { backgroundColor: c.neutralSurface, borderColor: c.gold, borderWidth: 2 },
   arcIconText: { color: c.forestText },

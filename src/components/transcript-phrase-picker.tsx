@@ -1,6 +1,7 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
@@ -21,7 +22,7 @@ type TranscriptPhrasePickerProps = {
 export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+  const insets = useSafeAreaInsets();
   const initialText = highlightedText?.trim() || romanizeDevanagari(message.text.trim());
   const [selectedText, setSelectedText] = useState(initialText);
   const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
@@ -32,6 +33,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -92,8 +94,8 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
 
   return (
     <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={close} presentationStyle="pageSheet" visible>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.screen}>
-        <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(spacing.xl, androidStatusInset + spacing.md) }]} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
+      <View style={[styles.screen, Platform.OS === 'android' && { paddingTop: insets.top }]}>
+        <ScrollView ref={scrollRef} automaticallyAdjustKeyboardInsets contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>Saved phrases</Text>
@@ -134,22 +136,24 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Hindi</Text>
-            <TextInput accessibilityLabel="Hindi phrase" maxLength={500} onChangeText={setHindi} placeholder="उदाहरण: आप कैसे हैं?" placeholderTextColor={colors.muted} style={styles.input} value={hindi} />
+            <TextInput accessibilityLabel="Hindi phrase" maxLength={500} onChangeText={setHindi} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="उदाहरण: आप कैसे हैं?" placeholderTextColor={colors.muted} style={styles.input} value={hindi} />
           </View>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Romanized Hindi</Text>
-            <TextInput accessibilityLabel="Romanized Hindi phrase" maxLength={500} onChangeText={setLatin} placeholder="Example: Aap kaise hain?" placeholderTextColor={colors.muted} style={styles.input} value={latin} />
+            <TextInput accessibilityLabel="Romanized Hindi phrase" maxLength={500} onChangeText={setLatin} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="Example: Aap kaise hain?" placeholderTextColor={colors.muted} style={styles.input} value={latin} />
           </View>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>English meaning</Text>
-            <TextInput accessibilityLabel="English phrase meaning" maxLength={500} onChangeText={setEnglish} placeholder="Example: How are you?" placeholderTextColor={colors.muted} style={styles.input} value={english} />
+            <TextInput accessibilityLabel="English phrase meaning" maxLength={500} onChangeText={setEnglish} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="Example: How are you?" placeholderTextColor={colors.muted} style={styles.input} value={english} />
           </View>
 
+        </ScrollView>
+        <View style={[styles.footer, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) }]}>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: !canSave }} disabled={!canSave} onPress={save} style={[styles.saveButton, !canSave && styles.disabled]}>
             <Text style={styles.saveButtonText}>Save phrase</Text>
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -157,6 +161,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.background },
   content: { gap: spacing.lg, padding: spacing.xl, paddingBottom: spacing.xxl },
+  footer: { borderTopColor: c.line, borderTopWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   headerCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   eyebrow: { color: c.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },

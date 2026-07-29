@@ -9,7 +9,7 @@ jest.mock('expo-router/unstable-native-tabs', () => {
   Trigger.Label = ({ children }: PropsWithChildren) => React.createElement(Text, null, children);
   Trigger.Badge = ({ children }: PropsWithChildren) => React.createElement(Text, { testID: 'tab-badge' }, children);
   const NativeTabs = Object.assign(
-    ({ children }: PropsWithChildren) => React.createElement(View, { testID: 'native-tabs' }, children),
+    ({ children, ...props }: PropsWithChildren<Record<string, unknown>>) => React.createElement(View, { testID: 'native-tabs', ...props }, children),
     { Trigger },
   );
   return { NativeTabs };
@@ -37,6 +37,7 @@ describe('primary tab navigation', () => {
     expect(view.getByText('Phrases')).toBeTruthy();
     expect(view.getByText('Progress')).toBeTruthy();
     expect(view.getByTestId('tab-badge').props.children).toBe('1');
+    expect(view.getByTestId('native-tabs').props.disableTransparentOnScrollEdge).toBe(true);
   });
 
   it('does not show an empty badge when nothing is due', async () => {

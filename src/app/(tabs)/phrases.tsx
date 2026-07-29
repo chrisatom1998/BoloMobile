@@ -3,7 +3,8 @@ import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
 import { BookOpen, Leaf, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Platform, StatusBar, Text, View } from 'react-native';
+import { FlatList, Platform, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
@@ -49,10 +50,11 @@ export default function PhrasesScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
   const largeTextLayout = useLargeTextLayout();
+  const insets = useSafeAreaInsets();
   const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, sceneProgress: savedSceneProgress } = useAppState();
-  const { audioError, speak } = useSpeakText();
+  const { audioError, clearAudioError, speak } = useSpeakText();
+  const [audioPhrase, setAudioPhrase] = useState('');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   // List all due phrases here, not the 5-phrase review-session cap from duePhrases.
@@ -99,6 +101,8 @@ export default function PhrasesScreen() {
 
   function playPhrase(text: string, playbackRate = 1) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
+    clearAudioError();
+    setAudioPhrase(text);
     void speak(text, undefined, playbackRate);
   }
 
@@ -111,12 +115,12 @@ export default function PhrasesScreen() {
 
   const Header = (
     <View style={styles.header}>
-      <View style={styles.headerHero}>
-        <View style={styles.headerCopy}>
+      <View style={[styles.headerHero, largeTextLayout && styles.headerHeroLarge]} testID="phrases-header-hero">
+        <View style={[styles.headerCopy, largeTextLayout && styles.headerCopyLarge]}>
           <JournalKicker>Your language garden</JournalKicker>
-          <JournalDisplay style={styles.headerTitle}>Words you want to keep.</JournalDisplay>
+          <JournalDisplay style={[styles.headerTitle, largeTextLayout && styles.headerTitleLarge]}>Words you want to keep.</JournalDisplay>
         </View>
-        <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={styles.headerMotif} />
+        <JournalMotif accessibilityLabel="Language garden motif" size="strip" style={[styles.headerMotif, largeTextLayout && styles.headerMotifLarge]} />
       </View>
       {phrases.length > 0 ? (
         <>
@@ -150,9 +154,8 @@ export default function PhrasesScreen() {
           />
           <View style={styles.savedHeading}>
             <Text style={styles.savedTitle}>Saved for practice</Text>
-            <Text style={styles.savedCount}>{visible.length} total</Text>
+            <Text style={styles.savedCount}>{visible.length === phrases.length ? `${phrases.length} total` : `${visible.length} of ${phrases.length}`}</Text>
           </View>
-          {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
         </>
       ) : null}
     </View>
@@ -161,7 +164,10 @@ export default function PhrasesScreen() {
   return (
     <FlatList
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.content, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]}
+      contentContainerStyle={[
+        styles.content,
+        Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
+      ]}
       data={visible}
       keyExtractor={(phrase) => phrase.hi}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -195,7 +201,7 @@ export default function PhrasesScreen() {
                 <Text style={[styles.categoryText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>{category === 'Food' ? 'Café' : category}</Text>
               </View>
               <View style={styles.cardHeaderActions}>
-                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, category === 'Food' ? styles.listenButtonBrand : styles.listenButtonForest, !canListen && styles.disabled]}>
+                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, category === 'Food' ? styles.listenButtonBrand : styles.listenButtonForest, !canListen && styles.disabled]} testID="saved-phrase-listen">
                   <Volume2 color={category === 'Food' ? colors.brand : colors.forest} size={14} />
                   <Text style={[styles.listenText, category === 'Food' ? styles.categoryTextBrand : styles.categoryTextForest]}>Listen</Text>
                 </PressableFeedback>
@@ -216,6 +222,7 @@ export default function PhrasesScreen() {
                 <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
               ))}
             </View>
+            {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
         );
       }}
@@ -228,18 +235,22 @@ export default function PhrasesScreen() {
 const useStyles = makeStyles((c) => ({
   // Let saved-phrase cards use a little more of the screen without changing
   // the visual margins of the header controls above them.
-  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.sm, paddingTop: 18, paddingBottom: spacing.xxl },
+  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.md, paddingTop: 18, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
   header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md, paddingHorizontal: spacing.sm },
   headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: spacing.md, paddingTop: spacing.sm },
+  headerHeroLarge: { alignItems: 'stretch' },
   headerCopy: { alignItems: 'flex-start', gap: spacing.xs },
+  headerCopyLarge: { width: '100%' },
   headerTitle: { maxWidth: 310, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  headerTitleLarge: { maxWidth: '100%' },
   headerMotif: { borderRadius: 20 },
+  headerMotifLarge: { alignSelf: 'stretch' },
   dueCard: { width: '100%', minHeight: 146, overflow: 'hidden', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 14, padding: spacing.lg, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
   dueCardLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   dueIcon: { width: 68, height: 68, borderRadius: 21, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   dueIconLarge: { alignSelf: 'flex-start', height: 'auto', minHeight: 68, minWidth: 68, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, width: 'auto' },
-  dueIconText: { color: c.forestText, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  dueIconText: { color: c.ink, fontSize: 28, fontWeight: '900', fontVariant: ['tabular-nums'] },
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 4 },
   dueTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, fontWeight: '700', textAlign: 'left' },
   dueBody: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },

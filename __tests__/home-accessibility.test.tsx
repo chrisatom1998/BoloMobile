@@ -1,5 +1,5 @@
-import { render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { act, render } from '@testing-library/react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -60,5 +60,36 @@ describe('home accessibility', () => {
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
     expect(StyleSheet.flatten(list.props.contentContainerStyle).paddingTop).toBe(18);
     expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
+  });
+
+  it('reflows the Today header and daily-goal status at accessibility text sizes', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
+
+    try {
+      const view = await render(<HomeScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
+      expect(StyleSheet.flatten(view.getByTestId('today-goal-status').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('today-goal-dial').props.style).height).toBeGreaterThanOrEqual(190);
+      expect(StyleSheet.flatten(view.getByTestId('today-next-practice').props.style).minHeight).toBeGreaterThanOrEqual(52);
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+  });
+
+  it('keeps the motif clear of the greeting on narrow default-text phones', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 360 }, window: { ...window, fontScale: 1, width: 360 } }));
+
+    try {
+      const view = await render(<HomeScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0, paddingRight: 0 });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
   });
 });

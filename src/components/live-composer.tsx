@@ -39,7 +39,7 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
         onSubmitEditing={send}
         placeholder="Ask in English or Hindi…"
         placeholderTextColor={colors.muted}
-        style={styles.input}
+        style={[styles.input, disabled && styles.inputDisabled]}
         value={input}
       />
       <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={send} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>

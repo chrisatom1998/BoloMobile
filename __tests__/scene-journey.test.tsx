@@ -1,5 +1,6 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
+import { Dimensions, StyleSheet } from 'react-native';
 
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 
@@ -156,6 +157,18 @@ describe('SceneScreen primary journey', () => {
     });
   });
 
+  it('ignores a repeated Finish press from the same scene beat', async () => {
+    mockAppState.sceneProgress = { chai: { lastBeatIndex: 1 } };
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(/Less sugar, please\./u));
+    const finish = view.getByRole('button', { name: 'Finish' });
+
+    await fireEvent.press(finish);
+    await fireEvent.press(finish);
+
+    expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
+  });
+
   it('shows a safe not-found route and returns to the scene catalog', async () => {
     mockSceneId = 'missing-scene';
     const view = await render(<SceneScreen />);
@@ -285,5 +298,28 @@ describe('SceneScreen primary journey', () => {
 
     await view.unmount();
     expect(stopSpeakingMock).toHaveBeenCalled();
+  });
+
+  it('stacks the scene HUD, answer choices, and follow-up controls at accessibility text sizes', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
+
+    try {
+      const view = await render(<SceneScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('scene-progress-header').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('scene-asha-row').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('scene-asha-bubble').props.style)).toMatchObject({ alignSelf: 'stretch', flex: 0 });
+      expect(StyleSheet.flatten(view.getByLabelText('Hear Asha').props.style)).toMatchObject({ alignSelf: 'flex-end', position: 'relative' });
+      expect(StyleSheet.flatten(view.getByLabelText(/One tea, please\./u).props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
+
+      await fireEvent.press(view.getByLabelText(/One tea, please\./u));
+      expect(StyleSheet.flatten(view.getByTestId('scene-result').props.style)).toMatchObject({ alignItems: 'stretch' });
+      expect(StyleSheet.flatten(view.getByRole('button', { name: 'Continue' }).props.style)).toMatchObject({ alignSelf: 'stretch', justifyContent: 'center' });
+      expect(StyleSheet.flatten(view.getByTestId('scene-save-row').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
   });
 });

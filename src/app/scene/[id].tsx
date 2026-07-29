@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Bookmark, Check, ChevronRight, Heart, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
+import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { lessonPlans } from '@/data/lesson-plans';
 import { getScene } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { observe } from '@/lib/observability';
@@ -22,12 +23,14 @@ import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function SceneScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useLocalSearchParams<{ id: string | string[] }>();
   const router = useRouter();
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
-  const scene = useMemo(() => getScene(id), [id]);
+  const largeTextLayout = useLargeTextLayout();
+  const sceneId = Array.isArray(id) ? id[0] : id;
+  const scene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
     const plan = lessonPlans.find((candidate) => candidate.lessonIds.includes(scene.id));
@@ -50,13 +53,12 @@ export default function SceneScreen() {
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
-  const [hearts, setHearts] = useState(3);
   const [done, setDone] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
   const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
   const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
-  const advancingRef = useRef(false);
+  const advancedBeatRef = useRef<number | null>(null);
   const autoPlayedBeatRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -119,15 +121,14 @@ export default function SceneScreen() {
     }
     else {
       hapticWarning();
-      setHearts((value) => Math.max(0, value - 1));
       setWeakPhrases((current) => [...new Set([...current, target.hi])]);
     }
     play(choice.reply);
   }
 
   function next() {
-    if (advancingRef.current || picked === null) return;
-    advancingRef.current = true;
+    if (advancedBeatRef.current === beatIndex) return;
+    advancedBeatRef.current = beatIndex;
     void stopSpeaking();
     clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
@@ -139,7 +140,6 @@ export default function SceneScreen() {
       });
       observe('scene_completed');
       setDone(true);
-      advancingRef.current = false;
       return;
     }
     hapticSelect();
@@ -148,7 +148,6 @@ export default function SceneScreen() {
     setPicked(null);
     setShowHint(false);
     setWordDefinitionWord(null);
-    requestAnimationFrame(() => { advancingRef.current = false; });
   }
 
   function replay() {
@@ -163,8 +162,8 @@ export default function SceneScreen() {
     setWordDefinitionWord(null);
     setScore(0);
     setCorrectCount(0);
-    setHearts(3);
     setWeakPhrases([]);
+    advancedBeatRef.current = null;
     setDone(false);
   }
 
@@ -199,7 +198,7 @@ export default function SceneScreen() {
         </MotionReveal>
         <View style={styles.finishStats}>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>scene score</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{hearts}/3</Text><Text style={styles.finishLabel}>confidence</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{activeScene.beats.length - initialBeatIndex}</Text><Text style={styles.finishLabel}>correct this run</Text></View>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{activeScene.beats.length - initialBeatIndex}</Text><Text style={styles.finishLabel}>turns this run</Text></View>
         </View>
         <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
@@ -216,8 +215,8 @@ export default function SceneScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" style={sharedStyles.screen}>
       <Stack.Screen options={{ title: activeScene.title }} />
-      <View style={styles.progressHeader}>
-        <View style={styles.hud}><Heart color={colors.danger} fill={colors.danger} size={17} /><Text style={styles.hudText}>{hearts}</Text></View>
+      <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
+        <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
         <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
         <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={17} /><Text style={styles.hudText}>{score}</Text></View>
       </View>
@@ -229,10 +228,10 @@ export default function SceneScreen() {
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
       <View style={[styles.world, { borderColor: activeScene.color }]}> 
-        <View style={styles.worldTop}><Text style={styles.emoji}>{activeScene.emoji}</Text><Text style={styles.place}>{activeScene.place}</Text></View>
-        <View style={styles.ashaRow}>
+        <View style={[styles.worldTop, largeTextLayout && styles.worldTopLarge]}><Text style={styles.emoji}>{activeScene.emoji}</Text><Text style={styles.place}>{activeScene.place}</Text></View>
+        <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
           <View style={styles.asha}><Text style={styles.ashaText}>आ</Text></View>
-          <View style={styles.bubble}>
+          <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
             <Pressable
               accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
                 ? 'Agree to connected AI processing to enable this voice.'
@@ -246,9 +245,9 @@ export default function SceneScreen() {
               accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
               disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
               onPress={() => play(situationPromptSpeech ?? beat.npc)}
-              style={[styles.speaker, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
+              style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
             ><Volume2 color={colors.ink} size={18} /></Pressable>
-            <Text style={styles.npc}>{beat.npc}</Text>
+            <Text style={[styles.npc, largeTextLayout && styles.npcLarge]}>{beat.npc}</Text>
             <Text style={styles.translation}>{beat.translation}</Text>
           </View>
         </View>
@@ -260,7 +259,7 @@ export default function SceneScreen() {
           <Text style={styles.answerTitle}>{beat.prompt}</Text>
         </View>
       </View>
-      <View style={styles.choices}>
+      <View style={styles.choices} testID="scene-choices">
         {beat.choices.map((choice, index) => {
           const selected = picked === index;
           const revealed = picked !== null && choice.correct;
@@ -272,10 +271,10 @@ export default function SceneScreen() {
               accessibilityState={{ disabled: picked !== null || pronunciationBusy, selected }}
               disabled={picked !== null || pronunciationBusy}
               onPress={() => choose(index)}
-              style={[styles.choice, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
+              style={[styles.choice, largeTextLayout && styles.choiceLarge, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
             >
               <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{index + 1}</Text></View>
-              <View style={styles.choiceCopy}>
+              <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]}>
                 {learnerProfile?.scriptPreference !== 'latin' ? <Text style={styles.choiceHindi}>{choice.hi}</Text> : null}
                 <Text style={styles.choiceMeaning}>{learnerProfile?.scriptPreference === 'devanagari' ? choice.en : `${choice.latin} · ${choice.en}`}</Text>
               </View>
@@ -297,18 +296,22 @@ export default function SceneScreen() {
           {showHint ? <Text style={styles.hintBody}>{beat.tip}</Text> : null}
         </Pressable>
       ) : (
-        <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${picked}`} style={styles.result} testID="scene-feedback">
-          <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked]?.reply}</Text></View>
-        </MotionReveal>
+        <View testID="scene-feedback">
+          <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${picked}`} style={[styles.result, largeTextLayout && styles.resultLarge]} testID="scene-result">
+            <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked]?.reply}</Text></View>
+          </MotionReveal>
+        </View>
       )}
 
       {picked !== null ? (
         <>
-          <View style={styles.saveRow} testID="scene-save">
-            <View style={styles.saveCopy}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-            <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, saved && styles.saveButtonActive]}>
-              <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
-            </Pressable>
+          <View testID="scene-save">
+            <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
+              <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+              <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
+                <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
+              </Pressable>
+            </View>
           </View>
           <View style={styles.wordTray} testID="scene-words">
             <Text style={styles.wordTrayTitle}>Unpack the answer</Text>
@@ -345,7 +348,7 @@ export default function SceneScreen() {
           <ChevronRight color={colors.white} size={18} />
         </Pressable>
       ) : null}
-      {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile.scriptPreference} visible /> : null}
+      {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible /> : null}
     </ScrollView>
   );
 }
@@ -354,6 +357,7 @@ const useStyles = makeStyles((c) => ({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.xs },
   hud: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   hudText: { color: c.ink, fontWeight: '900' },
   turn: { color: c.muted, fontSize: 13, fontWeight: '800' },
@@ -362,42 +366,53 @@ const useStyles = makeStyles((c) => ({
   resumeNotice: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '700', textAlign: 'center' },
   world: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 2, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.md },
   worldTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  worldTopLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.xs },
   emoji: { fontSize: 30 },
   place: { color: c.muted, fontSize: 12, fontWeight: '700' },
   ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  ashaRowLarge: { flexDirection: 'column' },
   asha: { width: 52, height: 52, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
   ashaText: { color: c.white, fontSize: 24, fontWeight: '900' },
   bubble: { flex: 1, backgroundColor: c.background, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, gap: spacing.xs },
+  bubbleLarge: { alignSelf: 'stretch', flex: 0 },
   speaker: { position: 'absolute', zIndex: 1, right: spacing.sm, top: spacing.sm, width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paper, alignItems: 'center', justifyContent: 'center' },
+  speakerLarge: { alignSelf: 'flex-end', position: 'relative', right: undefined, top: undefined },
   disabled: { opacity: 0.4 },
   audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
   npc: { color: c.ink, fontSize: 21, lineHeight: 29, fontWeight: '800', paddingRight: 48 },
+  npcLarge: { paddingRight: 0 },
   translation: { color: c.muted, fontSize: 14, lineHeight: 20 },
   answerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   answerTitle: { color: c.ink, fontSize: 22, lineHeight: 29, fontWeight: '900', marginTop: spacing.xs },
   choices: { gap: spacing.sm },
   choice: { minHeight: 82, backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
   choiceCorrect: { borderColor: c.success, backgroundColor: c.successSoft },
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
   choiceNumber: { minWidth: 30, minHeight: 30, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xs },
   choiceNumberText: { color: c.muted, fontWeight: '800' },
   choiceCopy: { flex: 1, gap: 3 },
+  choiceCopyLarge: { flex: 0, width: '100%' },
   choiceHindi: { color: c.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
   choiceMeaning: { color: c.muted, fontSize: 12, lineHeight: 17 },
   hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, padding: spacing.lg, gap: spacing.lg },
+  resultLarge: { alignItems: 'stretch' },
   resultCopy: { gap: spacing.xs },
   resultTitle: { color: c.white, fontSize: 17, fontWeight: '900' },
   resultHindi: { color: c.heroSubtle, fontSize: 18, lineHeight: 25, fontWeight: '700' },
-  nextButton: { width: '100%', minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   nextText: { color: c.white, fontSize: 16, fontWeight: '900' },
   saveRow: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  saveRowLarge: { alignItems: 'stretch', flexDirection: 'column' },
   saveCopy: { flex: 1, gap: spacing.xs },
+  saveCopyLarge: { flex: 0, width: '100%' },
   saveTitle: { color: c.ink, fontSize: 15, fontWeight: '900' },
   saveMeaning: { color: c.muted, fontSize: 13 },
   saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center' },
+  saveButtonLarge: { alignSelf: 'flex-start' },
   saveButtonActive: { backgroundColor: c.brand },
   wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
   wordTrayTitle: { color: c.brandText, fontSize: 17, lineHeight: 23, fontWeight: '900' },

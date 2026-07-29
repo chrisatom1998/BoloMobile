@@ -17,7 +17,7 @@ const requiredCoverage = {
   consent: 'Enable live practice',
   'microphone denial': 'microphone: deny',
   'live background cleanup': 'pressKey: Home',
-  'saved phrase persistence': 'Hear चीनी कम, कृपया।',
+  'saved phrase persistence': 'चीनी कम, कृपया।',
   'data deletion': 'Delete my Bolo data',
   'offline startup': 'setAirplaneMode: enabled',
 };

@@ -171,8 +171,16 @@ export async function persistAiConsentChoice(aiConsent: boolean) {
 export function AppStateProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [hydrated, setHydrated] = useState(false);
+  // State updaters may run more than once in development. Keep persistence
+  // outside React's state setter so a render retry cannot write twice.
+  const stateRef = useRef<PersistedState>(initialState);
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
+
+  const replaceState = useCallback((next: PersistedState) => {
+    stateRef.current = next;
+    setState(next);
+  }, []);
 
   const enqueuePersistence = useCallback(<T,>(operation: () => Promise<T>) => {
     const result = persistenceTailRef.current.then(operation);
@@ -205,7 +213,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           motionPreference: sanitizeMotionPreference(readStored(storageKeys.motionPreference)),
         };
         if (active) {
-          setState(next);
+          replaceState(next);
           setHydrated(true);
           if (clientId !== readStored(storageKeys.clientId)) {
             void enqueuePersistence(() => AsyncStorage.setItem(storageKeys.clientId, clientId)).catch(reportPersistenceFailure);
@@ -219,7 +227,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         observe('runtime_error');
         if (active) {
           const fallback = { ...initialState, clientId: sanitizeClientId(null) };
-          setState(fallback);
+          replaceState(fallback);
           setHydrated(true);
           showAppAlert('Could not load saved progress', 'Bolo opened with temporary defaults. Check available storage before making changes.');
         }
@@ -228,21 +236,20 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, [enqueuePersistence]);
+  }, [enqueuePersistence, replaceState]);
 
   useEffect(() => {
     if (!hydrated) return;
     let midnightTimer: ReturnType<typeof setTimeout> | null = null;
     const refreshDay = () => {
-      setState((current) => {
-        if (clearingAllDataRef.current) return current;
-        const practice = currentPractice(current);
-        if (practice.date === current.practice.date) return current;
-        const next = { ...current, practice };
-        void enqueuePersistence(() => persistState(next, ['practice'])).catch((error: unknown) => {
-          reportPersistenceFailure(error, 'Bolo could not save today\'s practice reset. Check available storage and reopen the app.');
-        });
-        return next;
+      if (clearingAllDataRef.current) return;
+      const current = stateRef.current;
+      const practice = currentPractice(current);
+      if (practice.date === current.practice.date) return;
+      const next = { ...current, practice };
+      replaceState(next);
+      void enqueuePersistence(() => persistState(next, ['practice'])).catch((error: unknown) => {
+        reportPersistenceFailure(error, 'Bolo could not save today\'s practice reset. Check available storage and reopen the app.');
       });
     };
     const scheduleMidnightRefresh = () => {
@@ -261,7 +268,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       if (midnightTimer) clearTimeout(midnightTimer);
       subscription.remove();
     };
-  }, [enqueuePersistence, hydrated]);
+  }, [enqueuePersistence, hydrated, replaceState]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -274,17 +281,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const commit = useCallback((updater: (current: PersistedState) => PersistedState, keys: PersistedKey[]) => {
     if (clearingAllDataRef.current) return;
-    setState((current) => {
-      if (clearingAllDataRef.current) return current;
-      const previous = { ...current, practice: currentPractice(current) };
-      const next = updater(previous);
-      void enqueuePersistence(() => persistState(next, keys)).catch((error: unknown) => {
-        reportPersistenceFailure(error);
-        setState((latest) => restoreFailedPersistedState(latest, previous, next, keys));
-      });
-      return next;
+    const current = stateRef.current;
+    const previous = { ...current, practice: currentPractice(current) };
+    const next = updater(previous);
+    replaceState(next);
+    void enqueuePersistence(() => persistState(next, keys)).catch((error: unknown) => {
+      reportPersistenceFailure(error);
+      replaceState(restoreFailedPersistedState(stateRef.current, previous, next, keys));
     });
-  }, [enqueuePersistence]);
+  }, [enqueuePersistence, replaceState]);
 
   const setGoal = useCallback((goal: 5 | 10 | 15) => {
     commit((current) => ({ ...current, goal }), ['goal']);
@@ -442,9 +447,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       );
       return false;
     }
-    setState((current) => clearingAllDataRef.current ? current : { ...current, aiConsent: nextConsent });
+    if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
     return true;
-  }, [enqueuePersistence]);
+  }, [enqueuePersistence, replaceState]);
 
   const setReminder = useCallback((reminder: ReminderSettings) => {
     commit((current) => ({ ...current, reminder }), ['reminder']);
@@ -470,7 +475,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
       // Storage now holds the defaults; update in-memory state before anything
       // else can fail so the two never diverge.
-      setState(next);
+      replaceState(next);
     } catch (error) {
       console.warn('Bolo could not clear local data.', error);
       observe('runtime_error');
@@ -483,7 +488,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch (error) {
       console.warn('Bolo could not clear stored diagnostics.', error);
     }
-  }, [enqueuePersistence, state.reminder]);
+  }, [enqueuePersistence, replaceState, state.reminder]);
 
   const actions = useMemo<AppActions>(() => ({
     setGoal,
@@ -510,7 +515,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     hydrated,
     streak: calculateStreak(state.streakDays, completedToday(state.practice)),
     dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
-    duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews),
+    duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews, Infinity),
     reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
   }), [state, hydrated]);
 

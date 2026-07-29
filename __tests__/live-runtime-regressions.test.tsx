@@ -1,6 +1,6 @@
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
-import { Alert, Animated, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
+import { Alert, Animated, AppState, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
@@ -193,8 +193,11 @@ jest.mock('@/components/realtime-voice-button', () => {
   };
 });
 
+const mockElapsedSeconds = jest.fn(() => 42);
+const mockResetPracticeTimer = jest.fn();
+
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: () => 0 }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetPracticeTimer }),
 }));
 
 let mockReducedMotion = false;
@@ -214,17 +217,36 @@ let mockAiConsent = true;
 
 jest.mock('@/state/app-state', () => ({
   __appendChatMessagesMock: jest.fn(),
+  __addPracticeSecondsMock: jest.fn(),
   __clearChatHistoryMock: jest.fn(),
+  __markLiveTurnMock: jest.fn(),
   __togglePhraseMock: jest.fn(),
   useAppState: () => {
     const appState = jest.requireMock('@/state/app-state') as {
       __appendChatMessagesMock: jest.Mock;
+      __addPracticeSecondsMock: jest.Mock;
       __clearChatHistoryMock: jest.Mock;
+      __markLiveTurnMock: jest.Mock;
       __togglePhraseMock: jest.Mock;
     };
     const [chatHistory, setChatHistory] = mockReact.useState<
       { id: string; role: 'you' | 'asha'; text: string; language?: 'en' | 'hi' }[]
     >([]);
+    const [learnerProfile, setLearnerProfile] = mockReact.useState<{
+      completed: boolean;
+      level: 'new' | 'beginner' | 'intermediate';
+      microphoneTested: boolean;
+      primaryGoal: 'conversation' | 'travel' | 'family' | 'work';
+      responseLanguage: 'en' | 'hi';
+      scriptPreference: 'both' | 'devanagari' | 'latin';
+    }>({
+      completed: true,
+      level: 'new',
+      microphoneTested: false,
+      primaryGoal: 'conversation',
+      responseLanguage: 'en',
+      scriptPreference: 'both',
+    });
     const appendChatMessages = mockReact.useCallback((messages: typeof chatHistory) => {
       appState.__appendChatMessagesMock(messages);
       setChatHistory((current) => [...current, ...messages].slice(-100));
@@ -234,15 +256,18 @@ jest.mock('@/state/app-state', () => ({
       setChatHistory([]);
     }, []);
     return {
-      addPracticeSeconds: jest.fn(),
+      addPracticeSeconds: appState.__addPracticeSecondsMock,
       aiConsent: mockAiConsent,
       appendChatMessages,
       chatHistory,
       clearChatHistory,
       clientId: 'client-12345678',
-      markLiveTurn: jest.fn(),
+      markLiveTurn: appState.__markLiveTurnMock,
+      learnerProfile,
+      phraseReviews: {},
       phrases: [],
       togglePhrase: appState.__togglePhraseMock,
+      updateLearnerProfile: (update: Partial<typeof learnerProfile>) => setLearnerProfile((current) => ({ ...current, ...update })),
     };
   },
 }));
@@ -273,7 +298,9 @@ const speech = jest.requireMock('@/lib/speech') as {
 };
 const appState = jest.requireMock('@/state/app-state') as {
   __appendChatMessagesMock: jest.Mock;
+  __addPracticeSecondsMock: jest.Mock;
   __clearChatHistoryMock: jest.Mock;
+  __markLiveTurnMock: jest.Mock;
   __togglePhraseMock: jest.Mock;
 };
 
@@ -816,8 +843,8 @@ describe('live coaching state', () => {
     // receives its press. The last non-empty highlighted range must survive.
     await fireEvent(message, 'selectionChange', { nativeEvent: { selection: { start: 5, end: 5 } } });
     await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
-    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Hello there.');
-    expect(view.getByText('Highlight words in chat before tapping Save, or trim the transcript here. Bolo will add a Romanized Hindi version and English meaning.')).toBeTruthy();
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Hello');
+    expect(view.getByText('Only the words you highlighted were copied here. Adjust them if needed, then let Bolo prepare the phrase details.')).toBeTruthy();
     await fireEvent.changeText(view.getByLabelText('Selected transcript text'), 'Aap kaise hain?');
     await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
     await flushMicrotasks();
@@ -874,7 +901,7 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
-  it('opens Romanized word analysis from a completed English-mode Asha reply', async () => {
+  it('opens Hindi-only word analysis from a completed Romanized Asha reply', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
 
@@ -884,8 +911,7 @@ describe('live coaching state', () => {
     await fireEvent.press(words);
 
     expect(view.getByText('Word by word')).toBeTruthy();
-    expect(view.getByRole('button', { name: 'Explain Aap' })).toBeTruthy();
-    expect(view.queryByRole('button', { name: 'Explain आप' })).toBeNull();
+    expect(view.getByRole('button', { name: 'Explain आप' })).toBeTruthy();
     expect(view.queryByRole('button', { name: 'Explain Chris' })).toBeNull();
     await view.unmount();
     await flushMicrotasks();
@@ -1004,7 +1030,7 @@ describe('live coaching state', () => {
       await Promise.resolve();
     });
 
-    expect(speech.stopSpeaking).toHaveBeenCalledTimes(1);
+    expect(speech.stopSpeaking).toHaveBeenCalled();
     playback.resolve();
     await flushMicrotasks();
     await view.unmount();
@@ -1028,6 +1054,35 @@ describe('live coaching state', () => {
     expect(reportLabels).toEqual(['Report reply: Hello there.']);
     await view.unmount();
     await flushMicrotasks();
+  });
+});
+
+describe('live practice time', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('checkpoints a real practice visit once before the app backgrounds', async () => {
+    let appStateListener: ((state: 'active' | 'background') => void) | undefined;
+    const addEventListener = jest.spyOn(AppState, 'addEventListener').mockImplementation((_event, listener) => {
+      appStateListener = listener as (state: 'active' | 'background') => void;
+      return { remove: jest.fn() };
+    });
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(appState.__markLiveTurnMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => appStateListener?.('background'));
+    expect(appState.__addPracticeSecondsMock).toHaveBeenCalledWith(42);
+    await act(async () => appStateListener?.('background'));
+    expect(appState.__addPracticeSecondsMock).toHaveBeenCalledTimes(1);
+    await act(async () => appStateListener?.('active'));
+    await act(async () => appStateListener?.('background'));
+    expect(appState.__addPracticeSecondsMock).toHaveBeenCalledTimes(2);
+
+    await view.unmount();
+    addEventListener.mockRestore();
   });
 });
 

@@ -6,6 +6,7 @@ import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-na
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { SegmentedControl } from '@/components/segmented-control';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
@@ -36,6 +37,7 @@ export default function SettingsScreen() {
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
   const { fontScale, width: windowWidth } = useWindowDimensions();
+  const largeTextLayout = useLargeTextLayout();
   const { aiConsent, clearAllData, clientId, setAiConsent } = state;
   const learnerProfile = state.learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const reminder = state.reminder ?? defaultReminderSettings();
@@ -147,40 +149,40 @@ export default function SettingsScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
       <View style={styles.card}>
-        <View style={styles.row}>
+        <View style={[styles.row, largeTextLayout && styles.rowLarge]} testID="settings-learning-row">
           <View style={styles.icon}><Languages color={colors.white} size={20} /></View>
-          <View style={styles.copy}><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]} testID="settings-learning-copy"><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Hindi display</Text>
         <SegmentedControl
           accessibilityLabel="Hindi display preference"
-          stackedAtLargeText
           onValueChange={(scriptPreference) => updateLearnerProfile({ scriptPreference })}
           options={[
             { label: 'Both', value: 'both' },
             { label: 'हिन्दी', value: 'devanagari' },
             { label: 'Latin', value: 'latin' },
           ]}
+          stackedAtLargeText
           value={learnerProfile.scriptPreference}
         />
         <Text style={styles.choiceLabel}>Asha replies</Text>
         <SegmentedControl
           accessibilityLabel="Asha reply language preference"
-          stackedAtLargeText
           onValueChange={(responseLanguage) => updateLearnerProfile({ responseLanguage })}
           options={[
             { label: 'English', value: 'en' },
             { label: 'Hindi', value: 'hi' },
           ]}
+          stackedAtLargeText
           value={learnerProfile.responseLanguage}
         />
-        <Pressable accessibilityRole="button" onPress={() => router.push('/onboarding?recalibrate=1' as Href)} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'recalibrate' } })} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
       </View>
 
       <View style={styles.card}>
-        <View style={styles.row}>
+        <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={[styles.icon, { backgroundColor: colors.forest }]}><Sparkles color={colors.white} size={20} /></View>
-          <View style={styles.copy}><Text style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Animation style</Text>
         <SegmentedControl
@@ -204,15 +206,14 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.card}>
-        <View style={styles.row}>
+        <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
         <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
-          <View style={styles.copy}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
         </View>
         <SegmentedControl
           accessibilityLabel="Practice reminder time"
           columnCount={2}
           compact
-          stackedAtLargeText
           disabled={savingReminder}
           disabledHint="Bolo is updating your reminder."
           onValueChange={(next) => void changeReminder(next === 'off' ? undefined : Number(next))}
@@ -222,6 +223,7 @@ export default function SettingsScreen() {
             { label: formatReminderTime(19), value: '19' },
             { label: formatReminderTime(20), value: '20' },
           ]}
+          stackedAtLargeText
           testID="practice-reminder-control"
           value={reminder.enabled ? String(reminder.hour) as '9' | '19' | '20' : 'off'}
         />
@@ -229,9 +231,9 @@ export default function SettingsScreen() {
 
       {aiConsent ? (
         <View style={styles.card}>
-          <View style={styles.row}>
+          <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
             <View style={[styles.icon, { backgroundColor: colors.forest }]}><ShieldCheck color={colors.white} size={21} /></View>
-            <View style={styles.copy}><Text style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
+            <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
           </View>
           <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, or coaching.</Text>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
@@ -240,40 +242,40 @@ export default function SettingsScreen() {
         <AiConsentGate><View /></AiConsentGate>
       )}
 
-      <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={styles.linkCard}>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]} testID="settings-privacy-link">
         <View style={styles.icon}><LockKeyhole color={colors.white} size={20} /></View>
-        <View style={styles.copy}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={styles.linkCard}>
+      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><Activity color={colors.white} size={20} /></View>
-        <View style={styles.copy}><Text style={styles.title}>Private diagnostics</Text><Text style={styles.body}>View content-free reliability counters stored on this device</Text></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Private diagnostics</Text><Text style={styles.body}>View content-free reliability counters stored on this device</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="link" onPress={() => openPage('privacy', 'Privacy Policy')} style={styles.linkCard}>
+      <Pressable accessibilityRole="link" onPress={() => openPage('privacy', 'Privacy Policy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><ExternalLink color={colors.white} size={20} /></View>
-        <View style={styles.copy}><Text style={styles.title}>Public Privacy Policy</Text><Text style={styles.body}>Open the current policy on the web</Text></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Public Privacy Policy</Text><Text style={styles.body}>Open the current policy on the web</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="link" onPress={() => openPage('support', 'Support')} style={styles.linkCard}>
+      <Pressable accessibilityRole="link" onPress={() => openPage('support', 'Support')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><LifeBuoy color={colors.white} size={20} /></View>
-        <View style={styles.copy}><Text style={styles.title}>Support</Text><Text style={styles.body}>Get help or make a privacy request</Text></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Support</Text><Text style={styles.body}>Get help or make a privacy request</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="link" onPress={() => openPage('terms', 'Terms of Use')} style={styles.linkCard}>
+      <Pressable accessibilityRole="link" onPress={() => openPage('terms', 'Terms of Use')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><FileText color={colors.white} size={20} /></View>
-        <View style={styles.copy}><Text style={styles.title}>Terms of Use</Text><Text style={styles.body}>Read Bolo&apos;s public terms</Text></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Terms of Use</Text><Text style={styles.body}>Read Bolo&apos;s public terms</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
       <View style={styles.card}>
-        <View style={styles.row}>
+        <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={[styles.icon, { backgroundColor: colors.danger }]}><DatabaseBackup color={colors.white} size={20} /></View>
-          <View style={styles.copy}><Text style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
         </View>
         <Text style={styles.detail}>Bolo first deletes reports associated with your random app identifier. It then clears local data and rotates that identifier. If the request fails, the identifier is kept so you can retry.</Text>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: deleting }} disabled={deleting} onPress={confirmDeletion} style={[styles.destructiveButton, deleting && styles.disabled]}>
@@ -293,9 +295,12 @@ const useStyles = makeStyles((c) => ({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
   card: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg },
   linkCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  linkCardLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, gap: 3 },
+  copyLarge: { flex: 0, width: '100%' },
   title: { color: c.ink, fontSize: 16, fontWeight: '900' },
   body: { color: c.muted, fontSize: 13 },
   detail: { color: c.muted, fontSize: 14, lineHeight: 21 },

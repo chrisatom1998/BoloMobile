@@ -43,13 +43,13 @@ export default function LessonPlansScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
       <Stack.Screen options={{ headerLargeTitle: false, title: 'Lesson plans' }} />
-      <View style={styles.heading}>
-        <View style={styles.headingCopy}>
+      <View style={[styles.heading, largeTextLayout && styles.headingLarge]} testID="lesson-plans-heading">
+        <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>Guided curriculum</JournalKicker>
-          <JournalDisplay style={styles.title}>One path, 100 small wins.</JournalDisplay>
-          <Text style={styles.intro}>Move in order, one useful Hindi phrase at a time. Each plan has ten focused lessons, with ten practice turns in each lesson.</Text>
+          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>One path, 100 small wins.</JournalDisplay>
+          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Each plan has ten focused lessons, with ten practice turns in each lesson.</Text>
         </View>
-        <JournalMotif accessibilityLabel="Lesson plans journal motif" size="tile" />
+        <JournalMotif accessibilityLabel="Lesson plans journal motif" size="tile" style={largeTextLayout ? styles.headingMotifLarge : undefined} />
       </View>
 
       <View accessibilityLabel="Ten ordered lesson plans" style={styles.plans}>
@@ -149,16 +149,24 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.detailContent} style={sharedStyles.screen}>
       <Stack.Screen options={{ headerLargeTitle: false, title: plan.title }} />
-      <PressableFeedback accessibilityLabel="Back to all lesson plans" accessibilityRole="button" onPress={router.back} style={styles.backButton}>
+      <PressableFeedback
+        accessibilityLabel="Back to all lesson plans"
+        accessibilityRole="button"
+        onPress={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace('/lesson-plans');
+        }}
+        style={styles.backButton}
+      >
         <Text style={styles.backButtonText}>← All lesson plans</Text>
       </PressableFeedback>
-      <View style={styles.detailHeading}>
-        <View style={styles.headingCopy}>
+      <View style={[styles.detailHeading, largeTextLayout && styles.headingLarge]} testID="lesson-plan-detail-heading">
+        <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>{`Plan ${String(plan.order).padStart(2, '0')} · Guided curriculum`}</JournalKicker>
-          <JournalDisplay style={styles.detailTitle}>{plan.title}</JournalDisplay>
-          <Text style={styles.intro}>{plan.subtitle}</Text>
+          <JournalDisplay style={[styles.detailTitle, largeTextLayout && styles.detailTitleLarge]}>{plan.title}</JournalDisplay>
+          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>{plan.subtitle}</Text>
         </View>
-        <JournalMotif accessibilityLabel="Lesson plan journal motif" size="tile" />
+        <JournalMotif accessibilityLabel="Lesson plan journal motif" size="tile" style={largeTextLayout ? styles.headingMotifLarge : undefined} />
       </View>
       <View style={styles.detailSummary}>
         <View style={styles.detailSummaryTopline}>
@@ -214,10 +222,16 @@ const useStyles = makeStyles((c) => ({
   detailContent: { padding: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xxl, gap: spacing.md },
   heading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   detailHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
+  headingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   headingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  headingCopyLarge: { flex: 0, width: '100%' },
   title: { maxWidth: 260, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  titleLarge: { maxWidth: '100%' },
   detailTitle: { maxWidth: 260, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  detailTitleLarge: { maxWidth: '100%' },
   intro: { maxWidth: 310, color: c.muted, fontSize: 14, lineHeight: 20 },
+  introLarge: { maxWidth: '100%' },
+  headingMotifLarge: { alignSelf: 'flex-end' },
   backButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
   backButtonText: { color: c.forestText, fontSize: 14, fontWeight: '900' },
   plans: { width: '100%', gap: spacing.md },

@@ -9,6 +9,7 @@ tags:
     clearState: true
     permissions:
       microphone: deny
+- runFlow: ../subflows/enter-development-build.yaml
 - tapOn:
     text: "Don’t Allow"
     optional: true
@@ -51,6 +52,9 @@ tags:
       microphone: allow
 - stopApp
 - launchApp
+- tapOn:
+    text: "Dismiss"
+    optional: true
 - tapOn: "Asha"
 - tapOn:
     id: "realtime-voice-orb"
@@ -71,4 +75,7 @@ tags:
 - pressKey: Home
 - launchApp:
     stopApp: false
+- tapOn:
+    text: "Dismiss"
+    optional: true
 - assertVisible: "Settings"

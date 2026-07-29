@@ -361,4 +361,20 @@ describe('SettingsScreen lifecycle and UI', () => {
     await fireEvent.press(view.getByRole('button', { name: /Privacy & data use/u }));
     expect(mockPush).toHaveBeenCalledWith('/privacy');
   });
+
+  it('stacks settings rows and keeps link-card copy full width at accessibility text sizes', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
+
+    try {
+      const view = await render(<SettingsScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('settings-learning-row').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('settings-learning-copy').props.style)).toMatchObject({ flex: 0, width: '100%' });
+      expect(StyleSheet.flatten(view.getByTestId('settings-privacy-link').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'column' });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+  });
 });

@@ -2,14 +2,15 @@ import { useRouter, type Href } from 'expo-router';
 import { Award, Check, Leaf, Share2, Sprout } from 'lucide-react-native';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { useMemo } from 'react';
-import { Platform, Share, ScrollView, StatusBar, Text, View } from 'react-native';
+import { Platform, Share, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
-import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppStateValue } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 
@@ -18,12 +19,12 @@ export default function ProgressScreen() {
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const androidStatusInset = Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 0;
+  const largeTextLayout = useLargeTextLayout();
+  const insets = useSafeAreaInsets();
   const { duePhrases, learnerProfile, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
-  const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const { week, maxMinutes } = useMemo(() => {
     const days = weeklyPractice(practiceHistory);
-    return { week: days, maxMinutes: Math.max(1, ...days.map((day) => day.seconds / 60)) };
+    return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.round(day.seconds / 60))) };
   }, [practiceHistory]);
   const { accuracy, categories, completedScenes, milestones } = useMemo(() => ({
     categories: categoryMastery(sceneProgress),
@@ -98,17 +99,17 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, { paddingTop: Math.max(18, androidStatusInset + spacing.md) }]} style={sharedStyles.screen}>
-      <View style={styles.pageHeading}>
-        <View style={styles.pageHeadingCopy}>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
+      <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
+        <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
           <JournalKicker>Your language garden</JournalKicker>
-          <JournalDisplay style={styles.pageTitle}>What is taking root.</JournalDisplay>
+          <JournalDisplay style={[styles.pageTitle, largeTextLayout && styles.pageTitleLarge]}>What is taking root.</JournalDisplay>
         </View>
-        <JournalMotif accessibilityLabel="Progress journal motif" size="tile" />
+        <JournalMotif accessibilityLabel="Progress journal motif" size="tile" style={largeTextLayout ? styles.pageHeadingMotifLarge : undefined} />
       </View>
 
       <View style={styles.hero}>
-        <Text pointerEvents="none" style={styles.heroGlyph}>ब</Text>
+        <Text accessible={false} importantForAccessibility="no" pointerEvents="none" style={styles.heroGlyph}>ब</Text>
         <View style={styles.heroIcon}><Sprout color={colors.goldSoft} size={25} /></View>
         <Text style={styles.heroEyebrow}>
           {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
@@ -165,10 +166,9 @@ export default function ProgressScreen() {
           <View style={styles.featuredPhraseHeading}>
             <View style={styles.featuredPhraseIcon}><Sprout color={colors.forestText} size={20} /></View>
             <Text style={styles.gardenEyebrow}>Featured phrase</Text>
-            <View style={styles.featuredListen}><Text style={styles.featuredNavigate}>→</Text></View>
           </View>
-          {profile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
-          {profile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
+          {learnerProfile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
+          {learnerProfile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
           <Text style={styles.featuredEnglish}>{featuredPhrase.en}</Text>
           <View style={styles.featuredMasteryRow}>
             <Text style={styles.featuredMasteryLabel}>Mastery</Text>
@@ -225,8 +225,12 @@ export default function ProgressScreen() {
 export const createProgressStyles = (c: ThemeColors) => ({
   content: { alignItems: 'center', padding: spacing.lg, paddingTop: 18, paddingBottom: 120, gap: spacing.lg },
   pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
+  pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs, paddingTop: spacing.xs },
+  pageHeadingCopyLarge: { flex: 0, width: '100%' },
   pageTitle: { maxWidth: 225, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  pageTitleLarge: { maxWidth: '100%' },
+  pageHeadingMotifLarge: { alignSelf: 'flex-end' },
   hero: { width: '100%', position: 'relative', overflow: 'hidden', alignItems: 'flex-start', borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm, boxShadow: '0 10px 24px rgba(0, 0, 0, 0.09)' },
   heroIcon: { width: 46, height: 46, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center' },
   heroGlyph: { position: 'absolute', right: -6, bottom: -48, color: c.heroGlyph, fontSize: 156, lineHeight: 180, fontWeight: '900' },
@@ -254,7 +258,6 @@ export const createProgressStyles = (c: ThemeColors) => ({
   featuredPhraseHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   featuredPhraseIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.goldSoft, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   featuredListen: { marginLeft: 'auto', width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
-  featuredNavigate: { color: c.forestText, fontSize: 20, fontWeight: '900' },
   featuredHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 28, lineHeight: 36, fontWeight: '700' },
   featuredLatin: { color: c.brandText, fontSize: 15, fontWeight: '900' },
   featuredEnglish: { color: c.muted, fontSize: 15, lineHeight: 21 },

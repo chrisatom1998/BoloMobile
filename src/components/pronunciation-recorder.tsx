@@ -94,7 +94,9 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
               hapticSuccess();
               setFeedback(result.feedback);
               setReported(false);
-              await speakText(result.feedback, controller.signal);
+              // Feedback is ready as soon as the card appears. Playback should
+              // not keep the recorder labelled "Asha is thinking…".
+              void speakText(result.feedback, controller.signal).catch(() => undefined);
             } finally {
               if (requestRef.current === controller) requestRef.current = null;
             }

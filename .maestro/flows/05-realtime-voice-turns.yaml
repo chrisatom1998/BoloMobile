@@ -8,6 +8,7 @@ tags:
     clearState: true
     permissions:
       microphone: allow
+- runFlow: ../subflows/enter-development-build.yaml
 - tapOn:
     text: "Allow"
     optional: true
