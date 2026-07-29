@@ -18,6 +18,7 @@ function messageActionExcerpt(text: string) {
 }
 
 function SelectableChatText({
+  accessibilityHint,
   accessibilityLabel,
   accessibilityLiveRegion,
   onSelectedText,
@@ -26,6 +27,7 @@ function SelectableChatText({
   style,
   text,
 }: {
+  accessibilityHint: string;
   accessibilityLabel: string;
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
   onSelectedText: (selection: { sourceText: string; text: string }) => void;
@@ -55,7 +57,7 @@ function SelectableChatText({
 
   return (
     <TextInput
-      accessibilityHint="Read-only message. Highlight words, then use Save selection below."
+      accessibilityHint={accessibilityHint}
       accessibilityLabel={accessibilityLabel}
       accessibilityLiveRegion={accessibilityLiveRegion}
       accessibilityRole="text"
@@ -130,6 +132,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
         </View>
         <SelectableChatText
+          accessibilityHint={isWelcome ? 'Read-only message.' : 'Read-only message. Highlight words, then use Save selection below.'}
           accessibilityLabel={`Selectable chat text: ${displayText}`}
           accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
           onSelectionCollapsed={selectionCollapsed}

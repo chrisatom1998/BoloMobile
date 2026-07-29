@@ -723,6 +723,25 @@ describe('typed live coaching request control', () => {
     await flushMicrotasks();
   });
 
+  it('omits the Save selection hint on the welcome message that never renders that action', async () => {
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const view = await render(<LiveScreen />);
+
+    expect(view.getByLabelText('Selectable chat text: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.').props.accessibilityHint).toBe('Read-only message.');
+
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please help with this sentence.');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await act(async () => {
+      request.resolve({ transcript: '', reply: 'Here is a selectable correction.', language: 'en' });
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+
+    expect(view.getByLabelText('Selectable chat text: Here is a selectable correction.').props.accessibilityHint).toBe('Read-only message. Highlight words, then use Save selection below.');
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('never persists a learner-only turn when the request fails before a reply', async () => {
     boloApi.sendMobileChat.mockRejectedValueOnce(new Error('Asha is unavailable.'));
     const view = await render(<LiveScreen />);
