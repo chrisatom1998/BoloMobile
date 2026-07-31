@@ -1,6 +1,9 @@
 type MockAudioStatus = {
+  currentTime?: number;
   didJustFinish?: boolean;
+  duration?: number;
   error?: string;
+  playing?: boolean;
 };
 
 type MockPlayer = {
@@ -168,6 +171,19 @@ describe('AI voice native playback', () => {
     aiVoicePlayer.clearAiVoicePlaybackCache();
     expect(native.player.release).toHaveBeenCalledTimes(1);
     expect(file.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles generated speech after a terminal status update without the one-shot finish flag', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ currentTime: 1.2, didJustFinish: false, duration: 1.2, playing: false }));
+
+    await expect(aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'Y29tcGxldGUtd2l0aG91dC1mbGFn',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal)).resolves.toBeUndefined();
+
+    expect(native.player.pause).toHaveBeenCalledTimes(1);
+    expect(native.subscription.remove).toHaveBeenCalledTimes(1);
   });
 
   it('replays a prepared native clip without rewriting or reloading it', async () => {

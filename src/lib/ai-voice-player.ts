@@ -27,6 +27,16 @@ function normalizedPlaybackRate(playbackRate: number) {
   return Math.min(2, Math.max(MIN_PLAYBACK_RATE, playbackRate));
 }
 
+function playbackFinished(status: AudioStatus) {
+  // `didJustFinish` is the preferred completion signal. Some native status
+  // updates arrive just after that one-shot flag has cleared, though, while
+  // still reporting the terminal position and a stopped player. Treat that as
+  // the same completed playback so callers do not stay locked after audible
+  // speech has ended.
+  return status.didJustFinish
+    || (status.duration > 0 && !status.playing && status.currentTime >= status.duration);
+}
+
 function deletePreparedFiles(files: readonly File[]) {
   for (const file of files) {
     try {
@@ -213,7 +223,7 @@ export async function playAiVoiceAudio(
       const cancel = () => finish();
       const update = (status: AudioStatus) => {
         if (status.error) finish(new Error(`AI voice playback failed: ${status.error}`));
-        else if (status.didJustFinish) finish();
+        else if (playbackFinished(status)) finish();
       };
 
       subscription = prepared.player.addListener('playbackStatusUpdate', update);

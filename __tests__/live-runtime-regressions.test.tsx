@@ -167,6 +167,17 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(
         MockPressable,
         {
+          accessibilityLabel: 'Mock completed realtime reply',
+          onPress: () => {
+            onTurnComplete({ transcript: 'Namaste', reply: 'A completed voice reply.', language: 'en' });
+            onStatusChange?.('ready');
+          },
+        },
+        mockReact.createElement(MockText, null, 'Mock completed reply'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
           accessibilityLabel: 'Mock learner transcript',
           onPress: () => onTranscriptChange?.({ speaker: 'you', text: 'नमस्ते, मेरा नाम Chris है।' }),
         },
@@ -770,6 +781,30 @@ describe('typed live coaching request control', () => {
     await flushMicrotasks();
   });
 
+  it('re-enables the next voice turn only after typed-reply playback settles', async () => {
+    const playback = deferred<void>();
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Wait until my reply finishes.', language: 'en' });
+    speech.speakText.mockReturnValueOnce(playback.promise);
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Can I speak after this?');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+
+    expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
+    expect(view.getByLabelText('Connect with Asha').props.accessibilityState).toEqual({ disabled: true });
+
+    await act(async () => {
+      playback.resolve();
+      await flushMicrotasks();
+    });
+
+    expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByLabelText('Connect with Asha').props.accessibilityState).toEqual({ disabled: false });
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('aborts without persisting the local learner message when the screen unmounts before a reply', async () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     let requestSignal: AbortSignal | undefined;
@@ -1130,7 +1165,7 @@ describe('live audio control exclusion', () => {
     await flushMicrotasks();
   }, 20_000);
 
-  it('saves and preloads typed replies without starting Expo playback while realtime owns the iOS audio session', async () => {
+  it('re-enables Listen after a typed reply while a ready realtime session owns the iOS audio session', async () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'A reply while realtime stays connected.', language: 'en' });
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
@@ -1149,14 +1184,8 @@ describe('live audio control exclusion', () => {
     expect(view.queryByText(/UnexpectedException/u)).toBeNull();
 
     const listen = view.getByLabelText('Read reply aloud: A reply while realtime stays connected.');
-    expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(true);
+    expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(false);
     await fireEvent.press(listen);
-    expect(speech.speakText).not.toHaveBeenCalled();
-
-    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
-    expect(view.getByLabelText('Read reply aloud: A reply while realtime stays connected.').props.accessibilityState?.disabled
-      ?? view.getByLabelText('Read reply aloud: A reply while realtime stays connected.').props.disabled).toBe(false);
-    await fireEvent.press(view.getByLabelText('Read reply aloud: A reply while realtime stays connected.'));
     await flushMicrotasks();
     expect(speech.speakText).toHaveBeenCalledWith(
       'A reply while realtime stays connected.',
@@ -1170,6 +1199,24 @@ describe('live audio control exclusion', () => {
     await view.unmount();
     await flushMicrotasks();
   }, 20_000);
+
+  it('re-enables Listen after a realtime reply finishes, while keeping it disabled during the response', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    await fireEvent.press(view.getByLabelText('Mock completed realtime reply'));
+
+    const listen = view.getByLabelText('Read reply aloud: A completed voice reply.');
+    expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(false);
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    expect(view.getByLabelText('Read reply aloud: A completed voice reply.').props.accessibilityState?.disabled
+      ?? view.getByLabelText('Read reply aloud: A completed voice reply.').props.disabled).toBe(true);
+
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    expect(view.getByLabelText('Read reply aloud: A completed voice reply.').props.accessibilityState?.disabled
+      ?? view.getByLabelText('Read reply aloud: A completed voice reply.').props.disabled).toBe(false);
+    await view.unmount();
+    await flushMicrotasks();
+  });
 
   it('keeps live coaching actions accessible and at least 44 points tall', async () => {
     const view = await render(<LiveScreen />);

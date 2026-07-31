@@ -15,6 +15,11 @@ function normalizedPlaybackRate(playbackRate: number) {
   return Math.min(2, Math.max(MIN_PLAYBACK_RATE, playbackRate));
 }
 
+function playbackFinished(status: AudioStatus) {
+  return status.didJustFinish
+    || (status.duration > 0 && !status.playing && status.currentTime >= status.duration);
+}
+
 function normalizeLessonText(text: string) {
   return text
     .normalize('NFC')
@@ -98,7 +103,7 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
       const cancel = () => finish();
       const update = (status: AudioStatus) => {
         if (status.error) finish(new Error(`Offline lesson audio failed: ${status.error}`));
-        else if (status.didJustFinish) finish();
+        else if (playbackFinished(status)) finish();
       };
       subscription = player.addListener('playbackStatusUpdate', update);
       signal.addEventListener('abort', cancel, { once: true });

@@ -328,7 +328,7 @@ describe('Realtime connection lifecycle', () => {
     }
   });
 
-  it('configures a recording-capable speaker session before WebRTC captures microphone audio', async () => {
+  it('restores the recording-capable speaker route after WebRTC initializes', async () => {
     const peer = createPeer();
     let peerOptions: RealtimePeerOptions | undefined;
     const speakerMode = {
@@ -357,7 +357,9 @@ describe('Realtime connection lifecycle', () => {
         start = result.current.startTurn();
       });
       await waitFor(() => expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.update' })));
-      expect(setAudioModeMock).toHaveBeenCalledWith(speakerMode);
+      expect(setAudioModeMock).toHaveBeenCalledTimes(2);
+      expect(setAudioModeMock).toHaveBeenNthCalledWith(1, speakerMode);
+      expect(setAudioModeMock).toHaveBeenNthCalledWith(2, speakerMode);
 
       await act(async () => {
         peerOptions?.onMessage(JSON.stringify({ type: 'session.updated' }));
@@ -368,7 +370,7 @@ describe('Realtime connection lifecycle', () => {
       expect(setAudioModeMock).toHaveBeenLastCalledWith(speakerMode);
       expect(setAudioModeMock.mock.calls.filter(([mode]) => (
         mode.allowsRecording === true && mode.shouldRouteThroughEarpiece === false
-      ))).toHaveLength(1);
+      ))).toHaveLength(2);
     } finally {
       await unmount();
     }

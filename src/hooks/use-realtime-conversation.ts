@@ -889,6 +889,17 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
         attemptPeer = null;
         return;
       }
+      // Creating the native WebRTC peer can replace iOS's PlayAndRecord
+      // category options. Reapply Bolo's live mode after that handoff so the
+      // reply player uses the loudspeaker, not the quieter call receiver.
+      // This is deliberately before a microphone turn or Asha playback, so it
+      // does not race either active media path.
+      await setVoiceAudioMode('realtime');
+      if (!isCurrentAttempt()) {
+        closeStaleAttemptPeer();
+        attemptPeer = null;
+        return;
+      }
       peerRef.current = peer;
 
       await new Promise<void>((resolve, reject) => {

@@ -85,7 +85,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onReport,
   onSelectionCollapsed,
   onSelectedText,
-  realtimeOwnsAudio,
+  playbackLocked,
   reported,
   reporting,
   styles,
@@ -100,7 +100,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onReport: (message: ChatMessage) => void;
   onSelectedText: (messageId: string, selection: { sourceText: string; text: string }) => void;
   onSelectionCollapsed: (messageId: string) => void;
-  realtimeOwnsAudio: boolean;
+  playbackLocked: boolean;
   reported: boolean;
   reporting: boolean;
   styles: ReturnType<typeof createLiveStyles>;
@@ -144,7 +144,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
             {message.role === 'asha' ? (
               <>
-                <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : realtimeOwnsAudio ? 'End realtime voice before playing another voice.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || realtimeOwnsAudio }} disabled={!aiConsent || realtimeOwnsAudio} onPress={playReply} style={[styles.smallAction, (!aiConsent || realtimeOwnsAudio) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
+                <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || playbackLocked }} disabled={!aiConsent || playbackLocked} onPress={playReply} style={[styles.smallAction, (!aiConsent || playbackLocked) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
                 {!isWelcome ? <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} onPress={report} style={[styles.smallAction, (reported || reporting) && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable> : null}
               </>
             ) : null}

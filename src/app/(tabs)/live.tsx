@@ -109,6 +109,10 @@ export default function LiveScreen() {
   );
   const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
   const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
+  // A connected-but-ready WebRTC session can safely replay an earlier response:
+  // `speakText` retains its existing PlayAndRecord session. Only block Listen
+  // while Asha is connecting, recording, responding, or finishing typed audio.
+  const replyPlaybackLocked = busy || realtimeLocked;
   const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
@@ -262,11 +266,11 @@ export default function LiveScreen() {
   }, [appendChatMessages, markLiveTurn]);
 
   const playReply = useCallback((message: ChatMessage) => {
-    if (!aiConsent || realtimeOwnsAudio) return;
+    if (!aiConsent || replyPlaybackLocked) return;
     setError('');
     if (message.language === 'hi') void speak(message.text, undefined, 1, 'hi', 'playback', true);
     else void speak(message.text, undefined, 1, undefined, 'playback', true);
-  }, [aiConsent, realtimeOwnsAudio, speak]);
+  }, [aiConsent, replyPlaybackLocked, speak]);
 
   const changeResponseLanguage = useCallback((nextLanguage: AshaResponseLanguage) => {
     if (languageControlLocked || nextLanguage === responseLanguage) return;
@@ -602,7 +606,7 @@ export default function LiveScreen() {
             onReport={report}
             onSelectedText={rememberSelectedChatText}
             onSelectionCollapsed={forgetSelectedChatText}
-            realtimeOwnsAudio={realtimeOwnsAudio}
+            playbackLocked={replyPlaybackLocked}
             reported={reported.has(item.id)}
             reporting={pendingReports.has(item.id)}
             styles={styles}
