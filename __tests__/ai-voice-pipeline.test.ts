@@ -245,6 +245,33 @@ describe('AI voice native playback', () => {
     expect(normalized.delete).toHaveBeenCalledTimes(1);
   });
 
+  it('normalizes a typed chat reply without retaining the WebRTC audio session', async () => {
+    const native = installPlayer();
+    native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
+    aiAudioNormalizerMock.normalizeAiVoiceAudioFile.mockResolvedValue(
+      'file:///cache/bolo-ai-voice-chat-normalized.caf',
+    );
+
+    await aiVoicePlayer.playAiVoiceAudio({
+      audioBase64: 'Y2hhdC1ub3JtYWxpemUtbWU=',
+      mimeType: 'audio/mpeg',
+    }, new AbortController().signal, 1, 'playback', true);
+
+    const source = expectDefined(expoFileSystem.__mockFiles[0]);
+    const normalized = expectDefined(expoFileSystem.__mockFiles[1]);
+    expect(aiAudioNormalizerMock.normalizeAiVoiceAudioFile).toHaveBeenCalledWith(source.uri);
+    expect(expoAudio.setAudioModeAsync).toHaveBeenCalledWith({
+      allowsRecording: false,
+      interruptionMode: 'doNotMix',
+      playsInSilentMode: true,
+      shouldRouteThroughEarpiece: false,
+    });
+    expect(expoAudio.createAudioPlayer).toHaveBeenCalledWith(normalized.uri, {
+      updateInterval: 100,
+      keepAudioSessionActive: false,
+    });
+  });
+
   it('uses the original MP3 when iOS normalization is unavailable', async () => {
     const native = installPlayer();
     native.player.play.mockImplementation(() => native.emit({ didJustFinish: true }));
@@ -288,6 +315,37 @@ describe('AI voice native playback', () => {
     expect(normal.player.release).toHaveBeenCalledTimes(1);
     expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
     expect(realtime.player.release).not.toHaveBeenCalled();
+  });
+
+  it('rebuilds an idle prepared clip when chat normalization changes', async () => {
+    const generic = installPlayer();
+    generic.player.play.mockImplementation(() => generic.emit({ didJustFinish: true }));
+    const audio: boloApi.AiVoiceAudio = {
+      audioBase64: 'Y2FjaGUtY2hhdC1ub3JtYWxpemF0aW9u',
+      mimeType: 'audio/mpeg',
+    };
+
+    await aiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal);
+
+    const chat = installPlayer();
+    chat.player.play.mockImplementation(() => chat.emit({ didJustFinish: true }));
+    aiAudioNormalizerMock.normalizeAiVoiceAudioFile.mockResolvedValue(
+      'file:///cache/bolo-ai-voice-cache-chat-normalized.caf',
+    );
+    await aiVoicePlayer.playAiVoiceAudio(audio, new AbortController().signal, 1, 'playback', true);
+
+    expect(expoAudio.createAudioPlayer).toHaveBeenNthCalledWith(1, expect.any(String), {
+      updateInterval: 100,
+      keepAudioSessionActive: false,
+    });
+    const normalized = expectDefined(expoFileSystem.__mockFiles[2]);
+    expect(expoAudio.createAudioPlayer).toHaveBeenNthCalledWith(2, normalized.uri, {
+      updateInterval: 100,
+      keepAudioSessionActive: false,
+    });
+    expect(generic.player.release).toHaveBeenCalledTimes(1);
+    expect(expectDefined(expoFileSystem.__mockFiles[0]).delete).toHaveBeenCalledTimes(1);
+    expect(chat.player.release).not.toHaveBeenCalled();
   });
 
   it('caps the slow-playback watchdog at two minutes', async () => {
@@ -402,6 +460,16 @@ describe('AI voice speech orchestration', () => {
     await expect(speakText('A live tab listen request.')).resolves.toBeUndefined();
 
     expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal), 1, 'realtimePlayback');
+  });
+
+  it('passes chat-reply normalization through generated speech playback', async () => {
+    const audio = { audioBase64: 'Y2hhdC1yZXBseQ==', mimeType: 'audio/mpeg' as const };
+    jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue(audio);
+    const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockResolvedValue();
+
+    await expect(speakText('A typed Asha reply.', undefined, 1, undefined, 'playback', true)).resolves.toBeUndefined();
+
+    expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal), 1, 'playback', true);
   });
 
   it('prefetches the next speech chunk while preserving playback order', async () => {

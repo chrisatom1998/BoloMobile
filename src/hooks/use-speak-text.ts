@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { speakText } from '@/lib/speech';
+import type { VoiceAudioMode } from '@/lib/voice';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
 
 // One canonical message for every screen that surfaces a failed voice playback.
 const playbackFallbackMessage = 'Bolo could not play the voice.';
 
-type SpeakOptions = [signal?: AbortSignal, playbackRate?: number, language?: AshaResponseLanguage];
+type SpeakOptions = [
+  signal?: AbortSignal,
+  playbackRate?: number,
+  language?: AshaResponseLanguage,
+  audioMode?: VoiceAudioMode,
+  normalizeGeneratedChatReply?: boolean,
+];
 
 export function useSpeakText() {
   const [audioError, setAudioError] = useState('');

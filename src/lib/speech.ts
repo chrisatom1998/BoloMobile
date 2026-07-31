@@ -178,6 +178,7 @@ async function playGeneratedSpeech(
   signal: AbortSignal,
   playbackRate: number,
   audioMode: VoiceAudioMode,
+  normalizeGeneratedChatReply: boolean,
 ) {
   let result = prepared ? await prepared : await prepareSpeechAudio(chunk, signal);
   for (let attempt = 0; attempt < GENERATED_SPEECH_ATTEMPTS; attempt += 1) {
@@ -189,9 +190,14 @@ async function playGeneratedSpeech(
     }
     try {
       const audio = result.audio;
-      if (playbackRate === 1 && audioMode === 'playback') await playAiVoiceAudio(audio, signal);
-      else if (playbackRate === 1) await playAiVoiceAudio(audio, signal, 1, audioMode);
-      else await playAiVoiceAudio(audio, signal, playbackRate, audioMode);
+      if (playbackRate === 1 && audioMode === 'playback') {
+        if (normalizeGeneratedChatReply) await playAiVoiceAudio(audio, signal, 1, audioMode, true);
+        else await playAiVoiceAudio(audio, signal);
+      } else if (normalizeGeneratedChatReply) {
+        await playAiVoiceAudio(audio, signal, playbackRate, audioMode, true);
+      } else {
+        await playAiVoiceAudio(audio, signal, playbackRate, audioMode);
+      }
       return;
     } catch (error) {
       if (signal.aborted) return;
@@ -223,6 +229,7 @@ export async function speakText(
   playbackRate = 1,
   requestedLanguage?: AshaResponseLanguage,
   audioMode: VoiceAudioMode = 'playback',
+  normalizeGeneratedChatReply = false,
 ) {
   // A normal Listen action can arrive from a still-mounted non-Live tab while
   // the Realtime call owns iOS's PlayAndRecord session. In that case, retain
@@ -270,6 +277,7 @@ export async function speakText(
         controller.signal,
         playbackRate,
         effectiveAudioMode,
+        normalizeGeneratedChatReply,
       );
       preparedAudio.delete(index);
     }

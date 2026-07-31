@@ -56,8 +56,15 @@ export function clearAiVoicePlaybackCache() {
   }
 }
 
-export async function playAiVoiceAudio(audioData: AiVoiceAudio, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback'): Promise<void> {
+export async function playAiVoiceAudio(
+  audioData: AiVoiceAudio,
+  signal: AbortSignal,
+  playbackRate = 1,
+  audioMode: VoiceAudioMode = 'playback',
+  normalizeGeneratedChatReply = false,
+): Promise<void> {
   void audioMode;
+  void normalizeGeneratedChatReply;
   if (signal.aborted) return;
   const prepared = getPreparedAudio(audioData);
   prepared.inUse += 1;

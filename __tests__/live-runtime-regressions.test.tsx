@@ -803,6 +803,14 @@ describe('typed live coaching request control', () => {
     ]);
     expect(view.getByLabelText('Selectable chat text: Keep this completed turn.')).toBeTruthy();
     expect(view.getByLabelText('Selectable chat text: The text reply succeeded.')).toBeTruthy();
+    expect(speech.speakText).toHaveBeenCalledWith(
+      'The text reply succeeded.',
+      expect.any(AbortSignal),
+      1,
+      undefined,
+      'playback',
+      true,
+    );
     const playbackError = view.getByText('Asha replied, but the voice audio could not play. Voice playback failed.');
     expect(playbackError.props.accessibilityRole).toBe('alert');
     await view.unmount();
@@ -1019,7 +1027,14 @@ describe('live coaching state', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     const listenActions = view.getAllByLabelText(/Read reply aloud/u);
     await fireEvent.press(expectDefined(listenActions[listenActions.length - 1]));
-    expect(speech.speakText).toHaveBeenCalledWith('Hello there.');
+    expect(speech.speakText).toHaveBeenCalledWith(
+      'Hello there.',
+      undefined,
+      1,
+      undefined,
+      'playback',
+      true,
+    );
 
     await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
     const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
@@ -1143,7 +1158,14 @@ describe('live audio control exclusion', () => {
       ?? view.getByLabelText('Read reply aloud: A reply while realtime stays connected.').props.disabled).toBe(false);
     await fireEvent.press(view.getByLabelText('Read reply aloud: A reply while realtime stays connected.'));
     await flushMicrotasks();
-    expect(speech.speakText).toHaveBeenCalledWith('A reply while realtime stays connected.');
+    expect(speech.speakText).toHaveBeenCalledWith(
+      'A reply while realtime stays connected.',
+      undefined,
+      1,
+      undefined,
+      'playback',
+      true,
+    );
 
     await view.unmount();
     await flushMicrotasks();

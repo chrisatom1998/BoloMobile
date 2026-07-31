@@ -264,8 +264,8 @@ export default function LiveScreen() {
   const playReply = useCallback((message: ChatMessage) => {
     if (!aiConsent || realtimeOwnsAudio) return;
     setError('');
-    if (message.language === 'hi') void speak(message.text, undefined, 1, 'hi');
-    else void speak(message.text);
+    if (message.language === 'hi') void speak(message.text, undefined, 1, 'hi', 'playback', true);
+    else void speak(message.text, undefined, 1, undefined, 'playback', true);
   }, [aiConsent, realtimeOwnsAudio, speak]);
 
   const changeResponseLanguage = useCallback((nextLanguage: AshaResponseLanguage) => {
@@ -343,8 +343,8 @@ export default function LiveScreen() {
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
       if (realtimeStatusRef.current === 'disconnected') {
         try {
-          if (result.language === 'hi') await speakText(result.reply, controller.signal, 1, 'hi');
-          else await speakText(result.reply, controller.signal);
+          if (result.language === 'hi') await speakText(result.reply, controller.signal, 1, 'hi', 'playback', true);
+          else await speakText(result.reply, controller.signal, 1, undefined, 'playback', true);
         } catch (cause) {
           if (mountedRef.current && !controller.signal.aborted) {
             const reason = cause instanceof Error ? cause.message : 'Bolo could not play the AI voice.';

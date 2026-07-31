@@ -15,6 +15,7 @@ type PreparedAudio = {
   hasStarted: boolean;
   inUse: number;
   keepAudioSessionActive: boolean;
+  normalizeAiVoiceAudio: boolean;
   player: AudioPlayer;
   cached: boolean;
 };
@@ -61,15 +62,19 @@ function evictPreparedAudio() {
   }
 }
 
-async function createPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) {
+async function createPreparedAudio(
+  audio: AiVoiceAudio,
+  keepAudioSessionActive: boolean,
+  normalizeAiVoiceAudio: boolean,
+) {
   const file = new File(Paths.cache, `bolo-ai-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
   const files = [file];
   try {
     file.write(audio.audioBase64, { encoding: 'base64' });
     let playbackFile = file;
-    // Only canonical Asha replies inside a live WebRTC session are boosted.
+    // Generated Asha chat replies and canonical live replies are boosted.
     // AVAudioFile processes the downloaded MP3 without touching AVAudioSession.
-    if (keepAudioSessionActive) {
+    if (normalizeAiVoiceAudio) {
       const normalizedUri = await normalizeAiVoiceAudioFile(file.uri);
       if (normalizedUri) {
         const normalizedFile = new File(normalizedUri);
@@ -85,17 +90,33 @@ async function createPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: 
       keepAudioSessionActive,
     });
     player.volume = 1;
-    return { audio, cached: false, files, hasStarted: false, inUse: 0, keepAudioSessionActive, player };
+    return {
+      audio,
+      cached: false,
+      files,
+      hasStarted: false,
+      inUse: 0,
+      keepAudioSessionActive,
+      normalizeAiVoiceAudio,
+      player,
+    };
   } catch (error) {
     deletePreparedFiles(files);
     throw error;
   }
 }
 
-async function getPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boolean) {
+async function getPreparedAudio(
+  audio: AiVoiceAudio,
+  keepAudioSessionActive: boolean,
+  normalizeAiVoiceAudio: boolean,
+) {
   const cached = preparedAudioCache.get(audio);
   if (cached) {
-    if (cached.keepAudioSessionActive === keepAudioSessionActive) {
+    if (
+      cached.keepAudioSessionActive === keepAudioSessionActive
+      && cached.normalizeAiVoiceAudio === normalizeAiVoiceAudio
+    ) {
       preparedAudioCache.delete(audio);
       preparedAudioCache.set(audio, cached);
       return cached;
@@ -103,17 +124,20 @@ async function getPreparedAudio(audio: AiVoiceAudio, keepAudioSessionActive: boo
     // A player configured for standalone playback cannot safely be reused for
     // an active WebRTC session (or vice versa). Never release a clip that is
     // currently playing; use a one-shot player until it becomes idle.
-    if (cached.inUse > 0) return createPreparedAudio(audio, keepAudioSessionActive);
+    if (cached.inUse > 0) return createPreparedAudio(audio, keepAudioSessionActive, normalizeAiVoiceAudio);
     disposePreparedAudio(cached);
   }
 
-  const prepared = await createPreparedAudio(audio, keepAudioSessionActive);
+  const prepared = await createPreparedAudio(audio, keepAudioSessionActive, normalizeAiVoiceAudio);
   // A superseding speech request can prepare the same cached audio while the
   // first normalization is still running. Keep one cache owner and dispose the
   // duplicate rather than leaking its native player and temporary files.
   const raced = preparedAudioCache.get(audio);
   if (raced) {
-    if (raced.keepAudioSessionActive === keepAudioSessionActive) {
+    if (
+      raced.keepAudioSessionActive === keepAudioSessionActive
+      && raced.normalizeAiVoiceAudio === normalizeAiVoiceAudio
+    ) {
       disposePreparedAudio(prepared);
       return raced;
     }
@@ -131,9 +155,22 @@ export function clearAiVoicePlaybackCache() {
   }
 }
 
-export async function playAiVoiceAudio(audio: AiVoiceAudio, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback'): Promise<void> {
+export async function playAiVoiceAudio(
+  audio: AiVoiceAudio,
+  signal: AbortSignal,
+  playbackRate = 1,
+  audioMode: VoiceAudioMode = 'playback',
+  normalizeGeneratedChatReply = false,
+): Promise<void> {
   if (signal.aborted) return;
-  const prepared = await getPreparedAudio(audio, audioMode === 'realtimePlayback');
+  const keepAudioSessionActive = audioMode === 'realtimePlayback';
+  const prepared = await getPreparedAudio(
+    audio,
+    keepAudioSessionActive,
+    // Live replies remain normalized. Typed-chat replies opt in without
+    // retaining the WebRTC session or changing the standalone audio mode.
+    keepAudioSessionActive || normalizeGeneratedChatReply,
+  );
   if (signal.aborted) {
     if (!prepared.cached) disposePreparedAudio(prepared);
     return;
