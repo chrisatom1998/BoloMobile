@@ -18,6 +18,7 @@ import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiWordTokens } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { shuffleChoices } from '@/lib/shuffle-choices';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
@@ -51,6 +52,7 @@ export default function SceneScreen() {
   const [initialBeatIndex, setInitialBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
   const [beatIndex, setBeatIndex] = useState(initialBeatIndex);
   const [picked, setPicked] = useState<number | null>(null);
+  const [choiceNonce, setChoiceNonce] = useState(0);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [done, setDone] = useState(false);
@@ -75,6 +77,10 @@ export default function SceneScreen() {
       : currentBeat.npc
     : undefined;
   const autoPlayKey = scene && npcLine !== undefined ? `${scene.id}:${beatIndex}` : null;
+  const choicePresentation = useMemo(() => ({
+    choices: currentBeat ? shuffleChoices(currentBeat.choices) : [],
+    key: `${scene?.id ?? 'missing-scene'}:${beatIndex}:${choiceNonce}`,
+  }), [beatIndex, choiceNonce, currentBeat, scene?.id]);
 
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
   useEffect(() => {
@@ -148,6 +154,7 @@ export default function SceneScreen() {
     setPicked(null);
     setShowHint(false);
     setWordDefinitionWord(null);
+    setChoiceNonce((value) => value + 1);
   }
 
   function replay() {
@@ -165,6 +172,7 @@ export default function SceneScreen() {
     setWeakPhrases([]);
     advancedBeatRef.current = null;
     setDone(false);
+    setChoiceNonce((value) => value + 1);
   }
 
   function leaveCompletedScene() {
@@ -259,24 +267,29 @@ export default function SceneScreen() {
           <Text style={styles.answerTitle}>{beat.prompt}</Text>
         </View>
       </View>
-      <View style={styles.choices} testID="scene-choices">
-        {beat.choices.map((choice, index) => {
-          const selected = picked === index;
+      <View key={choicePresentation.key} style={styles.choices} testID="scene-choices">
+        {choicePresentation.choices.map(({ item: choice, sourceIndex }, displayIndex) => {
+          const selected = picked === sourceIndex;
           const revealed = picked !== null && choice.correct;
+          const answered = picked !== null;
+          const accessibilityLabel = answered
+            ? `${choice.hi} ${choice.latin} ${choice.en}`
+            : `${choice.hi} ${choice.latin}`;
           return (
             <Pressable
               key={choice.hi}
-              accessibilityLabel={`${choice.hi}. ${choice.latin}. ${choice.en}`}
+              accessibilityLabel={accessibilityLabel}
               accessibilityRole="button"
               accessibilityState={{ disabled: picked !== null || pronunciationBusy, selected }}
               disabled={picked !== null || pronunciationBusy}
-              onPress={() => choose(index)}
+              onPress={() => choose(sourceIndex)}
               style={[styles.choice, largeTextLayout && styles.choiceLarge, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
             >
-              <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{index + 1}</Text></View>
-              <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]}>
-                {learnerProfile?.scriptPreference !== 'latin' ? <Text style={styles.choiceHindi}>{choice.hi}</Text> : null}
-                <Text style={styles.choiceMeaning}>{learnerProfile?.scriptPreference === 'devanagari' ? choice.en : `${choice.latin} · ${choice.en}`}</Text>
+              <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{displayIndex + 1}</Text></View>
+              <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]} testID="scene-choice-copy">
+                <Text style={styles.choiceHindi}>{choice.hi}</Text>
+                <Text style={styles.choiceRomanized}>{choice.latin}</Text>
+                {answered ? <Text style={styles.choiceMeaning}>{choice.en}</Text> : null}
               </View>
               {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
             </Pressable>
@@ -391,9 +404,10 @@ const useStyles = makeStyles((c) => ({
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
   choiceNumber: { minWidth: 30, minHeight: 30, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xs },
   choiceNumberText: { color: c.muted, fontWeight: '800' },
-  choiceCopy: { flex: 1, gap: 3 },
+  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 3 },
   choiceCopyLarge: { flex: 0, width: '100%' },
   choiceHindi: { color: c.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
+  choiceRomanized: { color: c.forestText, fontSize: 14, lineHeight: 20, fontWeight: '700' },
   choiceMeaning: { color: c.muted, fontSize: 12, lineHeight: 17 },
   hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },

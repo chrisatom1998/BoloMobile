@@ -79,7 +79,7 @@ describe('scene situation auto-play', () => {
     const view = await render(<SceneScreen />);
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?\nHello! What will you have?'));
 
-    await fireEvent.press(view.getByLabelText(/One tea, please\./u));
+    await fireEvent.press(view.getByLabelText('एक चाय दीजिए। Ek chai dijiye.'));
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledWith('चीनी कम या ज़्यादा?\nLess sugar or more?'));
@@ -101,7 +101,7 @@ describe('scene situation auto-play', () => {
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledTimes(1));
     speakTextMock.mockClear();
 
-    await fireEvent.press(view.getByLabelText(/One tea, please\./u));
+    await fireEvent.press(view.getByLabelText('एक चाय दीजिए। Ek chai dijiye.'));
 
     expect(speakTextMock).toHaveBeenCalledWith('ज़रूर! चीनी कम या ज़्यादा?');
     expect(speakTextMock).not.toHaveBeenCalledWith(expect.stringContaining('Hello! What will you have?'));
