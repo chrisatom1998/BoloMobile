@@ -67,17 +67,27 @@
     "e2e:validate": "node ./scripts/validate-e2e-flows.mjs",
     "e2e:ios": "maestro test .maestro",
     "store:validate": "node ./scripts/validate-store-assets.mjs",
+    "store:validate:ios": "node ./scripts/validate-store-assets.mjs --platform ios",
     "acceptance:live": "node ./scripts/validate-live-services.mjs",
+    "audit:gate": "node ./scripts/assert-audit-exceptions.mjs",
+    "toolchain:check": "node ./scripts/assert-node-version.mjs",
     "build:android:preview": "node ./scripts/run-eas-from-app-root.mjs build --platform android --profile preview",
     "build:ios:preview": "node ./scripts/run-eas-from-app-root.mjs build --platform ios --profile preview",
     "build:production": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs build --platform all --profile production",
-    "build:ios:production": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs build --platform ios --profile production",
+    "build:ios:production": "npm run release:preflight:ios:binary && node ./scripts/run-eas-from-app-root.mjs build --platform ios --profile production",
     "submit:android:internal": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs submit --platform android --latest --profile internal",
     "submit:android:production": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs submit --platform android --latest --profile production",
-    "submit:ios:production": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs submit --platform ios --latest --profile production",
+    "submit:ios:production": "npm run release:preflight:ios:binary && node ./scripts/run-eas-from-app-root.mjs submit --platform ios --latest --profile production",
     "metadata:push": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs metadata:push --profile production",
+    "metadata:ios:push": "npm run release:preflight:ios && node ./scripts/run-eas-from-app-root.mjs metadata:push --profile production",
+    "release:provenance": "node ./scripts/assert-release-provenance.mjs",
     "release:validate": "node ./scripts/validate-release.mjs",
+    "release:validate:ios": "node ./scripts/validate-release.mjs --platform ios",
+    "release:validate:ios:binary": "node ./scripts/validate-release.mjs --platform ios --phase binary",
     "release:validate:live": "node ./scripts/validate-release-live.mjs",
+    "release:preflight": "npm run release:provenance && npm run audit:gate && npm run release:validate && npm run release:validate:live",
+    "release:preflight:ios": "npm run toolchain:check && npm run release:provenance && npm run verify && npm run audit:gate && npm run release:validate:ios && npm run store:validate:ios",
+    "release:preflight:ios:binary": "npm run toolchain:check && npm run release:provenance && npm run verify && npm run audit:gate && npm run release:validate:ios:binary && npm run store:validate:ios",
     "verify": "npm run lint && npm run typecheck && npm run test:coverage && npm run store:validate && npm run e2e:validate"
   },
   "jest": {
@@ -119,7 +129,10 @@
   },
   "overrides": {
     "uuid": "^11.1.1",
-    "brace-expansion": "^5.0.8"
+    "brace-expansion": "^5.0.9",
+    "minimatch@^3.0.0": {
+      "brace-expansion": "1.1.18"
+    }
   },
   "private": true
 }

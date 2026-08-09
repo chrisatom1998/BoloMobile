@@ -4,8 +4,11 @@ node_modules/
 dist/
 web-build/
 .acceptance-web*/
-ios/
-android/
+/ios/
+/android/
+coverage/
+builds/
+expo-env.d.ts
 *.tsbuildinfo
 
 # Local tooling and editor state

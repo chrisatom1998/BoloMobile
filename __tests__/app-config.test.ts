@@ -102,4 +102,41 @@ describe('Expo app configuration', () => {
 
     expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_PUBLIC_SITE_URL must be an absolute https URL/u);
   });
+
+  it('declares the app-owned iOS data collection without tracking', () => {
+    const appJson = require('../app.json') as {
+      expo: {
+        ios: {
+          privacyManifests: {
+            NSPrivacyTracking: boolean;
+            NSPrivacyCollectedDataTypes: {
+              NSPrivacyCollectedDataType: string;
+              NSPrivacyCollectedDataTypeLinked: boolean;
+              NSPrivacyCollectedDataTypeTracking: boolean;
+              NSPrivacyCollectedDataTypePurposes: string[];
+            }[];
+          };
+        };
+      };
+    };
+    const manifest = appJson.expo.ios.privacyManifests;
+    const expectedTypes = [
+      'NSPrivacyCollectedDataTypeOtherUserContent',
+      'NSPrivacyCollectedDataTypeAudioData',
+      'NSPrivacyCollectedDataTypeDeviceID',
+      'NSPrivacyCollectedDataTypeProductInteraction',
+    ];
+
+    expect(manifest.NSPrivacyTracking).toBe(false);
+    expect(manifest.NSPrivacyCollectedDataTypes).toHaveLength(expectedTypes.length);
+    expect(new Set(manifest.NSPrivacyCollectedDataTypes.map((entry) => entry.NSPrivacyCollectedDataType)))
+      .toEqual(new Set(expectedTypes));
+    for (const entry of manifest.NSPrivacyCollectedDataTypes) {
+      expect(entry).toMatchObject({
+        NSPrivacyCollectedDataTypeLinked: true,
+        NSPrivacyCollectedDataTypeTracking: false,
+        NSPrivacyCollectedDataTypePurposes: ['NSPrivacyCollectedDataTypePurposeAppFunctionality'],
+      });
+    }
+  });
 });

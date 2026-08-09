@@ -67,8 +67,35 @@
       "count": {
         "minimum": 1,
         "maximum": 10,
-        "recommended": 5
+        "recommended": 4
       },
+      "storyboard": [
+        {
+          "id": "lesson",
+          "file": "assets/store/screenshots/ios/01-lesson.png",
+          "headline": "Speak Hindi for real moments",
+          "altText": "A guided Hindi lesson with an English prompt and response choices in Devanagari and Romanized text."
+        },
+        {
+          "id": "path",
+          "file": "assets/store/screenshots/ios/02-path.png",
+          "headline": "10 guided plans · 100 short lessons",
+          "altText": "The guided lesson path showing progress through 10 plans and 100 short Hindi lessons."
+        },
+        {
+          "id": "home",
+          "file": "assets/store/screenshots/ios/03-home.png",
+          "headline": "Practice without an account",
+          "altText": "Bolo Today with a daily practice goal, progress, and the next lesson in the current plan."
+        },
+        {
+          "id": "asha",
+          "file": "assets/store/screenshots/ios/04-asha.png",
+          "headline": "Optional AI coaching — you choose",
+          "altText": "Asha coaching with a non-sensitive generated reply, an in-app Report control, and the message composer."
+        }
+      ],
+      "overlayRule": "A short truthful headline band around the unaltered capture is allowed; overlays must never cover, edit, or simulate app UI.",
       "iphone69PortraitAcceptedPixels": [
         "1260x2736",
         "1290x2796",
