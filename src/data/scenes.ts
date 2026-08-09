@@ -1,8 +1,25 @@
 import { additionalScenes } from './additional-scenes';
 import { plannedLessons } from './lesson-plans';
 
-export type Choice = { hi: string; latin: string; en: string; correct: boolean; reply: string };
-export type Beat = { npc: string; translation: string; prompt: string; choices: Choice[]; tip: string };
+export type Choice = {
+  hi: string;
+  latin: string;
+  en: string;
+  correct: boolean;
+  reply: string;
+  /** Plain-English correction shown after an incorrect answer. */
+  feedback?: string;
+};
+export type BeatMode = 'choice' | 'wordOrder' | 'recallReveal';
+export type Beat = {
+  npc: string;
+  translation: string;
+  prompt: string;
+  choices: Choice[];
+  tip: string;
+  /** Omitted on hand-authored scenes, which keep the original choice interaction. */
+  mode?: BeatMode;
+};
 
 export const sceneCategories = ['All', 'Food', 'Travel', 'Everyday', 'Health', 'Social', 'Work'] as const;
 export type SceneCategory = Exclude<(typeof sceneCategories)[number], 'All'>;

@@ -40,32 +40,72 @@ describe('Bolo scenario catalog', () => {
     }
   });
 
-  it('gives every planned lesson a distinct mix of guided-practice goals and phrases', () => {
+  it('keeps every planned lesson focused on its titled phrase while varying supporting practice', () => {
     const plannedScenes = scenes.filter((scene) => scene.id.startsWith('plan-'));
-    const goalMarkers = [
-      'Listen first',
-      'Before peeking',
-      'Match the meaning',
-      'Set the tone',
-      'Piece it together',
-      'Whisper it',
-      'Picture yourself',
-      'Say the whole thought',
-      'Rule out',
-      'Lock it in',
+    const activities = [
+      { marker: 'Listen first', mode: 'choice' },
+      { marker: 'Before revealing', mode: 'recallReveal' },
+      { marker: 'Match the meaning', mode: 'choice' },
+      { marker: 'Set the tone', mode: 'choice' },
+      { marker: 'Piece it together', mode: 'wordOrder' },
+      { marker: 'Whisper it', mode: 'choice' },
+      { marker: 'Picture yourself', mode: 'choice' },
+      { marker: 'Say the whole thought', mode: 'choice' },
+      { marker: 'Rule out', mode: 'choice' },
+      { marker: 'Lock it in', mode: 'choice' },
     ];
 
-    for (const scene of plannedScenes) {
+    for (const [sceneIndex, scene] of plannedScenes.entries()) {
+      const lessonIndex = sceneIndex % 10;
       const prompts = scene.beats.map((beat) => beat.prompt);
       expect(new Set(prompts).size).toBe(scene.beats.length);
-      for (const marker of goalMarkers) {
-        expect(prompts.some((prompt) => prompt.includes(marker))).toBe(true);
+      for (const [turnIndex, beat] of scene.beats.entries()) {
+        const activity = activities[(4 * lessonIndex + turnIndex) % activities.length]!;
+        expect(beat.prompt).toContain(activity.marker);
+        expect(beat.mode ?? 'choice').toBe(activity.mode);
       }
-      const practicePhrases = scene.beats.map((beat) => beat.choices.find((choice) => choice.correct)?.hi);
-      expect(new Set(practicePhrases).size).toBe(scene.beats.length);
+
+      const correctChoices = scene.beats.map((beat) => beat.choices.find((choice) => choice.correct)!);
+      const practicePhrases = correctChoices.map((choice) => choice.hi);
+      const titledPhrase = correctChoices[0]!.hi;
+      expect(correctChoices[0]!.en).toBe(scene.subtitle);
+      const expectedTitledTurns = scene.beats.flatMap((beat, turnIndex) => (
+        turnIndex === 0
+          || turnIndex === scene.beats.length - 1
+          || beat.mode === 'recallReveal'
+          || beat.mode === 'wordOrder'
+          ? [turnIndex]
+          : []
+      ));
+      const titledTurns = practicePhrases.flatMap((phrase, turnIndex) => phrase === titledPhrase ? [turnIndex] : []);
+      expect(titledTurns).toEqual(expectedTitledTurns);
+      for (const turnIndex of expectedTitledTurns) {
+        expect(correctChoices[turnIndex]!.en).toBe(scene.subtitle);
+      }
+      expect(titledTurns.length).toBeGreaterThanOrEqual(3);
+      expect(titledTurns.length).toBeLessThanOrEqual(4);
+      expect(new Set(practicePhrases).size).toBeGreaterThanOrEqual(7);
+      expect(new Set(practicePhrases).size).toBeLessThanOrEqual(8);
     }
 
-    expect(new Set(plannedScenes.flatMap((scene) => scene.beats.map((beat) => beat.prompt))).size).toBe(1000);
+    for (let planIndex = 0; planIndex < lessonPlans.length; planIndex += 1) {
+      const planScenes = plannedScenes.slice(planIndex * 10, planIndex * 10 + 10);
+      const titledPhrases = planScenes.map((scene) => {
+        const { hi, latin, en } = scene.beats[0]!.choices.find((choice) => choice.correct)!;
+        return { hi, latin, en };
+      });
+      for (const scene of planScenes) {
+        for (const beat of scene.beats) {
+          const target = beat.choices.find((choice) => choice.correct)!;
+          const targetIndex = titledPhrases.findIndex((phrase) => phrase.hi === target.hi);
+          expect(targetIndex).toBeGreaterThanOrEqual(0);
+          expect(beat.choices.filter((choice) => !choice.correct)).toEqual([
+            expect.objectContaining(titledPhrases[(targetIndex + 3) % titledPhrases.length]),
+            expect.objectContaining(titledPhrases[(targetIndex + 7) % titledPhrases.length]),
+          ]);
+        }
+      }
+    }
   });
 
   it('bundles offline audio for every playable Hindi line', () => {

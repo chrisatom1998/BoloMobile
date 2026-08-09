@@ -1,4 +1,6 @@
-import type { Choice, Scene, SceneCategory } from './scenes';
+import type { BeatMode, Choice, Scene, SceneCategory } from './scenes';
+import { buildLessonFeedback } from './lesson-feedback';
+import { trimTerminalPunctuation } from '../lib/text';
 
 type LessonSeed = {
   title: string;
@@ -42,73 +44,88 @@ type GuidedPracticeTurn = {
 type GuidedPracticeBeat = GuidedPracticeTurn & {
   target: LessonSeed;
   distractors: readonly [LessonSeed, LessonSeed];
+  mode: BeatMode;
 };
 
 /**
  * Ten distinct learning actions. Asha speaks the target's situational cue aloud in the beat's npc
  * line, so each prompt is purely the practice instruction for that moment.
+ *
+ * Two activities have a different interaction in the runtime. Keeping their mode beside their
+ * copy makes the instruction and the control the learner receives stay in sync.
  */
-const practiceActivities: readonly ((context: GuidedPracticeContext) => GuidedPracticeTurn)[] = [
-  ({ target }) => ({
-    prompt: `Listen first: replay Asha to hear the moment, then pick the Hindi for “${target.en}” without reading ahead.`,
+type PracticeActivity = {
+  mode: BeatMode;
+  build: (context: GuidedPracticeContext) => GuidedPracticeTurn;
+};
+
+const practiceActivities: readonly PracticeActivity[] = [
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Listen first, then pick the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
     tip: `Let the shape of “${target.latin}” guide you—you are matching a sound here, not a spelling.`,
-  }),
-  ({ target }) => ({
-    prompt: `Before peeking at the options, rebuild the Hindi for “${target.en}” from memory.`,
+  }) },
+  { mode: 'recallReveal', build: ({ target }) => ({
+    prompt: `Before revealing, recall the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
     tip: `If it will not come, start with the first word of “${target.latin}” and let the rest follow.`,
-  }),
-  ({ target, plan }) => ({
-    prompt: `Match the meaning: which of the three lines truly carries “${target.en}” in this moment?`,
-    tip: `The other two are real ${plan.category.toLowerCase()} phrases—read each gloss to the end before you commit.`,
-  }),
-  ({ target }) => ({
-    prompt: `Set the tone: of the three lines, choose the one meaning “${target.en}” that you could say out loud right now.`,
-    tip: `Say “${target.latin}” evenly and unhurried; courtesy in Hindi carries in the delivery as much as the words.`,
-  }),
-  ({ target }) => ({
-    prompt: `Piece it together—put the words in the order Hindi wants, then select the line for “${target.en}” below.`,
+  }) },
+  { mode: 'choice', build: ({ target, plan }) => ({
+    prompt: `Match the meaning: which line means “${trimTerminalPunctuation(target.en)}”?`,
+    tip: `The other two are real ${plan.category.toLowerCase()} phrases for different moments—compare the Hindi lines before you choose.`,
+  }) },
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Set the tone: say the Hindi for “${trimTerminalPunctuation(target.en)}” out loud.`,
+    tip: `Say “${target.latin}” evenly and without rushing; courtesy in Hindi comes through in your delivery as much as in your words.`,
+  }) },
+  { mode: 'wordOrder', build: ({ target }) => ({
+    prompt: `Piece it together: build the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
     tip: `Track “${target.latin}” from front to back; Hindi usually saves its verb for the very end.`,
-  }),
-  ({ target }) => ({
-    prompt: `Whisper it: sound out “${target.latin}” under your breath, then pick the matching Devanagari.`,
+  }) },
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Whisper it: “${trimTerminalPunctuation(target.latin)}”, then match the script.`,
     tip: `Hearing yourself say it first makes the right script jump out instead of needing to be decoded.`,
-  }),
-  ({ target }) => ({
-    prompt: `Picture yourself in the scene Asha just set, then give the Hindi for “${target.en}” as you would in the moment.`,
+  }) },
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Picture yourself there, then say “${trimTerminalPunctuation(target.en)}” in Hindi.`,
     tip: `Pin “${target.latin}” to this exact scene; a phrase with a moment attached is much harder to lose.`,
-  }),
-  ({ target }) => ({
-    prompt: `Say the whole thought, not half of it—choose the complete sentence for “${target.en}” rather than a fragment of it.`,
+  }) },
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Say the whole thought—the full line for “${trimTerminalPunctuation(target.en)}”.`,
     tip: `A single keyword only points at the idea; “${target.latin}” delivers all of it.`,
-  }),
-  ({ target }) => ({
-    prompt: `Rule out the two lines that belong to some other moment, then keep the one that means “${target.en}” right here.`,
+  }) },
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Rule out the other two, then keep “${trimTerminalPunctuation(target.en)}”.`,
     tip: `Both wrong answers are useful phrases from this plan—they are simply answering a different question.`,
-  }),
-  ({ target }) => ({
-    prompt: `Lock it in: one confident tap on the Hindi for “${target.en}”, no second-guessing.`,
+  }) },
+  { mode: 'choice', build: ({ target }) => ({
+    prompt: `Lock it in: tap the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
     tip: `Aim for “${target.latin}” to arrive on its own next time, before you have to reach for it.`,
-  }),
+  }) },
 ];
 
 /**
- * Each lesson cycles through all ten of its plan's phrases, starting with its own. The activity
- * index steps by three per lesson, and three is coprime with ten, so every (phrase, activity)
- * pairing happens exactly once per plan—no two prompts in the catalog come out the same.
+ * Every lesson keeps its titled phrase as the anchor: learners meet it first and last, and use it
+ * for both alternate practice modes. The remaining choice turns rotate through the plan so the
+ * lesson still introduces a broad supporting vocabulary. Activities advance one step per turn;
+ * the four-step lesson offset varies where each lesson enters that shared sequence.
  */
 function guidedPracticeTurns(plan: LessonPlanSeed, lessonIndex: number): GuidedPracticeBeat[] {
   const phraseCount = plan.lessons.length;
   return plan.lessons.map((_, turnIndex) => {
-    const targetIndex = (lessonIndex + turnIndex) % phraseCount;
+    const activity = practiceActivities[(4 * lessonIndex + turnIndex) % practiceActivities.length]!;
+    const targetsTitledPhrase = turnIndex === 0
+      || turnIndex === phraseCount - 1
+      || activity.mode === 'recallReveal'
+      || activity.mode === 'wordOrder';
+    const targetIndex = targetsTitledPhrase ? lessonIndex : (lessonIndex + turnIndex) % phraseCount;
     const target = plan.lessons[targetIndex]!;
-    const activity = practiceActivities[(3 * lessonIndex + targetIndex) % practiceActivities.length]!;
     return {
       target,
       distractors: [
         plan.lessons[(targetIndex + 3) % phraseCount]!,
         plan.lessons[(targetIndex + 7) % phraseCount]!,
       ] as const,
-      ...activity({ plan, target }),
+      mode: activity.mode,
+      ...activity.build({ plan, target }),
     };
   });
 }
@@ -296,11 +313,12 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
     translation: practice.target.cue,
     prompt: practice.prompt,
     tip: practice.tip,
+    mode: practice.mode,
     // Replies stay literal `reply:` property assignments so generate-offline-hindi-audio.mjs can find them.
     choices: [
       { ...phraseOf(practice.target), correct: true, reply: 'बहुत अच्छा।' },
-      { ...phraseOf(practice.distractors[0]), correct: false, reply: 'करीब है—फिर से कोशिश कीजिए।' },
-      { ...phraseOf(practice.distractors[1]), correct: false, reply: 'अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।' },
+      { ...phraseOf(practice.distractors[0]), correct: false, reply: 'करीब है—फिर से कोशिश कीजिए।', feedback: buildLessonFeedback(practice.target, practice.distractors[0]) },
+      { ...phraseOf(practice.distractors[1]), correct: false, reply: 'अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।', feedback: buildLessonFeedback(practice.target, practice.distractors[1]) },
     ],
   })),
 })));
