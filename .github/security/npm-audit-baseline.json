@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "reviewBy": "2026-11-16",
+  "allowedAdvisories": [
+    {
+      "package": "brace-expansion",
+      "advisory": "GHSA-rgw5-rvv9-x895",
+      "severity": "high",
+      "rationale": "Transitive Expo/Metro and CLI build tooling; not bundled as application runtime code."
+    },
+    {
+      "package": "image-size",
+      "advisory": "GHSA-w3rx-r6r6-pgpr",
+      "severity": "high",
+      "rationale": "Metro image inspection during development/build; not bundled as application runtime code."
+    },
+    {
+      "package": "image-size",
+      "advisory": "GHSA-5p2g-fcmc-qvqq",
+      "severity": "high",
+      "rationale": "Metro image inspection during development/build; not bundled as application runtime code."
+    },
+    {
+      "package": "js-yaml",
+      "advisory": "GHSA-5p4m-2wfm-xmqj",
+      "severity": "high",
+      "rationale": "Configuration and coverage parsing in the Expo/build toolchain; not app runtime behavior."
+    },
+    {
+      "package": "nanoid",
+      "advisory": "GHSA-2v37-7h3g-55p8",
+      "severity": "high",
+      "rationale": "Transitive build-tool use; the application does not invoke the vulnerable custom-generator API."
+    }
+  ]
+}
