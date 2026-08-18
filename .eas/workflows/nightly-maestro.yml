@@ -1,0 +1,60 @@
+name: Nightly staging acceptance
+
+on:
+  schedule:
+    - cron: "17 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  staging_services:
+    name: Validate staging services
+    environment: preview
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Require staging-only endpoints
+        run: |
+          node <<'NODE'
+          const productionApi = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
+          const productionSite = 'https://74e39779183cf78fed.v2.appdeploy.ai';
+          const stagingApi = process.env.BOLO_API_URL?.trim().replace(/\/+$/u, '');
+          const stagingSite = process.env.BOLO_PUBLIC_SITE_URL?.trim().replace(/\/+$/u, '');
+          if (!stagingApi || !stagingSite) {
+            throw new Error('EAS preview must define BOLO_API_URL and BOLO_PUBLIC_SITE_URL.');
+          }
+          if (stagingApi === productionApi || stagingSite === productionSite) {
+            throw new Error('Nightly acceptance refuses to run against a production endpoint.');
+          }
+          for (const [name, value] of [['BOLO_API_URL', stagingApi], ['BOLO_PUBLIC_SITE_URL', stagingSite]]) {
+            const parsed = new URL(value);
+            if (parsed.protocol !== 'https:') throw new Error(`${name} must use HTTPS.`);
+          }
+          console.log('Staging endpoint isolation validated.');
+          NODE
+      - run: npm run e2e:validate
+      - run: npm run release:validate:live
+      - run: npm run acceptance:live
+
+  build_ios:
+    name: Build unsigned staging iOS Simulator app
+    needs: [staging_services]
+    type: build
+    params:
+      platform: ios
+      profile: staging-e2e
+
+  maestro_ios:
+    name: Run all iOS-compatible staging flows
+    needs: [build_ios]
+    type: maestro
+    environment: preview
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      flow_path:
+        - .maestro/flows/02-scene-resume-and-phrases.yaml
+        - .maestro/flows/03-consent-and-live-lifecycle.yaml
+        - .maestro/flows/04-data-deletion.yaml
+        - .maestro/flows/05-realtime-voice-turns.yaml
+      retries: 1
+      retry_failed_only: true
+      record_screen: true
