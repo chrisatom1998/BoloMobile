@@ -1,3 +1,7 @@
+jest.mock('expo/config-plugins', () => ({
+  withAppDelegate: jest.fn(),
+}));
+
 const { applyBoloAppIntents } = require('../plugins/with-bolo-app-intents.js') as {
   applyBoloAppIntents: (contents: string) => string;
 };
