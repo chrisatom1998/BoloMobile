@@ -62,9 +62,10 @@ export function validateStagingEndpointIsolation({
   const productionApiIdentity = canonicalHttpsEndpointIdentity('production API URL', productionApiUrl);
   const productionSiteIdentity = canonicalHttpsEndpointIdentity('production public-site URL', productionSiteUrl);
 
+  const productionIdentities = new Set([productionApiIdentity, productionSiteIdentity]);
   if (
-    stagingApiIdentity === productionApiIdentity
-    || stagingSiteIdentity === productionSiteIdentity
+    productionIdentities.has(stagingApiIdentity)
+    || productionIdentities.has(stagingSiteIdentity)
   ) {
     throw new Error('Nightly acceptance refuses to run against a production endpoint.');
   }

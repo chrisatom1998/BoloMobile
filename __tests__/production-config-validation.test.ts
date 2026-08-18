@@ -101,6 +101,28 @@ describe('production configuration validator', () => {
     expect(result.stderr).toMatch(/Nightly acceptance refuses to run against a production endpoint/u);
   });
 
+  it.each([
+    [
+      'API variable points at the production public site',
+      'https://74e39779183cf78fed.v2.appdeploy.ai/',
+      'https://staging-site.example.test/',
+    ],
+    [
+      'site variable points at the production API',
+      'https://staging-api.example.test/v1/',
+      'https://api-v2.appdeploy.ai/app/74e39779183cf78fed/',
+    ],
+  ])('rejects staging when the %s', (_label, apiUrl, siteUrl) => {
+    const result = runValidator(['--validate-staging-endpoints'], {
+      BOLO_API_URL: apiUrl,
+      BOLO_PUBLIC_SITE_URL: siteUrl,
+      EAS_BUILD_PROFILE: 'preview',
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/Nightly acceptance refuses to run against a production endpoint/u);
+  });
+
   it('canonicalizes the production identity before comparing it with staging', () => {
     const invocation = [
       "import { validateStagingEndpointIsolation } from './scripts/validate-production-config.mjs';",
