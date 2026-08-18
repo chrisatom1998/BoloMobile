@@ -1,0 +1,52 @@
+appId: com.bolo.hindi
+name: iOS launch, consent, persistence, and deletion-cancel smoke
+tags:
+  - smoke
+  - ios
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      microphone: deny
+- runFlow: ../subflows/enter-development-build.yaml
+- assertVisible: "Your Hindi plan in one minute"
+- scrollUntilVisible:
+    element:
+      text: "Check microphone access"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Check microphone access"
+- scrollUntilVisible:
+    element:
+      text: "Microphone access is off. Typed and written practice still work."
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Microphone access is off. Typed and written practice still work."
+- runFlow: ../subflows/complete-onboarding.yaml
+- tapOn: "Asha"
+- scrollUntilVisible:
+    element:
+      text: "Before your first live turn"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Before your first live turn"
+- assertVisible: "Enable live practice"
+- stopApp
+- launchApp
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- assertNotVisible: "Your Hindi plan in one minute"
+- tapOn: "Settings"
+- assertVisible: "Learning preferences"
+- scrollUntilVisible:
+    element:
+      text: "Delete my Bolo data"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Delete my Bolo data"
+- assertVisible: "Delete your Bolo data?"
+- tapOn: "Cancel"
+- assertNotVisible: "Delete your Bolo data?"
+- assertVisible: "Delete my Bolo data"
