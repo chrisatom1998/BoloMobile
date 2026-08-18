@@ -32,6 +32,13 @@ function mustInclude(source, marker, relativePath) {
   }
 }
 
+function mustOccurExactlyOnce(source, marker, relativePath) {
+  const occurrences = source.split(marker).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(`${relativePath} must contain exactly one native marker ${marker}; found ${occurrences}.`);
+  }
+}
+
 const appJson = JSON.parse(await mustRead('app.json'));
 const appName = appJson.expo?.name;
 const bundleIdentifier = process.env.BOLO_APP_IDENTIFIER?.trim() || appJson.expo?.ios?.bundleIdentifier;
@@ -62,10 +69,24 @@ const [project, scheme, appDelegate, infoPlist, moduleConfigSource, modulePodspe
 mustInclude(project, bundleIdentifier, projectPath);
 mustInclude(project, `${bundleIdentifier}.widgets`, projectPath);
 mustInclude(scheme, 'BlueprintName = "Bolo"', schemePath);
-mustInclude(appDelegate, 'import AppIntents', appDelegatePath);
-mustInclude(appDelegate, 'struct PracticeHindiIntent: AppIntent', appDelegatePath);
-mustInclude(appDelegate, 'struct BoloAppShortcuts: AppShortcutsProvider', appDelegatePath);
+mustOccurExactlyOnce(appDelegate, 'import AppIntents', appDelegatePath);
+mustOccurExactlyOnce(appDelegate, 'struct PracticeHindiIntent: AppIntent', appDelegatePath);
+mustOccurExactlyOnce(appDelegate, 'struct BoloAppShortcuts: AppShortcutsProvider', appDelegatePath);
 mustInclude(infoPlist, `<string>${urlScheme}</string>`, infoPlistPath);
+
+const microphoneUsageDescription = 'Allow Bolo to use your microphone for Hindi practice and conversations.';
+mustOccurExactlyOnce(infoPlist, '<key>NSMicrophoneUsageDescription</key>', infoPlistPath);
+mustOccurExactlyOnce(infoPlist, `<string>${microphoneUsageDescription}</string>`, infoPlistPath);
+mustOccurExactlyOnce(infoPlist, '<key>NSAllowsArbitraryLoads</key>', infoPlistPath);
+
+if (!/<key>NSAppTransportSecurity<\/key>\s*<dict>[\s\S]*?<key>NSAllowsArbitraryLoads<\/key>\s*<false\s*\/>[\s\S]*?<\/dict>/.test(infoPlist)) {
+  throw new Error(`${infoPlistPath} must set NSAppTransportSecurity.NSAllowsArbitraryLoads to false.`);
+}
+
+const backgroundModes = infoPlist.match(/<key>UIBackgroundModes<\/key>\s*<array>([\s\S]*?)<\/array>/)?.[1] ?? '';
+if (/<string>\s*audio\s*<\/string>/.test(backgroundModes)) {
+  throw new Error(`${infoPlistPath} must not declare the audio UIBackgroundModes capability.`);
+}
 
 const moduleConfig = JSON.parse(moduleConfigSource);
 if (!moduleConfig.platforms?.includes('apple') || !moduleConfig.apple?.modules?.includes('BoloAudioNormalizerModule')) {
