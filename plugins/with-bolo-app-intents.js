@@ -29,17 +29,37 @@ struct BoloAppShortcuts: AppShortcutsProvider {
 }
 `;
 
-module.exports = function withBoloAppIntents(config) {
+function applyBoloAppIntents(contents) {
+  if (typeof contents !== 'string') {
+    throw new Error('Bolo App Intents expected a Swift AppDelegate source string.');
+  }
+
+  const needsImport = !contents.includes('import AppIntents');
+  const needsIntent = !contents.includes('struct PracticeHindiIntent: AppIntent');
+  const importAnchor = 'internal import Expo\n';
+  const delegateAnchor = '\nclass ReactNativeDelegate:';
+
+  if ((needsImport && !contents.includes(importAnchor)) || (needsIntent && !contents.includes(delegateAnchor))) {
+    throw new Error('Bolo App Intents could not find the Expo AppDelegate anchors.');
+  }
+
+  let nextContents = contents;
+  if (needsImport) {
+    nextContents = nextContents.replace(importAnchor, `${importAnchor}import AppIntents\n`);
+  }
+  if (needsIntent) {
+    nextContents = nextContents.replace(delegateAnchor, `${appIntentSource}${delegateAnchor}`);
+  }
+  return nextContents;
+}
+
+function withBoloAppIntents(config) {
   return withAppDelegate(config, (result) => {
     if (result.modResults.language !== 'swift') return result;
-    let contents = result.modResults.contents;
-    if (!contents.includes('import AppIntents')) {
-      contents = contents.replace('internal import Expo\n', 'internal import Expo\nimport AppIntents\n');
-    }
-    if (!contents.includes('struct PracticeHindiIntent: AppIntent')) {
-      contents = contents.replace('\nclass ReactNativeDelegate:', `${appIntentSource}\nclass ReactNativeDelegate:`);
-    }
-    result.modResults.contents = contents;
+    result.modResults.contents = applyBoloAppIntents(result.modResults.contents);
     return result;
   });
-};
+}
+
+module.exports = withBoloAppIntents;
+module.exports.applyBoloAppIntents = applyBoloAppIntents;
