@@ -4,8 +4,8 @@ node_modules/
 dist/
 web-build/
 .acceptance-web*/
-ios/
-android/
+/ios/
+/android/
 *.tsbuildinfo
 
 # Local tooling and editor state
