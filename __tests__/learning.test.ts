@@ -1,7 +1,8 @@
+import { lessonPlans } from '../src/data/lesson-plans';
 import { scenes } from '../src/data/scenes';
-import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, weeklyPractice } from '../src/lib/learning';
+import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, selectNextLesson, weeklyPractice } from '../src/lib/learning';
 import { defaultLearnerProfile } from '../src/lib/storage';
-import type { PhraseReview, SavedPhrase, SceneProgress } from '../src/state/app-state-types';
+import type { LearnerProfile, PhraseReview, SavedPhrase, SceneProgress } from '../src/state/app-state-types';
 
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
@@ -17,6 +18,12 @@ const progress = (overrides: Partial<SceneProgress> = {}): SceneProgress => ({
   lastPracticedAt: null,
   lastBeatIndex: 0,
   weakPhrases: [],
+  ...overrides,
+});
+
+const learner = (overrides: Partial<LearnerProfile> = {}): LearnerProfile => ({
+  ...defaultLearnerProfile(),
+  completed: true,
   ...overrides,
 });
 
@@ -63,5 +70,61 @@ describe('adaptive learning', () => {
     });
     expect(learningAccuracy(sceneProgress)).toBe(75);
     expect(milestoneProgress(sceneProgress).find((item) => item.id === 'order-food')?.achieved).toBe(true);
+  });
+});
+
+describe('next lesson selection', () => {
+  it('starts a new learner on the first foundation lesson', () => {
+    const result = selectNextLesson(learner(), {});
+    expect(result).toMatchObject({
+      action: 'Start lesson',
+      kicker: 'NEXT LESSON',
+      pathKicker: 'YOUR CONVERSATION PATH',
+      lessonId: 'plan-essentials-01',
+      title: 'A warm hello',
+    });
+    expect(result.plan.id).toBe('essentials');
+  });
+
+  it('keeps a traveller new to Hindi on the foundations before the travel plans', () => {
+    const result = selectNextLesson(learner({ primaryGoal: 'travel' }), {});
+    expect(result.plan.id).toBe('essentials');
+    expect(result.lessonId).toBe('plan-essentials-01');
+    expect(result.why).toBe("We'll start with greetings, then get you moving around town.");
+  });
+
+  it('sends an intermediate traveller straight to the travel plan', () => {
+    const result = selectNextLesson(learner({ level: 'intermediate', primaryGoal: 'travel' }), {});
+    expect(result).toMatchObject({
+      action: 'Start lesson',
+      lessonId: 'plan-getting-around-01',
+      pathKicker: 'YOUR TRAVEL PATH',
+      why: 'Jump into Get around town.',
+    });
+    expect(result.plan.id).toBe('getting-around');
+  });
+
+  it('resumes an unfinished lesson instead of jumping to the goal plan', () => {
+    const result = selectNextLesson(
+      learner({ level: 'intermediate', primaryGoal: 'travel' }),
+      { 'plan-essentials-03': progress({ lastBeatIndex: 2, lastPracticedAt: '2026-07-20T12:00:00.000Z' }) },
+    );
+    expect(result).toMatchObject({
+      action: 'Continue',
+      kicker: 'CONTINUE LESSON',
+      lessonId: 'plan-essentials-03',
+      title: 'Ask how someone is',
+    });
+    expect(result.plan.id).toBe('essentials');
+  });
+
+  it('offers a review once every planned lesson is complete', () => {
+    const everyLessonComplete = Object.fromEntries(
+      lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => [lessonId, progress({ completions: 1 })])),
+    );
+    const result = selectNextLesson(learner(), everyLessonComplete);
+    expect(result).toMatchObject({ action: 'Review lesson', kicker: 'REVIEW LESSON' });
+    expect(result.plan.id).toBe(expectDefined(lessonPlans.at(-1)).id);
+    expect(result.lessonId).toBe(expectDefined(lessonPlans.at(-1)).lessonIds[0]);
   });
 });

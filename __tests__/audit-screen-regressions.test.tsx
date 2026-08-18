@@ -68,6 +68,12 @@ const speech = jest.requireMock('../src/lib/speech') as { speakText: jest.Mock }
 
 const phrase = { hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?', en: 'How are you?' };
 
+async function advanceOnboarding(view: Awaited<ReturnType<typeof render>>, times = 1) {
+  for (let index = 0; index < times; index += 1) {
+    await fireEvent.press(view.getByRole('button', { name: 'Next' }));
+  }
+}
+
 describe('previously uncovered audit screens', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -76,6 +82,7 @@ describe('previously uncovered audit screens', () => {
       aiConsent: false,
       completeOnboarding: mockCompleteOnboarding,
       duePhrases: [phrase],
+      goal: 10,
       learnerProfile: {
         completed: true,
         level: 'new',
@@ -180,10 +187,37 @@ describe('previously uncovered audit screens', () => {
 
   it('keeps the onboarding daily goal numeric through selection and submission', async () => {
     const view = await render(<OnboardingScreen />);
+    await advanceOnboarding(view, 4);
     await fireEvent.press(view.getByRole('radio', { name: '5 minutes' }));
+    await advanceOnboarding(view);
+    await fireEvent.press(view.getByRole('button', { name: 'Skip' }));
     await fireEvent.press(view.getByRole('button', { name: 'Build my practice plan' }));
 
     expect(mockCompleteOnboarding).toHaveBeenCalledWith(expect.any(Object), 5);
+  });
+
+  it('previews the personalized plan on the final onboarding step', async () => {
+    const view = await render(<OnboardingScreen />);
+    expect(view.getByTestId('onboarding-progress').props.accessibilityValue).toEqual({ now: 1, min: 1, max: 7 });
+    expect(view.queryByRole('button', { name: 'Back' })).toBeNull();
+
+    await fireEvent.press(view.getByRole('radio', { name: 'Intermediate' }));
+    await advanceOnboarding(view, 2);
+    await fireEvent.press(view.getByRole('radio', { name: 'Travel' }));
+    await advanceOnboarding(view, 3);
+    await fireEvent.press(view.getByRole('button', { name: 'Skip' }));
+
+    expect(view.getByTestId('onboarding-progress').props.accessibilityValue).toEqual({ now: 7, min: 1, max: 7 });
+    expect(view.getByText('YOUR TRAVEL PATH')).toBeTruthy();
+    expect(view.getByText('Travel · Intermediate')).toBeTruthy();
+    expect(view.getByText('Get around town')).toBeTruthy();
+    expect(view.getByText('First lesson · Find the bus')).toBeTruthy();
+    expect(view.getByText('Jump into Get around town.')).toBeTruthy();
+    expect(view.getByText('10 minutes a day')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Next' })).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Back' }));
+    expect(view.getByRole('button', { name: 'Check microphone access' })).toBeTruthy();
   });
 
   it('seeds recalibration from saved preferences and offers a cancel exit', async () => {
@@ -200,9 +234,13 @@ describe('previously uncovered audit screens', () => {
     const view = await render(<OnboardingScreen />);
 
     expect(view.getByRole('radio', { name: 'Intermediate' }).props.accessibilityState).toEqual({ checked: true });
+    await advanceOnboarding(view);
     expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
+    await advanceOnboarding(view);
     expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
+    await advanceOnboarding(view);
     expect(view.getByRole('radio', { name: 'Hindi first' }).props.accessibilityState).toEqual({ checked: true });
+    await advanceOnboarding(view);
     expect(view.getByRole('radio', { name: '5 minutes' }).props.accessibilityState).toEqual({ checked: true });
     await fireEvent.press(view.getByRole('button', { name: 'Cancel recalibration' }));
     expect(mockRouter.back).toHaveBeenCalledTimes(1);

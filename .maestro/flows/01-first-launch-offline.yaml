@@ -11,18 +11,21 @@ tags:
       microphone: deny
 - runFlow: ../subflows/enter-development-build.yaml
 - assertVisible: "Your Hindi plan in one minute"
-- scrollUntilVisible:
-    element:
-      text: "Check microphone access"
-    direction: DOWN
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Next"
+- assertVisible: "Check microphone access"
 - tapOn: "Check microphone access"
-- scrollUntilVisible:
-    element:
-      text: "Microphone access is off. Typed and written practice still work."
-    direction: DOWN
+- extendedWaitUntil:
+    visible: "Microphone access is off. Typed and written practice still work."
     timeout: 20000
-- assertVisible: "Microphone access is off. Typed and written practice still work."
-- runFlow: ../subflows/complete-onboarding.yaml
+- tapOn: "Skip"
+- tapOn: "Build my practice plan"
+- extendedWaitUntil:
+    visible: "Bolo"
+    timeout: 15000
 - stopApp
 - launchApp
 - tapOn:

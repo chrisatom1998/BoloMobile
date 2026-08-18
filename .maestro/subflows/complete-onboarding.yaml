@@ -1,13 +1,11 @@
 appId: com.bolo.hindi
 ---
-- scrollUntilVisible:
-    element:
-      text: "Build my practice plan"
-    direction: DOWN
-    speed: 60
-    visibilityPercentage: 80
-    centerElement: true
-    timeout: 45000
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Next"
+- tapOn: "Skip"
 - tapOn: "Build my practice plan"
 - extendedWaitUntil:
     visible: "Bolo"
