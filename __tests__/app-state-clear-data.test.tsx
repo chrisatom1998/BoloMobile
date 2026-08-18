@@ -201,6 +201,7 @@ describe('AppStateProvider clearAllData', () => {
     expect(readSnapshot(view)).toEqual(before);
     expect(observe).toHaveBeenCalledWith('runtime_error');
     expect(Object.fromEntries(asyncStorage.__store)).toEqual(original);
+    expect(clearAiVoicePlaybackCache).not.toHaveBeenCalled();
     await view.unmount();
     warning.mockRestore();
   });
