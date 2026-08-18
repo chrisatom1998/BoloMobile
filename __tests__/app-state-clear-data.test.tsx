@@ -24,11 +24,13 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
+jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
 
 jest.mock('@/lib/practice-reminder', () => ({
   cancelPracticeReminder: jest.fn(async (current: { enabled: boolean }) => ({ ...current, enabled: false, notificationId: null })),
 }));
 
+import { clearAiVoicePlaybackCache } from '../src/lib/ai-voice-player';
 import { observe } from '../src/lib/observability';
 import { cancelPracticeReminder } from '../src/lib/practice-reminder';
 import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
@@ -140,6 +142,7 @@ describe('AppStateProvider clearAllData', () => {
     expect(asyncStorage.__store.get(storageKeys.phrases)).toBe('[]');
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.practice) ?? 'null')).toEqual(emptyPractice());
     expect(asyncStorage.__store.get(storageKeys.streakDays)).toBe('[]');
+    expect(clearAiVoicePlaybackCache).toHaveBeenCalledTimes(1);
     await view.unmount();
   });
 
