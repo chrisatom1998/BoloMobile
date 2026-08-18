@@ -49,6 +49,15 @@ describe('Bolo App Intents config plugin', () => {
     expect(first.match(/struct BoloAppShortcuts: AppShortcutsProvider/gu)).toHaveLength(1);
   });
 
+  it('fails closed when only part of the generated Swift source is present', () => {
+    const partial = expo57AppDelegate.replace(
+      '\nclass ReactNativeDelegate:',
+      '\nstruct PracticeHindiIntent: AppIntent {}\n\nclass ReactNativeDelegate:',
+    );
+
+    expect(() => applyBoloAppIntents(partial)).toThrow(/partial or duplicate generated Swift declarations/u);
+  });
+
   it('fails prebuild when the Expo Swift template no longer exposes the required anchors', () => {
     expect(() => applyBoloAppIntents('import Expo\nclass AppDelegate {}\n')).toThrow(
       /could not find the Expo AppDelegate anchors/u,

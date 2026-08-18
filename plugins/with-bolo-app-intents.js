@@ -34,8 +34,20 @@ function applyBoloAppIntents(contents) {
     throw new Error('Bolo App Intents expected a Swift AppDelegate source string.');
   }
 
-  const needsImport = !contents.includes('import AppIntents');
-  const needsIntent = !contents.includes('struct PracticeHindiIntent: AppIntent');
+  const importCount = contents.split('import AppIntents').length - 1;
+  const intentCount = contents.split('struct PracticeHindiIntent: AppIntent').length - 1;
+  const shortcutsCount = contents.split('struct BoloAppShortcuts: AppShortcutsProvider').length - 1;
+  if (
+    importCount > 1
+    || intentCount > 1
+    || shortcutsCount > 1
+    || intentCount !== shortcutsCount
+  ) {
+    throw new Error('Bolo App Intents found partial or duplicate generated Swift declarations.');
+  }
+
+  const needsImport = importCount === 0;
+  const needsIntent = intentCount === 0;
   const importAnchor = 'internal import Expo\n';
   const delegateAnchor = '\nclass ReactNativeDelegate:';
 
