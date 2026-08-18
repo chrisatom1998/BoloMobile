@@ -1,11 +1,23 @@
-import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+const { spawnSync } = require('child_process') as {
+  spawnSync: (
+    command: string,
+    args: string[],
+    options: {
+      cwd: string;
+      encoding: 'utf8';
+      env: Record<string, string | undefined>;
+    },
+  ) => {
+    status: number | null;
+    stdout: string;
+    stderr: string;
+  };
+};
 
 describe('production configuration validator', () => {
   it('accepts the checked-in production configuration', () => {
-    const root = resolve(__dirname, '..');
     const result = spawnSync(process.execPath, ['scripts/validate-production-config.mjs'], {
-      cwd: root,
+      cwd: process.cwd(),
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -16,6 +28,14 @@ describe('production configuration validator', () => {
       },
     });
 
-    expect(result.status).toBe(0);
+    expect({
+      status: result.status,
+      stderr: result.stderr,
+      stdout: result.stdout,
+    }).toEqual({
+      status: 0,
+      stderr: '',
+      stdout: expect.any(String),
+    });
   });
 });
