@@ -25,13 +25,7 @@ function configuredApiUrl() {
 }
 
 export function getBoloApiUrl() {
-  const defaultApiUrl = configuredApiUrl();
-  const override = process.env.EXPO_PUBLIC_BOLO_API_URL?.trim().replace(/\/$/u, '');
-  if (override && !override.startsWith('https://')) {
-    console.warn('Ignoring EXPO_PUBLIC_BOLO_API_URL: the Bolo API URL must use https://');
-    return defaultApiUrl;
-  }
-  return override || defaultApiUrl;
+  return configuredApiUrl();
 }
 
 export type AiVoiceAudio = {
