@@ -14,6 +14,7 @@ import os
 import plistlib
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -112,6 +113,13 @@ max_app_bytes = required_positive_int("MAX_EXPANDED_APP_BYTES")
 baseline_ipa_bytes = required_positive_int("BASELINE_IPA_BYTES")
 growth_percent = required_positive_int("MAX_IPA_GROWTH_PERCENT")
 
+# Bound ZIP work before extraction. The app budget covers Payload/*.app while
+# a small fixed allowance accommodates normal IPA metadata and SwiftSupport.
+max_archive_members = 50_000
+max_archive_overhead_bytes = 64 * 1024 * 1024
+max_archive_bytes = max_app_bytes + max_archive_overhead_bytes
+max_compression_ratio = 500
+
 ipa_bytes = ipa.stat().st_size
 if ipa_bytes > max_ipa_bytes:
     fail(f"IPA size {ipa_bytes} exceeds MAX_IPA_BYTES {max_ipa_bytes}")
@@ -126,10 +134,31 @@ with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
     root = Path(temp_directory)
     try:
         with zipfile.ZipFile(ipa) as archive:
-            for member in archive.infolist():
+            members = archive.infolist()
+            if len(members) > max_archive_members:
+                fail(f"archive contains {len(members)} members; maximum is {max_archive_members}")
+            expanded_archive_bytes = 0
+            for member in members:
                 destination = (root / member.filename).resolve()
                 if root not in destination.parents and destination != root:
                     fail(f"archive contains an unsafe path: {member.filename}")
+                if member.flag_bits & 0x1:
+                    fail(f"archive contains an encrypted member: {member.filename}")
+                member_mode = member.external_attr >> 16
+                if stat.S_ISLNK(member_mode):
+                    fail(f"archive contains a symbolic link: {member.filename}")
+                if member.is_dir():
+                    continue
+                if member.file_size > max_app_bytes:
+                    fail(f"archive member {member.filename} exceeds MAX_EXPANDED_APP_BYTES")
+                expanded_archive_bytes += member.file_size
+                if expanded_archive_bytes > max_archive_bytes:
+                    fail(f"archive expanded size exceeds safe limit {max_archive_bytes}")
+                if member.file_size and (
+                    member.compress_size == 0
+                    or member.file_size / member.compress_size > max_compression_ratio
+                ):
+                    fail(f"archive member {member.filename} exceeds safe compression ratio {max_compression_ratio}:1")
             archive.extractall(root)
     except (zipfile.BadZipFile, OSError) as error:
         fail(f"IPA is not a valid ZIP archive ({error})")
