@@ -1,9 +1,28 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+const { mkdtempSync, rmSync } = require('fs') as {
+  mkdtempSync: (prefix: string) => string;
+  rmSync: (path: string, options: { force: boolean; recursive: boolean }) => void;
+};
+const { tmpdir } = require('os') as { tmpdir: () => string };
+const { join, resolve } = require('path') as {
+  join: (...paths: string[]) => string;
+  resolve: (...paths: string[]) => string;
+};
+const { spawnSync } = require('child_process') as {
+  spawnSync: (
+    command: string,
+    args: string[],
+    options?: {
+      cwd?: string;
+      encoding?: 'utf8';
+      env?: Record<string, string | undefined>;
+    },
+  ) => {
+    status: number | null;
+    stderr: string;
+  };
+};
 
-const root = resolve(__dirname, '..');
+const root = process.cwd();
 const inspector = resolve(root, 'scripts/inspect-ios-artifact.sh');
 const generator = String.raw`
 import plistlib
