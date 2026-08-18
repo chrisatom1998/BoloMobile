@@ -7,10 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
-import { lessonPlans } from '@/data/lesson-plans';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
-import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
+import { categoryMastery, learningAccuracy, milestoneProgress, selectNextLesson, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 
@@ -41,29 +40,12 @@ export default function ProgressScreen() {
   const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
   const featuredMastery = featuredPhrase ? phraseReviews[featuredPhrase.hi]?.mastery ?? 0 : 0;
   const lessonFocus = useMemo(() => {
-    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
-    const resumed = catalog
-      .filter(({ lessonId }) => {
-        const progress = sceneProgress[lessonId];
-        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-      })
-      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
-        if (!selected) return candidate;
-        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-      }, undefined);
-    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
-    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
-    const lessonId = resumed?.lessonId
-      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
-      ?? plan.lessonIds[0]!;
+    const selection = selectNextLesson(learnerProfile, sceneProgress);
+    const { lessonId, plan } = selection;
     const lesson = getScene(lessonId);
     const lessonIndex = Math.max(0, plan.lessonIds.indexOf(lessonId));
     const progress = sceneProgress[lessonId];
-    const mode = resumed ? 'continue' : incompletePlan ? 'start' : 'review';
+    const mode = selection.action === 'Continue' ? 'continue' : selection.action === 'Review lesson' ? 'review' : 'start';
     const turnCount = lesson?.beats.length ?? 10;
     const currentTurn = Math.min(turnCount, (progress?.lastBeatIndex ?? 0) + 1);
 
@@ -76,7 +58,7 @@ export default function ProgressScreen() {
       mode,
       title: lesson?.title ?? plan.title,
     };
-  }, [sceneProgress]);
+  }, [learnerProfile, sceneProgress]);
   const streakLabel = streak > 0
     ? `${streak}-day practice streak`
     : hasLearningActivity

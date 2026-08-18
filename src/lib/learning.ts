@@ -109,7 +109,13 @@ export function selectNextLesson(profile: LearnerProfile, progress: Record<strin
     lessonId,
     plan,
     title: getScene(lessonId)?.title ?? plan.title,
-    why: planPreviewCopy(profile),
+    // The goal-path copy only makes sense when we are actually starting the next
+    // lesson on that path; resuming and reviewing need their own reassurance.
+    why: mode === 'continue'
+      ? "We'll pick up where you left off in this lesson."
+      : mode === 'review'
+        ? "You've finished every lesson. Review one to keep it fresh."
+        : planPreviewCopy(profile),
   };
 }
 

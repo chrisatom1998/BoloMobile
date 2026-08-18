@@ -114,6 +114,7 @@ describe('next lesson selection', () => {
       kicker: 'CONTINUE LESSON',
       lessonId: 'plan-essentials-03',
       title: 'Ask how someone is',
+      why: "We'll pick up where you left off in this lesson.",
     });
     expect(result.plan.id).toBe('essentials');
   });
@@ -123,7 +124,11 @@ describe('next lesson selection', () => {
       lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => [lessonId, progress({ completions: 1 })])),
     );
     const result = selectNextLesson(learner(), everyLessonComplete);
-    expect(result).toMatchObject({ action: 'Review lesson', kicker: 'REVIEW LESSON' });
+    expect(result).toMatchObject({
+      action: 'Review lesson',
+      kicker: 'REVIEW LESSON',
+      why: "You've finished every lesson. Review one to keep it fresh.",
+    });
     expect(result.plan.id).toBe(expectDefined(lessonPlans.at(-1)).id);
     expect(result.lessonId).toBe(expectDefined(lessonPlans.at(-1)).lessonIds[0]);
   });

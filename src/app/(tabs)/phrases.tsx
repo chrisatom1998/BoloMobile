@@ -8,12 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
-import { lessonPlans } from '@/data/lesson-plans';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
-import { dueSavedPhrases } from '@/lib/learning';
+import { dueSavedPhrases, selectNextLesson } from '@/lib/learning';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
@@ -63,31 +62,13 @@ export default function PhrasesScreen() {
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const nextLesson = useMemo(() => {
-    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
-    const resumed = catalog
-      .filter(({ lessonId }) => {
-        const progress = sceneProgress[lessonId];
-        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-      })
-      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
-        if (!selected) return candidate;
-        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-      }, undefined);
-    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
-    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
-    const lessonId = resumed?.lessonId
-      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
-      ?? plan.lessonIds[0]!;
+    const selection = selectNextLesson({ ...defaultLearnerProfile(), ...learnerProfile, completed: true }, sceneProgress);
 
     return {
-      action: resumed ? 'Continue lesson' : incompletePlan ? 'Start next lesson' : 'Review a lesson',
-      lessonId,
+      action: selection.action === 'Continue' ? 'Continue lesson' : selection.action === 'Review lesson' ? 'Review a lesson' : 'Start next lesson',
+      lessonId: selection.lessonId,
     };
-  }, [sceneProgress]);
+  }, [learnerProfile, sceneProgress]);
   const dueSet = useMemo(() => new Set(due.map((phrase) => phrase.hi)), [due]);
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
