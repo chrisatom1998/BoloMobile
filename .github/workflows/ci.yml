@@ -233,7 +233,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Audit the full dependency tree against the accepted baseline
+      - name: Audit production and full dependency trees against the accepted baseline
         run: node scripts/audit-runtime-dependencies.mjs
       - name: Audit website runtime dependencies
         run: npm --prefix website audit --omit=dev --audit-level=high

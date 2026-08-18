@@ -1,18 +1,38 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "reviewBy": "2026-11-16",
   "allowedAdvisories": [
     {
       "package": "image-size",
       "advisory": "GHSA-w3rx-r6r6-pgpr",
       "severity": "high",
-      "rationale": "Metro image inspection during development/build; not bundled as application runtime code."
+      "usage": "build-only",
+      "rationale": "Metro image inspection during development/build; not bundled as application runtime code.",
+      "pathFingerprint": {
+        "isDirect": false,
+        "nodes": [
+          "node_modules/image-size"
+        ],
+        "effects": [
+          "metro"
+        ]
+      }
     },
     {
       "package": "image-size",
       "advisory": "GHSA-5p2g-fcmc-qvqq",
       "severity": "high",
-      "rationale": "Metro image inspection during development/build; not bundled as application runtime code."
+      "usage": "build-only",
+      "rationale": "Metro image inspection during development/build; not bundled as application runtime code.",
+      "pathFingerprint": {
+        "isDirect": false,
+        "nodes": [
+          "node_modules/image-size"
+        ],
+        "effects": [
+          "metro"
+        ]
+      }
     }
   ]
 }

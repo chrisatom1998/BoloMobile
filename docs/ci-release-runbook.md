@@ -37,7 +37,7 @@ If Code Security becomes available:
 3. Set repository variable `ENABLE_CODEQL=true`.
 4. Enable dependency review and retain its high/critical merge policy in the `security` aggregate check.
 
-If Code Security is unavailable, the `security` job still runs a blocking full-tree `npm audit` against the checked-in, expiring advisory baseline plus the secret scan. Any new high/critical runtime, development, or build-time advisory fails; only the exact reviewed existing build-tool advisories remain warning-level until their review date. Do not mark CodeQL as required. Moving the repository to an eligible organization is the normal route to private-repository Code Security.
+If Code Security is unavailable, the `security` job still evaluates both `npm audit --omit=dev` and the full dependency tree against the checked-in, expiring advisory baseline, plus the secret scan. Any new high/critical runtime, development, or build-time advisory fails. The two existing `image-size` advisories remain warning-level only while their severity, non-direct status, installed node, and sole `metro` dependent exactly match the reviewed build-path fingerprint. The gate also rejects adding `image-size` to a root runtime dependency field or importing it from JavaScript/TypeScript source under `src`; a new runtime path carrying the same GHSA therefore fails. Baseline review dates must be real dates no more than 90 days away. Do not mark CodeQL as required. Moving the repository to an eligible organization is the normal route to private-repository Code Security.
 
 If GitHub Secret Protection is licensed, enable native secret scanning and push protection under **Settings → Advanced Security**. The workflow secret scanner remains useful for history and custom patterns, but it runs after a push and is not a substitute for push protection. Rotate a detected credential even if it is later removed from Git history.
 
@@ -95,10 +95,10 @@ Create a second environment, `ios-physical-signoff`, restricted to `main`. Requi
 
 Open **Actions → Release iOS → Run workflow**, select `main`, and initially leave `submit_to_testflight` false. The workflow:
 
-1. Requires `main`, explicit production endpoints, the checked-in full-tree advisory baseline, a blocking website runtime audit, warning-only diagnostic audit output for accepted root advisories and website development dependencies, project verification, static Maestro validation, Expo Doctor/export, deployed-policy validation, and live backend acceptance.
+1. Requires `main`, explicit production endpoints, checked-in production/full-tree advisory baselines with exact dependency-path fingerprints, a blocking website runtime audit, warning-only diagnostic output for accepted root build-path advisories and website development dependencies, project verification, static Maestro validation, Expo Doctor/export, deployed-policy validation, and live backend acceptance.
 2. Pauses at protected environment `ios-release`.
 3. Runs release metadata validation and starts an EAS production build with frozen credentials.
-4. Downloads the exact EAS build by ID and rejects a malformed, unsigned, development-signed, wrongly identified or unversioned, unexpectedly entitled, privacy-manifest-free, permission-copy-free, oversized, staging-linked, or credential-bearing IPA. It explicitly verifies the main app, extensions, and every embedded `.framework` signature.
+4. Downloads the exact EAS build by ID over HTTPS-only redirects and rejects a malformed, unsigned, development-signed, wrongly identified or unversioned, unexpectedly entitled, privacy-manifest-free, permission-copy-free, oversized, staging-linked, or credential-bearing IPA. It explicitly verifies the main app, extensions, and every embedded `.framework` signature.
 5. Uploads only inspection metadata to GitHub. The signed IPA remains in EAS and is not copied into GitHub artifacts.
 6. Optionally submits that exact inspected EAS build ID to TestFlight.
 7. If submitted, pauses at `ios-physical-signoff`.
