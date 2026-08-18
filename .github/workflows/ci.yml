@@ -4,21 +4,99 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
+env:
+  CI: "true"
+  EXPO_NO_TELEMETRY: "1"
+
 jobs:
   verify:
+    name: Verify and bundle
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npx expo customize tsconfig.json
-      - run: npm run verify
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Expo type declarations
+        run: npx expo customize tsconfig.json
+      - name: Run lint, type, test, and validation checks
+        run: npm run verify
+      - name: Bundle Android JavaScript
+        run: npx expo export --platform android --output-dir dist/android
+      - name: Bundle iOS JavaScript
+        run: npx expo export --platform ios --output-dir dist/ios
+
+  android-compile:
+    name: Compile Android app
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Compile Android debug app
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+  ios-compile:
+    name: Compile iOS app
+    needs: verify
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods dependencies
+        working-directory: ios
+        run: pod install
+      - name: Compile iOS simulator app and extensions
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -workspace Bolo.xcworkspace \
+            -scheme Bolo \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build
