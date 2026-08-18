@@ -91,10 +91,10 @@ Create a second environment, `ios-physical-signoff`, restricted to `main`. Requi
 
 Open **Actions → Release iOS → Run workflow**, select `main`, and initially leave `submit_to_testflight` false. The workflow:
 
-1. Requires `main`, explicit production endpoints, runtime audit, project verification, static Maestro validation, Expo Doctor/export, deployed-policy validation, and live backend acceptance.
+1. Requires `main`, explicit production endpoints, the checked-in root runtime-advisory baseline, a blocking website runtime audit, warning-only full root and website audits, project verification, static Maestro validation, Expo Doctor/export, deployed-policy validation, and live backend acceptance.
 2. Pauses at protected environment `ios-release`.
 3. Runs release metadata validation and starts an EAS production build with frozen credentials.
-4. Downloads the exact EAS build by ID and rejects a malformed, unsigned, development-signed, wrongly identified, unexpectedly entitled, privacy-manifest-free, permission-copy-free, oversized, staging-linked, or credential-bearing IPA.
+4. Downloads the exact EAS build by ID and rejects a malformed, unsigned, development-signed, wrongly identified or unversioned, unexpectedly entitled, privacy-manifest-free, permission-copy-free, oversized, staging-linked, or credential-bearing IPA. It explicitly verifies the main app, extensions, and every embedded `.framework` signature.
 5. Uploads only inspection metadata to GitHub. The signed IPA remains in EAS and is not copied into GitHub artifacts.
 6. Optionally submits that exact inspected EAS build ID to TestFlight.
 7. If submitted, pauses at `ios-physical-signoff`.

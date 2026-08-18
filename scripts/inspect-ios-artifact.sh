@@ -147,6 +147,10 @@ with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
         fail("main CFBundleIdentifier does not match EXPECTED_APP_IDENTIFIER")
     if info.get("CFBundlePackageType") != "APPL":
         fail("main CFBundlePackageType must be APPL")
+    for version_key in ("CFBundleShortVersionString", "CFBundleVersion"):
+        version_value = info.get(version_key)
+        if not isinstance(version_value, str) or not version_value.strip():
+            fail(f"{version_key} must be present and non-empty")
     executable = info.get("CFBundleExecutable")
     if not isinstance(executable, str) or not (app / executable).is_file():
         fail("main bundle executable is missing")
@@ -190,6 +194,13 @@ with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
         entitlement_summaries.append({"bundle_id": bundle_id, "app_group": expected_group_id})
     if not widget_found:
         fail(f"widget extension {expected_widget_id} is missing")
+
+    embedded_frameworks = sorted(app.rglob("*.framework"))
+    for framework in embedded_frameworks:
+        run_checked(
+            [codesign, "--verify", "--strict", "--verbose=2", str(framework)],
+            f"embedded framework signature verification for {framework.name}",
+        )
 
     profile = app / "embedded.mobileprovision"
     if not profile.is_file():
@@ -261,6 +272,7 @@ report = {
     "bundle_identifier": expected_app_id,
     "widget_bundle_identifier": expected_widget_id,
     "privacy_manifest_count": len(privacy_manifests),
+    "embedded_framework_count": len(embedded_frameworks),
     "signed_bundles": entitlement_summaries,
 }
 report_path = Path(os.environ.get("IOS_INSPECTION_REPORT", "ios-artifact-inspection.json"))
