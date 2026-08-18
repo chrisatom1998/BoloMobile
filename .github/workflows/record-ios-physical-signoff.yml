@@ -1,0 +1,76 @@
+name: Record iOS physical signoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_commit:
+        description: Exact 40-character commit SHA used for the inspected TestFlight build
+        type: string
+        required: true
+      eas_build_id:
+        description: EAS build ID reported by the Release iOS workflow
+        type: string
+        required: true
+      testflight_build:
+        description: TestFlight version and build number tested on the physical iPhone
+        type: string
+        required: true
+      checks_completed:
+        description: Confirm every physical-iPhone checklist item in the release runbook passed
+        type: boolean
+        required: true
+        default: false
+      notes:
+        description: Device, iOS version, and any release-testing notes
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-physical-signoff-${{ inputs.eas_build_id }}
+  cancel-in-progress: false
+
+jobs:
+  record_signoff:
+    name: Record tested TestFlight build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RELEASE_COMMIT: ${{ inputs.release_commit }}
+      EAS_BUILD_ID: ${{ inputs.eas_build_id }}
+      TESTFLIGHT_BUILD: ${{ inputs.testflight_build }}
+      CHECKS_COMPLETED: ${{ inputs.checks_completed }}
+      SIGNOFF_NOTES: ${{ inputs.notes }}
+    steps:
+      - name: Require an explicit, attributable signoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CHECKS_COMPLETED" = "true"
+          if [[ ! "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_commit must be an exact lowercase 40-character Git commit SHA."
+            exit 1
+          fi
+          test -n "$EAS_BUILD_ID"
+          test -n "$TESTFLIGHT_BUILD"
+      - name: Record physical-iPhone test evidence
+        shell: bash
+        run: |
+          {
+            echo "## Physical iPhone release signoff"
+            echo
+            printf -- "- Recorded by: `%s`\n" "$GITHUB_ACTOR"
+            printf -- "- Recorded at: `%s`\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            printf -- "- Release commit: `%s`\n" "$RELEASE_COMMIT"
+            printf -- "- EAS build: `%s`\n" "$EAS_BUILD_ID"
+            printf -- "- TestFlight build: `%s`\n" "$TESTFLIGHT_BUILD"
+            echo
+            echo "The dispatcher explicitly confirmed every physical-iPhone checklist item passed."
+            if [[ -n "$SIGNOFF_NOTES" ]]; then
+              echo
+              echo "### Notes"
+              printf "%s\n" "$SIGNOFF_NOTES"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

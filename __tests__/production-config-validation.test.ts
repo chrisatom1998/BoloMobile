@@ -41,6 +41,18 @@ function runValidator(
   });
 }
 
+function runPublicPageValidation(extra: Record<string, string>) {
+  const invocation = [
+    "import { validateProductionPublicPages } from './scripts/validate-production-config.mjs';",
+    `validateProductionPublicPages(${JSON.stringify(extra)});`,
+  ].join('\n');
+  return spawnSync(process.execPath, ['--input-type=module', '--eval', invocation], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: { ...process.env },
+  });
+}
+
 describe('production configuration validator', () => {
   it('accepts the checked-in production configuration', () => {
     const result = runValidator();
@@ -72,6 +84,70 @@ describe('production configuration validator', () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toMatch(/must equal the permanent release app identity com\.bolo\.hindi/u);
+  });
+
+  it.each([
+    [
+      'BOLO_API_URL',
+      {
+        BOLO_API_URL: 'https://74e39779183cf78fed.v2.appdeploy.ai',
+      },
+      /BOLO_API_URL must resolve to the permanent production API identity/u,
+    ],
+    [
+      'BOLO_PUBLIC_SITE_URL',
+      {
+        BOLO_PUBLIC_SITE_URL: 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed',
+      },
+      /BOLO_PUBLIC_SITE_URL must resolve to the permanent production public-site identity/u,
+    ],
+  ])('rejects swapping the production identity selected by %s', (_name, overrides, message) => {
+    const result = runValidator([], overrides);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(message);
+  });
+
+  it.each([
+    ['BOLO_API_URL', { BOLO_API_URL: 'https://publisher:secret@api-v2.appdeploy.ai/app/74e39779183cf78fed' }],
+    ['BOLO_PUBLIC_SITE_URL', { BOLO_PUBLIC_SITE_URL: 'https://publisher:secret@74e39779183cf78fed.v2.appdeploy.ai' }],
+  ])('rejects URL credentials in %s', (_name, overrides) => {
+    const result = runValidator([], overrides);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/must not include URL credentials/u);
+  });
+
+  it.each([
+    [
+      'privacy page without its selector',
+      {
+        publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+      },
+    ],
+    [
+      'support page using the privacy selector',
+      {
+        publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+      },
+    ],
+    [
+      'terms page with an extra query parameter',
+      {
+        publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms&preview=1',
+      },
+    ],
+  ])('rejects a production public %s', (_label, extra) => {
+    const result = runPublicPageValidation(extra);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/must use the permanent production public-site URL with exactly/u);
   });
 
   it.each([

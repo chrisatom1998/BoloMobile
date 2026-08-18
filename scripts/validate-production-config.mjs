@@ -73,6 +73,42 @@ export function validateStagingEndpointIsolation({
   return { stagingApiIdentity, stagingSiteIdentity };
 }
 
+export function validateProductionPublicPages(extra = {}) {
+  const expectedSiteIdentity = canonicalHttpsEndpointIdentity(
+    'production public-site URL',
+    PRODUCTION_SITE_URL,
+  );
+  const pages = [
+    ['publicPrivacyUrl', 'privacy'],
+    ['publicSupportUrl', 'support'],
+    ['publicTermsUrl', 'terms'],
+  ];
+
+  for (const [field, page] of pages) {
+    const value = extra[field];
+    let parsed;
+    try {
+      parsed = new URL(value);
+    } catch {
+      throw new Error(
+        `${field} must use the permanent production public-site URL with exactly ?page=${page}.`,
+      );
+    }
+    const query = [...parsed.searchParams.entries()];
+    if (
+      canonicalHttpsEndpointIdentity(field, value) !== expectedSiteIdentity
+      || parsed.hash !== ''
+      || query.length !== 1
+      || query[0][0] !== 'page'
+      || query[0][1] !== page
+    ) {
+      throw new Error(
+        `${field} must use the permanent production public-site URL with exactly ?page=${page}.`,
+      );
+    }
+  }
+}
+
 function readConsentVersion(root) {
   const source = readFileSync(resolve(root, 'src/lib/storage.ts'), 'utf8');
   const match = source.match(/\bAI_CONSENT_VERSION\s*=\s*(\d+)\s+as const/u);
@@ -108,6 +144,21 @@ export function validateProductionConfig(root = defaultRoot) {
   const fallbackMatch = apiSource.match(/\bFALLBACK_API_URL\s*=\s*(['"])(https:[^'"]+)\1/u);
   const runtimeApiUrl = fallbackMatch?.[2];
   const releaseApiUrl = resolvedConfig.extra?.boloApiUrl;
+  const releasePublicSiteUrl = resolvedConfig.extra?.publicPrivacyUrl;
+
+  if (
+    canonicalHttpsEndpointIdentity('BOLO_API_URL', releaseApiUrl)
+    !== canonicalHttpsEndpointIdentity('production API URL', PRODUCTION_API_URL)
+  ) {
+    throw new Error('BOLO_API_URL must resolve to the permanent production API identity.');
+  }
+  if (
+    canonicalHttpsEndpointIdentity('BOLO_PUBLIC_SITE_URL', releasePublicSiteUrl)
+    !== canonicalHttpsEndpointIdentity('production public-site URL', PRODUCTION_SITE_URL)
+  ) {
+    throw new Error('BOLO_PUBLIC_SITE_URL must resolve to the permanent production public-site identity.');
+  }
+  validateProductionPublicPages(resolvedConfig.extra);
 
   if (typeof runtimeApiUrl !== 'string' || runtimeApiUrl !== releaseApiUrl) {
     throw new Error('The runtime API URL must exactly equal the release-validated production API URL.');

@@ -3,7 +3,7 @@ name: Nightly staging acceptance
 on:
   schedule:
     - cron: "17 8 * * *"
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   staging_services:
@@ -32,6 +32,7 @@ jobs:
     type: maestro
     environment: preview
     params:
+      maestro_version: 2.8.0
       build_id: ${{ needs.build_ios.outputs.build_id }}
       flow_path:
         - .maestro/flows/00-ci-smoke.yaml

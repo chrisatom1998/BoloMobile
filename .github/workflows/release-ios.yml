@@ -63,7 +63,7 @@ jobs:
         run: npm audit --prefix website --include=dev --audit-level=high
       - run: npm run verify
       - run: npm run e2e:validate
-      - run: npx expo-doctor
+      - run: npx --no-install expo-doctor
       - run: npx expo export --platform ios
       - run: npm run release:validate:live
       - run: npm run acceptance:live
@@ -174,17 +174,16 @@ jobs:
             --what-to-test "$WHAT_TO_TEST" \
             --non-interactive \
             --wait
-
-  physical_iphone_signoff:
-    name: Physical iPhone signoff
-    if: inputs.submit_to_testflight
-    needs: [build_inspect_submit]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: ios-physical-signoff
-      url: https://appstoreconnect.apple.com/apps
-    steps:
-      - name: Record owner approval
+      - name: Explain post-TestFlight physical signoff
+        if: inputs.submit_to_testflight
         run: |
-          echo "Physical-iPhone TestFlight signoff approved for ${GITHUB_SHA}." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Record iOS physical signoff after testing"
+            echo
+            echo "This workflow does not claim physical-device approval automatically."
+            echo "After testing this exact TestFlight build on an iPhone, dispatch:"
+            echo "https://github.com/${GITHUB_REPOSITORY}/actions/workflows/record-ios-physical-signoff.yml"
+            echo
+            echo "- Commit: `${GITHUB_SHA}`"
+            echo "- EAS build: `${{ steps.eas_build.outputs.build_id }}`"
+          } >> "$GITHUB_STEP_SUMMARY"

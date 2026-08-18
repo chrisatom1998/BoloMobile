@@ -27,6 +27,22 @@ jobs:
       - run: npm ci
       - run: npm run verify
 
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci --prefix website
+      - run: npm run lint --prefix website
+      - run: npm test --prefix website
+
   expo-doctor:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -42,7 +58,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx expo-doctor@latest
+      - run: npx --no-install expo-doctor
 
   ios-prebuild:
     runs-on: ubuntu-latest
@@ -253,3 +269,49 @@ jobs:
       - name: Explain disabled dependency review
         if: always() && (github.event_name != 'pull_request' || vars.ENABLE_DEPENDENCY_REVIEW != 'true')
         run: echo "::notice::Dependency Review skipped. Set the repository variable ENABLE_DEPENDENCY_REVIEW=true after GitHub Code Security is available for this private repository."
+
+  required-checks:
+    name: required-checks
+    if: always()
+    needs:
+      - verify
+      - website
+      - expo-doctor
+      - ios-prebuild
+      - production-config
+      - ios-native-build
+      - maestro-smoke
+      - security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERIFY_RESULT: ${{ needs['verify'].result }}
+      WEBSITE_RESULT: ${{ needs['website'].result }}
+      EXPO_DOCTOR_RESULT: ${{ needs['expo-doctor'].result }}
+      IOS_PREBUILD_RESULT: ${{ needs['ios-prebuild'].result }}
+      PRODUCTION_CONFIG_RESULT: ${{ needs['production-config'].result }}
+      IOS_NATIVE_BUILD_RESULT: ${{ needs['ios-native-build'].result }}
+      MAESTRO_SMOKE_RESULT: ${{ needs['maestro-smoke'].result }}
+      SECURITY_RESULT: ${{ needs['security'].result }}
+    steps:
+      - name: Require every merge check to pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          while IFS='=' read -r check result; do
+            if [[ "$result" != "success" ]]; then
+              echo "::error::Merge check $check completed with result $result."
+              failures=1
+            fi
+          done <<RESULTS
+          verify=$VERIFY_RESULT
+          website=$WEBSITE_RESULT
+          expo-doctor=$EXPO_DOCTOR_RESULT
+          ios-prebuild=$IOS_PREBUILD_RESULT
+          production-config=$PRODUCTION_CONFIG_RESULT
+          ios-native-build=$IOS_NATIVE_BUILD_RESULT
+          maestro-smoke=$MAESTRO_SMOKE_RESULT
+          security=$SECURITY_RESULT
+          RESULTS
+          exit "$failures"

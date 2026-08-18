@@ -45,7 +45,7 @@ const bundleIdentifier = process.env.BOLO_APP_IDENTIFIER?.trim() || appJson.expo
 const urlScheme = appJson.expo?.scheme;
 
 if (appName !== 'Bolo' || bundleIdentifier !== 'com.bolo.hindi' || urlScheme !== 'bolo') {
-  throw new Error('Native CI expects the Bolo scheme, com.bolo.hindi bundle identifier, and bolo URL scheme.');
+  throw new Error('Native CI expects the Bolo app name, com.bolo.hindi bundle identifier, and bolo URL scheme.');
 }
 
 const projectPath = 'ios/Bolo.xcodeproj/project.pbxproj';
