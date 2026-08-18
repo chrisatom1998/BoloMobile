@@ -5,6 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage } from '@/lib/public-pages';
 import { observe, observeOncePerSession } from '@/lib/observability';
+import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
@@ -52,6 +53,7 @@ export function AiConsentGate({
     <View style={styles.card}>
       <View style={styles.icon}><ShieldCheck color={colors.white} size={22} /></View>
       <Text style={styles.title}>{title}</Text>
+      <Text style={styles.version}>AI data-use consent notice version {AI_CONSENT_VERSION}</Text>
       <Text style={styles.body}>
         Core lesson and saved-phrase audio is bundled with Bolo and works offline without sending text anywhere. After you agree, Bolo uses its service and OpenAI for generated Asha speech, submitted text, live voice turns, and pronunciation recordings. Typed coaching includes a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. Tap the glowing orb to begin each turn, then tap the orb again to send the turn. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Asha&apos;s spoken reply travels directly from OpenAI to the app. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
       </Text>
@@ -72,6 +74,7 @@ const useStyles = makeStyles((c) => ({
   card: { backgroundColor: c.paper, borderColor: c.forest, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md },
   icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
   title: { color: c.ink, fontSize: 22, fontWeight: '900' },
+  version: { color: c.muted, fontSize: 12, fontWeight: '800' },
   body: { color: c.ink, fontSize: 15, lineHeight: 22 },
   detail: { color: c.muted, fontSize: 13, lineHeight: 19 },
   link: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },

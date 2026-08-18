@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
+import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function PrivacyScreen() {
@@ -18,6 +19,7 @@ export default function PrivacyScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
       <Text style={sharedStyles.eyebrow}>Effective July 16, 2026</Text>
       <Text style={sharedStyles.heading}>Privacy & data use</Text>
+      <Text style={sharedStyles.body}>AI data-use consent notice version {AI_CONSENT_VERSION}</Text>
       <Text style={sharedStyles.body}>Bolo&apos;s core scenarios work without an account. Connected AI coaching is optional and requires consent to the current notice.</Text>
 
       <Section title="Data stored on your device">

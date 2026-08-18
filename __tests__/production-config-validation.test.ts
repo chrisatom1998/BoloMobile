@@ -38,4 +38,22 @@ describe('production configuration validator', () => {
       stdout: expect.any(String),
     });
   });
+
+  it('rejects a standard OpenAI key exposed through an Expo public variable', () => {
+    const result = spawnSync(process.execPath, ['scripts/validate-production-config.mjs'], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        EXPO_PUBLIC_OPENAI_KEY: ['s', 'k'].join('') + '-' + 'x'.repeat(32),
+        BOLO_APP_IDENTIFIER: 'com.bolo.hindi',
+        BOLO_EAS_PROJECT_ID: '573b5aad-b676-44aa-8ec4-34b831b6d5ff',
+        BOLO_EXPO_OWNER: 'appdevcmjatom',
+        EAS_BUILD_PROFILE: 'production',
+      },
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/must not expose a standard OpenAI API key/u);
+  });
 });
