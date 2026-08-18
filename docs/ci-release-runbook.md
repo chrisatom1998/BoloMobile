@@ -51,7 +51,7 @@ In the Expo project’s **preview** environment, define:
 - `BOLO_EAS_PROJECT_ID`: the linked EAS project UUID.
 - `BOLO_EXPO_OWNER`: the publishing Expo account.
 
-The two staging URLs must be present and must differ from the production API and site. The nightly workflow refuses the checked-in production defaults before running any live test. It then runs the deployed-policy validator, the bounded live-service acceptance passes, builds the unsigned `staging-e2e` Simulator app, and executes flows 02–05.
+The two staging URLs must be present and must differ from the production API and site. The nightly workflow refuses the checked-in production defaults before running any live test. It then runs the deployed-policy validator, the bounded live-service acceptance passes, builds the unsigned `staging-e2e` Simulator app, and executes the iOS smoke flow 00 plus flows 02–05.
 
 Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Simulator voice flows may take the “physical iPhone required” branch, so actual WebRTC microphone turns remain a release signoff item.
 

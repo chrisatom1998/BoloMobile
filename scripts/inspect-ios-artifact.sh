@@ -153,6 +153,10 @@ with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
     microphone_copy = info.get("NSMicrophoneUsageDescription")
     if not isinstance(microphone_copy, str) or not microphone_copy.strip():
         fail("NSMicrophoneUsageDescription must be present and non-empty")
+    for key, value in info.items():
+        if key.startswith("NS") and key.endswith("UsageDescription"):
+            if not isinstance(value, str) or not value.strip():
+                fail(f"{key} must contain non-empty permission copy")
     if info.get("ITSAppUsesNonExemptEncryption") is not False:
         fail("ITSAppUsesNonExemptEncryption must be false")
     arbitrary_loads = info.get("NSAppTransportSecurity", {}).get("NSAllowsArbitraryLoads")
