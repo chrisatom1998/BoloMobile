@@ -13,7 +13,7 @@ Create an active branch ruleset for `main`. Require a pull request, require the 
 
 Do not add CodeQL, the scheduled nightly workflow, release preflight, TestFlight upload, or physical signoff as required merge checks. A sole owner cannot satisfy an independent approval rule; add a trusted reviewer before requiring one approval or preventing self-approval.
 
-In **Settings → Actions → General**, set the default `GITHUB_TOKEN` permission to read-only, leave “Allow GitHub Actions to create and approve pull requests” disabled, and require approval for workflows from outside collaborators. Where the account plan permits, allow only GitHub-authored actions and explicitly approved third-party actions. Replace moving action tags with verified full commit SHAs after the initial workflows are green; Dependabot will maintain them.
+In **Settings → Actions → General**, set the default `GITHUB_TOKEN` permission to read-only, leave “Allow GitHub Actions to create and approve pull requests” disabled, and require approval for workflows from outside collaborators. Where the account plan permits, allow only GitHub-authored actions and explicitly approved third-party actions. Workflow actions are pinned to verified full commit SHAs with their release tags in comments; review and merge Dependabot SHA-update PRs rather than restoring moving tags.
 
 ## Dependency security
 
@@ -37,7 +37,7 @@ If Code Security becomes available:
 3. Set repository variable `ENABLE_CODEQL=true`.
 4. Enable dependency review and retain its high/critical merge policy in the `security` aggregate check.
 
-If Code Security is unavailable, keep the blocking runtime `npm audit` and secret scan in `security`; do not mark CodeQL as required. Moving the repository to an eligible organization is the normal route to private-repository Code Security.
+If Code Security is unavailable, the `security` job still runs a blocking full-tree `npm audit` against the checked-in, expiring advisory baseline plus the secret scan. Any new high/critical runtime, development, or build-time advisory fails; only the exact reviewed existing build-tool advisories remain warning-level until their review date. Do not mark CodeQL as required. Moving the repository to an eligible organization is the normal route to private-repository Code Security.
 
 If GitHub Secret Protection is licensed, enable native secret scanning and push protection under **Settings → Advanced Security**. The workflow secret scanner remains useful for history and custom patterns, but it runs after a push and is not a substitute for push protection. Rotate a detected credential even if it is later removed from Git history.
 
@@ -54,6 +54,8 @@ In the Expo project’s **preview** environment, define:
 The two staging URLs must be present and must differ from the production API and site. The nightly workflow refuses the checked-in production defaults before running any live test. It then runs the deployed-policy validator, the bounded live-service acceptance passes, builds the unsigned `staging-e2e` Simulator app, and executes the iOS smoke flow 00 plus flows 02–05.
 
 Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Simulator voice flows may take the “physical iPhone required” branch, so actual WebRTC microphone turns remain a release signoff item.
+
+The PR smoke job downloads Maestro CLI 2.8.0 over HTTPS and verifies the vendor-published `checksums_sha256.txt` digest before extraction. When updating Maestro, review the signed GitHub release, replace both `MAESTRO_VERSION` and `MAESTRO_SHA256`, and verify the new asset locally before merging.
 
 ## GitHub release variables and environments
 
@@ -85,13 +87,15 @@ Create GitHub environment `ios-release`, restrict deployments to `main`, and req
 
 The EAS production environment must contain matching production identity/endpoints and any build-time secrets. EAS environment values and GitHub environment values are separate stores.
 
+GitHub release secrets are step-scoped: metadata validation, EAS build, build lookup, and submission receive only the credentials they need. Do not move them back to the release job-level environment, where checkout, setup, dependency installation, and artifact-inspection steps could read them.
+
 Create a second environment, `ios-physical-signoff`, restricted to `main`. Require the person accountable for physical-iPhone release testing; enable prevention of self-review when a second trusted reviewer exists. Do not place credentials in this environment. Approval is the auditable final record after TestFlight testing.
 
 ## Dispatching an iOS release
 
 Open **Actions → Release iOS → Run workflow**, select `main`, and initially leave `submit_to_testflight` false. The workflow:
 
-1. Requires `main`, explicit production endpoints, the checked-in root runtime-advisory baseline, a blocking website runtime audit, warning-only full root and website audits, project verification, static Maestro validation, Expo Doctor/export, deployed-policy validation, and live backend acceptance.
+1. Requires `main`, explicit production endpoints, the checked-in full-tree advisory baseline, a blocking website runtime audit, warning-only diagnostic audit output for accepted root advisories and website development dependencies, project verification, static Maestro validation, Expo Doctor/export, deployed-policy validation, and live backend acceptance.
 2. Pauses at protected environment `ios-release`.
 3. Runs release metadata validation and starts an EAS production build with frozen credentials.
 4. Downloads the exact EAS build by ID and rejects a malformed, unsigned, development-signed, wrongly identified or unversioned, unexpectedly entitled, privacy-manifest-free, permission-copy-free, oversized, staging-linked, or credential-bearing IPA. It explicitly verifies the main app, extensions, and every embedded `.framework` signature.

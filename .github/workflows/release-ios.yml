@@ -35,10 +35,10 @@ jobs:
         run: |
           echo "Release dispatches must use main; received ${GITHUB_REF}." >&2
           exit 1
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -75,16 +75,9 @@ jobs:
     timeout-minutes: 120
     environment: ios-release
     env:
-      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       BOLO_APP_IDENTIFIER: ${{ vars.BOLO_APP_IDENTIFIER }}
       BOLO_EAS_PROJECT_ID: ${{ vars.BOLO_EAS_PROJECT_ID }}
       BOLO_EXPO_OWNER: ${{ vars.BOLO_EXPO_OWNER }}
-      BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
-      BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
-      BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
-      BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
-      BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
-      BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
       BOLO_API_URL: ${{ vars.PRODUCTION_API_URL }}
       BOLO_PUBLIC_SITE_URL: ${{ vars.PRODUCTION_PUBLIC_SITE_URL }}
       EXPECTED_APP_IDENTIFIER: ${{ vars.BOLO_APP_IDENTIFIER }}
@@ -97,20 +90,35 @@ jobs:
       MAX_IPA_GROWTH_PERCENT: ${{ vars.IOS_MAX_GROWTH_PERCENT }}
       IOS_INSPECTION_REPORT: ios-artifact-inspection.json
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.13"
       - run: npm ci
       - name: Validate release-owned metadata
+        env:
+          BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
+          BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
+          BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
+          BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
+          BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
+          BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
         run: npm run release:validate
       - name: Start signed EAS production build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
+          BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
+          BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
+          BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
+          BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
+          BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
         run: |
           npx eas-cli@21.0.0 build \
             --platform ios \
@@ -121,6 +129,8 @@ jobs:
             --json > eas-build.json
       - id: eas_build
         name: Resolve and download EAS build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           BUILD_ID="$(node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync('eas-build.json','utf8')); const build=Array.isArray(value)?value[0]:value; if(!build?.id) process.exit(2); process.stdout.write(build.id)")"
           npx eas-cli@21.0.0 build:view "$BUILD_ID" --json > eas-build-view.json
@@ -140,7 +150,7 @@ jobs:
             echo "- IPA bytes: \`${{ steps.inspect.outputs.ipa_size_bytes }}\`"
             echo "- Expanded app bytes: \`${{ steps.inspect.outputs.expanded_app_size_bytes }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ios-artifact-inspection-${{ github.run_id }}
           path: ios-artifact-inspection.json
@@ -148,6 +158,13 @@ jobs:
       - name: Submit inspected build to TestFlight
         if: inputs.submit_to_testflight
         env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
+          BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
+          BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
+          BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
+          BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
+          BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
           WHAT_TO_TEST: ${{ inputs.what_to_test }}
         run: |
           npx eas-cli@21.0.0 submit \

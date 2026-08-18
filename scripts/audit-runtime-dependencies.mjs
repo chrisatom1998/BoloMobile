@@ -7,7 +7,7 @@ const baselinePath = resolve(root, '.github/security/npm-audit-baseline.json');
 const blockingSeverities = new Set(['high', 'critical']);
 
 function fail(message) {
-  console.error(`::error title=Runtime dependency audit::${message}`);
+  console.error(`::error title=Dependency audit::${message}`);
   process.exitCode = 1;
 }
 
@@ -19,7 +19,7 @@ let baseline;
 try {
   baseline = JSON.parse(readFileSync(baselinePath, 'utf8'));
 } catch (error) {
-  throw new Error('Could not read the runtime audit baseline.', { cause: error });
+  throw new Error('Could not read the dependency audit baseline.', { cause: error });
 }
 
 if (
@@ -27,7 +27,7 @@ if (
   || !/^\d{4}-\d{2}-\d{2}$/u.test(baseline.reviewBy)
   || !Array.isArray(baseline.allowedAdvisories)
 ) {
-  throw new Error('The runtime audit baseline has an invalid schema.');
+  throw new Error('The dependency audit baseline has an invalid schema.');
 }
 
 const today = new Date().toISOString().slice(0, 10);
@@ -44,7 +44,7 @@ for (const entry of baseline.allowedAdvisories) {
     || typeof entry?.rationale !== 'string'
     || !entry.rationale.trim()
   ) {
-    throw new Error('Every runtime audit baseline entry must name a package, advisory, severity, and rationale.');
+    throw new Error('Every dependency audit baseline entry must name a package, advisory, severity, and rationale.');
   }
   const key = `${entry.package}:${entry.advisory.toUpperCase()}`;
   if (allowed.has(key)) throw new Error(`Duplicate runtime audit baseline entry: ${key}`);
@@ -52,7 +52,7 @@ for (const entry of baseline.allowedAdvisories) {
 }
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const audit = spawnSync(npmCommand, ['audit', '--omit=dev', '--json'], {
+const audit = spawnSync(npmCommand, ['audit', '--json'], {
   cwd: root,
   encoding: 'utf8',
   maxBuffer: 16 * 1024 * 1024,
@@ -71,7 +71,7 @@ try {
 }
 
 if (!report || typeof report.vulnerabilities !== 'object' || report.vulnerabilities === null) {
-  throw new Error('npm audit returned an unexpected report and the runtime gate cannot evaluate it.');
+  throw new Error('npm audit returned an unexpected report and the dependency gate cannot evaluate it.');
 }
 
 const observed = new Map();
@@ -125,5 +125,5 @@ for (const entry of allowed.values()) {
   );
 }
 console.log(
-  `Runtime dependency audit passed: no new high/critical advisories; ${allowed.size} exact build-tool advisories remain on the reviewed baseline.`,
+  `Full dependency audit passed: no new high/critical advisories; ${allowed.size} exact build-tool advisories remain on the reviewed baseline.`,
 );

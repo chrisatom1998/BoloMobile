@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -34,10 +34,10 @@ jobs:
       CI: 1
       EXPO_NO_TELEMETRY: 1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -51,10 +51,10 @@ jobs:
       CI: 1
       EXPO_NO_TELEMETRY: 1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -79,10 +79,10 @@ jobs:
       BOLO_REVIEW_EMAIL: reviewer@example.com
       BOLO_REVIEW_PHONE: "+15555550100"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -97,10 +97,10 @@ jobs:
       CI: 1
       EXPO_NO_TELEMETRY: 1
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
@@ -129,7 +129,7 @@ jobs:
           app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
           test -d "$app"
           ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/Bolo-simulator.zip"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: bolo-ios-simulator-${{ github.sha }}
           path: ${{ runner.temp }}/Bolo-simulator.zip
@@ -144,20 +144,21 @@ jobs:
       CI: 1
       MAESTRO_CLI_NO_ANALYTICS: 1
       MAESTRO_VERSION: 2.8.0
+      MAESTRO_SHA256: b3e561161904fb391875ca5834d5b22cf0b01c052dd1b408ad83e30d8f8951b3
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: 17
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bolo-ios-simulator-${{ github.sha }}
           path: ${{ runner.temp }}/bolo-artifact
@@ -184,8 +185,11 @@ jobs:
           xcrun simctl get_app_container "$SIMULATOR_UDID" com.bolo.hindi app
       - name: Install pinned Maestro CLI
         run: |
-          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --output "$RUNNER_TEMP/maestro.zip" \
             "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | shasum -a 256 --check
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
           echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
       - name: Run the dedicated iOS smoke flow
@@ -196,7 +200,7 @@ jobs:
             --output maestro-junit.xml \
             --test-output-dir maestro-artifacts
       - if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: maestro-smoke-results-${{ github.sha }}
           path: |
@@ -217,19 +221,19 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Scan committed content with Gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
-      - name: Audit root runtime dependencies against the accepted baseline
+      - name: Audit the full dependency tree against the accepted baseline
         run: node scripts/audit-runtime-dependencies.mjs
       - name: Audit website runtime dependencies
         run: npm --prefix website audit --omit=dev --audit-level=high
@@ -243,7 +247,9 @@ jobs:
         run: npm --prefix website audit --audit-level=high
       - name: Review pull-request dependency changes
         if: always() && github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+        with:
+          fail-on-severity: high
       - name: Explain disabled dependency review
         if: always() && (github.event_name != 'pull_request' || vars.ENABLE_DEPENDENCY_REVIEW != 'true')
         run: echo "::notice::Dependency Review skipped. Set the repository variable ENABLE_DEPENDENCY_REVIEW=true after GitHub Code Security is available for this private repository."
