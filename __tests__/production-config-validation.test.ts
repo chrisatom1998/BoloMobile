@@ -45,7 +45,7 @@ describe('production configuration validator', () => {
       encoding: 'utf8',
       env: {
         ...process.env,
-        EXPO_PUBLIC_OPENAI_KEY: ['s', 'k'].join('') + '-' + 'x'.repeat(32),
+        EXPO_PUBLIC_OPENAI_KEY: ['s', 'k'].join('') + '-' + 'x'.repeat(32) + '-',
         BOLO_APP_IDENTIFIER: 'com.bolo.hindi',
         BOLO_EAS_PROJECT_ID: '573b5aad-b676-44aa-8ec4-34b831b6d5ff',
         BOLO_EXPO_OWNER: 'appdevcmjatom',

@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EXPECTED_MICROPHONE_USAGE = 'Allow Bolo to use your microphone for Hindi practice and conversations.';
-const REAL_OPENAI_KEY = /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}\b/u;
+const REAL_OPENAI_KEY = /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])/u;
 
 function count(source, needle) {
   return source.split(needle).length - 1;
@@ -53,6 +53,17 @@ export function validateProductionConfig(root = defaultRoot) {
   }
   if (apiSource.includes('EXPO_PUBLIC_BOLO_API_URL')) {
     throw new Error('Runtime API selection must not accept EXPO_PUBLIC_BOLO_API_URL overrides.');
+  }
+
+  const expectedIdentifier = process.env.BOLO_APP_IDENTIFIER?.trim() || 'com.bolo.hindi';
+  if (
+    resolvedConfig.ios?.bundleIdentifier !== expectedIdentifier
+    || resolvedConfig.android?.package !== expectedIdentifier
+  ) {
+    throw new Error('Resolved iOS and Android identifiers must equal BOLO_APP_IDENTIFIER.');
+  }
+  if (resolvedConfig.scheme !== 'bolo') {
+    throw new Error('The production URL scheme must remain bolo.');
   }
 
   for (const [name, value] of Object.entries(process.env)) {
@@ -102,10 +113,18 @@ export function validateProductionConfig(root = defaultRoot) {
   }
 
   const consentVersion = readConsentVersion(root);
-  const declarations = readFileSync(resolve(root, 'store/privacy-declarations.md'), 'utf8');
-  const declarationMatch = declarations.match(/AI data-use consent notice version:\s*(\d+)/iu);
-  if (!declarationMatch || Number(declarationMatch[1]) !== consentVersion) {
-    throw new Error('Store privacy declarations must match AI_CONSENT_VERSION ' + consentVersion + '.');
+  const metadata = JSON.parse(readFileSync(resolve(root, 'store.config.json'), 'utf8'));
+  const listings = JSON.parse(readFileSync(resolve(root, 'store/listings.json'), 'utf8'));
+  const consentDocuments = {
+    'store/privacy-declarations.md': readFileSync(resolve(root, 'store/privacy-declarations.md'), 'utf8'),
+    'store.config.json Apple review notes': metadata.apple?.review?.notes || '',
+    'store/listings.json Apple review notes': listings.apple?.reviewNotes || '',
+  };
+  for (const [label, source] of Object.entries(consentDocuments)) {
+    const marker = source.match(/AI data-use consent notice version:?\s*(\d+)/iu);
+    if (!marker || Number(marker[1]) !== consentVersion) {
+      throw new Error(label + ' must match AI_CONSENT_VERSION ' + consentVersion + '.');
+    }
   }
   for (const path of ['src/components/ai-consent-gate.tsx', 'src/app/privacy.tsx']) {
     const source = readFileSync(resolve(root, path), 'utf8');
