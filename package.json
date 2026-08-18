@@ -80,7 +80,8 @@
     "release:validate:live": "node ./scripts/validate-release-live.mjs",
     "verify": "npm run lint && npm run typecheck && npm run test:coverage && npm run store:validate && npm run production:validate",
     "production:validate": "node ./scripts/validate-production-config.mjs",
-    "native:validate": "node ./scripts/validate-native-project.mjs"
+    "native:validate": "node ./scripts/validate-native-project.mjs",
+    "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs"
   },
   "jest": {
     "preset": "jest-expo",
