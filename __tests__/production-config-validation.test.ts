@@ -101,6 +101,26 @@ describe('production configuration validator', () => {
     expect(result.stderr).toMatch(/Nightly acceptance refuses to run against a production endpoint/u);
   });
 
+  it('canonicalizes the production identity before comparing it with staging', () => {
+    const invocation = [
+      "import { validateStagingEndpointIsolation } from './scripts/validate-production-config.mjs';",
+      `validateStagingEndpointIsolation(${JSON.stringify({
+        configuredApiUrl: 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed',
+        configuredSiteUrl: 'https://staging-site.example.test/',
+        productionApiUrl: 'https://API-V2.APPDEPLOY.AI:443/app/74e39779183cf78fed/',
+        productionSiteUrl: 'https://74E39779183CF78FED.V2.APPDEPLOY.AI:443/',
+      })});`,
+    ].join('\n');
+    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', invocation], {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      env: { ...process.env },
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/Nightly acceptance refuses to run against a production endpoint/u);
+  });
+
   it('accepts canonically distinct HTTPS staging services', () => {
     const result = runValidator(['--validate-staging-endpoints'], {
       BOLO_API_URL: 'https://STAGING-API.example.test:443/v1/',
