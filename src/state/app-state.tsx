@@ -3,6 +3,7 @@ import { createContext, type PropsWithChildren, useCallback, useContext, useEffe
 import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
+import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
@@ -473,7 +474,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       // otherwise the OS notification keeps firing with no way to turn it off.
       if (state.reminder.notificationId) await cancelPracticeReminder(state.reminder);
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
-      const { clearAiVoicePlaybackCache } = await import('@/lib/ai-voice-player');
       clearAiVoicePlaybackCache();
       // Storage now holds the defaults; update in-memory state before anything
       // else can fail so the two never diverge.

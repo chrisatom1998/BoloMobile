@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 
 const mockRouterReplace = jest.fn();
 
+jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   return {
