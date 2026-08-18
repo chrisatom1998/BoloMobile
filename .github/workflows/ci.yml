@@ -219,8 +219,9 @@ jobs:
       - name: Audit runtime dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: Audit build and development dependencies
+        if: always()
         continue-on-error: true
         run: npm audit --include=dev --audit-level=high
       - name: Review pull-request dependency changes
-        if: github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
+        if: always() && github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
         uses: actions/dependency-review-action@v4
