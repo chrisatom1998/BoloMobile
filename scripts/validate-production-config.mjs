@@ -6,10 +6,70 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const EXPECTED_MICROPHONE_USAGE = 'Allow Bolo to use your microphone for Hindi practice and conversations.';
+const PERMANENT_RELEASE_APP_IDENTIFIER = 'com.bolo.hindi';
+const PRODUCTION_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
+const PRODUCTION_SITE_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai';
 const REAL_OPENAI_KEY = /\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{20,}(?![A-Za-z0-9_-])/u;
 
 function count(source, needle) {
   return source.split(needle).length - 1;
+}
+
+function canonicalPathname(pathname) {
+  const decodedUnreserved = pathname.replace(/%[0-9a-f]{2}/giu, (escape) => {
+    const character = String.fromCharCode(Number.parseInt(escape.slice(1), 16));
+    return /^[A-Za-z0-9._~-]$/u.test(character) ? character : escape.toUpperCase();
+  });
+  const withoutTrailingSlashes = decodedUnreserved.replace(/\/+$/u, '');
+  return withoutTrailingSlashes || '/';
+}
+
+export function canonicalHttpsEndpointIdentity(name, value) {
+  const configured = typeof value === 'string' ? value.trim() : '';
+  if (!configured) throw new Error(`${name} is required.`);
+
+  let parsed;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    throw new Error(`${name} must be an absolute HTTPS URL.`);
+  }
+  if (parsed.protocol !== 'https:') throw new Error(`${name} must use HTTPS.`);
+  if (parsed.username || parsed.password) throw new Error(`${name} must not include URL credentials.`);
+
+  // WHATWG URL parsing lowercases DNS names, removes the default HTTPS port,
+  // and resolves dot segments. Strip a DNS root dot, normalize unreserved
+  // escapes, and ignore query/fragment values because they do not move a
+  // nightly run off the same service endpoint.
+  const hostname = parsed.hostname.toLowerCase().replace(/\.+$/u, '');
+  if (!hostname) throw new Error(`${name} must include a hostname.`);
+  const port = parsed.port ? `:${parsed.port}` : '';
+  return `https://${hostname}${port}${canonicalPathname(parsed.pathname)}`;
+}
+
+export function validateStagingEndpointIsolation({
+  configuredApiUrl = process.env.BOLO_API_URL,
+  configuredSiteUrl = process.env.BOLO_PUBLIC_SITE_URL,
+  productionApiUrl = PRODUCTION_API_URL,
+  productionSiteUrl = PRODUCTION_SITE_URL,
+} = {}) {
+  if (!configuredApiUrl?.trim() || !configuredSiteUrl?.trim()) {
+    throw new Error('EAS preview must define BOLO_API_URL and BOLO_PUBLIC_SITE_URL.');
+  }
+
+  const stagingApiIdentity = canonicalHttpsEndpointIdentity('BOLO_API_URL', configuredApiUrl);
+  const stagingSiteIdentity = canonicalHttpsEndpointIdentity('BOLO_PUBLIC_SITE_URL', configuredSiteUrl);
+  const productionApiIdentity = canonicalHttpsEndpointIdentity('production API URL', productionApiUrl);
+  const productionSiteIdentity = canonicalHttpsEndpointIdentity('production public-site URL', productionSiteUrl);
+
+  if (
+    stagingApiIdentity === productionApiIdentity
+    || stagingSiteIdentity === productionSiteIdentity
+  ) {
+    throw new Error('Nightly acceptance refuses to run against a production endpoint.');
+  }
+
+  return { stagingApiIdentity, stagingSiteIdentity };
 }
 
 function readConsentVersion(root) {
@@ -55,12 +115,36 @@ export function validateProductionConfig(root = defaultRoot) {
     throw new Error('Runtime API selection must not accept EXPO_PUBLIC_BOLO_API_URL overrides.');
   }
 
-  const expectedIdentifier = process.env.BOLO_APP_IDENTIFIER?.trim() || 'com.bolo.hindi';
+  const configuredIdentifier = process.env.BOLO_APP_IDENTIFIER;
   if (
-    resolvedConfig.ios?.bundleIdentifier !== expectedIdentifier
-    || resolvedConfig.android?.package !== expectedIdentifier
+    configuredIdentifier !== undefined
+    && configuredIdentifier.trim() !== PERMANENT_RELEASE_APP_IDENTIFIER
   ) {
-    throw new Error('Resolved iOS and Android identifiers must equal BOLO_APP_IDENTIFIER.');
+    throw new Error(
+      'BOLO_APP_IDENTIFIER must equal the permanent release app identity '
+        + PERMANENT_RELEASE_APP_IDENTIFIER
+        + '.',
+    );
+  }
+  if (
+    resolvedConfig.ios?.bundleIdentifier !== PERMANENT_RELEASE_APP_IDENTIFIER
+    || resolvedConfig.android?.package !== PERMANENT_RELEASE_APP_IDENTIFIER
+  ) {
+    throw new Error(
+      'Resolved iOS and Android identifiers must equal the permanent release app identity '
+        + PERMANENT_RELEASE_APP_IDENTIFIER
+        + '.',
+    );
+  }
+  const widgetsPlugin = resolvedConfig.plugins?.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-widgets',
+  );
+  const widgetsOptions = widgetsPlugin?.[1];
+  if (
+    widgetsOptions?.bundleIdentifier !== `${PERMANENT_RELEASE_APP_IDENTIFIER}.widgets`
+    || widgetsOptions?.groupIdentifier !== `group.${PERMANENT_RELEASE_APP_IDENTIFIER}`
+  ) {
+    throw new Error('Resolved widget and app-group identifiers must derive from the permanent release app identity.');
   }
   if (resolvedConfig.scheme !== 'bolo') {
     throw new Error('The production URL scheme must remain bolo.');
@@ -141,10 +225,18 @@ export function validateProductionConfig(root = defaultRoot) {
 
 const invokedPath = process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href : null;
 if (invokedPath === import.meta.url) {
-  const result = validateProductionConfig();
-  console.log(
-    'Validated production API, client secrets, microphone/background audio, ATS, App Intents, and AI consent notice version '
-      + result.consentVersion
-      + '.',
-  );
+  const arguments_ = process.argv.slice(2);
+  if (arguments_.length === 1 && arguments_[0] === '--validate-staging-endpoints') {
+    validateStagingEndpointIsolation();
+    console.log('Staging endpoint isolation validated.');
+  } else if (arguments_.length === 0) {
+    const result = validateProductionConfig();
+    console.log(
+      'Validated production API, client secrets, microphone/background audio, ATS, App Intents, and AI consent notice version '
+        + result.consentVersion
+        + '.',
+    );
+  } else {
+    throw new Error('Unknown production-config validator arguments: ' + arguments_.join(', '));
+  }
 }
