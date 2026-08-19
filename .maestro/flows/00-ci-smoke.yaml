@@ -15,13 +15,19 @@ tags:
     element:
       text: "Check microphone access"
     direction: DOWN
-    timeout: 20000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: true
+    timeout: 45000
 - tapOn: "Check microphone access"
 - scrollUntilVisible:
     element:
       text: "Microphone access is off. Typed and written practice still work."
     direction: DOWN
-    timeout: 20000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: true
+    timeout: 45000
 - assertVisible: "Microphone access is off. Typed and written practice still work."
 - runFlow: ../subflows/complete-onboarding.yaml
 - tapOn: "Asha"
@@ -29,13 +35,19 @@ tags:
     element:
       text: "Before your first live turn"
     direction: DOWN
-    timeout: 20000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: true
+    timeout: 45000
 - assertVisible: "Before your first live turn"
 - scrollUntilVisible:
     element:
       text: "Enable live practice"
     direction: DOWN
-    timeout: 20000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: true
+    timeout: 45000
 - assertVisible: "Enable live practice"
 - stopApp
 - launchApp
@@ -49,7 +61,10 @@ tags:
     element:
       text: "Delete my Bolo data"
     direction: DOWN
-    timeout: 20000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: true
+    timeout: 45000
 - tapOn: "Delete my Bolo data"
 - assertVisible: "Delete your Bolo data?"
 - tapOn: "Cancel"
