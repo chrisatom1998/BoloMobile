@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
+jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   const storage = {

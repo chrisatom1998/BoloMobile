@@ -9,16 +9,309 @@ concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx expo customize tsconfig.json
       - run: npm run verify
+
+  website:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: npm ci --prefix website
+      - run: npm run lint --prefix website
+      - run: npm test --prefix website
+
+  expo-doctor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx --no-install expo-doctor
+
+  ios-prebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Validate generated native configuration
+        run: node scripts/validate-native-project.mjs
+
+  production-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EAS_BUILD_PROFILE: production
+      BOLO_APP_IDENTIFIER: com.bolo.hindi
+      BOLO_EAS_PROJECT_ID: 573b5aad-b676-44aa-8ec4-34b831b6d5ff
+      BOLO_EXPO_OWNER: appdevcmjatom
+      BOLO_PUBLISHER_NAME: Bolo CI
+      BOLO_SUPPORT_EMAIL: ci@example.com
+      BOLO_REVIEW_FIRST_NAME: CI
+      BOLO_REVIEW_LAST_NAME: Reviewer
+      BOLO_REVIEW_EMAIL: reviewer@example.com
+      BOLO_REVIEW_PHONE: "+15555550100"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run production:validate
+
+  ios-native-build:
+    needs: [verify, expo-doctor, ios-prebuild, production-config]
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      CI: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - run: npm ci
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=ios --repo-update
+      - name: Validate App Intents and the local Expo module
+        run: node scripts/validate-native-project.mjs --require-workspace
+      - name: Build unsigned Release app for the simulator
+        run: |
+          xcodebuild \
+            -workspace ios/Bolo.xcworkspace \
+            -scheme Bolo \
+            -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/BoloDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Package simulator app
+        run: |
+          app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
+          test -d "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/Bolo-simulator.zip"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bolo-ios-simulator-${{ github.sha }}
+          path: ${{ runner.temp }}/Bolo-simulator.zip
+          if-no-files-found: error
+          retention-days: 3
+
+  maestro-smoke:
+    needs: ios-native-build
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      CI: 1
+      MAESTRO_CLI_NO_ANALYTICS: 1
+      MAESTRO_VERSION: 2.8.0
+      MAESTRO_SHA256: b3e561161904fb391875ca5834d5b22cf0b01c052dd1b408ad83e30d8f8951b3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: bolo-ios-simulator-${{ github.sha }}
+          path: ${{ runner.temp }}/bolo-artifact
+      - name: Unpack simulator app
+        run: |
+          ditto -x -k "$RUNNER_TEMP/bolo-artifact/Bolo-simulator.zip" "$RUNNER_TEMP/bolo-app"
+          test -d "$RUNNER_TEMP/bolo-app/Bolo.app"
+      - name: Create and boot the simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier')"
+          device_type_id="$(xcrun simctl list devicetypes --json | jq -r '.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier')"
+          test -n "$runtime_id"
+          test -n "$device_type_id"
+          udid="$(xcrun simctl create "Bolo CI $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          open -a Simulator --args -CurrentDeviceUDID "$udid"
+          xcrun simctl bootstatus "$udid" -b
+      - name: Install the app
+        run: |
+          xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+          xcrun simctl get_app_container "$SIMULATOR_UDID" com.bolo.hindi app
+      - name: Install pinned Maestro CLI
+        run: |
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --output "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
+          echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
+      - name: Run the dedicated iOS smoke flow
+        run: |
+          npm run e2e:ios -- \
+            --device "$SIMULATOR_UDID" \
+            --format junit \
+            --output maestro-junit.xml \
+            --test-output-dir maestro-artifacts
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: maestro-smoke-results-${{ github.sha }}
+          path: |
+            maestro-junit.xml
+            maestro-artifacts
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove simulator
+        if: always() && env.SIMULATOR_UDID != ''
+        run: |
+          xcrun simctl shutdown "$SIMULATOR_UDID" || true
+          xcrun simctl delete "$SIMULATOR_UDID" || true
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan committed content with Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Audit production and full dependency trees against the accepted baseline
+        run: node scripts/audit-runtime-dependencies.mjs
+      - name: Audit website runtime dependencies
+        run: npm --prefix website audit --omit=dev --audit-level=high
+      - name: Audit all root dependencies
+        if: always()
+        continue-on-error: true
+        run: npm audit --audit-level=high
+      - name: Audit all website dependencies
+        if: always()
+        continue-on-error: true
+        run: npm --prefix website audit --audit-level=high
+      - name: Review pull-request dependency changes
+        if: always() && github.event_name == 'pull_request' && vars.ENABLE_DEPENDENCY_REVIEW == 'true'
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5
+        with:
+          fail-on-severity: high
+      - name: Explain disabled dependency review
+        if: always() && (github.event_name != 'pull_request' || vars.ENABLE_DEPENDENCY_REVIEW != 'true')
+        run: echo "::notice::Dependency Review skipped. Set the repository variable ENABLE_DEPENDENCY_REVIEW=true after GitHub Code Security is available for this private repository."
+
+  required-checks:
+    name: required-checks
+    if: always()
+    needs:
+      - verify
+      - website
+      - expo-doctor
+      - ios-prebuild
+      - production-config
+      - ios-native-build
+      - maestro-smoke
+      - security
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERIFY_RESULT: ${{ needs['verify'].result }}
+      WEBSITE_RESULT: ${{ needs['website'].result }}
+      EXPO_DOCTOR_RESULT: ${{ needs['expo-doctor'].result }}
+      IOS_PREBUILD_RESULT: ${{ needs['ios-prebuild'].result }}
+      PRODUCTION_CONFIG_RESULT: ${{ needs['production-config'].result }}
+      IOS_NATIVE_BUILD_RESULT: ${{ needs['ios-native-build'].result }}
+      MAESTRO_SMOKE_RESULT: ${{ needs['maestro-smoke'].result }}
+      SECURITY_RESULT: ${{ needs['security'].result }}
+    steps:
+      - name: Require every merge check to pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          while IFS='=' read -r check result; do
+            if [[ "$result" != "success" ]]; then
+              echo "::error::Merge check $check completed with result $result."
+              failures=1
+            fi
+          done <<RESULTS
+          verify=$VERIFY_RESULT
+          website=$WEBSITE_RESULT
+          expo-doctor=$EXPO_DOCTOR_RESULT
+          ios-prebuild=$IOS_PREBUILD_RESULT
+          production-config=$PRODUCTION_CONFIG_RESULT
+          ios-native-build=$IOS_NATIVE_BUILD_RESULT
+          maestro-smoke=$MAESTRO_SMOKE_RESULT
+          security=$SECURITY_RESULT
+          RESULTS
+          exit "$failures"

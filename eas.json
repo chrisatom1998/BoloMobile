@@ -16,6 +16,14 @@
         "buildType": "apk"
       }
     },
+    "staging-e2e": {
+      "distribution": "internal",
+      "environment": "preview",
+      "withoutCredentials": true,
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "autoIncrement": true,
       "environment": "production",

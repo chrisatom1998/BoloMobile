@@ -13,6 +13,11 @@ const publicPages = {
   terms: resolvedConfig.extra?.publicTermsUrl,
 };
 
+const storageSource = readFileSync(resolve(root, 'src/lib/storage.ts'), 'utf8');
+const consentVersionMatch = storageSource.match(/\bAI_CONSENT_VERSION\s*=\s*(\d+)\s+as const/u);
+if (!consentVersionMatch) throw new Error('Could not read AI_CONSENT_VERSION from src/lib/storage.ts.');
+const consentVersion = Number(consentVersionMatch[1]);
+
 const publicPageHtml = new Map();
 
 for (const [page, url] of Object.entries(publicPages)) {
@@ -60,6 +65,7 @@ const requiredPrivacyFacts = [
   'unencrypted storage on this device',
   'Clear chat',
   'does not delete reports',
+  `AI data-use consent notice version ${consentVersion}`,
 ];
 for (const fact of requiredPrivacyFacts) {
   if (!publicBundle.includes(fact)) {

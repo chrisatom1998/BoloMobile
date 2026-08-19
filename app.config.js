@@ -17,6 +17,9 @@ function httpsUrl(name, value, fallback) {
   if (parsed.protocol !== 'https:') {
     throw new Error(`${name} must use https://, for example ${fallback}.`);
   }
+  if (parsed.username || parsed.password) {
+    throw new Error(`${name} must not include URL credentials.`);
+  }
   return configured;
 }
 

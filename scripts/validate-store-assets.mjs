@@ -2,9 +2,12 @@ import { createRequire } from 'node:module';
 import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pngInfo } from './lib/png.mjs';
+import { validateProductionConfig } from './validate-production-config.mjs';
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
+
+validateProductionConfig(root);
 
 const specs = [
   { path: 'assets/images/icon.png', width: 1024, height: 1024, colorType: 2 },

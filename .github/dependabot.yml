@@ -1,0 +1,58 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:17"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    groups:
+      expo-sdk-57:
+        patterns:
+          - expo
+          - expo-*
+          - "@expo/*"
+          - react
+          - react-dom
+          - react-native
+          - react-native-*
+        update-types:
+          - minor
+          - patch
+      remaining-npm:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: /website
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:37"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    groups:
+      website-non-major:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:57"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"

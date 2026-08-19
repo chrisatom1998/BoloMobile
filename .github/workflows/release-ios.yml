@@ -1,0 +1,189 @@
+name: Release iOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit_to_testflight:
+        description: Upload the inspected build to TestFlight
+        type: boolean
+        required: true
+        default: false
+      what_to_test:
+        description: TestFlight What to Test notes
+        type: string
+        required: false
+        default: Validate onboarding, microphone consent, live voice, background cleanup, and deletion on a physical iPhone.
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-testflight-release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BOLO_API_URL: ${{ vars.PRODUCTION_API_URL }}
+      BOLO_PUBLIC_SITE_URL: ${{ vars.PRODUCTION_PUBLIC_SITE_URL }}
+    steps:
+      - name: Require main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "Release dispatches must use main; received ${GITHUB_REF}." >&2
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Require explicit production endpoints
+        run: |
+          test -n "$BOLO_API_URL"
+          test -n "$BOLO_PUBLIC_SITE_URL"
+          node -e "for (const name of ['BOLO_API_URL','BOLO_PUBLIC_SITE_URL']) { const url = new URL(process.env[name]); if (url.protocol !== 'https:') throw new Error(name + ' must use HTTPS'); }"
+      - run: npm ci
+      - name: Audit production and full dependency baselines
+        run: node scripts/audit-runtime-dependencies.mjs
+      - name: Audit website runtime dependencies
+        if: always()
+        run: npm audit --prefix website --omit=dev --audit-level=high
+      - name: Report full root dependency audit
+        if: always()
+        continue-on-error: true
+        run: npm audit --include=dev --audit-level=high
+      - name: Report full website dependency audit
+        if: always()
+        continue-on-error: true
+        run: npm audit --prefix website --include=dev --audit-level=high
+      - run: npm run verify
+      - run: npm run e2e:validate
+      - run: npx --no-install expo-doctor
+      - run: npx expo export --platform ios
+      - run: npm run release:validate:live
+      - run: npm run acceptance:live
+
+  build_inspect_submit:
+    name: Build, inspect, and optionally submit
+    needs: [preflight]
+    runs-on: macos-15
+    timeout-minutes: 120
+    environment: ios-release
+    env:
+      BOLO_APP_IDENTIFIER: ${{ vars.BOLO_APP_IDENTIFIER }}
+      BOLO_EAS_PROJECT_ID: ${{ vars.BOLO_EAS_PROJECT_ID }}
+      BOLO_EXPO_OWNER: ${{ vars.BOLO_EXPO_OWNER }}
+      BOLO_API_URL: ${{ vars.PRODUCTION_API_URL }}
+      BOLO_PUBLIC_SITE_URL: ${{ vars.PRODUCTION_PUBLIC_SITE_URL }}
+      EXPECTED_APP_IDENTIFIER: ${{ vars.BOLO_APP_IDENTIFIER }}
+      EXPECTED_API_URL: ${{ vars.PRODUCTION_API_URL }}
+      EXPECTED_PUBLIC_SITE_URL: ${{ vars.PRODUCTION_PUBLIC_SITE_URL }}
+      FORBIDDEN_RELEASE_URLS: ${{ vars.STAGING_API_URL }},${{ vars.STAGING_PUBLIC_SITE_URL }}
+      MAX_IPA_BYTES: ${{ vars.IOS_MAX_IPA_BYTES }}
+      MAX_EXPANDED_APP_BYTES: ${{ vars.IOS_MAX_EXPANDED_APP_BYTES }}
+      BASELINE_IPA_BYTES: ${{ vars.IOS_IPA_BASELINE_BYTES }}
+      MAX_IPA_GROWTH_PERCENT: ${{ vars.IOS_MAX_GROWTH_PERCENT }}
+      IOS_INSPECTION_REPORT: ios-artifact-inspection.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - run: npm ci
+      - name: Validate release-owned metadata
+        env:
+          BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
+          BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
+          BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
+          BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
+          BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
+          BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
+        run: npm run release:validate
+      - name: Start signed EAS production build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
+          BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
+          BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
+          BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
+          BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
+          BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
+        run: |
+          npx eas-cli@21.0.0 build \
+            --platform ios \
+            --profile production \
+            --non-interactive \
+            --freeze-credentials \
+            --wait \
+            --json > eas-build.json
+      - id: eas_build
+        name: Resolve and download EAS build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          BUILD_ID="$(node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync('eas-build.json','utf8')); const build=Array.isArray(value)?value[0]:value; if(!build?.id) process.exit(2); process.stdout.write(build.id)")"
+          npx eas-cli@21.0.0 build:view "$BUILD_ID" --json > eas-build-view.json
+          ARTIFACT_URL="$(node -e "const fs=require('fs'); const build=JSON.parse(fs.readFileSync('eas-build-view.json','utf8')); const url=build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl; if(!url) process.exit(2); process.stdout.write(url)")"
+          echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
+          curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 --output Bolo.ipa "$ARTIFACT_URL"
+          rm -f eas-build.json eas-build-view.json
+      - id: inspect
+        name: Inspect signed IPA
+        run: bash scripts/inspect-ios-artifact.sh Bolo.ipa
+      - name: Publish inspection summary
+        run: |
+          {
+            echo "## iOS artifact inspection"
+            echo
+            echo "- EAS build: \`${{ steps.eas_build.outputs.build_id }}\`"
+            echo "- IPA bytes: \`${{ steps.inspect.outputs.ipa_size_bytes }}\`"
+            echo "- Expanded app bytes: \`${{ steps.inspect.outputs.expanded_app_size_bytes }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-artifact-inspection-${{ github.run_id }}
+          path: ios-artifact-inspection.json
+          retention-days: 90
+      - name: Submit inspected build to TestFlight
+        if: inputs.submit_to_testflight
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          BOLO_PUBLISHER_NAME: ${{ secrets.BOLO_PUBLISHER_NAME }}
+          BOLO_SUPPORT_EMAIL: ${{ secrets.BOLO_SUPPORT_EMAIL }}
+          BOLO_REVIEW_FIRST_NAME: ${{ secrets.BOLO_REVIEW_FIRST_NAME }}
+          BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
+          BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
+          BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
+          WHAT_TO_TEST: ${{ inputs.what_to_test }}
+        run: |
+          npx eas-cli@21.0.0 submit \
+            --platform ios \
+            --id "${{ steps.eas_build.outputs.build_id }}" \
+            --profile production \
+            --what-to-test "$WHAT_TO_TEST" \
+            --non-interactive \
+            --wait
+      - name: Explain post-TestFlight physical signoff
+        if: inputs.submit_to_testflight
+        run: |
+          {
+            echo "## Record iOS physical signoff after testing"
+            echo
+            echo "This workflow does not claim physical-device approval automatically."
+            echo "After testing this exact TestFlight build on an iPhone, dispatch:"
+            echo "https://github.com/${GITHUB_REPOSITORY}/actions/workflows/record-ios-physical-signoff.yml"
+            echo
+            echo "- Commit: `${GITHUB_SHA}`"
+            echo "- EAS build: `${{ steps.eas_build.outputs.build_id }}`"
+          } >> "$GITHUB_STEP_SUMMARY"

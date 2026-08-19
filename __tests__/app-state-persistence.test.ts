@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { persistAiConsentChoice, restoreFailedPersistedState } from '../src/state/app-state';
 import { defaultLearnerProfile, defaultReminderSettings, emptyPractice, storageKeys, type PersistedState } from '../src/lib/storage';
 
+jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: {

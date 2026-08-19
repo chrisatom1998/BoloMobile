@@ -1,6 +1,6 @@
 # Store privacy declarations
 
-Audited against the shipping client contract on July 16, 2026. These declarations cover consent-gated AI speech for selected lesson and reply text, optional typed coaching, GPT Realtime voice turns, pronunciation checks, automated text safety classification, a random installation identifier, optional AI-reply reports, and user-initiated report deletion. The production AI-speech and Realtime endpoints and OpenAI session handshake were verified on July 14, 2026; these declarations still do not assume unverified contractual service-provider status.
+Audited against the shipping client contract on July 16, 2026. AI data-use consent notice version: 8. These declarations cover consent-gated AI speech for selected lesson and reply text, optional typed coaching, GPT Realtime voice turns, pronunciation checks, automated text safety classification, a random installation identifier, optional AI-reply reports, and user-initiated report deletion. The production AI-speech and Realtime endpoints and OpenAI session handshake were verified on July 14, 2026; these declarations still do not assume unverified contractual service-provider status.
 
 ## Apple App Privacy
 

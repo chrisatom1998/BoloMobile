@@ -2,9 +2,12 @@ import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pngInfo } from './lib/png.mjs';
+import { validateProductionConfig } from './validate-production-config.mjs';
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
+
+validateProductionConfig(root);
 
 function required(name) {
   const value = process.env[name]?.trim();

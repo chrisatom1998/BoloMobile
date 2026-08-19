@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react-native';
 import { AppState, type AppStateStatus, Text, View } from 'react-native';
 
+jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   return {

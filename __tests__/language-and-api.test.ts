@@ -21,11 +21,11 @@ function expectDefined<T>(value: T | undefined): T {
 }
 
 describe('connected coaching contract', () => {
-  it('uses the Expo public API URL override and normalizes a trailing slash', () => {
+  it('uses only the release-validated Expo API URL when a public environment override is present', () => {
     const previous = process.env.EXPO_PUBLIC_BOLO_API_URL;
     process.env.EXPO_PUBLIC_BOLO_API_URL = ' https://staging.example.test/ ';
     try {
-      expect(getBoloApiUrl()).toBe('https://staging.example.test');
+      expect(getBoloApiUrl()).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
     } finally {
       if (previous === undefined) delete process.env.EXPO_PUBLIC_BOLO_API_URL;
       else process.env.EXPO_PUBLIC_BOLO_API_URL = previous;
