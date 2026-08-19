@@ -6,9 +6,13 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { MotionProgress, MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
+import { isWordOrderPracticeable } from '@/components/practice-mode';
+import { RecallRevealPractice } from '@/components/recall-reveal-practice';
+import { WordOrderPractice } from '@/components/word-order-practice';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
+import { buildAlternateFeedback } from '@/data/lesson-feedback';
 import { lessonPlans } from '@/data/lesson-plans';
-import { getScene } from '@/data/scenes';
+import { getScene, type BeatMode } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
@@ -22,6 +26,12 @@ import { shuffleChoices } from '@/lib/shuffle-choices';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+
+const ALTERNATE_INCORRECT_COACH = {
+  en: 'Close—try again.',
+  hi: 'करीब है—फिर से कोशिश कीजिए।',
+  latin: 'Karib hai—phir se koshish kijiye.',
+};
 
 export default function SceneScreen() {
   const { id } = useLocalSearchParams<{ id: string | string[] }>();
@@ -52,14 +62,22 @@ export default function SceneScreen() {
   const [initialBeatIndex, setInitialBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
   const [beatIndex, setBeatIndex] = useState(initialBeatIndex);
   const [picked, setPicked] = useState<number | null>(null);
+  const [resolution, setResolution] = useState<null | 'correct' | 'incorrect'>(null);
   const [choiceNonce, setChoiceNonce] = useState(0);
+  const [wordOrderRetryNonce, setWordOrderRetryNonce] = useState(0);
   const [score, setScore] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
   const [done, setDone] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
   const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
   const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
+  const sceneScrollRef = useRef<ScrollView>(null);
+  const sceneViewportHeightRef = useRef(0);
+  const sceneScrollYRef = useRef(0);
+  const pendingResolutionScrollRef = useRef(false);
+  const pickedRef = useRef<number | null>(null);
   const advancedBeatRef = useRef<number | null>(null);
   const autoPlayedBeatRef = useRef<string | null>(null);
 
@@ -77,15 +95,23 @@ export default function SceneScreen() {
       : currentBeat.npc
     : undefined;
   const autoPlayKey = scene && npcLine !== undefined ? `${scene.id}:${beatIndex}` : null;
+  const effectiveMode = useMemo<BeatMode>(() => {
+    const declaredMode = currentBeat?.mode ?? 'choice';
+    if (declaredMode === 'wordOrder' && currentTarget && !isWordOrderPracticeable(currentTarget.hi)) {
+      return 'choice';
+    }
+    return declaredMode;
+  }, [currentBeat, currentTarget]);
+  const wordOrderChoiceFallback = currentBeat?.mode === 'wordOrder' && effectiveMode === 'choice';
   const choicePresentation = useMemo(() => ({
-    choices: currentBeat ? shuffleChoices(currentBeat.choices) : [],
+    choices: currentBeat && effectiveMode === 'choice' ? shuffleChoices(currentBeat.choices) : [],
     key: `${scene?.id ?? 'missing-scene'}:${beatIndex}:${choiceNonce}`,
-  }), [beatIndex, choiceNonce, currentBeat, scene?.id]);
+  }), [beatIndex, choiceNonce, currentBeat, effectiveMode, scene?.id]);
 
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
   useEffect(() => {
     if (!autoPlayKey || npcLine === undefined || situationPromptSpeech === undefined) return;
-    if (picked !== null) return;
+    if (resolution !== null) return;
     if (pronunciationBusy) return;
     if (autoPlayedBeatRef.current === autoPlayKey) return;
     if (!aiConsent && !hasOfflineSpeech(npcLine)) return;
@@ -93,7 +119,7 @@ export default function SceneScreen() {
     // consent or pronunciation activity still speaks when the effect re-runs.
     autoPlayedBeatRef.current = autoPlayKey;
     void speakText(situationPromptSpeech).catch(() => {});
-  }, [aiConsent, autoPlayKey, npcLine, picked, pronunciationBusy, situationPromptSpeech]);
+  }, [aiConsent, autoPlayKey, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
 
   if (!scene || !currentBeat || !currentTarget) {
     return (
@@ -107,8 +133,26 @@ export default function SceneScreen() {
   const activeScene = scene;
   const beat = currentBeat;
   const target = currentTarget;
+  const effectivePrompt = wordOrderChoiceFallback
+    ? `Choose the Hindi response that means “${target.en}”`
+    : beat.prompt;
+  const effectiveTip = wordOrderChoiceFallback
+    ? `Look for “${target.latin},” the Hindi response for “${target.en}”`
+    : beat.tip;
   const saved = phrases.some((phrase) => phrase.hi === target.hi);
-  const correct = picked !== null && beat.choices[picked]?.correct === true;
+  const correct = resolution === 'correct';
+  const feedbackReply = picked !== null
+    ? beat.choices[picked]?.reply ?? ''
+    : resolution === 'correct'
+      ? 'बहुत अच्छा।'
+      : resolution === 'incorrect'
+        ? ALTERNATE_INCORRECT_COACH.hi
+        : '';
+  const englishMistakeFeedback = resolution === 'incorrect'
+    ? picked !== null
+      ? beat.choices[picked]?.feedback ?? ''
+      : buildAlternateFeedback({ en: target.en, latin: target.latin })
+    : '';
 
   function play(text: string) {
     if ((!aiConsent && !hasOfflineSpeech(text)) || pronunciationBusy) return;
@@ -116,25 +160,62 @@ export default function SceneScreen() {
   }
 
   function choose(index: number) {
-    if (picked !== null || pronunciationBusy) return;
+    if (pickedRef.current !== null || pronunciationBusy) return;
     const choice = beat.choices[index];
     if (choice === undefined) return;
+    pendingResolutionScrollRef.current = true;
+    pickedRef.current = index;
     setPicked(index);
     if (choice.correct) {
       hapticSuccess();
-      setScore((value) => value + 50);
-      setCorrectCount((value) => value + 1);
+      if (!alreadyResolvedIncorrect) {
+        setScore((value) => value + 50);
+        setCorrectCount((value) => value + 1);
+      }
+      setResolution('correct');
     }
     else {
       hapticWarning();
       setWeakPhrases((current) => [...new Set([...current, target.hi])]);
+      setResolution('incorrect');
     }
     play(choice.reply);
+  }
+
+  function handleAlternateResult(result: 'correct' | 'incorrect') {
+    if (pickedRef.current !== null || pronunciationBusy) return;
+    pendingResolutionScrollRef.current = true;
+    pickedRef.current = result === 'correct' ? 0 : -1;
+    if (result === 'correct') {
+      if (!alreadyResolvedIncorrect) {
+        setScore((value) => value + 50);
+        setCorrectCount((value) => value + 1);
+      }
+      setResolution('correct');
+      play('बहुत अच्छा।');
+      return;
+    }
+    setWeakPhrases((current) => [...new Set([...current, target.hi])]);
+    setResolution('incorrect');
+    play(ALTERNATE_INCORRECT_COACH.hi);
+  }
+
+  function tryAgain() {
+    if ((effectiveMode !== 'choice' && effectiveMode !== 'wordOrder') || resolution !== 'incorrect' || pronunciationBusy) return;
+    pendingResolutionScrollRef.current = false;
+    pickedRef.current = null;
+    setPicked(null);
+    setResolution(null);
+    setAlreadyResolvedIncorrect(true);
+    setShowHint(false);
+    setWordDefinitionWord(null);
+    if (effectiveMode === 'wordOrder') setWordOrderRetryNonce((value) => value + 1);
   }
 
   function next() {
     if (advancedBeatRef.current === beatIndex) return;
     advancedBeatRef.current = beatIndex;
+    pendingResolutionScrollRef.current = false;
     void stopSpeaking();
     clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
@@ -151,8 +232,11 @@ export default function SceneScreen() {
     hapticSelect();
     checkpointScene?.(activeScene.id, beatIndex + 1);
     setBeatIndex((value) => value + 1);
+    pickedRef.current = null;
     setPicked(null);
+    setResolution(null);
     setShowHint(false);
+    setAlreadyResolvedIncorrect(false);
     setWordDefinitionWord(null);
     setChoiceNonce((value) => value + 1);
   }
@@ -164,13 +248,17 @@ export default function SceneScreen() {
     autoPlayedBeatRef.current = null;
     setInitialBeatIndex(0);
     setBeatIndex(0);
+    pickedRef.current = null;
     setPicked(null);
+    setResolution(null);
     setShowHint(false);
+    setAlreadyResolvedIncorrect(false);
     setWordDefinitionWord(null);
     setScore(0);
     setCorrectCount(0);
     setWeakPhrases([]);
     advancedBeatRef.current = null;
+    pendingResolutionScrollRef.current = false;
     setDone(false);
     setChoiceNonce((value) => value + 1);
   }
@@ -195,13 +283,16 @@ export default function SceneScreen() {
 
   if (done) {
     return (
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen}>
+      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ title: activeScene.title }} />
         <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-complete`} style={styles.finishIntro} testID="scene-completion-motion">
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
           <Text style={sharedStyles.eyebrow}>Scene complete</Text>
-          <Text style={styles.finishHindi}>आपने कर दिखाया!</Text>
-          <Text style={styles.finishTitle}>You navigated {activeScene.title} in Hindi.</Text>
+          <View style={styles.finishHeading}>
+            <Text accessibilityLanguage="hi-IN" style={styles.finishHindi} testID="scene-completion-headline">आपने कर दिखाया!</Text>
+            <Text style={styles.finishGloss} testID="scene-completion-gloss">Aapne kar dikhaya! · You did it!</Text>
+          </View>
+          <Text style={styles.finishTitle} testID="scene-completion-title">You navigated {activeScene.title} in Hindi.</Text>
           <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>
         </MotionReveal>
         <View style={styles.finishStats}>
@@ -220,15 +311,68 @@ export default function SceneScreen() {
     );
   }
 
+  const recoveryActionsFirst = resolution === 'incorrect'
+    && (effectiveMode === 'choice' || effectiveMode === 'wordOrder');
+  const answerActions = resolution !== null ? (
+    <View
+      onLayout={(event) => {
+        if (!pendingResolutionScrollRef.current) return;
+        const viewportHeight = sceneViewportHeightRef.current;
+        if (viewportHeight <= 0) return;
+        const { height, y } = event.nativeEvent.layout;
+        const nextScrollY = Math.max(0, y + height + spacing.lg - viewportHeight);
+        pendingResolutionScrollRef.current = false;
+        if (nextScrollY <= sceneScrollYRef.current) return;
+        sceneScrollYRef.current = nextScrollY;
+        sceneScrollRef.current?.scrollTo({ animated: !reducedMotion, y: nextScrollY });
+      }}
+      style={styles.answerActions}
+      testID="scene-answer-actions"
+    >
+      {resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: pronunciationBusy }}
+          disabled={pronunciationBusy}
+          onPress={tryAgain}
+          style={[styles.tryAgainButton, pronunciationBusy && styles.disabled]}
+          testID="scene-try-again"
+        >
+          <RotateCcw color={colors.brand} size={19} />
+          <Text style={styles.tryAgainText}>Try again</Text>
+        </Pressable>
+      ) : null}
+      <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
+        <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
+        <ChevronRight color={colors.white} size={18} />
+      </Pressable>
+    </View>
+  ) : null;
+
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" style={sharedStyles.screen}>
+    <ScrollView
+      key="scene-run"
+      ref={sceneScrollRef}
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+      onLayout={(event) => {
+        sceneViewportHeightRef.current = event.nativeEvent.layout.height;
+      }}
+      onScroll={(event) => {
+        sceneScrollYRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
+      }}
+      scrollEventThrottle={16}
+      style={sharedStyles.screen}
+      testID="scene-scroll"
+    >
       <Stack.Screen options={{ title: activeScene.title }} />
       <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
         <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
         <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
         <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={17} /><Text style={styles.hudText}>{score}</Text></View>
       </View>
-      <View style={styles.track}><MotionProgress color={activeScene.color} mode={motionMode} percent={(beatIndex + Number(picked !== null)) / activeScene.beats.length * 100} style={styles.trackFill} testID="scene-progress-motion" /></View>
+      <View style={styles.track}><MotionProgress color={activeScene.color} mode={motionMode} percent={(beatIndex + Number(resolution !== null || alreadyResolvedIncorrect)) / activeScene.beats.length * 100} style={styles.trackFill} testID="scene-progress-motion" /></View>
 
       {initialBeatIndex > 0 ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Continuing at turn {initialBeatIndex + 1}.</Text> : null}
 
@@ -264,40 +408,60 @@ export default function SceneScreen() {
       <View style={styles.answerHeader}>
         <View>
           <Text style={sharedStyles.eyebrow}>Your response</Text>
-          <Text style={styles.answerTitle}>{beat.prompt}</Text>
+          <Text style={styles.answerTitle}>{effectivePrompt}</Text>
         </View>
       </View>
-      <View key={choicePresentation.key} style={styles.choices} testID="scene-choices">
-        {choicePresentation.choices.map(({ item: choice, sourceIndex }, displayIndex) => {
-          const selected = picked === sourceIndex;
-          const revealed = picked !== null && choice.correct;
-          const answered = picked !== null;
-          const accessibilityLabel = answered
-            ? `${choice.hi} ${choice.latin} ${choice.en}`
-            : `${choice.hi} ${choice.latin}`;
-          return (
-            <Pressable
-              key={choice.hi}
-              accessibilityLabel={accessibilityLabel}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: picked !== null || pronunciationBusy, selected }}
-              disabled={picked !== null || pronunciationBusy}
-              onPress={() => choose(sourceIndex)}
-              style={[styles.choice, largeTextLayout && styles.choiceLarge, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
-            >
-              <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{displayIndex + 1}</Text></View>
-              <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]} testID="scene-choice-copy">
-                <Text style={styles.choiceHindi}>{choice.hi}</Text>
-                <Text style={styles.choiceRomanized}>{choice.latin}</Text>
-                {answered ? <Text style={styles.choiceMeaning}>{choice.en}</Text> : null}
-              </View>
-              {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
-            </Pressable>
-          );
-        })}
-      </View>
+      {effectiveMode === 'choice' ? (
+        <View key={choicePresentation.key} style={styles.choices} testID="scene-choices">
+          {choicePresentation.choices.map(({ item: choice, sourceIndex }, displayIndex) => {
+            const selected = picked === sourceIndex;
+            const revealed = picked !== null && choice.correct;
+            const answered = picked !== null;
+            const accessibilityLabel = answered
+              ? `${choice.hi} ${choice.latin} ${choice.en}`
+              : `${choice.hi} ${choice.latin}`;
+            return (
+              <Pressable
+                key={choice.hi}
+                accessibilityLabel={accessibilityLabel}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: picked !== null || pronunciationBusy, selected }}
+                disabled={picked !== null || pronunciationBusy}
+                onPress={() => choose(sourceIndex)}
+                style={[styles.choice, largeTextLayout && styles.choiceLarge, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
+              >
+                <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{displayIndex + 1}</Text></View>
+                <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]} testID="scene-choice-copy">
+                  <Text style={styles.choiceHindi}>{choice.hi}</Text>
+                  <Text style={styles.choiceRomanized}>{choice.latin}</Text>
+                  {answered ? <Text style={styles.choiceMeaning}>{choice.en}</Text> : null}
+                </View>
+                {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : effectiveMode === 'wordOrder' ? (
+        <WordOrderPractice
+          disabled={pronunciationBusy || resolution !== null}
+          key={`word-order-${activeScene.id}-${beatIndex}-${target.hi}-${wordOrderRetryNonce}`}
+          onResolve={handleAlternateResult}
+          showInstructions={false}
+          targetHi={target.hi}
+          targetLatin={target.latin}
+        />
+      ) : (
+        <RecallRevealPractice
+          disabled={pronunciationBusy || resolution !== null}
+          key={`recall-reveal-${activeScene.id}-${beatIndex}-${target.hi}`}
+          onResolve={handleAlternateResult}
+          targetEn={target.en}
+          targetHi={target.hi}
+          targetLatin={target.latin}
+        />
+      )}
 
-      {picked === null ? (
+      {resolution === null ? (
         <Pressable
           accessibilityLabel={showHint ? 'Hide Asha’s hint' : 'Show Asha’s hint'}
           accessibilityRole="button"
@@ -306,17 +470,44 @@ export default function SceneScreen() {
           style={styles.hint}
         >
           <Text style={styles.hintTitle}>{showHint ? 'Hide Asha’s hint' : 'Need a hint?'}</Text>
-          {showHint ? <Text style={styles.hintBody}>{beat.tip}</Text> : null}
+          {showHint ? <Text style={styles.hintBody}>{effectiveTip}</Text> : null}
         </Pressable>
       ) : (
         <View testID="scene-feedback">
-          <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${picked}`} style={[styles.result, largeTextLayout && styles.resultLarge]} testID="scene-result">
-            <View style={styles.resultCopy}><Text style={styles.resultTitle}>{correct ? 'Natural choice!' : 'Not quite—notice the pattern.'}</Text><Text style={styles.resultHindi}>{beat.choices[picked]?.reply}</Text></View>
+          <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, largeTextLayout && styles.resultLarge]} testID="scene-result">
+            <View style={styles.resultCopy}>
+              <Text style={styles.resultTitle}>{correct
+                ? 'Natural choice!'
+                : effectiveMode === 'wordOrder'
+                  ? 'Check the word order.'
+                  : effectiveMode === 'recallReveal'
+                    ? 'Keep practicing this phrase.'
+                    : 'Not quite—notice the pattern.'}</Text>
+              {englishMistakeFeedback ? <Text style={styles.resultBody} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
+              {englishMistakeFeedback ? <Text style={styles.resultTip}>Pattern: {effectiveTip}</Text> : null}
+              {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
+                <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
+                  <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
+                  <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text>
+                  <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text>
+                </View>
+              ) : null}
+              {picked === null && resolution === 'incorrect' ? (
+                <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
+                  <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
+                  <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text>
+                  <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text>
+                  <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
+                </View>
+              ) : feedbackReply ? <Text style={styles.resultHindi}>{feedbackReply}</Text> : null}
+            </View>
           </MotionReveal>
         </View>
       )}
 
-      {picked !== null ? (
+      {recoveryActionsFirst ? answerActions : null}
+
+      {resolution !== null ? (
         <>
           <View testID="scene-save">
             <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
@@ -355,12 +546,7 @@ export default function SceneScreen() {
           <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
         </View>
       ) : null}
-      {picked !== null ? (
-        <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
-          <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
-          <ChevronRight color={colors.white} size={18} />
-        </Pressable>
-      ) : null}
+      {!recoveryActionsFirst ? answerActions : null}
       {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible /> : null}
     </ScrollView>
   );
@@ -416,7 +602,21 @@ const useStyles = makeStyles((c) => ({
   resultLarge: { alignItems: 'stretch' },
   resultCopy: { gap: spacing.xs },
   resultTitle: { color: c.white, fontSize: 17, fontWeight: '900' },
+  resultBody: { color: c.white, fontSize: 15, lineHeight: 21, fontWeight: '700' },
+  resultTip: { color: c.heroSubtle, fontSize: 14, lineHeight: 20 },
+  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.heroSubtle, borderTopWidth: 1, paddingTop: spacing.md, gap: 2 },
+  wordOrderSolutionLabel: { color: c.heroSubtle, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
+  wordOrderSolutionHindi: { color: c.white, fontSize: 21, lineHeight: 29, fontWeight: '900' },
+  wordOrderSolutionLatin: { color: c.heroSubtle, fontSize: 15, lineHeight: 21, fontWeight: '700' },
+  alternateCoachNote: { marginTop: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: 2 },
+  alternateCoachLabel: { color: c.ink, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
+  alternateCoachHindi: { color: c.ink, fontSize: 18, lineHeight: 26, fontWeight: '800' },
+  alternateCoachLatin: { color: c.forestText, fontSize: 15, lineHeight: 21, fontWeight: '700' },
+  alternateCoachEnglish: { color: c.muted, fontSize: 14, lineHeight: 20 },
   resultHindi: { color: c.heroSubtle, fontSize: 18, lineHeight: 25, fontWeight: '700' },
+  answerActions: { gap: spacing.sm },
+  tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '900' },
   nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   nextText: { color: c.white, fontSize: 16, fontWeight: '900' },
   saveRow: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
@@ -437,7 +637,9 @@ const useStyles = makeStyles((c) => ({
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
   finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
+  finishHeading: { alignItems: 'stretch', gap: spacing.xs },
   finishHindi: { color: c.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },
+  finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
   finishTitle: { color: c.ink, fontSize: 26, lineHeight: 32, fontWeight: '900', textAlign: 'center' },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
