@@ -166,6 +166,34 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  android-native-build:
+    needs: [verify, expo-doctor, production-config]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: 17
+      - run: npm ci
+      - name: Generate the Android project
+        run: npx expo prebuild --platform android --clean --no-install
+      - name: Build the Release APK
+        working-directory: android
+        run: ./gradlew :app:assembleRelease --no-daemon
+      - name: Verify the Release APK
+        run: test -f android/app/build/outputs/apk/release/app-release.apk
+
   maestro-smoke:
     needs: ios-native-build
     runs-on: macos-26
@@ -294,6 +322,7 @@ jobs:
       - ios-prebuild
       - production-config
       - ios-native-build
+      - android-native-build
       - maestro-smoke
       - security
     runs-on: ubuntu-latest
@@ -305,6 +334,7 @@ jobs:
       IOS_PREBUILD_RESULT: ${{ needs['ios-prebuild'].result }}
       PRODUCTION_CONFIG_RESULT: ${{ needs['production-config'].result }}
       IOS_NATIVE_BUILD_RESULT: ${{ needs['ios-native-build'].result }}
+      ANDROID_NATIVE_BUILD_RESULT: ${{ needs['android-native-build'].result }}
       MAESTRO_SMOKE_RESULT: ${{ needs['maestro-smoke'].result }}
       SECURITY_RESULT: ${{ needs['security'].result }}
     steps:
@@ -325,6 +355,7 @@ jobs:
           ios-prebuild=$IOS_PREBUILD_RESULT
           production-config=$PRODUCTION_CONFIG_RESULT
           ios-native-build=$IOS_NATIVE_BUILD_RESULT
+          android-native-build=$ANDROID_NATIVE_BUILD_RESULT
           maestro-smoke=$MAESTRO_SMOKE_RESULT
           security=$SECURITY_RESULT
           RESULTS
