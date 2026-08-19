@@ -1,24 +1,28 @@
 import { createRequire } from 'node:module';
+import { Buffer } from 'node:buffer';
 import { readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pngInfo } from './lib/png.mjs';
-import { validateProductionConfig } from './validate-production-config.mjs';
 
 const require = createRequire(import.meta.url);
 const root = resolve(import.meta.dirname, '..');
 
-validateProductionConfig(root);
+const args = process.argv.slice(2);
+const iosOnly = args.length === 2 && args[0] === '--platform' && args[1] === 'ios';
+if (args.length > 0 && !iosOnly) {
+  throw new Error('Usage: node scripts/validate-store-assets.mjs [--platform ios]');
+}
 
 const specs = [
-  { path: 'assets/images/icon.png', width: 1024, height: 1024, colorType: 2 },
+  { path: 'assets/images/icon.png', width: 1024, height: 1024, colorType: 2, ios: true },
   { path: 'assets/images/android-icon-foreground.png', width: 1024, height: 1024, colorType: 6 },
   { path: 'assets/images/android-icon-monochrome.png', width: 1024, height: 1024, colorType: 6 },
-  { path: 'assets/images/splash-icon.png', width: 1024, height: 1024, colorType: 6 },
+  { path: 'assets/images/splash-icon.png', width: 1024, height: 1024, colorType: 6, ios: true },
   { path: 'assets/images/favicon.png', width: 64, height: 64, colorType: 6 },
-  { path: 'assets/store/app-store-icon.png', width: 1024, height: 1024, colorType: 2 },
+  { path: 'assets/store/app-store-icon.png', width: 1024, height: 1024, colorType: 2, ios: true },
   { path: 'assets/store/play-store-icon.png', width: 512, height: 512, colorType: 6, maxBytes: 1_000_000 },
   { path: 'assets/store/play-store-feature.png', width: 1024, height: 500, colorType: 2 },
-];
+].filter((spec) => !iosOnly || spec.ios);
 
 for (const spec of specs) {
   const info = pngInfo(resolve(root, spec.path), spec.path);
@@ -39,7 +43,7 @@ if (appConfig.ios?.supportsTablet !== false) throw new Error('The v1 phone-only 
 if (appConfig.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsArbitraryLoads !== false) {
   throw new Error('iOS production transport security must reject arbitrary HTTP loads.');
 }
-if (appConfig.android?.adaptiveIcon?.backgroundImage) throw new Error('Android adaptive icon must use the declared solid background color.');
+if (!iosOnly && appConfig.android?.adaptiveIcon?.backgroundImage) throw new Error('Android adaptive icon must use the declared solid background color.');
 if (appConfig.plugins?.some((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen' && plugin[1]?.backgroundColor !== '#F5F0E8')) {
   throw new Error('The splash screen must use Bolo cream, not starter artwork colors.');
 }
@@ -48,6 +52,7 @@ const listings = JSON.parse(readFileSync(resolve(root, 'store/listings.json'), '
 const storeAssets = JSON.parse(readFileSync(resolve(root, 'store/assets.json'), 'utf8'));
 const metadata = JSON.parse(readFileSync(resolve(root, 'store.config.json'), 'utf8'));
 const eas = JSON.parse(readFileSync(resolve(root, 'eas.json'), 'utf8'));
+const appleInfo = metadata.apple?.info?.['en-US'];
 
 const limitedCopy = [
   ['Apple title', listings.apple.title, 30],
@@ -55,17 +60,82 @@ const limitedCopy = [
   ['Apple keywords', listings.apple.keywords, 100],
   ['Apple description', listings.apple.description, 4_000],
   ['Apple release notes', listings.apple.releaseNotes, 4_000],
-  ['Google title', listings.googlePlay.appName, 30],
-  ['Google short description', listings.googlePlay.shortDescription, 80],
-  ['Google full description', listings.googlePlay.fullDescription, 4_000],
-  ['Google release notes', listings.googlePlay.releaseNotes, 500],
+  ['Apple promotional text', appleInfo?.promoText, 170],
+  ...(!iosOnly ? [
+    ['Google title', listings.googlePlay.appName, 30],
+    ['Google short description', listings.googlePlay.shortDescription, 80],
+    ['Google full description', listings.googlePlay.fullDescription, 4_000],
+    ['Google release notes', listings.googlePlay.releaseNotes, 500],
+  ] : []),
 ];
 for (const [label, value, limit] of limitedCopy) {
   if (typeof value !== 'string' || !value.trim() || [...value].length > limit) {
     throw new Error(`${label} must contain 1-${limit} characters.`);
   }
 }
-for (const screenshot of storeAssets.screenshots.recommendedOrder) {
+if (Buffer.byteLength(listings.apple.keywords, 'utf8') > 100) {
+  throw new Error('Apple keywords exceed the 100-byte App Store limit.');
+}
+
+const curriculumClaims = [
+  ['10 guided plans', /\b10 guided plans\b/iu],
+  ['100 short lessons', /\b100 short(?: Hindi)? lessons\b/iu],
+  ['30 standalone scenes', /\b30 standalone(?: real-life)? scenes\b/iu],
+];
+const primaryAppleCurriculumCopy = [
+  ['Apple listing description', listings.apple.description],
+  ['Apple listing release notes', listings.apple.releaseNotes],
+  ['Apple metadata description', appleInfo?.description],
+  ['Apple metadata release notes', appleInfo?.releaseNotes],
+  ['Apple promotional text', appleInfo?.promoText],
+];
+for (const [label, copy] of primaryAppleCurriculumCopy) {
+  for (const [claim, pattern] of curriculumClaims) {
+    if (typeof copy !== 'string' || !pattern.test(copy)) {
+      throw new Error(`${label} must truthfully state ${claim}.`);
+    }
+  }
+}
+for (const [label, copy] of [
+  ['Apple listing review notes', listings.apple.reviewNotes],
+  ['Apple metadata review notes', metadata.apple?.review?.notes],
+]) {
+  if (typeof copy !== 'string' || !/\b100 short(?: Hindi)? lessons\b/iu.test(copy) || !/\b30 standalone(?: real-life)? scenes\b/iu.test(copy)) {
+    throw new Error(`${label} must distinguish the 100 short lessons from the 30 standalone scenes.`);
+  }
+}
+const appleCopySurface = JSON.stringify({ listing: listings.apple, metadata: metadata.apple });
+if (/\b30 (?:written )?guided(?: Hindi)? scenes\b/iu.test(appleCopySurface)) {
+  throw new Error('Apple copy still contains the stale “30 guided scenes” curriculum claim.');
+}
+
+const expectedAppleStoryboard = [
+  ['lesson', 'assets/store/screenshots/ios/01-lesson.png'],
+  ['path', 'assets/store/screenshots/ios/02-path.png'],
+  ['home', 'assets/store/screenshots/ios/03-home.png'],
+  ['asha', 'assets/store/screenshots/ios/04-asha.png'],
+];
+const appleStoryboard = storeAssets.screenshots.apple.storyboard;
+if (!Array.isArray(appleStoryboard) || appleStoryboard.length !== expectedAppleStoryboard.length) {
+  throw new Error('Apple screenshots must define the four-shot lesson, path, home, and Asha storyboard.');
+}
+for (const [index, [expectedId, expectedFile]] of expectedAppleStoryboard.entries()) {
+  const screenshot = appleStoryboard[index];
+  if (screenshot?.id !== expectedId || screenshot?.file !== expectedFile) {
+    throw new Error(`Apple screenshot ${index + 1} must be ${expectedId} at ${expectedFile}.`);
+  }
+  if (typeof screenshot.headline !== 'string' || !screenshot.headline.trim()) {
+    throw new Error(`Apple screenshot ${expectedId} must include a truthful headline.`);
+  }
+}
+if (storeAssets.screenshots.apple.count.recommended !== appleStoryboard.length) {
+  throw new Error('Apple screenshot recommendation must match the four-shot storyboard.');
+}
+if (typeof storeAssets.screenshots.apple.overlayRule !== 'string' || !storeAssets.screenshots.apple.overlayRule.trim()) {
+  throw new Error('Apple screenshots must document the truthful overlay rule.');
+}
+
+for (const screenshot of [...storeAssets.screenshots.recommendedOrder, ...appleStoryboard]) {
   if ([...screenshot.altText].length > 140) throw new Error(`Screenshot alt text ${screenshot.id} exceeds 140 characters.`);
 }
 if (storeAssets.screenshots.apple.ipadSupportAtAudit !== false) throw new Error('Store assets must reflect the phone-only iOS v1 scope.');
@@ -82,13 +152,19 @@ if (metadata.configVersion !== 0 || metadata.apple?.advisory?.kidsAgeBand !== nu
 for (const key of ['ageRatingOverride', 'koreaAgeRatingOverride']) {
   if (metadata.apple?.advisory?.[key] !== 'NONE') throw new Error(`Apple ${key} must be declared explicitly.`);
 }
-if (metadata.apple?.info?.['en-US']?.keywords?.join(',').length > 100) throw new Error('Apple metadata keywords exceed 100 characters.');
+if (Buffer.byteLength(appleInfo?.keywords?.join(',') ?? '', 'utf8') > 100) {
+  throw new Error('Apple metadata keywords exceed the 100-byte App Store limit.');
+}
 
-if (eas.build?.production?.android?.buildType !== 'app-bundle') throw new Error('The Android production build must produce an app bundle.');
-if (eas.submit?.internal?.android?.track !== 'internal') throw new Error('The Android internal submission profile is missing.');
-if (eas.submit?.production?.android?.track !== 'production' || eas.submit?.production?.android?.releaseStatus !== 'draft') {
-  throw new Error('The Android production submission must create a safe production draft.');
+if (!iosOnly) {
+  if (eas.build?.production?.android?.buildType !== 'app-bundle') throw new Error('The Android production build must produce an app bundle.');
+  if (eas.submit?.internal?.android?.track !== 'internal') throw new Error('The Android internal submission profile is missing.');
+  if (eas.submit?.production?.android?.track !== 'production' || eas.submit?.production?.android?.releaseStatus !== 'draft') {
+    throw new Error('The Android production submission must create a safe production draft.');
+  }
 }
 if (eas.submit?.production?.ios?.metadataPath !== './store.config.js') throw new Error('The iOS submit profile must load dynamic Apple metadata.');
 
-console.log(`Validated ${specs.length} artwork files plus store copy, metadata, and release profiles.`);
+console.log(iosOnly
+  ? `Validated ${specs.length} iOS artwork files plus Apple store copy, metadata, and release profile.`
+  : `Validated ${specs.length} artwork files plus store copy, metadata, and release profiles.`);
