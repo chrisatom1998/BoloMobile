@@ -253,7 +253,7 @@ export default function HomeScreen() {
         <PressableFeedback
           accessibilityLabel={featuredPhrase ? `Practice saved phrase ${featuredPhrase.hi}` : 'Open saved phrases'}
           accessibilityRole="button"
-          onPress={() => router.push('/phrases')}
+          onPress={() => router.push((duePhrases.length ? '/review' : '/phrases') as Href)}
           style={[styles.phraseCard, largeTextLayout && styles.phraseCardLarge]}
           testID="today-language-garden"
         >

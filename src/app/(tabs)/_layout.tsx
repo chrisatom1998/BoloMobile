@@ -1,5 +1,6 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
 
+import { dueSavedPhrases } from '@/lib/learning';
 import { useAppState } from '@/state/app-state';
 import { useTheme } from '@/theme';
 
@@ -8,9 +9,10 @@ import { useTheme } from '@/theme';
  * the triggers static matters: native tabs remount if their route list changes.
  */
 export default function PrimaryTabsLayout() {
-  const { duePhrases } = useAppState();
+  const { phraseReviews, phrases } = useAppState();
   const { colors } = useTheme();
-  const dueCount = duePhrases.length;
+  // The badge points at the Phrases tab, which only lists saved phrases.
+  const dueCount = dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity).length;
 
   return (
     <NativeTabs
