@@ -15,15 +15,22 @@ jest.mock('expo-router/unstable-native-tabs', () => {
   return { NativeTabs };
 });
 
-let mockDuePhrases = [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }];
+const helloPhrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
+let mockDuePhrases = [helloPhrase];
+let mockPhrases = [helloPhrase];
 
 jest.mock('@/state/app-state', () => ({
-  useAppState: () => ({ duePhrases: mockDuePhrases }),
+  useAppState: () => ({ duePhrases: mockDuePhrases, phraseReviews: {}, phrases: mockPhrases }),
 }));
 
 import PrimaryTabsLayout from '../src/app/(tabs)/_layout';
 
 describe('primary tab navigation', () => {
+  beforeEach(() => {
+    mockDuePhrases = [helloPhrase];
+    mockPhrases = [helloPhrase];
+  });
+
   it('keeps the learning loop visible and surfaces due phrase count without changing tab routes', async () => {
     const view = await render(<PrimaryTabsLayout />);
 
@@ -42,9 +49,17 @@ describe('primary tab navigation', () => {
 
   it('does not show an empty badge when nothing is due', async () => {
     mockDuePhrases = [];
+    mockPhrases = [];
     const view = await render(<PrimaryTabsLayout />);
 
     expect(view.queryByTestId('tab-badge')).toBeNull();
-    mockDuePhrases = [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }];
+  });
+
+  it('does not badge Phrases for retention dues the learner never saved', async () => {
+    mockDuePhrases = [{ en: 'How are you?', hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?' }];
+    mockPhrases = [];
+    const view = await render(<PrimaryTabsLayout />);
+
+    expect(view.queryByTestId('tab-badge')).toBeNull();
   });
 });

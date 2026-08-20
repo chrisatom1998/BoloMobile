@@ -229,7 +229,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('One saved phrase is ready for a little water today.')).toBeTruthy();
+    expect(view.getByText('One phrase is ready for a little water today.')).toBeTruthy();
     expect(view.getByText('7 days')).toBeTruthy();
     expect(view.getByText('1 to water')).toBeTruthy();
     expect(view.getByText('Aap kaise hain?')).toBeTruthy();
@@ -237,8 +237,19 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('A warm hello')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText('Practice saved phrase आप कैसे हैं?'));
-    expect(mockRouterPush).toHaveBeenCalledWith('/phrases');
+    expect(mockRouterPush).toHaveBeenCalledWith('/review');
     expect(mockRouterPush).not.toHaveBeenCalledWith('/live');
+  });
+
+  it('opens review from the garden when only unsaved retention phrases are due', async () => {
+    mockAppState.duePhrases = [{ en: 'How are you?', hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?' }];
+    mockAppState.phrases = [];
+
+    const view = await render(<HomeScreen />);
+
+    await fireEvent.press(view.getByLabelText('Practice saved phrase आप कैसे हैं?'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/review');
+    expect(mockRouterPush).not.toHaveBeenCalledWith('/phrases');
   });
 
   it('updates the daily goal selection and renders progress from persisted practice', async () => {

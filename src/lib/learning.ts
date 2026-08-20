@@ -32,6 +32,58 @@ export function recommendedScenes(profile: LearnerProfile, progress: Record<stri
 
 export const reviewIntervals = [0, 1, 3, 7, 14, 30];
 
+/** Scene answers a learner missed are only reviewable when the catalog still holds their translations. */
+const scenePhrases = new Map<string, SavedPhrase>();
+for (const scene of scenes) {
+  for (const beat of scene.beats) {
+    for (const choice of beat.choices) {
+      if (!scenePhrases.has(choice.hi)) scenePhrases.set(choice.hi, { hi: choice.hi, latin: choice.latin, en: choice.en });
+    }
+  }
+}
+
+/** Keeps the retention queue reviewable in one sitting when a learner has missed answers across many scenes. */
+export const maxWeakPhraseCards = 20;
+
+function practicedTime(progress: SceneProgress) {
+  const parsed = Date.parse(progress.lastPracticedAt ?? '');
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Review cards for the answers a learner missed, most recently practiced scene first. */
+export function weakPhraseCards(progress: Record<string, SceneProgress>, limit = maxWeakPhraseCards): SavedPhrase[] {
+  const cards = new Map<string, SavedPhrase>();
+  for (const scene of Object.values(progress).sort((a, b) => practicedTime(b) - practicedTime(a))) {
+    for (const hi of scene.weakPhrases) {
+      const card = scenePhrases.get(hi);
+      if (!card || cards.has(hi)) continue;
+      cards.set(hi, card);
+      if (cards.size >= limit) return [...cards.values()];
+    }
+  }
+  return [...cards.values()];
+}
+
+/**
+ * The full retention pool: phrases the learner saved plus the ones they got wrong in a scene, so
+ * review still has cards for learners who never tapped save. Saved phrases stay first so their
+ * schedule keeps priority when mastery ties.
+ */
+export function retentionPhrases(
+  phrases: SavedPhrase[],
+  progress: Record<string, SceneProgress>,
+  limit = maxWeakPhraseCards,
+): SavedPhrase[] {
+  const saved = new Set(phrases.map((phrase) => phrase.hi));
+  return [...phrases, ...weakPhraseCards(progress, limit).filter((card) => !saved.has(card.hi))];
+}
+
+/** Grading and review history stay available for any phrase the retention loop can show. */
+export function isRetentionPhrase(hi: string, phrases: SavedPhrase[], progress: Record<string, SceneProgress>) {
+  return phrases.some((phrase) => phrase.hi === hi)
+    || Object.values(progress).some((scene) => scene.weakPhrases.includes(hi));
+}
+
 export function duePhraseList(phrases: SavedPhrase[], reviews: Record<string, PhraseReview>, today = dateKey()) {
   return phrases.filter((phrase) => (reviews[phrase.hi]?.dueAt ?? today) <= today);
 }

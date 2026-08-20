@@ -4,7 +4,7 @@ import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
-import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
+import { duePhraseList, dueSavedPhrases, isRetentionPhrase, retentionPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { updatePracticeWidget } from '@/lib/practice-widget';
@@ -53,6 +53,8 @@ type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   streak: number;
   dailySteps: number;
   duePhrases: SavedPhrase[];
+  /** Saved phrases plus scene answers the learner missed, whether or not they are due today. */
+  reviewPool: SavedPhrase[];
   reviewStreak: number;
 };
 
@@ -275,10 +277,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     if (!hydrated) return;
     updatePracticeWidget({
       streak: calculateStreak(state.streakDays, completedToday(state.practice)),
-      dueReviews: duePhraseList(state.phrases, state.phraseReviews).length,
+      dueReviews: duePhraseList(retentionPhrases(state.phrases, state.sceneProgress), state.phraseReviews).length,
       minutesToday: Math.floor(state.practice.seconds / 60),
     });
-  }, [hydrated, state.phraseReviews, state.phrases, state.practice, state.streakDays]);
+  }, [hydrated, state.phraseReviews, state.phrases, state.practice, state.sceneProgress, state.streakDays]);
 
   const commit = useCallback((updater: (current: PersistedState) => PersistedState, keys: PersistedKey[]) => {
     if (clearingAllDataRef.current) return;
@@ -311,13 +313,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         ? current.phrases.filter((saved) => saved.hi !== phrase.hi)
         : [...current.phrases, phrase].slice(-100);
       const phraseReviews = { ...current.phraseReviews };
-      if (exists) delete phraseReviews[phrase.hi];
-      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
+      if (!exists) phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
       // The 100-phrase cap can drop the oldest phrase; drop its review entry too
-      // so orphans never accumulate in storage.
+      // so orphans never accumulate in storage. Scene answers the learner missed
+      // stay in the retention loop, so their schedules are not orphans.
       const kept = new Set(phrases.map((saved) => saved.hi));
       for (const hi of Object.keys(phraseReviews)) {
-        if (!kept.has(hi)) delete phraseReviews[hi];
+        if (!kept.has(hi) && !isRetentionPhrase(hi, phrases, current.sceneProgress)) delete phraseReviews[hi];
       }
       return { ...current, phrases, phraseReviews };
     }, ['phrases', 'phraseReviews']);
@@ -325,9 +327,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const removePhrase = useCallback((hi: string) => {
     commit((current) => {
+      const phrases = current.phrases.filter((phrase) => phrase.hi !== hi);
       const phraseReviews = { ...current.phraseReviews };
-      delete phraseReviews[hi];
-      return { ...current, phrases: current.phrases.filter((phrase) => phrase.hi !== hi), phraseReviews };
+      // A removed phrase the learner also missed in a scene stays in the retention
+      // loop, so keep the schedule it already earned instead of restarting it.
+      if (!isRetentionPhrase(hi, phrases, current.sceneProgress)) delete phraseReviews[hi];
+      return { ...current, phrases, phraseReviews };
     }, ['phrases', 'phraseReviews']);
   }, [commit]);
 
@@ -377,7 +382,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const reviewPhrase = useCallback((hi: string, remembered: boolean) => {
     commit((current) => {
-      if (!current.phrases.some((phrase) => phrase.hi === hi)) return current;
+      if (!isRetentionPhrase(hi, current.phrases, current.sceneProgress)) return current;
       const previous = current.phraseReviews[hi] ?? defaultPhraseReview();
       const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
       const intervalDays = remembered ? reviewIntervals[mastery] ?? 0 : 0;
@@ -511,15 +516,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     clearAllData,
   }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
 
-  const value = useMemo<AppStateSlices>(() => ({
-    ...state,
-    aiConsent: state.aiConsent !== null,
-    hydrated,
-    streak: calculateStreak(state.streakDays, completedToday(state.practice)),
-    dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
-    duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews, Infinity),
-    reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
-  }), [state, hydrated]);
+  const value = useMemo<AppStateSlices>(() => {
+    const reviewPool = retentionPhrases(state.phrases, state.sceneProgress);
+    return {
+      ...state,
+      aiConsent: state.aiConsent !== null,
+      hydrated,
+      streak: calculateStreak(state.streakDays, completedToday(state.practice)),
+      dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
+      duePhrases: dueSavedPhrases(reviewPool, state.phraseReviews, Infinity),
+      reviewPool,
+      reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
+    };
+  }, [state, hydrated]);
 
   return (
     <AppActionsContext.Provider value={actions}>

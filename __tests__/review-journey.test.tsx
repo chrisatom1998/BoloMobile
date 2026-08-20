@@ -1,5 +1,5 @@
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { Pressable, Text } from 'react-native';
 
 const mockRouterReplace = jest.fn();
 
@@ -44,10 +44,11 @@ jest.mock('@/lib/speech', () => ({
 }));
 
 import ReviewScreen from '../src/app/review';
+import { scenes } from '../src/data/scenes';
 import { hapticSuccess, hapticWarning } from '../src/lib/haptics';
 import { dateKey, defaultPhraseReview, storageKeys } from '../src/lib/storage';
 import type { PhraseReview } from '../src/state/app-state-types';
-import { AppStateProvider, useAppStateValue } from '../src/state/app-state';
+import { AppStateProvider, useAppActions, useAppStateValue } from '../src/state/app-state';
 import { speakText } from '../src/lib/speech';
 
 const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default as {
@@ -60,10 +61,38 @@ const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const namaste = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
 const chai = { en: 'One tea, please.', hi: 'एक चाय दीजिए।', latin: 'ek chai dijiye.' };
 
+function expectDefined<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('Expected the value to be defined.');
+  return value;
+}
+
+const missedScene = expectDefined(scenes.find((scene) => scene.id === 'chai'));
+const missedChoice = expectDefined(expectDefined(missedScene.beats[0]).choices.find((choice) => !choice.correct));
+
+function seedMissedSceneAnswer() {
+  asyncStorage.__store.set(storageKeys.sceneProgress, JSON.stringify({
+    [missedScene.id]: {
+      completions: 1,
+      bestScore: 50,
+      bestAccuracy: 50,
+      totalCorrect: 1,
+      totalAnswers: 2,
+      lastPracticedAt: new Date().toISOString(),
+      lastBeatIndex: 0,
+      weakPhrases: [missedChoice.hi],
+    },
+  }));
+}
+
 function tomorrow(today = dateKey()) {
   const value = new Date(`${today}T12:00:00`);
   value.setDate(value.getDate() + 1);
   return dateKey(value);
+}
+
+function RemovePhraseProbe({ hi }: { hi: string }) {
+  const { removePhrase } = useAppActions();
+  return <Pressable onPress={() => removePhrase(hi)} testID="remove-phrase"><Text>Remove</Text></Pressable>;
 }
 
 function ReviewsProbe() {
@@ -107,6 +136,46 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(view.getByText('Save a phrase to start reviewing')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Choose a scene' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('reviews a phrase missed in a scene when the learner never saved one', async () => {
+    seedMissedSceneAnswer();
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Phrase 1 of 1')).toBeTruthy());
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByText(missedChoice.hi)).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    await waitFor(() => expect(readReviews(view)[missedChoice.hi]).toEqual(expect.objectContaining({
+      mastery: 1,
+      intervalDays: 1,
+      dueAt: tomorrow(),
+      correctReviews: 1,
+      totalReviews: 1,
+    })));
+    expect(view.getByText('Review complete')).toBeTruthy();
+  });
+
+  it('keeps the schedule of a missed scene answer when its saved copy is removed', async () => {
+    seedMissedSceneAnswer();
+    const saved = { en: missedChoice.en, hi: missedChoice.hi, latin: missedChoice.latin };
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([saved]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [saved.hi]: { ...defaultPhraseReview(dateKey()), mastery: 3, intervalDays: 7 },
+    }));
+    const view = await render(
+      <AppStateProvider>
+        <RemovePhraseProbe hi={saved.hi} />
+        <ReviewsProbe />
+      </AppStateProvider>,
+    );
+    await waitFor(() => expect(readReviews(view)[saved.hi]?.mastery).toBe(3));
+
+    await fireEvent.press(view.getByTestId('remove-phrase'));
+
+    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.phrases) ?? 'null')).toEqual([]));
+    expect(readReviews(view)[saved.hi]?.mastery).toBe(3);
   });
 
   it('reschedules a forgotten phrase for today and a remembered phrase for tomorrow', async () => {

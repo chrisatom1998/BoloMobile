@@ -64,7 +64,7 @@ export default function HomeScreen() {
   const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
   const featuredMastery = featuredPhrase ? (phraseReviews ?? {})[featuredPhrase.hi]?.mastery ?? 0 : 0;
   const gardenSummary = duePhrases.length > 0
-    ? `${countLabel(duePhrases.length)} saved phrase${duePhrases.length === 1 ? ' is' : 's are'} ready for a little water today.`
+    ? `${countLabel(duePhrases.length)} phrase${duePhrases.length === 1 ? ' is' : 's are'} ready for a little water today.`
     : phrases.length > 0
       ? `${countLabel(phrases.length)} saved phrase${phrases.length === 1 ? ' is' : 's are'} growing in your garden.`
       : 'Save a useful phrase and Asha will help it take root here.';
@@ -237,7 +237,7 @@ export default function HomeScreen() {
                 <Image accessible={false} contentFit="contain" source={gardenStreakIcon} style={styles.gardenChipIcon} />
                 <Text style={styles.streakChipText}>{streak} day{streak === 1 ? '' : 's'}</Text>
               </Pressable>
-              <View accessibilityLabel={`${duePhrases.length} saved phrases ready to water`} style={[styles.gardenChip, styles.waterChip]}>
+              <View accessibilityLabel={`${duePhrases.length} phrases ready to water`} style={[styles.gardenChip, styles.waterChip]}>
                 <Image accessible={false} contentFit="contain" source={gardenWaterIcon} style={styles.gardenChipIcon} />
                 <Text style={styles.waterChipText}>{duePhrases.length} to water</Text>
               </View>
@@ -253,7 +253,7 @@ export default function HomeScreen() {
         <PressableFeedback
           accessibilityLabel={featuredPhrase ? `Practice saved phrase ${featuredPhrase.hi}` : 'Open saved phrases'}
           accessibilityRole="button"
-          onPress={() => router.push('/phrases')}
+          onPress={() => router.push((duePhrases.length ? '/review' : '/phrases') as Href)}
           style={[styles.phraseCard, largeTextLayout && styles.phraseCardLarge]}
           testID="today-language-garden"
         >
