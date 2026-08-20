@@ -191,9 +191,18 @@ async function main() {
     await waitFor(client, async () => !(await bodyText(client)).includes('Loading Bolo'), 30_000, 'Bolo hydration');
 
     let text = await bodyText(client);
-    if (text.includes('Build my practice plan')) {
-      await click(client, 'Build my practice plan');
-      await sleep(2_000);
+    if (text.includes('Your Hindi plan in one minute') || text.includes('Next') || text.includes('Build my practice plan')) {
+      for (let step = 0; step < 8 && !text.includes('Build my practice plan'); step += 1) {
+        if (text.includes('Skip')) await click(client, 'Skip');
+        else if (text.includes('Next')) await click(client, 'Next');
+        else break;
+        await sleep(400);
+        text = await bodyText(client);
+      }
+      if (text.includes('Build my practice plan')) {
+        await click(client, 'Build my practice plan');
+        await sleep(2_000);
+      }
     }
 
     await client.send('Page.navigate', { url: `${APP_URL}/live` });

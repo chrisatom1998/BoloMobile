@@ -1,4 +1,5 @@
-import { scenes, type Scene, type SceneCategory } from '@/data/scenes';
+import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
+import { getScene, scenes, type Scene, type SceneCategory } from '@/data/scenes';
 import { dateKey, previousDate } from '@/lib/storage';
 import type { LearnerProfile, PhraseReview, PracticeDay, SavedPhrase, SceneProgress } from '@/state/app-state-types';
 
@@ -8,6 +9,115 @@ const goalCategories: Record<LearnerProfile['primaryGoal'], SceneCategory[]> = {
   family: ['Social', 'Everyday', 'Health'],
   work: ['Work', 'Everyday', 'Social'],
 };
+
+const goalPathKickers: Record<LearnerProfile['primaryGoal'], string> = {
+  conversation: 'YOUR CONVERSATION PATH',
+  family: 'YOUR FAMILY PATH',
+  travel: 'YOUR TRAVEL PATH',
+  work: 'YOUR WORK PATH',
+};
+
+const goalPreviewCopy: Record<LearnerProfile['primaryGoal'], { foundation: string; direct: string }> = {
+  conversation: {
+    foundation: "We'll start with greetings, then everyday conversation.",
+    direct: 'Jump into richer everyday conversation.',
+  },
+  family: {
+    foundation: "We'll start with greetings, then talk with family and friends.",
+    direct: 'Jump into spending time together.',
+  },
+  travel: {
+    foundation: "We'll start with greetings, then get you moving around town.",
+    direct: 'Jump into Get around town.',
+  },
+  work: {
+    foundation: "We'll start with greetings, then workplace Hindi.",
+    direct: 'Jump into Work with clarity.',
+  },
+};
+
+/** The two plans every newer learner starts from, in the order they are taught. */
+const foundationPlanIds = ['essentials', 'connection'];
+
+export type LessonSelection = {
+  action: 'Continue' | 'Start lesson' | 'Review lesson';
+  kicker: 'CONTINUE LESSON' | 'NEXT LESSON' | 'REVIEW LESSON';
+  pathKicker: string;
+  lessonId: string;
+  plan: LessonPlan;
+  title: string;
+  why: string;
+};
+
+export function planPreviewCopy(profile: LearnerProfile) {
+  const copy = goalPreviewCopy[profile.primaryGoal];
+  return profile.level === 'intermediate' ? copy.direct : copy.foundation;
+}
+
+function planIsIncomplete(plan: LessonPlan, progress: Record<string, SceneProgress>) {
+  return plan.lessonIds.some((lessonId) => (progress[lessonId]?.completions ?? 0) === 0);
+}
+
+function planIsStarted(plan: LessonPlan, progress: Record<string, SceneProgress>) {
+  return plan.lessonIds.some((lessonId) => (progress[lessonId]?.completions ?? 0) > 0 || (progress[lessonId]?.lastBeatIndex ?? 0) > 0);
+}
+
+/**
+ * Plans in the order this learner should meet them: foundations first for newer learners,
+ * then the plans that serve their goal (strongest category first), then everything else.
+ * Intermediate learners skip Starter plans they have never opened.
+ */
+function goalAwarePlans(profile: LearnerProfile, progress: Record<string, SceneProgress>) {
+  const preferred = goalCategories[profile.primaryGoal];
+  const foundations = profile.level === 'intermediate'
+    ? []
+    : lessonPlans.filter((plan) => foundationPlanIds.includes(plan.id));
+  const rest = lessonPlans.filter((plan) => !foundations.includes(plan)
+    && (profile.level !== 'intermediate' || plan.level !== 'Starter' || planIsStarted(plan, progress)));
+  const goalPlans = preferred.flatMap((category) => rest.filter((plan) => plan.category === category));
+  return [...foundations, ...goalPlans, ...rest.filter((plan) => !goalPlans.includes(plan))];
+}
+
+/**
+ * The single lesson Today offers and onboarding previews. A lesson left mid-practice always
+ * wins so recalibrating a plan never yanks a learner out of the turn they were on.
+ */
+export function selectNextLesson(profile: LearnerProfile, progress: Record<string, SceneProgress>): LessonSelection {
+  const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
+  const resumed = catalog
+    .filter(({ lessonId }) => (progress[lessonId]?.completions ?? 0) === 0 && (progress[lessonId]?.lastBeatIndex ?? 0) > 0)
+    .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
+      if (!selected) return candidate;
+      const candidateTime = Date.parse(progress[candidate.lessonId]?.lastPracticedAt ?? '');
+      const selectedTime = Date.parse(progress[selected.lessonId]?.lastPracticedAt ?? '');
+      const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
+      const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
+      return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
+    }, undefined);
+  const incompletePlan = goalAwarePlans(profile, progress).find((plan) => planIsIncomplete(plan, progress))
+    ?? lessonPlans.find((plan) => planIsIncomplete(plan, progress));
+  const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
+  const lessonId = resumed?.lessonId
+    ?? plan.lessonIds.find((id) => (progress[id]?.completions ?? 0) === 0)
+    ?? plan.lessonIds[0]!;
+  const mode = resumed ? 'continue' : incompletePlan ? 'next' : 'review';
+
+  return {
+    action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
+    kicker: mode === 'continue' ? 'CONTINUE LESSON' : mode === 'next' ? 'NEXT LESSON' : 'REVIEW LESSON',
+    pathKicker: goalPathKickers[profile.primaryGoal],
+    lessonId,
+    plan,
+    title: getScene(lessonId)?.title ?? plan.title,
+    // The goal-path copy only makes sense when we are actually starting the next
+    // lesson on that path; resuming and reviewing need their own reassurance.
+    why: mode === 'continue'
+      ? "We'll pick up where you left off in this lesson."
+      : mode === 'review'
+        ? "You've finished every lesson. Review one to keep it fresh."
+        : planPreviewCopy(profile),
+  };
+}
 
 export function recommendedScenes(profile: LearnerProfile, progress: Record<string, SceneProgress>, limit = 3): Scene[] {
   const preferred = goalCategories[profile.primaryGoal];

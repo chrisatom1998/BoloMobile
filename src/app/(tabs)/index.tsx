@@ -12,6 +12,7 @@ import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
+import { selectNextLesson } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { colors, makeStyles, maxContentWidth, radius, spacing, useSharedStyles } from '@/theme';
@@ -71,37 +72,7 @@ export default function HomeScreen() {
   const featuredPhraseText = featuredPhrase
     ? profile.scriptPreference === 'devanagari' ? featuredPhrase.hi : featuredPhrase.latin
     : 'Save your first phrase';
-  const lessonSelection = useMemo(() => {
-    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
-    const resumed = catalog
-      .filter(({ lessonId }) => {
-        const progress = sceneProgress[lessonId];
-        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-      })
-      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
-        if (!selected) return candidate;
-        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-      }, undefined);
-    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
-    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
-    const lessonId = resumed?.lessonId
-      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
-      ?? plan.lessonIds[0]!;
-    const scene = getScene(lessonId);
-    const mode = resumed ? 'continue' : incompletePlan ? 'next' : 'review';
-
-    return {
-      action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
-      kicker: mode === 'continue' ? 'CONTINUE LESSON' : mode === 'next' ? 'NEXT LESSON' : 'REVIEW LESSON',
-      lessonId,
-      plan,
-      title: scene?.title ?? plan.title,
-    };
-  }, [sceneProgress]);
+  const lessonSelection = useMemo(() => selectNextLesson(profile, sceneProgress), [profile, sceneProgress]);
   const currentPlan = lessonSelection.plan;
 
   const goalFooter = useMemo(() => (
@@ -273,6 +244,7 @@ export default function HomeScreen() {
         </PressableFeedback>
 
         <View style={styles.nextPractice} testID="today-next-practice">
+          <JournalKicker style={styles.pathKicker}>{lessonSelection.pathKicker}</JournalKicker>
           <JournalKicker>{lessonSelection.kicker}</JournalKicker>
           <JournalDisplay style={styles.nextPracticeTitle}>{lessonSelection.title}</JournalDisplay>
           <Button accessibilityLabel={lessonSelection.action} accessibilityRole="button" onPress={() => openLesson(lessonSelection.lessonId)} size="md" style={styles.nextButton} variant="secondary">
@@ -401,6 +373,7 @@ const useStyles = makeStyles((c) => ({
   phraseTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 16, lineHeight: 21, fontWeight: '700', marginTop: 1 },
   phraseMastery: { color: c.muted, fontSize: 11, lineHeight: 15, fontWeight: '700', marginTop: 1 },
   nextPractice: { width: '100%', minHeight: 123, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderCurve: 'continuous', backgroundColor: '#FFF7E3', borderColor: 'rgba(232, 199, 143, 0.48)', borderWidth: 1, padding: spacing.md, gap: 6, marginTop: 21, boxShadow: '0 5px 14px rgba(94, 66, 34, 0.08)' },
+  pathKicker: { color: c.muted, textAlign: 'center' },
   nextPracticeTitle: { width: '100%', fontSize: 20, lineHeight: 25, letterSpacing: -0.25, textAlign: 'center' },
   learningHeading: { width: '100%', minHeight: 35, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.md },
   learningHeadingLarge: { alignItems: 'flex-start', flexDirection: 'column' },

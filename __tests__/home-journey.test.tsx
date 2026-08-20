@@ -10,6 +10,14 @@ const mockAppState = {
   duePhrases: [] as { en: string; hi: string; latin: string }[],
   goal: 10 as 5 | 10 | 15,
   hydrated: true,
+  learnerProfile: undefined as undefined | {
+    completed: boolean;
+    level: 'new' | 'beginner' | 'intermediate';
+    microphoneTested: boolean;
+    primaryGoal: 'conversation' | 'family' | 'travel' | 'work';
+    responseLanguage: 'en' | 'hi';
+    scriptPreference: 'both' | 'devanagari' | 'latin';
+  },
   phraseReviews: {} as Record<string, { mastery: number }>,
   phrases: [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }] as { en: string; hi: string; latin: string }[],
   practice: { chaiDone: true, date: '2026-07-16', liveDone: false, seconds: 300 },
@@ -69,6 +77,7 @@ describe('HomeScreen primary journey', () => {
     mockAppState.dailySteps = 1;
     mockAppState.goal = 10;
     mockAppState.hydrated = true;
+    mockAppState.learnerProfile = undefined;
     mockAppState.duePhrases = [];
     mockAppState.phraseReviews = {};
     mockAppState.phrases = [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }];
@@ -170,6 +179,24 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('Ask where someone lives')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeTruthy();
     expect(view.queryByLabelText('Start speaking, plan 1 of 10, 10 of 10 lessons complete')).toBeNull();
+  });
+
+  it('opens on the travel plan for an intermediate traveller', async () => {
+    mockAppState.learnerProfile = {
+      completed: true,
+      level: 'intermediate',
+      microphoneTested: false,
+      primaryGoal: 'travel',
+      responseLanguage: 'en',
+      scriptPreference: 'both',
+    };
+
+    const view = await render(<HomeScreen />);
+
+    expect(view.getByText('YOUR TRAVEL PATH')).toBeTruthy();
+    expect(view.getByText('NEXT LESSON')).toBeTruthy();
+    expect(view.getByText('Find the bus')).toBeTruthy();
+    expect(view.getByLabelText('Get around town, plan 4 of 10, 0 of 10 lessons complete')).toBeTruthy();
   });
 
   it('selects the second lesson after the first lesson is complete', async () => {
