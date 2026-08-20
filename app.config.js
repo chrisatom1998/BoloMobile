@@ -71,9 +71,9 @@ module.exports = ({ config }) => {
     owner: configuredOwner,
     extra: {
       ...config.extra,
-      publicPrivacyUrl: `${publicSiteUrl}/?page=privacy`,
-      publicSupportUrl: `${publicSiteUrl}/?page=support`,
-      publicTermsUrl: `${publicSiteUrl}/?page=terms`,
+      publicPrivacyUrl: `${publicSiteUrl}/privacy`,
+      publicSupportUrl: `${publicSiteUrl}/support`,
+      publicTermsUrl: `${publicSiteUrl}/terms`,
       boloApiUrl,
       ...(configuredProjectId ? { eas: { ...config.extra?.eas, projectId: configuredProjectId } } : {}),
     },

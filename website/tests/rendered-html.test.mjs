@@ -30,9 +30,10 @@ test("server-renders the production Bolo landing page", async () => {
   assert.doesNotMatch(html, /live translat/i);
   assert.match(html, /og:image:width[^>]+content="1731"|content="1731"[^>]+og:image:width/i);
   assert.match(html, /og:image:height[^>]+content="909"|content="909"[^>]+og:image:height/i);
-  assert.match(html, /href="https:[^"]+\?page=privacy"/i);
-  assert.match(html, /href="https:[^"]+\?page=support"/i);
-  assert.match(html, /href="https:[^"]+\?page=terms"/i);
+  assert.match(html, /href="\/privacy"/i);
+  assert.match(html, /href="\/support"/i);
+  assert.match(html, /href="\/terms"/i);
+  assert.doesNotMatch(html, /\?page=(privacy|support|terms)/i);
   assert.doesNotMatch(html, /codex-preview|starter project|taking shape|loading skeleton/i);
 });
 
@@ -72,6 +73,68 @@ test("image endpoint rejects non-relative sources without an IMAGES binding", as
     path: "/_vinext/image?url=https%3A%2F%2Fevil.example%2Fx.png&w=640&q=75",
   });
   assert.equal(response.status, 400);
+});
+
+const policyPages = [
+  { path: "/privacy", title: "Privacy policy", version: "2026-07-16", effective: "July 16, 2026" },
+  { path: "/terms", title: "Terms of use", version: "2026-08-20", effective: "August 20, 2026" },
+  { path: "/support", title: "Support", version: "2026-08-20", effective: "August 20, 2026" },
+];
+
+for (const page of policyPages) {
+  test(`serves the versioned ${page.path} page the store listings link to`, async () => {
+    const response = await render({ path: page.path });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+    const html = await response.text();
+    assert.match(html, /<html lang="en">/i);
+    assert.match(html, new RegExp(`<title>Bolo — ${page.title}</title>`, "i"));
+    // Server components split interpolated text with comment markers.
+    assert.match(html, new RegExp(`Version <!-- -->${page.version}<!-- --> · Effective <!-- -->${page.effective}`));
+    // Every document must reach the other two and the landing page.
+    for (const link of ['href="/privacy"', 'href="/terms"', 'href="/support"', 'href="/"']) {
+      assert.ok(html.includes(link), `${page.path} is missing ${link}`);
+    }
+    assert.doesNotMatch(html, /\?page=(privacy|support|terms)/i);
+  });
+}
+
+test("publishes the privacy page with the app's current AI consent notice version", async () => {
+  const [storage, legal] = await Promise.all([
+    readFile(new URL("../../src/lib/storage.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/legal.tsx", import.meta.url), "utf8"),
+  ]);
+  const appVersion = storage.match(/\bAI_CONSENT_VERSION\s*=\s*(\d+)\s+as const/u)?.[1];
+  const siteVersion = legal.match(/\baiConsentVersion:\s*(\d+)/u)?.[1];
+  assert.ok(appVersion, "could not read AI_CONSENT_VERSION from the app");
+  assert.equal(siteVersion, appVersion);
+
+  const html = await (await render({ path: "/privacy" })).text();
+  assert.match(html, new RegExp(`AI data-use consent notice version <!-- -->${appVersion}`));
+  assert.match(html, /does not create a recording file/i);
+  assert.match(html, /disabled between turns/i);
+});
+
+test("keeps the support page usable whether or not a support address is configured", async () => {
+  const previous = process.env.BOLO_SUPPORT_EMAIL;
+  try {
+    delete process.env.BOLO_SUPPORT_EMAIL;
+    const withoutEmail = await (await render({ path: "/support" })).text();
+    assert.match(withoutEmail, /monitored support address for this release is published with/i);
+    assert.doesNotMatch(withoutEmail, /mailto:/i);
+
+    process.env.BOLO_SUPPORT_EMAIL = "help@example.test";
+    const withEmail = await (await render({ path: "/support" })).text();
+    assert.match(withEmail, /href="mailto:help@example\.test"/);
+
+    process.env.BOLO_SUPPORT_EMAIL = "not-an-address";
+    const withBadEmail = await (await render({ path: "/support" })).text();
+    assert.doesNotMatch(withBadEmail, /mailto:/i);
+  } finally {
+    if (previous === undefined) delete process.env.BOLO_SUPPORT_EMAIL;
+    else process.env.BOLO_SUPPORT_EMAIL = previous;
+  }
 });
 
 test("keeps production copy and required public artwork checked in", async () => {

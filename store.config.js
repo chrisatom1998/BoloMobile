@@ -41,8 +41,8 @@ module.exports = {
       ...baseConfig.apple.info,
       'en-US': {
         ...baseConfig.apple.info['en-US'],
-        privacyPolicyUrl: `${site}/?page=privacy`,
-        supportUrl: `${site}/?page=support`,
+        privacyPolicyUrl: `${site}/privacy`,
+        supportUrl: `${site}/support`,
         marketingUrl: `${site}/`,
       },
     },

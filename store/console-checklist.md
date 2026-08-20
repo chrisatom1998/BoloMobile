@@ -6,7 +6,7 @@ Complete the owner-controlled items first; the store records cannot be finalized
 
 - [ ] **REQUIRED_OWNER_INPUT:** Choose permanent iOS bundle and Android package identifiers under a namespace the publisher controls. Confirm them before creating either store record.
 - [ ] **REQUIRED_OWNER_INPUT:** Supply the publisher's legal display name and copyright owner, and confirm rights to the Bolo name, lesson copy, fonts, artwork, and all included content.
-- [ ] **REQUIRED_OWNER_INPUT:** Supply a monitored privacy/support email for the store records and the operational support queue. Public privacy, support, and terms pages are already hosted and must continue to match production data practices.
+- [ ] **REQUIRED_OWNER_INPUT:** Supply a monitored privacy/support email for the store records and the operational support queue. Public privacy, support, and terms pages are served by the in-repo website in `website/` and must continue to match production data practices; build that site with `BOLO_SUPPORT_EMAIL` set so the support page publishes the monitored address.
 - [ ] **REQUIRED_OWNER_INPUT:** Confirm AppDeploy and OpenAI production terms, retention and deletion behavior, service-provider status, security controls, content safeguards, and the complete encrypted transit path. Reconcile the store privacy declarations after that review.
 - [ ] **REQUIRED_OWNER_INPUT:** Supply Apple Developer/App Store Connect and Google Play Console ownership, agreements, tax or trader-status information, and secure submission credentials. Do not commit credentials to the repository.
 - [ ] **REQUIRED_OWNER_INPUT:** Supply Apple's app-review contact first name, last name, monitored email, and phone number.

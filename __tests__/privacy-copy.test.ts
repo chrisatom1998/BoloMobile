@@ -28,6 +28,7 @@ describe('live voice privacy copy', () => {
     const disclosures = {
       consent: read('src/components/ai-consent-gate.tsx'),
       inAppPolicy: read('src/app/privacy.tsx'),
+      publicSitePolicy: read('website/app/privacy/page.tsx'),
       readme: read('README.md'),
       storeChecklist: read('store/console-checklist.md'),
       storeDeclarations: read('store/privacy-declarations.md'),
@@ -42,12 +43,12 @@ describe('live voice privacy copy', () => {
     }
   });
 
-  it('declares the contact data collected by the linked support form', () => {
+  it('declares the contact data collected through the public support page', () => {
     const declarations = read('store/privacy-declarations.md');
 
     expect(declarations).toMatch(/Contact Info → Name/iu);
     expect(declarations).toMatch(/Contact Info → Email Address/iu);
-    expect(declarations).toMatch(/support form does collect the optional name and email address/iu);
+    expect(declarations).toMatch(/support page does collect the optional name and email address/iu);
   });
 
   it('discloses bounded local chat retention and deletion', () => {

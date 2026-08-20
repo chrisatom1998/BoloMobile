@@ -135,6 +135,21 @@ em { color: var(--terracotta); font-style: italic; font-weight: 400; }
 .closing .eyebrow { position: relative; z-index: 2; }.closing h2 { position: relative; z-index: 2; margin: 28px 0 38px; font-size: clamp(58px, 6vw, 92px); line-height: 0.95; }.closing .primary-button { position: relative; z-index: 2; }.closing-note { position: relative; z-index: 2; margin: 22px 0 0; color: var(--muted); font-size: 11px; letter-spacing: 0.06em; }
 .closing-stamp { position: absolute; top: 56px; right: 8vw; width: 128px; height: 128px; border: 1px solid rgba(172,72,40,0.5); border-radius: 50%; display: grid; place-items: center; color: var(--terracotta); font-family: var(--font-serif), Georgia, serif; font-size: 31px; line-height: 0.85; transform: rotate(8deg); }.closing-stamp::after { content: ""; position: absolute; inset: 7px; border: 1px dashed rgba(172,72,40,0.42); border-radius: 50%; }.closing-stamp span { font-family: var(--font-sans), sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
 
+.policy { display: flex; flex-direction: column; min-height: 100vh; }
+.policy-shell { width: min(100% - 48px, 760px); margin: clamp(56px, 8vw, 96px) auto clamp(72px, 9vw, 120px); flex: 1 0 auto; }
+.policy h1 { margin: 26px 0 18px; font-family: var(--font-serif), Georgia, serif; font-size: clamp(46px, 6vw, 68px); font-weight: 400; letter-spacing: -0.04em; line-height: 1; }
+.policy-lead { margin: 0 0 14px; color: var(--muted); font-size: 17px; line-height: 1.6; }
+.policy-version { margin: 0; padding-bottom: 26px; border-bottom: 1px solid var(--line); color: var(--terracotta); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.policy-note { margin: 26px 0 0; padding: 18px 20px; border-radius: 14px; background: var(--paper); border: 1px solid var(--line); color: var(--muted); font-size: 13px; line-height: 1.7; }
+.policy-section { margin-top: 42px; }
+.policy-section h2 { margin: 0 0 12px; font-family: var(--font-serif), Georgia, serif; font-size: 29px; font-weight: 400; letter-spacing: -0.03em; }
+.policy-section p, .policy-section li { color: var(--muted); font-size: 15px; line-height: 1.8; }
+.policy-section p { margin: 0 0 14px; }
+.policy-section ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
+.policy-section strong { color: var(--ink); }
+.policy-section a, .policy-note a { color: var(--forest-dark); font-weight: 700; text-underline-offset: 4px; }
+.policy nav a[aria-current="page"] { color: var(--terracotta); font-weight: 700; }
+
 footer { min-height: 115px; padding: 26px clamp(24px, 6.75vw, 108px); background: var(--ink); color: var(--cream); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 30px; }
 .footer-brand .brand-name { font-size: 29px; } footer > p { margin: 0; color: rgba(255,255,255,0.55); font-family: var(--font-serif), Georgia, serif; font-size: 18px; } footer > div { display: flex; justify-content: flex-end; gap: 26px; } footer > div a { color: rgba(255,255,255,0.72); font-size: 11px; text-underline-offset: 5px; }
 
@@ -163,6 +178,15 @@ footer { min-height: 115px; padding: 26px clamp(24px, 6.75vw, 108px); background
 
 @media (max-width: 480px) {
   .site-header nav { display: none; }.hero-copy { padding-top: 62px; }.hero h1 { font-size: 62px; }.hero-actions { align-items: flex-start; flex-direction: column; }.hero-proof strong { font-size: 27px; }.hero-proof span { letter-spacing: 0.07em; font-size: 8px; }.field-note { left: 20px; }.phone-wrap { width: 248px; }.practice-postcard { transform: rotate(-2deg); }.moment-strip span:nth-of-type(n+3), .moment-strip i:nth-of-type(n+3) { display: none; }.asha-visual { min-height: 600px; }.asha-visual > img { width: 245px; }.asha-halo { display: none; }
+}
+
+/* The landing header hides its in-page nav on small screens; the policy pages
+   need theirs, because it is the only way between the three documents. */
+@media (max-width: 800px) {
+  .policy .site-header { height: auto; padding-block: 18px; flex-wrap: wrap; gap: 14px; }
+  .policy .site-header nav { display: flex; gap: 20px; }
+  .policy .site-header nav a { display: inline-flex; font-size: 12px; }
+  .policy-shell { width: min(100% - 40px, 760px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

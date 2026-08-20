@@ -273,7 +273,7 @@ async function checkPublicPage(page, pass) {
   const startedAt = performance.now();
   let response;
   try {
-    response = await fetch(`${PUBLIC_URL}?page=${page}`, {
+    response = await fetch(`${PUBLIC_URL}${page}`, {
       headers: { Accept: 'text/html', 'User-Agent': 'BoloLiveAcceptance/1.0' },
       redirect: 'follow',
       signal: requestSignal(label, 20_000),

@@ -21,6 +21,10 @@ This project does not use `wrangler.jsonc`.
 ## Layout
 
 - `app/page.tsx` — the single-page Bolo landing page
+- `app/privacy/page.tsx`, `app/terms/page.tsx`, `app/support/page.tsx` — the
+  public policy pages the mobile app and both store listings link to
+- `app/legal.tsx` — shared chrome for those pages plus `policyDocuments`, which
+  holds each document's version and effective date
 - `app/layout.tsx` — metadata (Open Graph, icons) derived per request
 - `app/globals.css` — all page styling
 - `worker/index.ts` — Cloudflare Worker entry; serves the app and guards the
@@ -41,9 +45,19 @@ scenes are added or removed in `../src/data/scenes.ts`, update the counts in
 `app/page.tsx` and the description in `app/layout.tsx`; `npm test` asserts the
 footnote copy stays consistent.
 
-The privacy/terms/support links point at the existing public pages that the
-mobile app and store listings also use (see `../store.config.json`). Do not
-deploy this site over that URL until equivalent pages exist here.
+The privacy, terms, and support pages live here and are linked as `/privacy`,
+`/terms`, and `/support`; the mobile app and both store listings point at the
+same paths on this site's origin (see `../app.config.js` and
+`../store.config.js`). Each document carries a version and an effective date in
+`app/legal.tsx` — bump both when its wording changes in substance. The privacy
+page also states the AI data-use consent notice version, and `npm test` fails if
+it drifts from `AI_CONSENT_VERSION` in `../src/lib/storage.ts`.
+
+The support page publishes the monitored support address from the
+`BOLO_SUPPORT_EMAIL` environment variable, the same variable the release scripts
+require. No address is checked in; without it the page routes people to the
+support contact published with the store listings, so build and deploy with the
+variable set.
 
 ## Useful Commands
 

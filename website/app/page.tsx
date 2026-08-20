@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 const scenes = [
   { number: "01", place: "Delhi · 9:10 AM", title: "Order a chai", hindi: "एक चाय, कृपया", note: "Cafés & food", tone: "terracotta" },
@@ -146,7 +147,7 @@ export default function Home() {
         <div className="privacy-card">
           <div className="privacy-mark" aria-hidden="true">ब</div>
           <div><p className="eyebrow light"><span />Practice on your terms</p><h2>Offline at the core.<br /><em>AI only when you choose.</em></h2></div>
-          <div className="privacy-copy"><p>Bolo’s written scenes, saved phrases, and progress work without an account. Connected coaching begins only after a clear consent step, and you can withdraw consent or delete local data in Settings.</p><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy">Read the privacy policy <span aria-hidden="true">↗</span></a></div>
+          <div className="privacy-copy"><p>Bolo’s written scenes, saved phrases, and progress work without an account. Connected coaching begins only after a clear consent step, and you can withdraw consent or delete local data in Settings.</p><Link href="/privacy">Read the privacy policy <span aria-hidden="true">↗</span></Link></div>
         </div>
       </section>
 
@@ -161,7 +162,7 @@ export default function Home() {
       <footer>
         <a className="brand footer-brand" href="#top"><Image src="/bolo-icon.png" alt="" width={44} height={44} /><span className="brand-name">Bolo</span></a>
         <p>Hindi for real moments.</p>
-        <div><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy">Privacy</a><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms">Terms</a><a href="https://74e39779183cf78fed.v2.appdeploy.ai/?page=support">Support</a></div>
+        <div><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/support">Support</Link></div>
       </footer>
     </main>
   );

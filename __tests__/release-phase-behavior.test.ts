@@ -116,8 +116,8 @@ describe('iOS release validation phases', () => {
     const storeConfigPath = join(sandboxRoot, 'store.config.js');
     const storeConfig = readFileSync(storeConfigPath, 'utf8');
     const mismatchedStoreConfig = storeConfig.replace(
-      'privacyPolicyUrl: `${site}/?page=privacy`,',
-      "privacyPolicyUrl: 'https://example.test/?page=privacy',",
+      'privacyPolicyUrl: `${site}/privacy`,',
+      "privacyPolicyUrl: 'https://example.test/privacy',",
     );
     expect(mismatchedStoreConfig).not.toBe(storeConfig);
     writeFileSync(storeConfigPath, mismatchedStoreConfig);
