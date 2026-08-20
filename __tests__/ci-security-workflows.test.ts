@@ -73,6 +73,13 @@ describe('CI supply-chain controls', () => {
     expect(releaseWorkflow).toContain('npx --no-install expo-doctor');
     expect(ciWorkflow).not.toContain('expo-doctor@latest');
   });
+
+  test('fails CI when Expo SDK dependency versions drift', () => {
+    const ciWorkflow = read('.github/workflows/ci.yml');
+    const expoDoctorJob = matchingBlock(ciWorkflow, '  expo-doctor:', '  ios-prebuild:');
+
+    expect(expoDoctorJob).toContain('CI=1 npx expo install --check');
+  });
 });
 
 describe('fail-closed merge verification', () => {
@@ -113,6 +120,7 @@ describe('fail-closed merge verification', () => {
 
   test('always aggregates every merge job and rejects non-success results', () => {
     const jobs = [
+      'dependency-audit',
       'verify',
       'website',
       'expo-doctor',

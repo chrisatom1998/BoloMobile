@@ -4,9 +4,9 @@ This runbook separates merge checks, nightly staging acceptance, signed artifact
 
 ## Required checks on `main`
 
-Create an active branch ruleset for `main`. Require a pull request, require the branch to be up to date, dismiss stale approvals, require conversation resolution, and block force pushes and deletion. Require the single status check `required-checks` by its exact context name.
+Create an active branch ruleset for `main`. Require a pull request, require the branch to be up to date, dismiss stale approvals, require conversation resolution, and block force pushes and deletion. Require both `dependency-audit` and `required-checks` by their exact context names. Keeping the audit job directly required preserves the gate for open branches created before the aggregate learned to include it.
 
-`required-checks` uses `if: always()` and fails unless all eight merge jobs report `success`: `verify`, `website`, `expo-doctor`, `ios-prebuild`, `production-config`, `ios-native-build`, `maestro-smoke`, and `security`. This aggregate is intentionally fail-closed: a failed prerequisite that skips a downstream native job cannot be reported as an acceptable skipped required check.
+`required-checks` uses `if: always()` and fails unless all nine merge jobs report `success`: `dependency-audit`, `verify`, `website`, `expo-doctor`, `ios-prebuild`, `production-config`, `ios-native-build`, `maestro-smoke`, and `security`. This aggregate is intentionally fail-closed: a failed prerequisite that skips a downstream native job cannot be reported as an acceptable skipped required check.
 
 Do not add CodeQL, the scheduled nightly workflow, release preflight, TestFlight upload, or physical signoff as required merge checks. A sole owner cannot satisfy an independent approval rule; add a trusted reviewer before requiring one approval or preventing self-approval.
 

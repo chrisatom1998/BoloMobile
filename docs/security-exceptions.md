@@ -26,15 +26,15 @@ Release and the dependency-audit CI job remain intentionally blocked while eithe
       "ghsa": "GHSA-w3rx-r6r6-pgpr",
       "module": "image-size",
       "expires": "2026-11-06",
-      "owner": "PENDING",
-      "acceptedOn": "PENDING"
+      "owner": "@chrisatom1998",
+      "acceptedOn": "2026-08-20"
     },
     {
       "ghsa": "GHSA-5p2g-fcmc-qvqq",
       "module": "image-size",
       "expires": "2026-11-06",
-      "owner": "PENDING",
-      "acceptedOn": "PENDING"
+      "owner": "@chrisatom1998",
+      "acceptedOn": "2026-08-20"
     }
   ]
 }
