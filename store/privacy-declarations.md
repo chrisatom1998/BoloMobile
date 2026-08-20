@@ -12,10 +12,10 @@ Select **Yes, data is collected**. Use the following conservative declarations f
 | User Content → Audio Data | Voice turns and pronunciation recordings submitted after consent | App Functionality | Yes — the connected audio paths use the installation identifier | No |
 | Identifiers → Device ID | A random identifier generated for this app installation | App Functionality | Yes | No |
 | Usage Data → Product Interaction | An optional report action and its server-side report time | App Functionality | Yes — the report includes the installation identifier | No |
-| Contact Info → Name | A name entered voluntarily on the public support form | Developer Communications → Customer Support | Yes — it is submitted with the support request | No |
-| Contact Info → Email Address | An email entered voluntarily on the public support form | Developer Communications → Customer Support | Yes — it is submitted with the support request | No |
+| Contact Info → Name | A name entered voluntarily in a request sent to the public support address | Developer Communications → Customer Support | Yes — it is submitted with the support request | No |
+| Contact Info → Email Address | An email entered voluntarily in a request sent to the public support address | Developer Communications → Customer Support | Yes — it is submitted with the support request | No |
 
-Do not declare phone number, physical address, precise or coarse location, contacts, photos, browsing history, purchases, financial information, health records, advertising data, crash data, or performance data based on this client. The linked support form does collect the optional name and email address declared above. Locally stored chat history, phrases, goals, practice history, consent, and streak data are not Apple “collected” data while they remain only on the device.
+Do not declare phone number, physical address, precise or coarse location, contacts, photos, browsing history, purchases, financial information, health records, advertising data, crash data, or performance data based on this client. The linked support page does collect the optional name and email address declared above, through the support request a user chooses to send. Locally stored chat history, phrases, goals, practice history, consent, and streak data are not Apple “collected” data while they remain only on the device.
 
 The privacy-policy URL is required in App Store Connect. A user-privacy-choices URL is optional. Reconcile the table with the production backend and every third-party processor before publishing the answers.
 
@@ -29,8 +29,8 @@ Answer **Yes** to “Does your app collect or share any of the required user dat
 | Audio files → Voice or sound recordings | Yes | Yes | No | Optional | App functionality |
 | Device or other IDs | Yes | Yes | No | Optional | App functionality |
 | App activity → App interactions | Yes, for an optional report action | Yes | No | Optional | App functionality |
-| Personal info → Name | Yes, through the public support form | Yes | No | Optional | Developer communications |
-| Personal info → Email address | Yes, through the public support form | Yes | No | Optional | Developer communications |
+| Personal info → Name | Yes, through the public support page | Yes | No | Optional | Developer communications |
+| Personal info → Email address | Yes, through the public support page | Yes | No | Optional | Developer communications |
 
 Security-practice answers supported by the client:
 

@@ -188,7 +188,8 @@ if (!publicPagesSource.includes('Constants.expoConfig?.extra')) {
 for (const [page, url] of Object.entries(publicPages)) {
   if (typeof url !== 'string') throw new Error(`The production ${page} URL is missing.`);
   const parsed = new URL(url);
-  if (parsed.protocol !== 'https:' || parsed.searchParams.get('page') !== page) {
+  // The pages are served by the in-repo website at /privacy, /terms, and /support.
+  if (parsed.protocol !== 'https:' || parsed.pathname.replace(/\/+$/u, '') !== `/${page}` || parsed.search !== '') {
     throw new Error(`The production ${page} URL must be HTTPS and identify the ${page} page.`);
   }
   if (!publicPagesSource.includes(extraKeys[page])) {

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Each lesson turn now speaks the situation's Hindi line aloud automatically before the learner answers, using bundled offline audio when available, while the English text stays on screen.
+- Versioned privacy, terms, and support pages are served by the in-repo website at `/privacy`, `/terms`, and `/support`, and the app, store metadata, and release validators now point at those paths instead of the `?page=` selectors. The support page publishes the monitored `BOLO_SUPPORT_EMAIL` address when the site is built with it.
 
 ### Fixed
 

@@ -7,9 +7,9 @@ jest.mock('expo-web-browser', () => ({ openBrowserAsync: jest.fn(async () => ({ 
 describe('public policy pages', () => {
   it('uses the production HTTPS pages required by the store listings', async () => {
     expect(publicPageUrls).toEqual({
-      privacy: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
-      support: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
-      terms: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+      privacy: 'https://74e39779183cf78fed.v2.appdeploy.ai/privacy',
+      support: 'https://74e39779183cf78fed.v2.appdeploy.ai/support',
+      terms: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms',
     });
 
     await openPublicPage('privacy');
@@ -23,9 +23,9 @@ describe('public policy pages', () => {
         default: {
           expoConfig: {
             extra: {
-              publicPrivacyUrl: 'https://pages.example.test/?page=privacy',
-              publicSupportUrl: 'https://pages.example.test/?page=support',
-              publicTermsUrl: 'http://pages.example.test/?page=terms',
+              publicPrivacyUrl: 'https://pages.example.test/privacy',
+              publicSupportUrl: 'https://pages.example.test/support',
+              publicTermsUrl: 'http://pages.example.test/terms',
             },
           },
         },
@@ -35,9 +35,9 @@ describe('public policy pages', () => {
         publicPageUrls: Record<string, string>;
       };
 
-      expect(configured.privacy).toBe('https://pages.example.test/?page=privacy');
-      expect(configured.support).toBe('https://pages.example.test/?page=support');
-      expect(configured.terms).toBe('https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms');
+      expect(configured.privacy).toBe('https://pages.example.test/privacy');
+      expect(configured.support).toBe('https://pages.example.test/support');
+      expect(configured.terms).toBe('https://74e39779183cf78fed.v2.appdeploy.ai/terms');
     });
   });
 });

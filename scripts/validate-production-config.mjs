@@ -47,6 +47,11 @@ export function canonicalHttpsEndpointIdentity(name, value) {
   return `https://${hostname}${port}${canonicalPathname(parsed.pathname)}`;
 }
 
+/** Origin identity only, for values that legitimately carry a page path. */
+export function canonicalHttpsOrigin(name, value) {
+  return `https://${new URL(canonicalHttpsEndpointIdentity(name, value)).host}`;
+}
+
 export function validateStagingEndpointIsolation({
   configuredApiUrl = process.env.BOLO_API_URL,
   configuredSiteUrl = process.env.BOLO_PUBLIC_SITE_URL,
@@ -74,10 +79,12 @@ export function validateStagingEndpointIsolation({
 }
 
 export function validateProductionPublicPages(extra = {}) {
-  const expectedSiteIdentity = canonicalHttpsEndpointIdentity(
+  // The pages are served by the in-repo website (website/app/<page>/page.tsx),
+  // so each URL is the permanent production origin plus exactly that path.
+  const expectedOrigin = canonicalHttpsEndpointIdentity(
     'production public-site URL',
     PRODUCTION_SITE_URL,
-  );
+  ).replace(/\/+$/u, '');
   const pages = [
     ['publicPrivacyUrl', 'privacy'],
     ['publicSupportUrl', 'support'],
@@ -91,19 +98,16 @@ export function validateProductionPublicPages(extra = {}) {
       parsed = new URL(value);
     } catch {
       throw new Error(
-        `${field} must use the permanent production public-site URL with exactly ?page=${page}.`,
+        `${field} must use the permanent production public-site URL with exactly the /${page} path.`,
       );
     }
-    const query = [...parsed.searchParams.entries()];
     if (
-      canonicalHttpsEndpointIdentity(field, value) !== expectedSiteIdentity
+      canonicalHttpsEndpointIdentity(field, value) !== `${expectedOrigin}/${page}`
       || parsed.hash !== ''
-      || query.length !== 1
-      || query[0][0] !== 'page'
-      || query[0][1] !== page
+      || parsed.search !== ''
     ) {
       throw new Error(
-        `${field} must use the permanent production public-site URL with exactly ?page=${page}.`,
+        `${field} must use the permanent production public-site URL with exactly the /${page} path.`,
       );
     }
   }
@@ -152,9 +156,11 @@ export function validateProductionConfig(root = defaultRoot) {
   ) {
     throw new Error('BOLO_API_URL must resolve to the permanent production API identity.');
   }
+  // The privacy URL now carries the /privacy path served by the in-repo
+  // website, so only its origin identifies the production public site.
   if (
-    canonicalHttpsEndpointIdentity('BOLO_PUBLIC_SITE_URL', releasePublicSiteUrl)
-    !== canonicalHttpsEndpointIdentity('production public-site URL', PRODUCTION_SITE_URL)
+    canonicalHttpsOrigin('BOLO_PUBLIC_SITE_URL', releasePublicSiteUrl)
+    !== canonicalHttpsOrigin('production public-site URL', PRODUCTION_SITE_URL)
   ) {
     throw new Error('BOLO_PUBLIC_SITE_URL must resolve to the permanent production public-site identity.');
   }

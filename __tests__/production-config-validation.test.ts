@@ -120,27 +120,35 @@ describe('production configuration validator', () => {
 
   it.each([
     [
-      'privacy page without its selector',
+      'privacy page without its path',
       {
         publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/',
-        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
-        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/support',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms',
       },
     ],
     [
-      'support page using the privacy selector',
+      'support page using the privacy path',
       {
-        publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
-        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
-        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+        publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/privacy',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/privacy',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms',
       },
     ],
     [
-      'terms page with an extra query parameter',
+      'terms page with a leftover query selector',
+      {
+        publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/privacy',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/support',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms?page=terms',
+      },
+    ],
+    [
+      'privacy page kept on the retired query selector',
       {
         publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
-        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
-        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms&preview=1',
+        publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/support',
+        publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms',
       },
     ],
   ])('rejects a production public %s', (_label, extra) => {

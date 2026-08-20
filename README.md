@@ -45,11 +45,13 @@ $env:BOLO_REVIEW_PHONE = '<review contact phone>'
 $env:BOLO_SUPPORT_EMAIL = '<public monitored support email>'
 ```
 
-These values are deliberately absent from source control. Google Play's support email is entered manually in Play Console. The public pages used by both listings are already live:
+These values are deliberately absent from source control. Google Play's support email is entered manually in Play Console. The public pages used by both listings are served by the in-repo website in `website/` (`website/app/<page>/page.tsx`), and each page is versioned with an effective date:
 
-- Privacy: https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy
-- Support: https://74e39779183cf78fed.v2.appdeploy.ai/?page=support
-- Terms: https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms
+- Privacy: https://74e39779183cf78fed.v2.appdeploy.ai/privacy
+- Support: https://74e39779183cf78fed.v2.appdeploy.ai/support
+- Terms: https://74e39779183cf78fed.v2.appdeploy.ai/terms
+
+Deploy `website/` to that origin before pushing store metadata that points at these URLs. Build the support page with `BOLO_SUPPORT_EMAIL` set so it publishes the monitored address; without it the page routes people to the support contact on the store listings.
 
 ## Build and submit
 

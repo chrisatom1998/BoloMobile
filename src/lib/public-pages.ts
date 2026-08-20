@@ -2,9 +2,9 @@ import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 
 const DEFAULT_PUBLIC_PAGE_URLS = {
-  privacy: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
-  support: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
-  terms: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+  privacy: 'https://74e39779183cf78fed.v2.appdeploy.ai/privacy',
+  support: 'https://74e39779183cf78fed.v2.appdeploy.ai/support',
+  terms: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms',
 } as const;
 
 export type PublicPage = keyof typeof DEFAULT_PUBLIC_PAGE_URLS;

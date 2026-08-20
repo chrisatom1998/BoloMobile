@@ -67,9 +67,9 @@ describe('Expo app configuration', () => {
     const { extra } = appConfig({ config: fixture() });
 
     expect(extra).toMatchObject({
-      publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=privacy',
-      publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
-      publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
+      publicPrivacyUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/privacy',
+      publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/support',
+      publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/terms',
       boloApiUrl: 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed',
     });
   });
@@ -81,9 +81,9 @@ describe('Expo app configuration', () => {
     const { extra } = appConfig({ config: fixture() });
 
     expect(extra).toMatchObject({
-      publicPrivacyUrl: 'https://pages.example.test/?page=privacy',
-      publicSupportUrl: 'https://pages.example.test/?page=support',
-      publicTermsUrl: 'https://pages.example.test/?page=terms',
+      publicPrivacyUrl: 'https://pages.example.test/privacy',
+      publicSupportUrl: 'https://pages.example.test/support',
+      publicTermsUrl: 'https://pages.example.test/terms',
       boloApiUrl: 'https://api.example.test/app/bolo',
     });
   });
