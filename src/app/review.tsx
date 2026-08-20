@@ -15,14 +15,14 @@ export default function ReviewScreen() {
   const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
-  const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
+  const { aiConsent, duePhrases, learnerProfile, phraseReviews, reviewPhrase, reviewPool } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const gradedPhraseRef = useRef<string | null>(null);
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
   // advancing index. Lock the displayed session at the first grade instead of at
   // mount so a screen rendered before hydration still picks up the due list.
   const [lockedSession, setLockedSession] = useState<typeof duePhrases | null>(null);
-  const session = lockedSession ?? (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5));
+  const session = lockedSession ?? (duePhrases.length ? duePhrases : [...reviewPool].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5));
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
@@ -55,7 +55,7 @@ export default function ReviewScreen() {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
         <Text style={styles.title}>Save a phrase to start reviewing</Text>
-        <Text style={styles.body}>Natural answers saved from scenes will become quick recall cards here.</Text>
+        <Text style={styles.body}>Phrases you save, and the ones you miss in a scene, become quick recall cards here.</Text>
         <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose a scene</Text></Pressable>
       </ScrollView>
     );

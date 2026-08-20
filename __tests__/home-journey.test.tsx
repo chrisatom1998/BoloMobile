@@ -229,7 +229,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('One saved phrase is ready for a little water today.')).toBeTruthy();
+    expect(view.getByText('One phrase is ready for a little water today.')).toBeTruthy();
     expect(view.getByText('7 days')).toBeTruthy();
     expect(view.getByText('1 to water')).toBeTruthy();
     expect(view.getByText('Aap kaise hain?')).toBeTruthy();

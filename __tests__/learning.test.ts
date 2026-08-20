@@ -1,5 +1,16 @@
 import { scenes } from '../src/data/scenes';
-import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, weeklyPractice } from '../src/lib/learning';
+import {
+  categoryMastery,
+  dueSavedPhrases,
+  isRetentionPhrase,
+  learningAccuracy,
+  maxWeakPhraseCards,
+  milestoneProgress,
+  recommendedScenes,
+  retentionPhrases,
+  weakPhraseCards,
+  weeklyPractice,
+} from '../src/lib/learning';
 import { defaultLearnerProfile } from '../src/lib/storage';
 import type { PhraseReview, SavedPhrase, SceneProgress } from '../src/state/app-state-types';
 
@@ -18,6 +29,60 @@ const progress = (overrides: Partial<SceneProgress> = {}): SceneProgress => ({
   lastBeatIndex: 0,
   weakPhrases: [],
   ...overrides,
+});
+
+const catalogPhrases = scenes.flatMap((scene) => scene.beats.flatMap((beat) => beat.choices.map((choice) => choice.hi)));
+
+function catalogPhrase(index: number) {
+  return expectDefined(catalogPhrases[index]);
+}
+
+describe('weak scene phrases in the retention loop', () => {
+  it('turns missed scene answers into review cards with their translations', () => {
+    const missed = expectDefined(expectDefined(expectDefined(scenes[0]).beats[0]).choices.find((choice) => !choice.correct));
+    const cards = weakPhraseCards({ chai: progress({ weakPhrases: [missed.hi, 'नहीं मिलेगा।'] }) });
+
+    expect(cards).toEqual([{ hi: missed.hi, latin: missed.latin, en: missed.en }]);
+  });
+
+  it('lists the most recently practiced scene first and caps the queue', () => {
+    const older = catalogPhrases.slice(0, maxWeakPhraseCards);
+    const newest = catalogPhrase(maxWeakPhraseCards);
+    const cards = weakPhraseCards({
+      chai: progress({ weakPhrases: older, lastPracticedAt: '2026-07-18T10:00:00.000Z' }),
+      restaurant: progress({ weakPhrases: [newest], lastPracticedAt: '2026-07-19T10:00:00.000Z' }),
+    });
+
+    expect(cards).toHaveLength(maxWeakPhraseCards);
+    expect(expectDefined(cards[0]).hi).toBe(newest);
+    expect(cards.map((card) => card.hi)).toEqual([...new Set(cards.map((card) => card.hi))]);
+  });
+
+  it('reviews missed scene answers for a learner who never saved a phrase', () => {
+    const missed = catalogPhrase(1);
+    const pool = retentionPhrases([], { chai: progress({ weakPhrases: [missed] }) });
+
+    expect(dueSavedPhrases(pool, {})).toEqual([expect.objectContaining({ hi: missed })]);
+  });
+
+  it('keeps saved phrases first and never repeats one that was also missed', () => {
+    const shared = catalogPhrase(0);
+    const missedOnly = catalogPhrase(1);
+    const saved: SavedPhrase[] = [{ hi: shared, latin: 'ek chai dijiye.', en: 'One tea, please.' }];
+    const pool = retentionPhrases(saved, { chai: progress({ weakPhrases: [shared, missedOnly] }) });
+
+    expect(pool.map((phrase) => phrase.hi)).toEqual([shared, missedOnly]);
+    expect(expectDefined(pool[0]).en).toBe('One tea, please.');
+  });
+
+  it('recognizes saved and missed phrases as gradable, and nothing else', () => {
+    const saved: SavedPhrase[] = [{ hi: 'नमस्ते', latin: 'namaste', en: 'Hello' }];
+    const sceneProgress = { chai: progress({ weakPhrases: [catalogPhrase(1)] }) };
+
+    expect(isRetentionPhrase('नमस्ते', saved, sceneProgress)).toBe(true);
+    expect(isRetentionPhrase(catalogPhrase(1), saved, sceneProgress)).toBe(true);
+    expect(isRetentionPhrase(catalogPhrase(2), saved, sceneProgress)).toBe(false);
+  });
 });
 
 describe('adaptive learning', () => {
