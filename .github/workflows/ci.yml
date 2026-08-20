@@ -72,6 +72,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: CI=1 npx expo install --check
       - run: npx --no-install expo-doctor
 
   ios-prebuild:
@@ -288,6 +289,7 @@ jobs:
     name: required-checks
     if: always()
     needs:
+      - dependency-audit
       - verify
       - website
       - expo-doctor
@@ -299,6 +301,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      DEPENDENCY_AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
       VERIFY_RESULT: ${{ needs['verify'].result }}
       WEBSITE_RESULT: ${{ needs['website'].result }}
       EXPO_DOCTOR_RESULT: ${{ needs['expo-doctor'].result }}
@@ -319,6 +322,7 @@ jobs:
               failures=1
             fi
           done <<RESULTS
+          dependency-audit=$DEPENDENCY_AUDIT_RESULT
           verify=$VERIFY_RESULT
           website=$WEBSITE_RESULT
           expo-doctor=$EXPO_DOCTOR_RESULT

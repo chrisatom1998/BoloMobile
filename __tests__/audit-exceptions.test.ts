@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { execFileSync } = require('child_process');
+const { readFileSync } = require('fs');
 const { resolve } = require('path');
 const { pathToFileURL } = require('url');
 
@@ -230,6 +231,17 @@ describe('dependency audit exceptions', () => {
     const document = `Security review\n<!-- acceptance-record:begin -->\n\`\`\`json\n${JSON.stringify(acceptance)}\n\`\`\`\n<!-- acceptance-record:end -->`;
 
     expect(runPureExport<AcceptanceRecord>('parseAcceptanceDocument', document)).toEqual(acceptance);
+  });
+
+  it('records the named security owner acceptance for each approved exception', () => {
+    const document = readFileSync(resolve(process.cwd(), 'docs/security-exceptions.md'), 'utf8');
+    const acceptance = runPureExport<AcceptanceRecord>('parseAcceptanceDocument', document);
+
+    expect(acceptance.exceptions).toHaveLength(2);
+    for (const exception of acceptance.exceptions) {
+      expect(exception.owner).toBe('@chrisatom1998');
+      expect(exception.acceptedOn).toBe('2026-08-20');
+    }
   });
 
   it('rejects duplicate acceptance markers', () => {
