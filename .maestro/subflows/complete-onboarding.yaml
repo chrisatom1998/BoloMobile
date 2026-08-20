@@ -8,5 +8,5 @@ appId: com.bolo.hindi
 - tapOn: "Skip"
 - tapOn: "Build my practice plan"
 - extendedWaitUntil:
-    visible: "Bolo"
+    visible: "Make Hindi yours."
     timeout: 15000
