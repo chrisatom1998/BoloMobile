@@ -11,10 +11,7 @@ const acceptancePath = resolve(appRoot, 'docs/security-exceptions.md');
 const acceptanceBegin = '<!-- acceptance-record:begin -->';
 const acceptanceEnd = '<!-- acceptance-record:end -->';
 const blockingSeverities = new Set(['high', 'critical']);
-const approvedExceptions = new Map([
-  ['GHSA-w3rx-r6r6-pgpr', { module: 'image-size', expires: '2026-11-06' }],
-  ['GHSA-5p2g-fcmc-qvqq', { module: 'image-size', expires: '2026-11-06' }],
-]);
+const approvedExceptions = new Map();
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
