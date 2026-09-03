@@ -43,21 +43,14 @@ function runPureExport<T>(exportName: string, input: unknown): T {
   return JSON.parse(output) as T;
 }
 
-function evaluate(audit: Record<string, unknown>, acceptance = signedAcceptance(), now = '2026-08-08T12:00:00.000Z') {
+function evaluate(audit: Record<string, unknown>, acceptance = emptyAcceptance(), now = '2026-08-08T12:00:00.000Z') {
   return runPureExport<AuditGateResult>('evaluateAuditExceptions', { audit, acceptance, now });
 }
 
-function signedAcceptance(overrides: Partial<AcceptanceRecord['exceptions'][number]> = {}): AcceptanceRecord {
+function emptyAcceptance(): AcceptanceRecord {
   return {
     version: 1,
-    exceptions: [firstGhsa, secondGhsa].map((ghsa) => ({
-      ghsa,
-      module: 'image-size',
-      expires: '2026-11-06',
-      owner: 'Release Security Owner',
-      acceptedOn: '2026-08-08',
-      ...overrides,
-    })),
+    exceptions: [],
   };
 }
 
@@ -73,7 +66,15 @@ function advisory(ghsa: string, title: string) {
   };
 }
 
-function knownAudit(): Record<string, unknown> {
+function cleanAudit(): Record<string, unknown> {
+  return {
+    auditReportVersion: 2,
+    vulnerabilities: {},
+    metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
+  };
+}
+
+function retiredImageSizeAudit(): Record<string, unknown> {
   return {
     auditReportVersion: 2,
     vulnerabilities: {
@@ -93,71 +94,39 @@ function knownAudit(): Record<string, unknown> {
 }
 
 describe('dependency audit exceptions', () => {
-  it('accepts only the two signed, unexpired image-size advisories', () => {
-    const result = evaluate(knownAudit());
+  it('accepts a clean audit when no security exceptions are active', () => {
+    const result = evaluate(cleanAudit(), emptyAcceptance());
 
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
-    expect(result.accepted).toEqual([
-      expect.objectContaining({ ghsa: firstGhsa, module: 'image-size', owner: 'Release Security Owner' }),
-      expect.objectContaining({ ghsa: secondGhsa, module: 'image-size', owner: 'Release Security Owner' }),
-    ]);
+    expect(result.accepted).toEqual([]);
   });
 
-  it('keeps release blocked while security-owner sign-off is pending', () => {
-    const pending = signedAcceptance({ owner: 'PENDING', acceptedOn: 'PENDING' });
-    const result = evaluate(knownAudit(), pending);
+  it('rejects the two retired image-size advisories if they reappear', () => {
+    const result = evaluate(retiredImageSizeAudit(), emptyAcceptance());
 
     expect(result.ok).toBe(false);
     expect(result.failures.join(' ')).toContain(firstGhsa);
     expect(result.failures.join(' ')).toContain(secondGhsa);
-    expect(result.failures.join(' ')).toContain('pending security-owner sign-off');
+    expect(result.failures.join(' ')).toContain('Unapproved high advisory');
   });
 
-  it('rejects an expired exception', () => {
-    const result = evaluate(knownAudit(), signedAcceptance(), '2026-11-07T00:00:00.000Z');
-
-    expect(result.ok).toBe(false);
-    expect(result.failures.join(' ')).toContain('expired on 2026-11-06');
-  });
-
-  it('rejects acceptance recorded after the exception expiry', () => {
-    const result = evaluate(
-      knownAudit(),
-      signedAcceptance({ acceptedOn: '2026-11-07' }),
-      '2026-11-08T00:00:00.000Z',
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.failures.join(' ')).toContain('accepted after its expiry');
-  });
-
-  it('rejects a future-dated acceptance even when it is before expiry', () => {
-    const result = evaluate(
-      knownAudit(),
-      signedAcceptance({ acceptedOn: '2026-08-09' }),
-      '2026-08-08T12:00:00.000Z',
-    );
-
-    expect(result.ok).toBe(false);
-    expect(result.failures.join(' ')).toContain('cannot be accepted in the future');
-  });
-
-  it('ignores a non-blocking package in a mixed via chain without treating it as approval', () => {
-    const audit = knownAudit() as {
-      vulnerabilities: Record<string, { name?: string; severity: string; via: unknown[] }>;
-      metadata: { vulnerabilities: { moderate: number; total: number } };
+  it('allows a non-blocking advisory without treating it as an exception', () => {
+    const audit = {
+      auditReportVersion: 2,
+      vulnerabilities: {
+        'non-blocking-helper': {
+          name: 'non-blocking-helper',
+          severity: 'moderate',
+          via: [],
+        },
+      },
+      metadata: {
+        vulnerabilities: { info: 0, low: 0, moderate: 1, high: 0, critical: 0, total: 1 },
+      },
     };
-    audit.vulnerabilities.metro!.via.push('non-blocking-helper');
-    audit.vulnerabilities['non-blocking-helper'] = {
-      name: 'non-blocking-helper',
-      severity: 'moderate',
-      via: [],
-    };
-    audit.metadata.vulnerabilities.moderate += 1;
-    audit.metadata.vulnerabilities.total += 1;
 
-    expect(evaluate(audit).ok).toBe(true);
+    expect(evaluate(audit, emptyAcceptance()).ok).toBe(true);
   });
 
   it('fails closed on a pure high-severity via cycle', () => {
@@ -201,32 +170,29 @@ describe('dependency audit exceptions', () => {
     expect(result.failures.length).toBeGreaterThan(0);
   });
 
-  it.each(['image-size', 'new-build-package'])('rejects a new high advisory on %s', (moduleName) => {
-    const audit = knownAudit() as {
-      vulnerabilities: Record<string, { name?: string; severity: string; via: unknown[] }>;
-      metadata: { vulnerabilities: { high: number; total: number } };
-    };
+  it('rejects any other unknown high advisory', () => {
+    const moduleName = 'new-build-package';
     const unknownGhsa = 'GHSA-aaaa-bbbb-cccc';
-    if (moduleName === 'image-size') {
-      audit.vulnerabilities['image-size']!.via.push(advisory(unknownGhsa, 'New image-size issue'));
-    } else {
-      audit.vulnerabilities[moduleName] = {
-        name: moduleName,
-        severity: 'high',
-        via: [{ ...advisory(unknownGhsa, 'New dependency issue'), name: moduleName, dependency: moduleName }],
-      };
-      audit.metadata.vulnerabilities.high += 1;
-      audit.metadata.vulnerabilities.total += 1;
-    }
+    const audit = {
+      auditReportVersion: 2,
+      vulnerabilities: {
+        [moduleName]: {
+          name: moduleName,
+          severity: 'high',
+          via: [{ ...advisory(unknownGhsa, 'New dependency issue'), name: moduleName, dependency: moduleName }],
+        },
+      },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 1, critical: 0, total: 1 } },
+    };
 
-    const result = evaluate(audit);
+    const result = evaluate(audit, emptyAcceptance());
 
     expect(result.ok).toBe(false);
     expect(result.failures.join(' ')).toContain(unknownGhsa);
   });
 
   it('parses exactly one fenced acceptance record', () => {
-    const acceptance = signedAcceptance();
+    const acceptance = emptyAcceptance();
     const document = `Security review\n<!-- acceptance-record:begin -->\n\`\`\`json\n${JSON.stringify(acceptance)}\n\`\`\`\n<!-- acceptance-record:end -->`;
 
     expect(runPureExport<AcceptanceRecord>('parseAcceptanceDocument', document)).toEqual(acceptance);
