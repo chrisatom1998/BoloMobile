@@ -273,9 +273,9 @@ export function evaluateAuditReports({
   const reviewDay = parseIsoDate(baseline.reviewBy);
   if (!evaluationDay) {
     errors.push(`Dependency audit evaluation date ${evaluationDate} is invalid.`);
-  } else if (evaluationDay > reviewDay) {
+  } else if (allowed.size > 0 && evaluationDay > reviewDay) {
     errors.push(`The existing build-tool advisory baseline expired on ${baseline.reviewBy}; triage and renew it explicitly.`);
-  } else if ((reviewDay.getTime() - evaluationDay.getTime()) / 86_400_000 > 90) {
+  } else if (allowed.size > 0 && (reviewDay.getTime() - evaluationDay.getTime()) / 86_400_000 > 90) {
     errors.push(`The build-tool advisory baseline review date must be no more than 90 days in the future.`);
   }
 

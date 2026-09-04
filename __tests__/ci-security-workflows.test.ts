@@ -420,6 +420,34 @@ describe('dependency advisory fallback gate', () => {
     );
   });
 
+  test.each(['2098-01-01', '2100-01-01'])('does not expire an empty advisory baseline reviewed on %s', (reviewBy) => {
+    const cleanReport = {
+      metadata: { vulnerabilities: { high: 0, critical: 0 } },
+      vulnerabilities: {},
+    };
+    const emptyBaseline = { ...acceptedAdvisory, reviewBy, allowedAdvisories: [] };
+
+    expect(evaluate(cleanReport, cleanReport, '2099-01-01', { dependencies: {} }, [], emptyBaseline).errors).toEqual([]);
+  });
+
+  test('still rejects unapproved high advisories after an empty baseline review date', () => {
+    const emptyBaseline = { ...acceptedAdvisory, allowedAdvisories: [] };
+    const result = evaluate(acceptedReport, acceptedReport, '2100-01-01', { dependencies: {} }, [], emptyBaseline);
+
+    expect(result.errors).toEqual([
+      'production dependency tree: unapproved high advisory GHSA-W3RX-R6R6-PGPR affects image-size.',
+      'full dependency tree: unapproved high advisory GHSA-W3RX-R6R6-PGPR affects image-size.',
+    ]);
+  });
+
+  test('still validates calendar dates for an empty advisory baseline', () => {
+    const emptyBaseline = { ...acceptedAdvisory, reviewBy: '2099-02-30', allowedAdvisories: [] };
+
+    expect(evaluate(acceptedReport, acceptedReport, '2099-01-01', { dependencies: {} }, [], emptyBaseline).errors).toEqual([
+      'The dependency audit baseline has an invalid schema.',
+    ]);
+  });
+
   test('rejects a baseline review date more than 90 days away', () => {
     const longLivedBaseline = {
       ...acceptedAdvisory,
