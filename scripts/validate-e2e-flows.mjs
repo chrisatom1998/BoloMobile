@@ -31,7 +31,7 @@ const structuralTargets = [
 ];
 
 for (const { file, directory, label } of structuralTargets) {
-  const source = await readFile(path.join(directory, file), 'utf8');
+  const source = (await readFile(path.join(directory, file), 'utf8')).replace(/\r\n/gu, '\n');
   // Maestro subflows may omit their own launch stanza, but when a file declares an appId it
   // must be the identifier this build ships with.
   if (source.startsWith('appId:')) {

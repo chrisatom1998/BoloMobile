@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { extname, join, relative, resolve } from 'node:path';
+import { dirname, extname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = resolve(import.meta.dirname, '..');
@@ -273,9 +273,9 @@ export function evaluateAuditReports({
   const reviewDay = parseIsoDate(baseline.reviewBy);
   if (!evaluationDay) {
     errors.push(`Dependency audit evaluation date ${evaluationDate} is invalid.`);
-  } else if (evaluationDay > reviewDay) {
+  } else if (allowed.size > 0 && evaluationDay > reviewDay) {
     errors.push(`The existing build-tool advisory baseline expired on ${baseline.reviewBy}; triage and renew it explicitly.`);
-  } else if ((reviewDay.getTime() - evaluationDay.getTime()) / 86_400_000 > 90) {
+  } else if (allowed.size > 0 && (reviewDay.getTime() - evaluationDay.getTime()) / 86_400_000 > 90) {
     errors.push(`The build-tool advisory baseline review date must be no more than 90 days in the future.`);
   }
 
@@ -313,9 +313,11 @@ function readRuntimeSources(directory) {
   return sources;
 }
 
-function runAudit(args, label) {
-  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const audit = spawnSync(npmCommand, args, {
+export function runAudit(args, label) {
+  const bundledNpm = resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const npmCommand = process.platform === 'win32' && existsSync(bundledNpm) ? process.execPath : 'npm';
+  const npmArgs = npmCommand === process.execPath ? [bundledNpm, ...args] : args;
+  const audit = spawnSync(npmCommand, npmArgs, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,

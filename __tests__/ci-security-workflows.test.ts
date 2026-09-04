@@ -1,6 +1,11 @@
-const { readFileSync } = require('fs') as {
+const { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('fs') as {
   readFileSync: (path: string, encoding: 'utf8') => string;
+  mkdtempSync: (prefix: string) => string;
+  mkdirSync: (path: string, options: { recursive: boolean }) => void;
+  writeFileSync: (path: string, data: string, encoding: 'utf8') => void;
+  rmSync: (path: string, options: { recursive: boolean; force: boolean }) => void;
 };
+const { tmpdir } = require('os') as { tmpdir: () => string };
 const { resolve } = require('path') as {
   resolve: (...paths: string[]) => string;
 };
@@ -8,14 +13,14 @@ const { spawnSync } = require('child_process') as {
   spawnSync: (
     command: string,
     args: string[],
-    options: { cwd: string; encoding: 'utf8' },
+    options: { cwd: string; encoding: 'utf8'; env?: NodeJS.ProcessEnv },
   ) => { status: number | null; stderr: string; stdout: string };
 };
 
 const root = process.cwd();
 
 function read(path: string) {
-  return readFileSync(resolve(root, path), 'utf8');
+  return readFileSync(resolve(root, path), 'utf8').replace(/\r\n/gu, '\n');
 }
 
 function matchingBlock(source: string, start: string, end?: string) {
@@ -78,6 +83,17 @@ describe('CI supply-chain controls', () => {
 describe('fail-closed merge verification', () => {
   const ciWorkflow = read('.github/workflows/ci.yml');
   const requiredChecks = matchingBlock(ciWorkflow, '  required-checks:');
+  const jobs = [
+    'dependency-audit',
+    'verify',
+    'website',
+    'expo-doctor',
+    'ios-prebuild',
+    'production-config',
+    'ios-native-build',
+    'maestro-smoke',
+    'security',
+  ];
 
   test('runs website compatibility checks for the changed website dependency tree', () => {
     const websiteJob = matchingBlock(ciWorkflow, '  website:', '  expo-doctor:');
@@ -112,24 +128,105 @@ describe('fail-closed merge verification', () => {
   });
 
   test('always aggregates every merge job and rejects non-success results', () => {
-    const jobs = [
-      'verify',
-      'website',
-      'expo-doctor',
-      'ios-prebuild',
-      'production-config',
-      'ios-native-build',
-      'maestro-smoke',
-      'security',
-    ];
-
     expect(requiredChecks).toContain('if: always()');
     for (const job of jobs) {
-      expect(requiredChecks).toContain(job);
+      expect(requiredChecks).toContain(`      - ${job}\n`);
       expect(requiredChecks).toContain(`needs['${job}'].result`);
+      expect(requiredChecks).toContain(`${job}=$${job.replace(/-/gu, '_').toUpperCase()}_RESULT`);
     }
     expect(requiredChecks).toContain('if [[ "$result" != "success" ]]');
   });
+
+  test.each([
+    ['success', 0],
+    ['failure', 1],
+    ['skipped', 1],
+    ['cancelled', 1],
+  ])('runs the aggregate gate with dependency-audit=%s and exits %i', (auditResult, expectedStatus) => {
+    const script = matchingBlock(requiredChecks, '        run: |\n')
+      .slice('        run: |\n'.length)
+      .replace(/^ {10}/gmu, '');
+    const results = Object.fromEntries(jobs.map((job) => [
+      `${job.replace(/-/gu, '_').toUpperCase()}_RESULT`,
+      'success',
+    ]));
+    const result = spawnSync('bash', ['-c', script], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, ...results, DEPENDENCY_AUDIT_RESULT: String(auditResult) },
+    });
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(expectedStatus);
+    if (expectedStatus !== 0) {
+      expect(result.stdout).toContain(`Merge check dependency-audit completed with result ${auditResult}.`);
+    }
+  });
+
+  test('bounds iOS driver startup and uploads diagnostics even before a flow starts', () => {
+    const smokeJob = matchingBlock(ciWorkflow, '  maestro-smoke:', '  security:');
+    const smokeStep = matchingBlock(smokeJob, '      - name: Run the dedicated iOS smoke flow', '      - if: always()');
+    const artifactStep = matchingBlock(smokeJob, '      - if: always()', '      - name: Remove simulator');
+
+    expect(smokeJob).toContain('MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000');
+    expect(smokeStep).toContain('timeout-minutes: 15');
+    expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
+    expect(artifactStep).toContain('maestro-artifacts');
+    expect(smokeStep).not.toContain('continue-on-error');
+  });
+});
+
+describe('Maestro flow validation across checkout line endings', () => {
+  test.each(['\n', '\r\n'])('validates flows and subflows with %j line endings', (newline) => {
+    const result = validateFixture(newline);
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Validated 4 Maestro device flows and 1 subflows');
+  });
+
+  test.each(['flows/0.yaml', 'subflows/helper.yaml'])('rejects a wrong bundle identifier in CRLF %s', (invalidFile) => {
+    const result = validateFixture('\r\n', invalidFile);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`${invalidFile} does not target the Bolo bundle identifier (com.bolo.hindi).`);
+  });
+
+  function validateFixture(newline: string, invalidFile?: string) {
+    const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'bolo-maestro-validation-'));
+    const commands = [
+      '- launchApp:',
+      '    clearState: true',
+      '- stopApp',
+      '- assertVisible: "Scene complete"',
+      '- assertVisible: "Turn 2 of 2"',
+      '- assertVisible: "Enable live practice"',
+      '- setPermissions:',
+      '    permissions:',
+      '      microphone: deny',
+      '- pressKey: Home',
+      '- assertVisible: "चीनी कम, कृपया।"',
+      '- assertVisible: "Delete my Bolo data"',
+      '- setAirplaneMode: enabled',
+    ];
+    try {
+      mkdirSync(resolve(fixtureRoot, '.maestro/flows'), { recursive: true });
+      mkdirSync(resolve(fixtureRoot, '.maestro/subflows'), { recursive: true });
+      const files = ['flows/0.yaml', 'flows/1.yaml', 'flows/2.yaml', 'flows/3.yaml', 'subflows/helper.yaml'];
+      for (const file of files) {
+        const appId = file === invalidFile ? 'com.other.app' : 'com.bolo.hindi';
+        const body = file === 'flows/0.yaml' ? commands : ['- stopApp'];
+        writeFileSync(resolve(fixtureRoot, '.maestro', file), [`appId: ${appId}`, '---', ...body, ''].join(newline), 'utf8');
+      }
+      return spawnSync(process.execPath, [resolve(root, 'scripts/validate-e2e-flows.mjs')], {
+        cwd: fixtureRoot,
+        encoding: 'utf8',
+        env: { ...process.env, BOLO_APP_IDENTIFIER: 'com.bolo.hindi' },
+      });
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }
 });
 
 describe('nightly and release approval gates', () => {
@@ -321,6 +418,34 @@ describe('dependency advisory fallback gate', () => {
     expect(evaluate(acceptedReport, acceptedReport, '2100-01-01').errors).toEqual(
       expect.arrayContaining([expect.stringMatching(/baseline expired/u)]),
     );
+  });
+
+  test.each(['2098-01-01', '2100-01-01'])('does not expire an empty advisory baseline reviewed on %s', (reviewBy) => {
+    const cleanReport = {
+      metadata: { vulnerabilities: { high: 0, critical: 0 } },
+      vulnerabilities: {},
+    };
+    const emptyBaseline = { ...acceptedAdvisory, reviewBy, allowedAdvisories: [] };
+
+    expect(evaluate(cleanReport, cleanReport, '2099-01-01', { dependencies: {} }, [], emptyBaseline).errors).toEqual([]);
+  });
+
+  test('still rejects unapproved high advisories after an empty baseline review date', () => {
+    const emptyBaseline = { ...acceptedAdvisory, allowedAdvisories: [] };
+    const result = evaluate(acceptedReport, acceptedReport, '2100-01-01', { dependencies: {} }, [], emptyBaseline);
+
+    expect(result.errors).toEqual([
+      'production dependency tree: unapproved high advisory GHSA-W3RX-R6R6-PGPR affects image-size.',
+      'full dependency tree: unapproved high advisory GHSA-W3RX-R6R6-PGPR affects image-size.',
+    ]);
+  });
+
+  test('still validates calendar dates for an empty advisory baseline', () => {
+    const emptyBaseline = { ...acceptedAdvisory, reviewBy: '2099-02-30', allowedAdvisories: [] };
+
+    expect(evaluate(acceptedReport, acceptedReport, '2099-01-01', { dependencies: {} }, [], emptyBaseline).errors).toEqual([
+      'The dependency audit baseline has an invalid schema.',
+    ]);
   });
 
   test('rejects a baseline review date more than 90 days away', () => {

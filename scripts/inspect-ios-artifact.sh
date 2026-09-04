@@ -131,7 +131,7 @@ codesign = os.environ.get("CODESIGN_BIN", "codesign")
 security = os.environ.get("SECURITY_BIN", "security")
 
 with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
-    root = Path(temp_directory)
+    root = Path(temp_directory).resolve()
     try:
         with zipfile.ZipFile(ipa) as archive:
             members = archive.infolist()

@@ -6,13 +6,15 @@ Users choose whether Asha replies in English or Hindi from the visible language 
 
 ## Run locally
 
-Requirements: Node.js 22.13 or newer and npm.
+Use Node.js 22.23.2, pinned in `.nvmrc`, and npm. With nvm or nvm-windows, run `nvm install 22.23.2` followed by `nvm use 22.23.2`. The IPA inspection tests also require Python 3 (`python3`) and Bash (`bash`) on `PATH`; on Windows, run verification from Git Bash.
 
 ```powershell
-npm install
+npm ci
 npm run verify
-npx expo start
+npx expo start --dev-client
 ```
+
+Install a development build on your device before connecting to the local server. To create one with the checked-in EAS development profile, run `node scripts/run-eas-from-app-root.mjs build --platform android --profile development` (use `--platform ios` for iOS), then install the resulting build. Expo Go cannot load the app's custom WebRTC native module.
 
 Bolo resolves its API endpoint from the reviewed Expo configuration. Staging builds may set the build-time `BOLO_API_URL` value in their EAS environment; production validation requires the resolved URL to exactly match the runtime fallback and rejects the former `EXPO_PUBLIC_BOLO_API_URL` client override. The configured endpoint is embedded in the app bundle, so it must always be a public URL rather than a secret.
 
