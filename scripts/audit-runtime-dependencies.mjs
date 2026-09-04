@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { extname, join, relative, resolve } from 'node:path';
+import { dirname, extname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = resolve(import.meta.dirname, '..');
@@ -313,9 +313,11 @@ function readRuntimeSources(directory) {
   return sources;
 }
 
-function runAudit(args, label) {
-  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const audit = spawnSync(npmCommand, args, {
+export function runAudit(args, label) {
+  const bundledNpm = resolve(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const npmCommand = process.platform === 'win32' && existsSync(bundledNpm) ? process.execPath : 'npm';
+  const npmArgs = npmCommand === process.execPath ? [bundledNpm, ...args] : args;
+  const audit = spawnSync(npmCommand, npmArgs, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,

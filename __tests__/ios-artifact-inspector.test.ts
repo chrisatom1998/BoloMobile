@@ -1,6 +1,8 @@
-const { mkdtempSync, rmSync } = require('fs') as {
+const { mkdirSync, mkdtempSync, rmSync, symlinkSync } = require('fs') as {
+  mkdirSync: (path: string) => void;
   mkdtempSync: (prefix: string) => string;
   rmSync: (path: string, options: { force: boolean; recursive: boolean }) => void;
+  symlinkSync: (target: string, path: string, type: 'junction') => void;
 };
 const { tmpdir } = require('os') as { tmpdir: () => string };
 const { join, resolve } = require('path') as {
@@ -43,6 +45,8 @@ info = {
     'UIDeviceFamily': [1],
 }
 with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+    if mode == 'traversal':
+        archive.writestr('../escaped.txt', b'outside extraction root')
     if mode == 'bomb':
         archive.writestr('unbounded-outside-payload.bin', b'0' * (8 * 1024 * 1024))
     if mode == 'symlink':
@@ -54,12 +58,13 @@ with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=
     archive.writestr('Payload/Bolo.app/Bolo', b'not-a-mach-o')
 `;
 
-function inspect(ipa: string) {
+function inspect(ipa: string, temporaryDirectory?: string) {
   return spawnSync('bash', [inspector, ipa], {
     cwd: root,
     encoding: 'utf8',
     env: {
       ...process.env,
+      ...(temporaryDirectory ? { TMPDIR: temporaryDirectory, TEMP: temporaryDirectory, TMP: temporaryDirectory } : {}),
       BASELINE_IPA_BYTES: '500000',
       EXPECTED_API_URL: 'https://api.example.test',
       EXPECTED_APP_IDENTIFIER: 'com.bolo.hindi',
@@ -76,6 +81,32 @@ describe('signed IPA inspection archive bounds', () => {
   const directory = mkdtempSync(join(tmpdir(), 'bolo-ipa-test-'));
 
   afterAll(() => rmSync(directory, { force: true, recursive: true }));
+
+  it('rejects archive members outside the extraction root', () => {
+    const ipa = join(directory, 'traversal.ipa');
+    expect(spawnSync('python3', ['-c', generator, ipa, 'traversal']).status).toBe(0);
+
+    const result = inspect(ipa);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('unsafe path: ../escaped.txt');
+    expect(result.stderr).not.toContain('signature verification');
+  });
+
+  it('allows a bounded archive when the temporary directory resolves through a link', () => {
+    const target = join(directory, 'real-temp');
+    const linked = join(directory, 'linked-temp');
+    mkdirSync(target);
+    symlinkSync(target, linked, 'junction');
+    const ipa = join(directory, 'linked-temp-bounded.ipa');
+    expect(spawnSync('python3', ['-c', generator, ipa, 'bounded']).status).toBe(0);
+
+    const result = inspect(ipa, linked);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('signature verification');
+    expect(result.stderr).not.toContain('unsafe path');
+  });
 
   it('rejects a high-ratio member before extracting or invoking codesign', () => {
     const ipa = join(directory, 'expansion-bomb.ipa');

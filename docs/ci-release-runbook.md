@@ -6,7 +6,7 @@ This runbook separates merge checks, nightly staging acceptance, signed artifact
 
 Create an active branch ruleset for `main`. Require a pull request, require the branch to be up to date, dismiss stale approvals, require conversation resolution, and block force pushes and deletion. Require the single status check `required-checks` by its exact context name.
 
-`required-checks` uses `if: always()` and fails unless all eight merge jobs report `success`: `verify`, `website`, `expo-doctor`, `ios-prebuild`, `production-config`, `ios-native-build`, `maestro-smoke`, and `security`. This aggregate is intentionally fail-closed: a failed prerequisite that skips a downstream native job cannot be reported as an acceptable skipped required check.
+`required-checks` uses `if: always()` and fails unless all nine merge jobs report `success`: `dependency-audit`, `verify`, `website`, `expo-doctor`, `ios-prebuild`, `production-config`, `ios-native-build`, `maestro-smoke`, and `security`. This aggregate is intentionally fail-closed: a failed prerequisite that skips a downstream native job cannot be reported as an acceptable skipped required check. The dependency exception approval gate is included even when the separate security scan succeeds.
 
 Do not add CodeQL, the scheduled nightly workflow, release preflight, TestFlight upload, or physical signoff as required merge checks. A sole owner cannot satisfy an independent approval rule; add a trusted reviewer before requiring one approval or preventing self-approval.
 
@@ -36,7 +36,7 @@ If Code Security becomes available:
 3. Set repository variable `ENABLE_CODEQL=true`.
 4. Enable dependency review and retain its high/critical merge policy in the `security` aggregate check.
 
-If Code Security is unavailable, the `security` job still evaluates both `npm audit --omit=dev` and the full dependency tree against the checked-in, expiring advisory baseline, plus the secret scan. Any new high/critical runtime, development, or build-time advisory fails. The two existing `image-size` advisories remain warning-level only while their severity, non-direct status, installed node, and sole `metro` dependent exactly match the reviewed build-path fingerprint. The gate also rejects adding `image-size` to a root runtime dependency field or importing it from JavaScript/TypeScript source under `src`; a new runtime path carrying the same GHSA therefore fails. Baseline review dates must be real dates no more than 90 days away. Do not mark CodeQL as required. Moving the repository to an eligible organization is the normal route to private-repository Code Security.
+If Code Security is unavailable, the `security` job still evaluates both `npm audit --omit=dev` and the full dependency tree against the checked-in advisory baseline, plus the secret scan. Any new high/critical runtime, development, or build-time advisory fails. The current baseline and accepted exception list are empty: the previous `image-size` advisories were removed by Expo SDK 57 and Metro patch updates. A future exception must retain its exact reviewed dependency-path fingerprint, explicit approval, and a real review date no more than 90 days away; adding a runtime declaration or source import for a build-only exception also fails the gate. Do not mark CodeQL as required. Moving the repository to an eligible organization is the normal route to private-repository Code Security.
 
 If GitHub Secret Protection is licensed, enable native secret scanning and push protection under **Settings → Advanced Security**. The workflow secret scanner remains useful for history and custom patterns, but it runs after a push and is not a substitute for push protection. Rotate a detected credential even if it is later removed from Git history.
 
@@ -55,6 +55,8 @@ The two staging URLs must be present and must differ from the production API and
 Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Simulator voice flows may take the “physical iPhone required” branch, so actual WebRTC microphone turns remain a release signoff item.
 
 The PR smoke job downloads Maestro CLI 2.8.0 over HTTPS and verifies the vendor-published `checksums_sha256.txt` digest before extraction. When updating Maestro, review the signed GitHub release, replace both `MAESTRO_VERSION` and `MAESTRO_SHA256`, and verify the new asset locally before merging.
+
+The smoke job gives the iOS driver five minutes to start with `MAESTRO_DRIVER_STARTUP_TIMEOUT=300000`. [Maestro 2.8.0 reads this value in milliseconds](https://github.com/mobile-dev-inc/maestro/blob/cli-2.8.0/maestro-ios-driver/src/main/kotlin/xcuitest/installer/LocalXCTestInstaller.kt); its default is two minutes. The smoke step remains limited to fifteen minutes within the thirty-minute job, and a startup or flow failure still fails CI. Debug output is written to `maestro-artifacts/driver-logs` and uploaded with the smoke results even if the driver fails before producing JUnit output. Inspect those XCTest startup logs before changing timeouts again.
 
 The EAS nightly job also pins `maestro_version: 2.8.0`; do not restore Expo's moving `latest` default. Its manual trigger must remain the schema-valid object form `workflow_dispatch: {}`.
 
