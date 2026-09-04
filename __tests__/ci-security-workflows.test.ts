@@ -1,6 +1,11 @@
-const { readFileSync } = require('fs') as {
+const { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('fs') as {
   readFileSync: (path: string, encoding: 'utf8') => string;
+  mkdtempSync: (prefix: string) => string;
+  mkdirSync: (path: string, options: { recursive: boolean }) => void;
+  writeFileSync: (path: string, data: string, encoding: 'utf8') => void;
+  rmSync: (path: string, options: { recursive: boolean; force: boolean }) => void;
 };
+const { tmpdir } = require('os') as { tmpdir: () => string };
 const { resolve } = require('path') as {
   resolve: (...paths: string[]) => string;
 };
@@ -169,6 +174,59 @@ describe('fail-closed merge verification', () => {
     expect(artifactStep).toContain('maestro-artifacts');
     expect(smokeStep).not.toContain('continue-on-error');
   });
+});
+
+describe('Maestro flow validation across checkout line endings', () => {
+  test.each(['\n', '\r\n'])('validates flows and subflows with %j line endings', (newline) => {
+    const result = validateFixture(newline);
+
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Validated 4 Maestro device flows and 1 subflows');
+  });
+
+  test.each(['flows/0.yaml', 'subflows/helper.yaml'])('rejects a wrong bundle identifier in CRLF %s', (invalidFile) => {
+    const result = validateFixture('\r\n', invalidFile);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`${invalidFile} does not target the Bolo bundle identifier (com.bolo.hindi).`);
+  });
+
+  function validateFixture(newline: string, invalidFile?: string) {
+    const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'bolo-maestro-validation-'));
+    const commands = [
+      '- launchApp:',
+      '    clearState: true',
+      '- stopApp',
+      '- assertVisible: "Scene complete"',
+      '- assertVisible: "Turn 2 of 2"',
+      '- assertVisible: "Enable live practice"',
+      '- setPermissions:',
+      '    permissions:',
+      '      microphone: deny',
+      '- pressKey: Home',
+      '- assertVisible: "चीनी कम, कृपया।"',
+      '- assertVisible: "Delete my Bolo data"',
+      '- setAirplaneMode: enabled',
+    ];
+    try {
+      mkdirSync(resolve(fixtureRoot, '.maestro/flows'), { recursive: true });
+      mkdirSync(resolve(fixtureRoot, '.maestro/subflows'), { recursive: true });
+      const files = ['flows/0.yaml', 'flows/1.yaml', 'flows/2.yaml', 'flows/3.yaml', 'subflows/helper.yaml'];
+      for (const file of files) {
+        const appId = file === invalidFile ? 'com.other.app' : 'com.bolo.hindi';
+        const body = file === 'flows/0.yaml' ? commands : ['- stopApp'];
+        writeFileSync(resolve(fixtureRoot, '.maestro', file), [`appId: ${appId}`, '---', ...body, ''].join(newline), 'utf8');
+      }
+      return spawnSync(process.execPath, [resolve(root, 'scripts/validate-e2e-flows.mjs')], {
+        cwd: fixtureRoot,
+        encoding: 'utf8',
+        env: { ...process.env, BOLO_APP_IDENTIFIER: 'com.bolo.hindi' },
+      });
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  }
 });
 
 describe('nightly and release approval gates', () => {
