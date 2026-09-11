@@ -1,14 +1,16 @@
+jest.mock('expo-constants', () => ({ __esModule: true, default: { expoConfig: { extra: { boloLiveApiUrl: 'https://live.example.test' } } } }));
+
 import { splitAiVoiceText } from '../src/lib/speech-text';
-import { buildRealtimeSessionConfig } from '../src/lib/realtime-session';
 import {
   AI_VOICE_TEXT_LIMIT,
   buildMobileChatPayload,
   checkPronunciation,
-  createRealtimeClientSecret,
+  createLiveCall,
   deleteMobileData,
   getBoloApiUrl,
+  getBoloLiveApiUrl,
   MOBILE_LANGUAGE_MODE,
-  OPENAI_REALTIME_MODEL,
+  OPENAI_LIVE_MODEL,
   prepareSavedPhraseFromText,
   requestAiVoiceAudio,
   sendMobileChat,
@@ -32,34 +34,26 @@ describe('connected coaching contract', () => {
     }
   });
 
-  it('falls back to the API base published through the resolved Expo configuration', () => {
-    jest.isolateModules(() => {
-      jest.doMock('expo-constants', () => ({
-        __esModule: true,
-        default: { expoConfig: { extra: { boloApiUrl: 'https://api.example.test/app/bolo/' } } },
-      }));
-
-      const { getBoloApiUrl: resolveApiUrl } = require('../src/services/bolo-api') as {
-        getBoloApiUrl: () => string;
-      };
-
-      expect(resolveApiUrl()).toBe('https://api.example.test/app/bolo');
-    });
+  it('uses a valid HTTPS API base and ignores HTTP configuration', () => {
+    const constants = jest.requireMock('expo-constants').default;
+    constants.expoConfig.extra.boloApiUrl = 'https://api.example.test/app/bolo/';
+    expect(getBoloApiUrl()).toBe('https://api.example.test/app/bolo');
+    constants.expoConfig.extra.boloApiUrl = 'http://api.example.test';
+    expect(getBoloApiUrl()).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
+    delete constants.expoConfig.extra.boloApiUrl;
   });
 
-  it('ignores a non-HTTPS API base in the resolved Expo configuration', () => {
-    jest.isolateModules(() => {
-      jest.doMock('expo-constants', () => ({
-        __esModule: true,
-        default: { expoConfig: { extra: { boloApiUrl: 'http://api.example.test' } } },
-      }));
-
-      const { getBoloApiUrl: resolveApiUrl } = require('../src/services/bolo-api') as {
-        getBoloApiUrl: () => string;
-      };
-
-      expect(resolveApiUrl()).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
-    });
+  it('requires an independent trusted live server URL and never falls back to typed coaching', () => {
+    const constants = jest.requireMock('expo-constants').default;
+    const original = constants.expoConfig.extra.boloLiveApiUrl;
+    try {
+      for (const value of [undefined, '', 'http://live.example.test', 'https://key:secret@live.example.test', 'https://live.example.test?key=secret']) {
+        constants.expoConfig.extra.boloLiveApiUrl = value;
+        expect(getBoloLiveApiUrl).toThrow('Live voice is not configured');
+      }
+      constants.expoConfig.extra.boloLiveApiUrl = 'https://live.example.test/base/';
+      expect(getBoloLiveApiUrl()).toBe('https://live.example.test/base');
+    } finally { constants.expoConfig.extra.boloLiveApiUrl = original; }
   });
 
   it('splits long mixed-language replies into bounded AI-voice requests', () => {
@@ -374,74 +368,31 @@ describe('connected coaching contract', () => {
     }
   });
 
-  it('requests only a short-lived GPT Realtime client secret from the backend', async () => {
+  it('exchanges the real offer and bounded history through the backend, without client credentials', async () => {
     const originalFetch = globalThis.fetch;
-    const expiresAt = Math.floor(Date.now() / 1000) + 60;
-    const fetchMock = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ value: 'temporary-client-secret', expires_at: expiresAt }),
-    }));
+    const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
+    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId: 'live-session-123' }) }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
     try {
-      await expect(createRealtimeClientSecret('client-12345678')).resolves.toEqual({
-        value: 'temporary-client-secret',
-        expires_at: expiresAt,
-      });
-      expect(fetchMock).toHaveBeenCalledWith(
-        'https://api-v2.appdeploy.ai/app/74e39779183cf78fed/api/realtime-token',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({
-            clientId: 'client-12345678',
-            model: OPENAI_REALTIME_MODEL,
-            languageMode: MOBILE_LANGUAGE_MODE,
-          }),
-        }),
-      );
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      const history = Array.from({ length: 15 }, () => ({ role: 'you' as const, text: 'a'.repeat(900) }));
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'hi', history })).resolves.toEqual({ answerSdp, sessionId: 'live-session-123' });
+      expect(OPENAI_LIVE_MODEL).toBe('gpt-live-1');
+      expect(fetchMock).toHaveBeenCalledWith('https://live.example.test/api/live-call', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'hi', history: history.slice(-10).map((row) => ({ ...row, text: row.text.slice(0, 600) })) }),
+      }));
+    } finally { globalThis.fetch = originalFetch; }
   });
 
-  it('rejects a standard API key returned to the mobile client', async () => {
+  it('rejects invalid local offers without a network call and rejects credential-shaped responses', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ value: 'sk-proj-must-not-reach-client', expires_at: Math.floor(Date.now() / 1000) + 60 }),
-    })) as unknown as typeof fetch;
-
+    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ value: 'sk-must-not-reach-client', expires_at: 123 }) }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
     try {
-      await expect(createRealtimeClientSecret('client-12345678')).rejects.toThrow('Bolo returned an invalid response.');
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  it('configures native Realtime speech-to-speech with deterministic turns and the selected response language', () => {
-    const englishSession = buildRealtimeSessionConfig(OPENAI_REALTIME_MODEL, 'en');
-    const hindiSession = buildRealtimeSessionConfig(OPENAI_REALTIME_MODEL, 'hi');
-
-    expect(englishSession).toMatchObject({
-      type: 'realtime',
-      model: 'gpt-realtime-2.1',
-      output_modalities: ['text'],
-      audio: {
-        input: {
-          transcription: { model: 'gpt-4o-mini-transcribe' },
-          turn_detection: null,
-        },
-      },
-    });
-    expect(englishSession.instructions).toContain('Reply in concise, natural English');
-    expect(hindiSession.instructions).toContain('Reply in concise, natural spoken Hindi');
-    expect(englishSession.instructions).toContain('form every Hindi phrase in Devanagari');
-    expect(hindiSession.instructions).toContain('Use Devanagari for every Hindi word or phrase');
-    expect(hindiSession.instructions).toContain('standard Indian Hindi pronunciation and prosody');
-    expect(englishSession.instructions).toContain('Check factual claims and calculations before answering');
-    expect(hindiSession.instructions).toContain('compute prices and change carefully');
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: 'not SDP', responseLanguage: 'en' })).rejects.toThrow('could not start');
+      expect(fetchMock).not.toHaveBeenCalled();
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n', responseLanguage: 'en' })).rejects.toThrow('invalid response');
+    } finally { globalThis.fetch = originalFetch; }
   });
 
   it('requests deletion using only the current random app identifier', async () => {

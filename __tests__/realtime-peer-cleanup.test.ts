@@ -42,6 +42,8 @@ function mountWebPeer() {
     addEventListener: jest.fn((event: string, handler: () => void) => peerHandlers.set(event, handler)),
     close: jest.fn(),
     connectionState: 'connected',
+    iceGatheringState: 'complete',
+    localDescription: { sdp: 'gathered-offer' },
     iceConnectionState: 'connected',
     createDataChannel: jest.fn(() => dataChannel),
     createOffer: jest.fn(async () => ({ sdp: 'web-offer', type: 'offer' })),
@@ -84,6 +86,34 @@ describe('Realtime peer setup cleanup', () => {
     jest.useRealTimers();
   });
 
+  it('releases native microphone capture when permission finishes after cancellation', async () => {
+    const permission = deferred<{ getAudioTracks: () => { enabled: boolean; stop: jest.Mock }[]; getTracks: () => { enabled: boolean; stop: jest.Mock }[] }>();
+    const microphone = { enabled: true, stop: jest.fn() };
+    (mediaDevices.getUserMedia as jest.Mock).mockReturnValue(permission.promise);
+    const controller = new AbortController();
+    const failure = createNativeSession({ exchangeSdp: jest.fn(), onClose: jest.fn(), onMessage: jest.fn(), signal: controller.signal }).catch((error: unknown) => error);
+    controller.abort();
+    permission.resolve({ getAudioTracks: () => [microphone], getTracks: () => [microphone] });
+    expect(await failure).toEqual(expect.objectContaining({ message: 'The live voice connection was canceled.' }));
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(RTCPeerConnection).not.toHaveBeenCalled();
+  });
+
+  it('exchanges the gathered local SDP through the backend and never exposes a provider key', async () => {
+    const { microphone, peer } = mountWebPeer();
+    const exchangeSdp = jest.fn(async () => 'live-answer');
+    const session = await createWebSession({ exchangeSdp, onClose: jest.fn(), onMessage: jest.fn() });
+    expect(exchangeSdp).toHaveBeenCalledWith('gathered-offer', expect.anything());
+    expect(peer.setRemoteDescription).toHaveBeenCalledWith({ type: 'answer', sdp: 'live-answer' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(microphone.enabled).toBe(false);
+    session.close();
+    session.close();
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    session.setMicrophoneEnabled(true);
+    expect(microphone.enabled).toBe(false);
+  });
+
   it('closes the native microphone and peer when abort fires during remote description setup', async () => {
     const remoteDescription = deferred<void>();
     const microphone = { enabled: true, stop: jest.fn() };
@@ -101,6 +131,8 @@ describe('Realtime peer setup cleanup', () => {
       addTrack: jest.fn(),
       close: jest.fn(),
       connectionState: 'connecting',
+      iceGatheringState: 'complete',
+      localDescription: { sdp: 'gathered-offer' },
       createDataChannel: jest.fn(() => dataChannel),
       createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
       setLocalDescription: jest.fn(async () => undefined),
@@ -116,7 +148,7 @@ describe('Realtime peer setup cleanup', () => {
     const controller = new AbortController();
     let rejection: unknown;
     const session = createNativeSession({
-      ephemeralKey: 'ek_native',
+      exchangeSdp: async () => 'live-answer',
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: controller.signal,
@@ -161,6 +193,8 @@ describe('Realtime peer setup cleanup', () => {
       addTrack: jest.fn(),
       close: jest.fn(),
       connectionState: 'connecting',
+      iceGatheringState: 'complete',
+      localDescription: { sdp: 'gathered-offer' },
       createDataChannel: jest.fn(() => dataChannel),
       createOffer: jest.fn(async () => ({ sdp: 'web-offer', type: 'offer' })),
       addEventListener: jest.fn(),
@@ -187,7 +221,7 @@ describe('Realtime peer setup cleanup', () => {
     const controller = new AbortController();
     let rejection: unknown;
     const session = createWebSession({
-      ephemeralKey: 'ek_web',
+      exchangeSdp: async () => 'live-answer',
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: controller.signal,
@@ -231,6 +265,8 @@ describe('Realtime peer setup cleanup', () => {
       addTrack: jest.fn(),
       close: jest.fn(),
       connectionState: 'connecting',
+      iceGatheringState: 'complete',
+      localDescription: { sdp: 'gathered-offer' },
       createDataChannel: jest.fn(() => dataChannel),
       createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
       setLocalDescription: jest.fn(async () => undefined),
@@ -246,7 +282,7 @@ describe('Realtime peer setup cleanup', () => {
 
     let rejection: unknown;
     const session = createNativeSession({
-      ephemeralKey: 'ek_native_timeout',
+      exchangeSdp: async () => 'live-answer',
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: new AbortController().signal,
@@ -283,6 +319,8 @@ describe('Realtime peer setup cleanup', () => {
       addTrack: jest.fn(),
       close: jest.fn(),
       connectionState: 'connecting',
+      iceGatheringState: 'complete',
+      localDescription: { sdp: 'gathered-offer' },
       createDataChannel: jest.fn(() => dataChannel),
       createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
       setLocalDescription: jest.fn(async () => undefined),
@@ -298,7 +336,7 @@ describe('Realtime peer setup cleanup', () => {
     const controller = new AbortController();
     let rejection: unknown;
     const session = createNativeSession({
-      ephemeralKey: 'ek_native',
+      exchangeSdp: async () => 'live-answer',
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: controller.signal,
@@ -338,6 +376,8 @@ describe('Realtime peer setup cleanup', () => {
       addTrack: jest.fn(),
       close: jest.fn(),
       connectionState: 'connecting',
+      iceGatheringState: 'complete',
+      localDescription: { sdp: 'gathered-offer' },
       createDataChannel: jest.fn(() => dataChannel),
       createOffer: jest.fn(async () => ({ sdp: 'web-offer', type: 'offer' })),
       addEventListener: jest.fn(),
@@ -364,7 +404,7 @@ describe('Realtime peer setup cleanup', () => {
     const controller = new AbortController();
     let rejection: unknown;
     const session = createWebSession({
-      ephemeralKey: 'ek_web',
+      exchangeSdp: async () => 'live-answer',
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: controller.signal,
@@ -404,6 +444,8 @@ describe('Realtime peer setup cleanup', () => {
       addTrack: jest.fn(),
       close: jest.fn(),
       connectionState: 'connected',
+    iceGatheringState: 'complete',
+    localDescription: { sdp: 'gathered-offer' },
       iceConnectionState: 'connected',
       createDataChannel: jest.fn(() => dataChannel),
       createOffer: jest.fn(async () => ({ sdp: 'native-offer', type: 'offer' })),
@@ -417,7 +459,7 @@ describe('Realtime peer setup cleanup', () => {
     const onClose = jest.fn();
 
     await createNativeSession({
-      ephemeralKey: 'temporary-client-secret',
+      exchangeSdp: async () => 'live-answer',
       onClose,
       onMessage: jest.fn(),
       signal: new AbortController().signal,
@@ -440,7 +482,7 @@ describe('Realtime peer setup cleanup', () => {
     const onClose = jest.fn();
 
     await createWebSession({
-      ephemeralKey: 'ek_web_watchdog',
+      exchangeSdp: async () => 'live-answer',
       onClose,
       onMessage: jest.fn(),
       signal: new AbortController().signal,
@@ -464,7 +506,7 @@ describe('Realtime peer setup cleanup', () => {
     const onClose = jest.fn();
 
     await createWebSession({
-      ephemeralKey: 'ek_web_recovery',
+      exchangeSdp: async () => 'live-answer',
       onClose,
       onMessage: jest.fn(),
       signal: new AbortController().signal,
@@ -490,7 +532,7 @@ describe('Realtime peer setup cleanup', () => {
     });
 
     await expect(createWebSession({
-      ephemeralKey: 'ek_web_denied',
+      exchangeSdp: async () => 'live-answer',
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: new AbortController().signal,

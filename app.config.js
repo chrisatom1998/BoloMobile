@@ -33,6 +33,10 @@ module.exports = ({ config }) => {
   const isProduction = process.env.EAS_BUILD_PROFILE === 'production';
   const publicSiteUrl = httpsUrl('BOLO_PUBLIC_SITE_URL', process.env.BOLO_PUBLIC_SITE_URL, DEFAULT_PUBLIC_SITE_URL);
   const boloApiUrl = httpsUrl('BOLO_API_URL', process.env.BOLO_API_URL, DEFAULT_API_URL);
+  const boloLiveApiUrl = httpsUrl('BOLO_LIVE_API_URL', process.env.BOLO_LIVE_API_URL, undefined);
+  if (boloLiveApiUrl && (new URL(boloLiveApiUrl).search || new URL(boloLiveApiUrl).hash)) {
+    throw new Error('BOLO_LIVE_API_URL must not include query parameters or a fragment.');
+  }
 
   if (configuredIdentifier && !IDENTIFIER_PATTERN.test(configuredIdentifier)) {
     throw new Error('BOLO_APP_IDENTIFIER must be a lowercase reverse-domain identifier, for example com.yourdomain.bolo.');
@@ -75,6 +79,7 @@ module.exports = ({ config }) => {
       publicSupportUrl: `${publicSiteUrl}/?page=support`,
       publicTermsUrl: `${publicSiteUrl}/?page=terms`,
       boloApiUrl,
+      boloLiveApiUrl,
       ...(configuredProjectId ? { eas: { ...config.extra?.eas, projectId: configuredProjectId } } : {}),
     },
   };

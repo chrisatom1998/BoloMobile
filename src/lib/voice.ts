@@ -42,10 +42,18 @@ const VOICE_AUDIO_MODES = {
 } as const;
 
 let currentVoiceAudioMode: VoiceAudioMode = 'idle';
+let audioModeTail: Promise<void> = Promise.resolve();
 
-export async function setVoiceAudioMode(mode: VoiceAudioMode) {
-  await setAudioModeAsync(VOICE_AUDIO_MODES[mode]);
-  currentVoiceAudioMode = mode;
+export function setVoiceAudioMode(mode: VoiceAudioMode) {
+  // Native audio transitions can finish out of order. Serialize setup, teardown,
+  // and a subsequent connection so an old setup cannot re-enable a closed call.
+  const transition = audioModeTail.then(async () => {
+    await setAudioModeAsync(VOICE_AUDIO_MODES[mode]);
+    currentVoiceAudioMode = mode;
+  });
+  // Propagate this transition's error to its caller while allowing later resets.
+  audioModeTail = transition.catch(() => undefined);
+  return transition;
 }
 
 export function resetVoiceAudioMode() {
