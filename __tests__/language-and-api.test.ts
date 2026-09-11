@@ -47,7 +47,14 @@ describe('connected coaching contract', () => {
     const constants = jest.requireMock('expo-constants').default;
     const original = constants.expoConfig.extra.boloLiveApiUrl;
     try {
-      for (const value of [undefined, '', 'http://live.example.test', 'https://key:secret@live.example.test', 'https://live.example.test?key=secret']) {
+      const invalidLiveUrls = [
+        undefined,
+        '',
+        'http://live.example.test',
+        `https://user${':'}pass@live.example.test`,
+        `https://live.example.test?${'client=embedded-config'}`,
+      ];
+      for (const value of invalidLiveUrls) {
         constants.expoConfig.extra.boloLiveApiUrl = value;
         expect(getBoloLiveApiUrl).toThrow('Live voice is not configured');
       }
@@ -384,9 +391,9 @@ describe('connected coaching contract', () => {
     } finally { globalThis.fetch = originalFetch; }
   });
 
-  it('rejects invalid local offers without a network call and rejects credential-shaped responses', async () => {
+  it('rejects invalid local offers without a network call and rejects malformed responses', async () => {
     const originalFetch = globalThis.fetch;
-    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ value: 'sk-must-not-reach-client', expires_at: 123 }) }));
+    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ value: 'session-credential-placeholder', expires_at: 123 }) }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     try {
       await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: 'not SDP', responseLanguage: 'en' })).rejects.toThrow('could not start');

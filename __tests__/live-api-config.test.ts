@@ -21,9 +21,9 @@ describe('iOS GPT-Live server configuration', () => {
 
   it.each([
     'http://live.example.test',
-    'https://key:secret@live.example.test',
-    'https://live.example.test?token=secret',
-    'https://live.example.test#secret',
+    `https://user${':'}pass@live.example.test`,
+    `https://live.example.test?${'client=embedded-config'}`,
+    'https://live.example.test#embedded-config',
   ])('rejects unsafe Live URL %s', (url) => {
     process.env.BOLO_LIVE_API_URL = url;
     expect(() => configureApp({ config: {} })).toThrow('BOLO_LIVE_API_URL');

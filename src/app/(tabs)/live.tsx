@@ -91,6 +91,7 @@ export default function LiveScreen() {
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
+  const [screenFocused, setScreenFocused] = useState(true);
   const liveSnapshotIdsRef = useRef<string[]>([]);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
@@ -100,7 +101,6 @@ export default function LiveScreen() {
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
   const selectionClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const transcriptTurnActionRef = useRef<(() => void) | null>(null);
-  const realtimeDisconnectRef = useRef<(() => void) | null>(null);
   const backgroundCheckpointedRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
@@ -114,7 +114,7 @@ export default function LiveScreen() {
   const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
-  const transcriptTurnDisabled = !aiConsent || busy || realtimeStatus === 'connecting';
+  const transcriptTurnDisabled = !aiConsent || !screenFocused || busy || realtimeStatus === 'connecting';
   const transcriptTurnLabel = {
     disconnected: 'Connect with Asha',
     connecting: 'Connecting to Asha…',
@@ -150,10 +150,6 @@ export default function LiveScreen() {
     transcriptTurnActionRef.current = action;
   }, []);
 
-  const bindRealtimeDisconnect = useCallback((disconnect: (() => void) | null) => {
-    realtimeDisconnectRef.current = disconnect;
-  }, []);
-
   const startTranscriptTurn = useCallback(() => {
     if (transcriptTurnDisabled) return;
     transcriptTurnActionRef.current?.();
@@ -164,11 +160,12 @@ export default function LiveScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    setScreenFocused(true);
     practiced.current = false;
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
-      realtimeDisconnectRef.current?.();
+      setScreenFocused(false);
       if (practiced.current) addPracticeSeconds(elapsedSeconds());
       void stopSpeaking();
     };
@@ -521,7 +518,7 @@ export default function LiveScreen() {
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
                   </View>
-                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy} enabled={aiConsent} motionMode={motionMode} onDisconnectReady={bindRealtimeDisconnect} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
+                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
                   <View style={styles.heroCopy}>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
