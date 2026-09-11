@@ -17,6 +17,7 @@ export type RealtimeTranscriptUpdate = { speaker: 'you' | 'asha'; text: string }
 export type RealtimeInputTranscript = { itemId: string; transcript: string };
 type Options = {
   clientId: string;
+  enabled?: boolean;
   responseLanguage?: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
   onError: (message: string) => void;
@@ -45,7 +46,7 @@ type PendingCommand = {
 const START_TIMEOUT_MS = 15_000;
 const COMMAND_TIMEOUT_MS = 10_000;
 
-export function useRealtimeConversation({ clientId, responseLanguage = 'en', ...options }: Options) {
+export function useRealtimeConversation({ clientId, enabled = true, responseLanguage = 'en', ...options }: Options) {
   const [status, setStatus] = useState<RealtimeVoiceStatus>('disconnected');
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -299,6 +300,8 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', ...
   }, [disconnect]);
   // Startup-only language and identity fields require a fresh Live session.
   useEffect(() => () => disconnect(), [clientId, responseLanguage, disconnect]);
+  // Withdrawn consent must end a session that is still mounted.
+  useEffect(() => enabled ? () => disconnect() : undefined, [enabled, disconnect]);
 
   return { connect, disconnect, finishTurn, startTurn, status, microphoneEnabled, isPlaying };
 }

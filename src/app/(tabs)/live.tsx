@@ -100,6 +100,7 @@ export default function LiveScreen() {
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
   const selectionClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const transcriptTurnActionRef = useRef<(() => void) | null>(null);
+  const realtimeDisconnectRef = useRef<(() => void) | null>(null);
   const backgroundCheckpointedRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
@@ -149,6 +150,10 @@ export default function LiveScreen() {
     transcriptTurnActionRef.current = action;
   }, []);
 
+  const bindRealtimeDisconnect = useCallback((disconnect: (() => void) | null) => {
+    realtimeDisconnectRef.current = disconnect;
+  }, []);
+
   const startTranscriptTurn = useCallback(() => {
     if (transcriptTurnDisabled) return;
     transcriptTurnActionRef.current?.();
@@ -163,6 +168,7 @@ export default function LiveScreen() {
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
+      realtimeDisconnectRef.current?.();
       if (practiced.current) addPracticeSeconds(elapsedSeconds());
       void stopSpeaking();
     };
@@ -515,7 +521,7 @@ export default function LiveScreen() {
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
                   </View>
-                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
+                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy} enabled={aiConsent} motionMode={motionMode} onDisconnectReady={bindRealtimeDisconnect} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
                   <View style={styles.heroCopy}>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>

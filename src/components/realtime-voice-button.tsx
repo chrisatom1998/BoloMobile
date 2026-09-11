@@ -23,11 +23,14 @@ type Props = {
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
+  enabled?: boolean;
   motionMode?: EffectiveMotion;
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  /** Shares this exact control's session teardown with the hosting screen. */
+  onDisconnectReady?: (disconnect: (() => void) | null) => void;
   /** Shares this exact control's turn action with a companion UI surface. */
   onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
@@ -127,8 +130,8 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
-  const voice = useRealtimeConversation({ clientId, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
+export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+  const voice = useRealtimeConversation({ clientId, enabled, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
@@ -167,6 +170,11 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
     onTurnActionReady?.(press);
     return () => onTurnActionReady?.(null);
   }, [onTurnActionReady, press]);
+
+  useEffect(() => {
+    onDisconnectReady?.(voice.disconnect);
+    return () => onDisconnectReady?.(null);
+  }, [onDisconnectReady, voice.disconnect]);
 
   const endSession = useCallback(() => {
     hapticSelect();

@@ -192,6 +192,17 @@ describe('GPT-Live conversation lifecycle', () => {
     await unmount();
   });
 
+  it('ends the session when consent is withdrawn while mounted', async () => {
+    const { result, rerender, unmount } = await renderHook(({ enabled }: { enabled: boolean }) => useRealtimeConversation({ clientId: 'client-12345678', enabled, onError: jest.fn(), onTurnComplete: jest.fn() }), { initialProps: { enabled: true } });
+    await act(async () => { await result.current.connect(); });
+    expect(result.current.status).toBe('ready');
+    await rerender({ enabled: false });
+    expect(result.current.status).toBe('disconnected');
+    expect(peer.send).toHaveBeenCalledWith({ type: 'session.close' });
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    await unmount();
+  });
+
   it('bounds the startup wait and releases microphone resources on timeout', async () => {
     jest.useFakeTimers();
     autoStart = false;
