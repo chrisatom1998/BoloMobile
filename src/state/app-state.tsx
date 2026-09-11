@@ -10,6 +10,7 @@ import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { updatePracticeWidget } from '@/lib/practice-widget';
 import {
   appendChatHistory,
+  replaceChatHistorySnapshot,
   calculateStreak,
   createAiConsentRecord,
   dateKey,
@@ -68,6 +69,7 @@ type AppActions = {
   markLiveTurn: (seconds?: number) => void;
   addPracticeSeconds: (seconds: number) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
+  replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
   clearChatHistory: () => void;
   setAiConsent: (consent: boolean) => Promise<boolean>;
   setReminder: (reminder: ReminderSettings) => void;
@@ -177,6 +179,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const stateRef = useRef<PersistedState>(initialState);
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
+  const liveSnapshotWriteQueuedRef = useRef(false);
 
   const replaceState = useCallback((next: PersistedState) => {
     stateRef.current = next;
@@ -431,6 +434,25 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['chatHistory']);
   }, [commit]);
 
+  const replaceLiveChatSnapshot = useCallback((previousIds: string[], messages: ChatMessage[]) => {
+    if (clearingAllDataRef.current) return;
+    const current = stateRef.current;
+    const chatHistory = replaceChatHistorySnapshot(current.chatHistory, previousIds, messages);
+    if (chatHistory === current.chatHistory) return;
+    replaceState({ ...current, chatHistory });
+    // A slow device can receive many deltas during one storage write. Queue at
+    // most one follow-up snapshot, reading the newest state when it begins.
+    if (liveSnapshotWriteQueuedRef.current) return;
+    liveSnapshotWriteQueuedRef.current = true;
+    void enqueuePersistence(async () => {
+      liveSnapshotWriteQueuedRef.current = false;
+      if (clearingAllDataRef.current) return;
+      await persistState(stateRef.current, ['chatHistory']);
+    }).catch((error: unknown) => {
+      reportPersistenceFailure(error, 'Bolo could not save the latest live captions. They remain visible until you leave the app. Check available storage.');
+    });
+  }, [enqueuePersistence, replaceState]);
+
   const clearChatHistory = useCallback(() => {
     commit((current) => current.chatHistory.length === 0 ? current : { ...current, chatHistory: [] }, ['chatHistory']);
   }, [commit]);
@@ -504,12 +526,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     markLiveTurn,
     addPracticeSeconds,
     appendChatMessages,
+    replaceLiveChatSnapshot,
     clearChatHistory,
     setAiConsent,
     setReminder,
     setMotionPreference,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,

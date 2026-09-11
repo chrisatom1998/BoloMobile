@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 jest.mock('lucide-react-native', () => ({
   Mic: () => null,
   Radio: () => null,
-  Send: () => null,
+  MicOff: () => null,
   X: () => null,
 }));
 
@@ -17,7 +17,7 @@ jest.mock('@/lib/haptics', () => ({
 const mockDisconnect = jest.fn();
 const mockStartTurn = jest.fn(async () => undefined);
 const mockFinishTurn = jest.fn(async () => undefined);
-let mockVoiceStatus: 'disconnected' | 'ready' | 'recording' = 'ready';
+let mockVoiceStatus: 'disconnected' | 'ready' | 'recording' | 'responding' = 'ready';
 
 jest.mock('@/hooks/use-realtime-conversation', () => ({
   useRealtimeConversation: () => ({
@@ -25,6 +25,8 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
     finishTurn: mockFinishTurn,
     startTurn: mockStartTurn,
     status: mockVoiceStatus,
+    microphoneEnabled: mockVoiceStatus === 'recording',
+    isPlaying: mockVoiceStatus === 'responding',
   }),
 }));
 
@@ -58,7 +60,7 @@ describe('realtime voice accessibility', () => {
 
   it('keeps both voice actions at least 44 points and exposes disabled state', async () => {
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" disabled onError={jest.fn()} onTurnComplete={jest.fn()} />);
-    const start = view.getByLabelText('Speak');
+    const start = view.getByLabelText('Unmute microphone');
     const end = view.getByLabelText('End live voice session');
 
     const startStyle = StyleSheet.flatten(start.props.style);
@@ -70,17 +72,26 @@ describe('realtime voice accessibility', () => {
     expect(endStyle.height).toBeGreaterThanOrEqual(44);
   });
 
-  it('uses the orb to start a ready turn and finish a recording turn', async () => {
+  it('uses the orb to unmute and mute the microphone', async () => {
     const ready = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
-    await fireEvent.press(ready.getByLabelText('Speak'));
+    await fireEvent.press(ready.getByLabelText('Unmute microphone'));
     expect(mockStartTurn).toHaveBeenCalledTimes(1);
     expect(haptics.hapticStartRecording).toHaveBeenCalledTimes(1);
     await ready.unmount();
 
     mockVoiceStatus = 'recording';
     const recording = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
-    await fireEvent.press(recording.getByLabelText('Send turn'));
+    await fireEvent.press(recording.getByLabelText('Mute microphone'));
     expect(mockFinishTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows unmuting while Asha is speaking', async () => {
+    mockVoiceStatus = 'responding';
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
+    const button = view.getByLabelText('Unmute microphone');
+    expect(button.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(button);
+    expect(mockStartTurn).toHaveBeenCalledTimes(1);
   });
 
   it('reclaims vertical space with a still-prominent compact orb', async () => {

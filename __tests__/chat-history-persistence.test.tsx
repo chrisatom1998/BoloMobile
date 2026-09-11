@@ -42,7 +42,7 @@ function deferred<T>() {
 }
 
 function HistoryHarness() {
-  const { appendChatMessages, chatHistory, clearAllData, clearChatHistory, hydrated } = useAppState();
+  const { appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearAllData, clearChatHistory, hydrated } = useAppState();
   if (!hydrated) return <Text>Hydrating</Text>;
   return (
     <View>
@@ -61,6 +61,15 @@ function HistoryHarness() {
           { id: 'asha-later', role: 'asha', text: 'A stale reply.', language: 'en' },
         ])}
       />
+      <Pressable accessibilityLabel="Stream revisable snapshots" onPress={() => {
+        replaceLiveChatSnapshot([], [
+          { id: 'live-1', role: 'you', text: 'Hello' },
+          { id: 'live-2', role: 'you', text: 'there' },
+        ]);
+        for (let index = 0; index < 50; index += 1) {
+          replaceLiveChatSnapshot(['live-1', 'live-2'], [{ id: 'live-1', role: 'you', text: `Hello there ${index}` }]);
+        }
+      }} />
       <Pressable accessibilityLabel="Clear chat history" onPress={clearChatHistory} />
       <Pressable accessibilityLabel="Clear all data" onPress={() => void clearAllData()} />
     </View>
@@ -110,6 +119,25 @@ describe('chat history provider persistence', () => {
     await waitFor(() => expect(cleared.getByTestId('history').props.children).toBe('empty'));
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
     await cleared.unmount();
+  });
+
+  it('coalesces streamed revisions, removes merged rows, and persists the final snapshot beside older history', async () => {
+    asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'asha', text: 'Previous session' }]));
+    const view = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+    await waitFor(() => expect(view.getByTestId('history').props.children).toBe('old:Previous session'));
+    asyncStorage.multiSet.mockClear();
+    await fireEvent.press(view.getByLabelText('Stream revisable snapshots'));
+    expect(view.getByTestId('history').props.children).toBe('old:Previous session|live-1:Hello there 49');
+    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? '[]')).toEqual([
+      { id: 'old', role: 'asha', text: 'Previous session' },
+      { id: 'live-1', role: 'you', text: 'Hello there 49' },
+    ]));
+    const writes = asyncStorage.multiSet.mock.calls.filter(([entries]) => entries.some(([key]: [string, string]) => key === storageKeys.chatHistory));
+    expect(writes.length).toBeLessThanOrEqual(2);
+    await view.unmount();
+    const restored = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+    await waitFor(() => expect(restored.getByTestId('history').props.children).toBe('old:Previous session|live-1:Hello there 49'));
+    await restored.unmount();
   });
 
   it('rolls back an optimistic history append when device persistence fails', async () => {

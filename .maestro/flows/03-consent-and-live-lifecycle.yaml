@@ -1,5 +1,7 @@
 appId: com.bolo.hindi
-name: Consent acceptance, microphone denial, withdrawal, and live cleanup
+name: Consent acceptance, microphone denial, withdrawal, and GPT-Live cleanup
+# Requires a physical iPhone and BOLO_LIVE_API_URL in the installed build.
+# Missing configuration or unavailable model access must fail this flow.
 tags:
   - critical
   - privacy
@@ -46,7 +48,9 @@ tags:
 - tapOn:
     text: "Don’t Allow"
     optional: true
-- assertVisible: ".*(Microphone access is required for live voice practice|Live voice requires a physical iPhone).*"
+- extendedWaitUntil:
+    visible: "Microphone access is required for live voice practice.*"
+    timeout: 30000
 - setPermissions:
     permissions:
       microphone: allow
@@ -59,8 +63,37 @@ tags:
 - tapOn:
     id: "realtime-voice-orb"
 - extendedWaitUntil:
-    visible: ".*(Asha is listening|Live voice requires a physical iPhone).*"
+    visible: "Your microphone is on"
     timeout: 30000
+- assertVisible: "Mute microphone"
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Unmute microphone"
+    timeout: 15000
+- assertVisible: ".*(Your microphone is muted|Asha is speaking).*"
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Your microphone is on"
+    timeout: 15000
+- pressKey: Home
+- launchApp:
+    stopApp: false
+- tapOn:
+    text: "Dismiss"
+    optional: true
+- assertVisible: "Start a voice conversation"
+- assertVisible: "Ready when you are"
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Your microphone is on"
+    timeout: 30000
+- tapOn: "Today"
+- tapOn: "Asha"
+- assertVisible: "Start a voice conversation"
+- assertVisible: "Ready when you are"
 - tapOn: "Today"
 - tapOn: "Settings"
 - scrollUntilVisible:

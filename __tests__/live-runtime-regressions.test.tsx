@@ -76,7 +76,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onStatusChange,
       onTranscriptChange,
       onTurnActionReady,
-      onTurnComplete,
+      onTranscriptSnapshot,
       responseLanguage,
     }: {
       disabled?: boolean;
@@ -85,9 +85,13 @@ jest.mock('@/components/realtime-voice-button', () => {
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
       onTurnActionReady?: (action: (() => void) | null) => void;
-      onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
+      onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string; startMs: number; endMs: number; fragments: never[] }[]) => void;
       responseLanguage: 'en' | 'hi';
     }) => {
+      const onTurnComplete = (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => onTranscriptSnapshot?.([
+        { id: 'live-user', speaker: 'you', text: turn.transcript, startMs: 0, endMs: 1000, fragments: [] },
+        { id: 'live-asha', speaker: 'asha', text: turn.reply, startMs: 500, endMs: 1500, fragments: [] },
+      ]);
       mockReact.useEffect(() => {
         onTurnActionReady?.(() => onStatusChange?.('recording'));
         return () => onTurnActionReady?.(null);
@@ -262,6 +266,10 @@ jest.mock('@/state/app-state', () => ({
       appState.__appendChatMessagesMock(messages);
       setChatHistory((current) => [...current, ...messages].slice(-100));
     }, []);
+    const replaceLiveChatSnapshot = mockReact.useCallback((previousIds: string[], messages: typeof chatHistory) => {
+      appState.__appendChatMessagesMock(messages);
+      setChatHistory((current) => [...current.filter((row) => !previousIds.includes(row.id)), ...messages].slice(-100));
+    }, []);
     const clearChatHistory = mockReact.useCallback(() => {
       appState.__clearChatHistoryMock();
       setChatHistory([]);
@@ -270,6 +278,7 @@ jest.mock('@/state/app-state', () => ({
       addPracticeSeconds: appState.__addPracticeSecondsMock,
       aiConsent: mockAiConsent,
       appendChatMessages,
+      replaceLiveChatSnapshot,
       chatHistory,
       clearChatHistory,
       clientId: 'client-12345678',
@@ -363,7 +372,7 @@ describe('live consent layout', () => {
     const list = view.getByTestId('live-chat-list');
 
     expect(view.getByTestId('mock-ai-consent-gate')).toBeTruthy();
-    expect(view.getByText('Before your first live turn')).toBeTruthy();
+    expect(view.getByText('Before your first live conversation')).toBeTruthy();
     expect(view.getByText('Enable live practice')).toBeTruthy();
     const testIds = collectTestIds(view.toJSON());
     expect(testIds.indexOf('live-consent-section')).toBeLessThan(testIds.indexOf('live-voice-controls'));
@@ -372,7 +381,7 @@ describe('live consent layout', () => {
     languageTabs.forEach((tab) => expect(tab.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true })));
     expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
     expect(view.getByText('Live voice unlocks here')).toBeTruthy();
-    expect(view.getByText('Your captions will appear here after the first turn.')).toBeTruthy();
+    expect(view.getAllByText('Enable live practice to see captions.')).toHaveLength(2);
     expect(view.queryByLabelText('Open chat history')).toBeNull();
     expect(view.queryByText('Ask Asha')).toBeNull();
     expect(view.queryByLabelText('Message Asha')).toBeNull();
@@ -424,12 +433,12 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
     expect(view.getByText('Ready when you are')).toBeTruthy();
-    expect(view.getByText('Tap the orb to begin a Hindi voice turn.')).toBeTruthy();
+    expect(view.getByText('Tap the orb to start talking with Asha.')).toBeTruthy();
     expect(view.getAllByText(/Tap the orb/u)).toHaveLength(1);
     const captionBadge = view.getByTestId('live-caption-label-badge');
-    expect(within(captionBadge).getByText('Live')).toBeTruthy();
+    expect(within(captionBadge).getByText('You')).toBeTruthy();
     expect(view.queryByText('LIVE')).toBeNull();
-    expect(view.getByText('Your live captions will appear here.').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByText('Your words appear here as you speak.').props.accessibilityLiveRegion).toBe('polite');
     expect(view.queryByText('Tap the orb and ask anything in Hindi.')).toBeNull();
     expect(view.queryByText('Live Asha caption')).toBeNull();
     expect(view.queryByLabelText('Open text phrase help')).toBeNull();
@@ -447,16 +456,16 @@ describe('immersive live conversation design', () => {
     expect(view.getByTestId('ask-asha-sheet-handle')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
-    expect(view.getByText('Connecting to Asha…')).toBeTruthy();
+    expect(view.getByText('Connecting to Asha')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
-    expect(view.getByText('Listening to your Hindi…')).toBeTruthy();
+    expect(view.getByText('Your microphone is on')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
-    expect(view.getByText('Asha is preparing your English reply…')).toBeTruthy();
+    expect(view.getByText('Asha is speaking')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.queryByText('Live Asha caption')).toBeNull();
 
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
-    expect(view.getByText('Live Asha caption')).toBeTruthy();
+    expect(view.getByTestId('live-output-caption')).toBeTruthy();
     expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
 
     expect(view.getByLabelText('Message Asha')).toBeTruthy();
@@ -469,10 +478,10 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
-    expect(view.getByText('Live Asha caption')).toBeTruthy();
+    expect(view.getByTestId('live-output-caption')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByText('Live Asha caption')).toBeTruthy();
-    expect(view.getByText('Captions appear after your first turn.')).toBeTruthy();
+    expect(view.getByTestId('live-output-caption')).toBeTruthy();
+    expect(view.getByText('Your words appear here as you speak.')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.queryByText('Live Asha caption')).toBeNull();
 
@@ -485,12 +494,12 @@ describe('immersive live conversation design', () => {
 
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
     await fireEvent.press(view.getByLabelText('Mock learner transcript'));
-    expect(view.getByText('Your transcript')).toBeTruthy();
+    expect(view.getByTestId('live-input-caption')).toBeTruthy();
     expect(view.getByText('Namaste, meraa naam Chris hai.')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
-    expect(view.getByText('Live Asha caption')).toBeTruthy();
+    expect(view.getByTestId('live-output-caption')).toBeTruthy();
     expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
 
     await view.unmount();
@@ -508,14 +517,14 @@ describe('immersive live conversation design', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
 
-    const nextTurn = view.getByLabelText('Start next Asha turn');
+    const nextTurn = view.getByLabelText('Unmute microphone');
     expect(nextTurn.props.accessibilityState.disabled).toBe(false);
     await fireEvent.press(nextTurn);
-    expect(view.getByText('Asha is listening')).toBeTruthy();
+    expect(view.getByText('Your microphone is on')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
-    const waiting = view.getByLabelText('Asha is responding…');
-    expect(waiting.props.accessibilityState.disabled).toBe(true);
+    const waiting = view.getByLabelText('Unmute microphone');
+    expect(waiting.props.accessibilityState.disabled).toBe(false);
 
     await view.unmount();
     await flushMicrotasks();
@@ -560,7 +569,7 @@ describe('immersive live conversation design', () => {
       .find((candidate) => candidate.props.value === displayReply);
     if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
     expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
-    expect(speech.preloadSpeech).toHaveBeenCalledWith(longDevanagariReply, 'hi');
+    expect(speech.preloadSpeech).not.toHaveBeenCalled();
 
     await view.unmount();
     await flushMicrotasks();
@@ -1165,57 +1174,28 @@ describe('live audio control exclusion', () => {
     await flushMicrotasks();
   }, 20_000);
 
-  it('re-enables Listen after a typed reply while a ready realtime session owns the iOS audio session', async () => {
-    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'A reply while realtime stays connected.', language: 'en' });
+  it('blocks typed chat and replay while the connected microphone is muted', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-
-    expect(view.getByLabelText('Message Asha').props.editable).toBe(true);
-    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Keep this typed question.');
+    expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
     await fireEvent.press(view.getByLabelText('Send message'));
-    await flushMicrotasks();
-
-    expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
-      expect.objectContaining({ role: 'you', text: 'Keep this typed question.' }),
-      expect.objectContaining({ role: 'asha', text: 'A reply while realtime stays connected.' }),
-    ]);
-    expect(speech.preloadSpeech).toHaveBeenCalledWith('A reply while realtime stays connected.');
+    expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
-    expect(view.queryByText(/UnexpectedException/u)).toBeNull();
-
-    const listen = view.getByLabelText('Read reply aloud: A reply while realtime stays connected.');
-    expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(false);
-    await fireEvent.press(listen);
-    await flushMicrotasks();
-    expect(speech.speakText).toHaveBeenCalledWith(
-      'A reply while realtime stays connected.',
-      undefined,
-      1,
-      undefined,
-      'playback',
-      true,
-    );
-
     await view.unmount();
-    await flushMicrotasks();
-  }, 20_000);
+  });
 
-  it('re-enables Listen after a realtime reply finishes, while keeping it disabled during the response', async () => {
+  it('keeps replay disabled through live playback and muted state until disconnect', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     await fireEvent.press(view.getByLabelText('Mock completed realtime reply'));
-
-    const listen = view.getByLabelText('Read reply aloud: A completed voice reply.');
-    expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(false);
-    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
-    expect(view.getByLabelText('Read reply aloud: A completed voice reply.').props.accessibilityState?.disabled
-      ?? view.getByLabelText('Read reply aloud: A completed voice reply.').props.disabled).toBe(true);
-
+    const read = () => view.getByLabelText('Read reply aloud: A completed voice reply.');
+    expect(read().props.accessibilityState.disabled).toBe(true);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByLabelText('Read reply aloud: A completed voice reply.').props.accessibilityState?.disabled
-      ?? view.getByLabelText('Read reply aloud: A completed voice reply.').props.disabled).toBe(false);
+    expect(read().props.accessibilityState.disabled).toBe(true);
+    expect(speech.preloadSpeech).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(read().props.accessibilityState.disabled).toBe(false);
     await view.unmount();
-    await flushMicrotasks();
   });
 
   it('keeps live coaching actions accessible and at least 44 points tall', async () => {
