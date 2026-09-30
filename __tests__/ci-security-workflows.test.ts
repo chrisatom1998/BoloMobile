@@ -127,6 +127,21 @@ describe('fail-closed merge verification', () => {
     }
   });
 
+  test('keeps the smoke consent selector aligned with the live screen heading', () => {
+    const screen = read('src/app/(tabs)/live.tsx');
+    const heading = screen.match(/<AiConsentGate actionLabel="Enable live practice" title="([^"]+)"/u)?.[1];
+    expect(heading).toBeDefined();
+    const smoke = read('.maestro/flows/00-ci-smoke.yaml');
+    expect(smoke).toContain(`      text: "${heading}"`);
+    expect(smoke).toContain(`- assertVisible: "${heading}"`);
+  });
+
+  test('configures the internal preview with the deployed public live endpoint', () => {
+    const eas = JSON.parse(read('eas.json'));
+    expect(eas.build.preview.distribution).toBe('internal');
+    expect(eas.build.preview.env?.BOLO_LIVE_API_URL).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
+  });
+
   test('always aggregates every merge job and rejects non-success results', () => {
     expect(requiredChecks).toContain('if: always()');
     for (const job of jobs) {

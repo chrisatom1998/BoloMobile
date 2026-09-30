@@ -12,6 +12,9 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "env": {
+        "BOLO_LIVE_API_URL": "https://api-v2.appdeploy.ai/app/74e39779183cf78fed"
+      },
       "android": {
         "buildType": "apk"
       }
