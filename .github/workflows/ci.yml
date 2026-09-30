@@ -40,6 +40,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+        env:
+          # Static configuration fixture only; this job does not deploy a Live server.
+          BOLO_LIVE_API_URL: https://live.example.test
 
   website:
     runs-on: ubuntu-latest
@@ -102,6 +105,8 @@ jobs:
       BOLO_APP_IDENTIFIER: com.bolo.hindi
       BOLO_EAS_PROJECT_ID: 573b5aad-b676-44aa-8ec4-34b831b6d5ff
       BOLO_EXPO_OWNER: appdevcmjatom
+      # Static configuration fixture only; never use this endpoint in a shipping build.
+      BOLO_LIVE_API_URL: https://live.example.test
       BOLO_PUBLISHER_NAME: Bolo CI
       BOLO_SUPPORT_EMAIL: ci@example.com
       BOLO_REVIEW_FIRST_NAME: CI

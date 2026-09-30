@@ -18,7 +18,7 @@ import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { type EffectiveMotion, useMotionPreference } from '@/hooks/use-motion-preference';
-import type { RealtimeInputTranscript, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
@@ -77,14 +77,13 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth <= 430;
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
   const [busy, setBusy] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
-  const [liveCaption, setLiveCaption] = useState('');
   const [liveAshaTranscript, setLiveAshaTranscript] = useState('');
   const [liveUserTranscript, setLiveUserTranscript] = useState('');
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
@@ -92,6 +91,8 @@ export default function LiveScreen() {
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
+  const [screenFocused, setScreenFocused] = useState(true);
+  const liveSnapshotIdsRef = useRef<string[]>([]);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
@@ -107,71 +108,39 @@ export default function LiveScreen() {
     () => pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, pendingUserMessage],
   );
-  const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
-  const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
-  // A connected-but-ready WebRTC session can safely replay an earlier response:
-  // `speakText` retains its existing PlayAndRecord session. Only block Listen
-  // while Asha is connecting, recording, responding, or finishing typed audio.
-  const replyPlaybackLocked = busy || realtimeLocked;
+  const realtimeLocked = realtimeStatus !== 'disconnected';
+  const realtimeOwnsAudio = realtimeLocked;
+  const replyPlaybackLocked = busy || realtimeOwnsAudio;
   const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
-  const transcriptTurnDisabled = !aiConsent || busy || realtimeStatus === 'connecting' || realtimeStatus === 'responding';
+  const transcriptTurnDisabled = !aiConsent || !screenFocused || busy || realtimeStatus === 'connecting';
   const transcriptTurnLabel = {
     disconnected: 'Connect with Asha',
     connecting: 'Connecting to Asha…',
-    ready: 'Start next Asha turn',
-    recording: 'Send this turn',
-    responding: 'Asha is responding…',
+    ready: 'Unmute microphone',
+    recording: 'Mute microphone',
+    responding: 'Unmute microphone',
   }[realtimeStatus];
-  const transcriptTurnHint = !aiConsent
-    ? 'Review consent to enable connected voice coaching.'
-    : busy
-      ? 'Wait while Asha finishes the current reply.'
-      : realtimeStatus === 'connecting'
-        ? 'The live voice session is connecting.'
-        : realtimeStatus === 'responding'
-          ? 'Wait while Asha finishes speaking.'
-          : realtimeStatus === 'recording'
-            ? 'Sends the turn currently being recorded.'
-            : realtimeStatus === 'ready'
-              ? 'Starts your next voice turn with Asha.'
-              : 'Connects to Asha for your next voice turn.';
-  const languageControlLocked = busy || realtimeOwnsAudio;
+  const transcriptTurnHint = realtimeStatus === 'recording'
+    ? 'Mutes your microphone. Asha can continue speaking.'
+    : 'Opens your microphone for continuous conversation. You can speak while Asha is speaking.';
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
+  const languageControlLocked = busy || realtimeOwnsAudio;
   const voiceHeroTitle = {
     disconnected: 'Ready when you are',
     connecting: 'Connecting to Asha',
-    ready: 'Ready when you are',
-    recording: 'Asha is listening',
-    responding: 'Asha is responding',
+    ready: 'Your microphone is muted',
+    recording: 'Your microphone is on',
+    responding: 'Asha is speaking',
   }[realtimeStatus];
   const voiceHeroBody = {
-    disconnected: 'Tap the orb to begin a Hindi voice turn.',
+    disconnected: 'Tap the orb to start talking with Asha.',
     connecting: 'Opening a private live voice session…',
-    ready: 'Tap the orb, then speak your Hindi naturally.',
-    recording: 'Tap the orb again when you finish your turn.',
-    responding: `Your ${responseLanguageName} reply is on the way.`,
+    ready: 'Tap the orb to unmute and join the conversation.',
+    recording: 'Speak naturally, even while Asha talks. Tap to mute.',
+    responding: 'Your mic is muted. Tap the orb to speak at any time.',
   }[realtimeStatus];
-  const liveCaptionText = realtimeStatus === 'connecting'
-    ? 'Connecting to Asha…'
-    : realtimeStatus === 'recording'
-      ? liveUserTranscript || 'Listening to your Hindi…'
-      : realtimeStatus === 'responding'
-        ? liveAshaTranscript || liveUserTranscript || `Asha is preparing your ${responseLanguageName} reply…`
-        : liveCaption || (realtimeStatus === 'ready' ? 'Captions appear after your first turn.' : '');
-  const visibleLiveCaptionText = romanizeDevanagari(liveCaptionText);
-  const hasLiveCaption = realtimeOwnsAudio || liveCaptionText !== '';
-  const liveCaptionLabel = !hasLiveCaption
-    ? 'Live'
-    : realtimeStatus === 'recording'
-    ? 'Your transcript'
-    : realtimeStatus === 'responding' && !liveAshaTranscript && liveUserTranscript
-      ? 'You said'
-      : 'Live Asha caption';
-  const captionText = hasLiveCaption
-    ? visibleLiveCaptionText
-    : 'Your live captions will appear here.';
 
   const scrollToChat = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: !reducedMotion });
@@ -191,10 +160,12 @@ export default function LiveScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    setScreenFocused(true);
     practiced.current = false;
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
+      setScreenFocused(false);
       if (practiced.current) addPracticeSeconds(elapsedSeconds());
       void stopSpeaking();
     };
@@ -248,22 +219,26 @@ export default function LiveScreen() {
     }
   }, [appendChatMessages, markLiveTurn]);
 
-  const recordRealtimeInputTranscript = useCallback((result: RealtimeInputTranscript) => {
-    if (!mountedRef.current || !result.transcript.trim()) return;
-    appendChatMessages([{ id: `you-voice-${result.itemId}`, role: 'you', text: result.transcript.trim() }]);
-  }, [appendChatMessages]);
-
-  const recordRealtimeReply = useCallback((result: { reply: string; language: 'en' | 'hi' }) => {
+  const recordLiveSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     if (!mountedRef.current) return;
+    const messages: ChatMessage[] = rows.filter((row) => row.text.trim()).map((row) => ({
+      id: row.id,
+      role: row.speaker,
+      text: row.text,
+      ...(row.speaker === 'asha' ? { language: responseLanguage } : {}),
+    }));
+    // The whole snapshot is revisable: late timestamped deltas can merge two
+    // provisional rows. Remove prior snapshot IDs so no stale row survives.
+    replaceLiveChatSnapshot(liveSnapshotIdsRef.current, messages);
+    liveSnapshotIdsRef.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
-    const now = Date.now();
-    void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
-    appendChatMessages([{ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language }]);
-    if (!practiced.current) {
+    setLiveUserTranscript([...messages].reverse().find((row) => row.role === 'you')?.text ?? '');
+    setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
+    if (messages.some((row) => row.role === 'you') && !practiced.current) {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [appendChatMessages, markLiveTurn]);
+  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
 
   const playReply = useCallback((message: ChatMessage) => {
     if (!aiConsent || replyPlaybackLocked) return;
@@ -275,7 +250,8 @@ export default function LiveScreen() {
   const changeResponseLanguage = useCallback((nextLanguage: AshaResponseLanguage) => {
     if (languageControlLocked || nextLanguage === responseLanguage) return;
     void stopSpeaking();
-    setLiveCaption('');
+    setLiveUserTranscript('');
+    setLiveAshaTranscript('');
     setError('');
     clearAudioError();
     updateLearnerProfile({ responseLanguage: nextLanguage });
@@ -283,7 +259,8 @@ export default function LiveScreen() {
 
   const clearSavedChat = useCallback(() => {
     void stopSpeaking();
-    setLiveCaption('');
+    setLiveUserTranscript('');
+    setLiveAshaTranscript('');
     selectedChatTextRef.current.clear();
     setWordDefinitionPhrase(null);
     clearChatHistory();
@@ -377,13 +354,14 @@ export default function LiveScreen() {
     const previous = realtimeStatusRef.current;
     realtimeStatusRef.current = status;
     setRealtimeStatus(status);
-    if (status === 'recording') {
+    if (status === 'recording') setError('');
+    if (status === 'connecting' && previous === 'disconnected') {
       setError('');
+      liveSnapshotIdsRef.current = [];
       setLiveAshaTranscript('');
       setLiveUserTranscript('');
     }
-    // The hook returns to 'ready' after every turn; only connecting -> ready is a new connection.
-    if (status === 'ready' && previous === 'connecting') observe('voice_connection_succeeded');
+    if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') observe('voice_connection_succeeded');
   }, []);
   const showRealtimeError = useCallback((message: string) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
@@ -395,14 +373,6 @@ export default function LiveScreen() {
     if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
     else setLiveUserTranscript(update.text);
   }, []);
-  const completeRealtimeTurn = useCallback((turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
-    setError('');
-    setLiveCaption(turn.reply.trim());
-    setLiveAshaTranscript(turn.reply.trim());
-    setLiveUserTranscript(turn.transcript.trim());
-    recordRealtimeReply(turn);
-  }, [recordRealtimeReply]);
-
   const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
       // The controller map is the in-flight record, so it also guards against a
@@ -524,7 +494,7 @@ export default function LiveScreen() {
               </View>
               {!aiConsent ? (
                 <View style={[styles.heroConsent, { width: heroContentWidth }]} testID="live-consent-section">
-                  <AiConsentGate actionLabel="Enable live practice" title="Before your first live turn" />
+                  <AiConsentGate actionLabel="Enable live practice" title="Before your first live conversation" />
                 </View>
               ) : null}
               <View style={styles.liveControls} testID="live-voice-controls">
@@ -548,7 +518,7 @@ export default function LiveScreen() {
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
                   </View>
-                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy} motionMode={motionMode} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} size="minimal" />
+                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
                   <View style={styles.heroCopy}>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
@@ -556,9 +526,13 @@ export default function LiveScreen() {
                 </View>
                 <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
                   <View style={styles.captionLabelBadge} testID="live-caption-label-badge">
-                    <Text style={styles.captionLabel}>{aiConsent ? liveCaptionLabel : 'Live captions'}</Text>
+                    <Text style={styles.captionLabel}>You</Text>
                   </View>
-                  <Text accessibilityLiveRegion="polite" style={styles.captionText}>{aiConsent ? captionText : 'Your captions will appear here after the first turn.'}</Text>
+                  <Text accessibilityLiveRegion="polite" style={styles.captionText} testID="live-input-caption">{aiConsent ? romanizeDevanagari(liveUserTranscript) || 'Your words appear here as you speak.' : 'Enable live practice to see captions.'}</Text>
+                  <View style={styles.captionLabelBadge}>
+                    <Text style={styles.captionLabel}>Asha</Text>
+                  </View>
+                  <Text accessibilityLiveRegion="polite" style={styles.captionText} testID="live-output-caption">{aiConsent ? romanizeDevanagari(liveAshaTranscript) || 'Asha’s words appear here as she speaks.' : 'Enable live practice to see captions.'}</Text>
                 </CaptionReveal>
               </View>
             </View>
@@ -617,7 +591,7 @@ export default function LiveScreen() {
             {hasTranscriptMessages ? (
               <View style={styles.transcriptFooter}>
                 <View style={styles.transcriptTurnCard}>
-                  <Text style={styles.transcriptTurnEyebrow}>Next voice turn</Text>
+                  <Text style={styles.transcriptTurnEyebrow}>Live microphone</Text>
                   <PressableFeedback
                     accessibilityHint={transcriptTurnHint}
                     accessibilityLabel={transcriptTurnLabel}

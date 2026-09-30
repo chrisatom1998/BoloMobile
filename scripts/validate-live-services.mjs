@@ -7,6 +7,7 @@ const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const DEFAULT_PUBLIC_SITE_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai';
 const API_URL = (process.env.BOLO_API_URL || DEFAULT_API_URL).trim().replace(/\/+$/u, '');
 const PUBLIC_URL = `${(process.env.BOLO_PUBLIC_SITE_URL || DEFAULT_PUBLIC_SITE_URL).trim().replace(/\/+$/u, '')}/`;
+const LIVE_API_URL = process.env.BOLO_LIVE_API_URL?.trim().replace(/\/+$/u, '');
 const PASSES = 3;
 const REQUEST_TIMEOUT_MS = 45_000;
 const OVERALL_TIMEOUT_MS = 10 * 60_000;
@@ -219,19 +220,17 @@ async function runServicePass(pass) {
       console.error('  BLOCKED voice-coach — generated Hindi MP3 unavailable');
     }
 
-    await check(`realtime-token #${pass}`, async () => {
-      const result = await postJson(`realtime-token #${pass}`, '/api/realtime-token', {
-        clientId,
-        model: 'gpt-realtime-2.1',
-        languageMode: 'english-unless-hindi-requested',
-      });
-      assert(typeof result.payload.value === 'string' && result.payload.value.startsWith('ek_'), `realtime-token #${pass}`, 'missing short-lived ek_ client secret');
-      assert(Number.isFinite(result.payload.expires_at), `realtime-token #${pass}`, 'expires_at was not finite');
-      const nowSeconds = Math.floor(Date.now() / 1_000);
-      assert(result.payload.expires_at > nowSeconds - 60, `realtime-token #${pass}`, 'client secret was already expired');
-      assert(result.payload.expires_at < nowSeconds + 86_400, `realtime-token #${pass}`, 'client secret lifetime exceeded one day');
-      return { elapsedMs: result.elapsedMs };
-    }, (result) => `${result.elapsedMs} ms; schema valid; secret redacted`);
+    if (LIVE_API_URL) await check(`live-status #${pass}`, async () => {
+      const startedAt = performance.now();
+      const response = await fetch(`${LIVE_API_URL}/api/live-status`, { signal: requestSignal('live-status') });
+      const raw = await readBoundedText(response, 'live-status', 4096);
+      const payload = objectValue(JSON.parse(raw), 'live-status');
+      assert(response.ok && payload.configured === true, 'live-status', 'GPT-Live backend is not configured');
+      assert(payload.model === 'gpt-live-1' && payload.protocol === 'live', 'live-status', 'unexpected live model or protocol');
+      assert(payload.available === true, 'live-status', 'the configured OpenAI project does not have verified gpt-live-1 access');
+      return { elapsedMs: Math.round(performance.now() - startedAt) };
+    }, (result) => `${result.elapsedMs} ms; GPT-Live capability available; no session created (real SDP/audio smoke still required)`);
+    else console.log('  SKIP GPT-Live: BOLO_LIVE_API_URL is unset; configure a trusted session server for the iOS build.');
 
     const report = await check(`report-message #${pass}`, async () => {
       const result = await postJson(`report-message #${pass}`, '/api/report-message', {
@@ -295,7 +294,7 @@ async function checkPublicPage(page, pass) {
 
 async function main() {
   console.log('Bolo live-service acceptance: 3 bounded passes with ephemeral client data.');
-  console.log('Cost note: this intentionally invokes GPT chat, transcription, TTS, coaching, and Realtime token APIs; no session is opened and no token or audio payload is printed.');
+  console.log('Cost note: this intentionally invokes GPT chat, transcription, TTS, and coaching APIs plus a GPT-Live capability check; no live session is opened and no token or audio payload is printed.');
 
   for (let pass = 1; pass <= PASSES; pass += 1) {
     await runServicePass(pass);
