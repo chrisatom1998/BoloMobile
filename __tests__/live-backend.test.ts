@@ -99,11 +99,51 @@ describe('GPT-Live backend', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('checks model access without starting a billable session', async () => {
+  it('checks both required models without starting a billable session', async () => {
     const { deps, status } = setup();
-    deps.openAI.mockResolvedValue({ ok: true, json: async () => ({ id: 'gpt-live-1' }) });
+    deps.openAI.mockImplementation(async path => ({ ok: true, json: async () => ({ id: path.split('/').at(-1) }) }));
     expect(await status()).toEqual({ status: 200, body: { configured: true, available: true, model: 'gpt-live-1', protocol: 'live' } });
+    expect(deps.openAI).toHaveBeenCalledTimes(2);
     expect(deps.openAI).toHaveBeenCalledWith('/models/gpt-live-1', 'test-server-key', expect.objectContaining({ method: 'GET' }));
+    expect(deps.openAI).toHaveBeenCalledWith('/models/gpt-5.6-terra', 'test-server-key', expect.objectContaining({ method: 'GET' }));
+  });
+
+  it.each([
+    { ok: false, id: 'gpt-5.6-terra' },
+    { ok: true, id: 'unexpected-model' },
+  ])('reports unavailable when the delegation model is inaccessible or mismatched: %j', async delegated => {
+    const { deps, status } = setup();
+    deps.openAI.mockImplementation(async path => ({
+      ok: path.endsWith('gpt-live-1') || delegated.ok,
+      json: async () => ({ id: path.endsWith('gpt-live-1') ? 'gpt-live-1' : delegated.id }),
+    }));
+    expect((await status()).body).toEqual({ configured: true, available: false, model: 'gpt-live-1', protocol: 'live' });
+  });
+
+  it('cancels the other model lookup when one fails', async () => {
+    jest.useFakeTimers();
+    const { deps, status } = setup();
+    deps.openAI.mockImplementation(async path => {
+      if (path.endsWith('gpt-live-1')) throw new Error('model unavailable');
+      return new Promise(() => {});
+    });
+    expect((await status()).body.available).toBe(false);
+    expect(deps.openAI).toHaveBeenCalledTimes(2);
+    expect(deps.openAI.mock.calls.every(([, , init]) => init.signal?.aborted)).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('bounds the capability check when the delegation lookup ignores cancellation', async () => {
+    jest.useFakeTimers();
+    const { deps, status } = setup();
+    deps.openAI.mockImplementation(async path => path.endsWith('gpt-live-1')
+      ? { ok: true, json: async () => ({ id: 'gpt-live-1' }) }
+      : new Promise(() => {}));
+    const pending = status();
+    await jest.advanceTimersByTimeAsync(LIVE_REQUEST_TIMEOUT_MS);
+    expect((await pending).body.available).toBe(false);
+    expect(deps.openAI.mock.calls.every(([, , init]) => init.signal?.aborted)).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('distinguishes configured credentials from missing model access', async () => {

@@ -110,15 +110,20 @@ export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TE
           timer = setTimeout(() => { controller.abort(); reject(new Error('live_status_timeout')); }, LIVE_REQUEST_TIMEOUT_MS);
         });
         const lookup = async () => {
-          const response = await deps.openAI('/models/' + LIVE_MODEL, key, { method: 'GET', signal: controller.signal });
-          if (!response.ok) throw new Error('live_model_unavailable');
-          return response.json() as Promise<unknown>;
+          const models = await Promise.all([LIVE_MODEL, LIVE_BACKEND_MODEL].map(async id => {
+            const response = await deps.openAI('/models/' + id, key, { method: 'GET', signal: controller.signal });
+            if (!response.ok) throw new Error('live_model_unavailable');
+            const model: unknown = await response.json();
+            return record(model) && model.id === id;
+          }));
+          return models.every(Boolean);
         };
-        const model = await Promise.race([lookup(), timeout]);
-        return deps.json({ configured, available: record(model) && model.id === LIVE_MODEL, model: LIVE_MODEL, protocol: 'live' });
+        const available = await Promise.race([lookup(), timeout]);
+        return deps.json({ configured, available, model: LIVE_MODEL, protocol: 'live' });
       } catch {
         return deps.json({ configured, available: false, model: LIVE_MODEL, protocol: 'live' });
       } finally {
+        controller.abort();
         if (timer !== undefined) clearTimeout(timer);
       }
     }],
