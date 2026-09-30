@@ -391,6 +391,33 @@ describe('connected coaching contract', () => {
     } finally { globalThis.fetch = originalFetch; }
   });
 
+  it.each([201, 256])('accepts a Live session identifier of %i characters from the backend', async (length) => {
+    const originalFetch = globalThis.fetch;
+    const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
+    const sessionId = 's'.repeat(length);
+    globalThis.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId }) })) as unknown as typeof fetch;
+    try {
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en' })).resolves.toEqual({ answerSdp, sessionId });
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it.each([
+    ['257 characters', 's'.repeat(257)],
+    ['empty', ''],
+    ['whitespace only', ' \t\n '],
+    ['missing', undefined],
+    ['null', null],
+    ['numeric', 123],
+    ['object', { id: 'live-session' }],
+  ])('rejects a %s Live session identifier', async (_description, sessionId) => {
+    const originalFetch = globalThis.fetch;
+    const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
+    globalThis.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId }) })) as unknown as typeof fetch;
+    try {
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en' })).rejects.toThrow('invalid response');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
   it('rejects invalid local offers without a network call and rejects malformed responses', async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ value: 'session-credential-placeholder', expires_at: 123 }) }));

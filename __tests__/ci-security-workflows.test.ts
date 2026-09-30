@@ -104,6 +104,15 @@ describe('fail-closed merge verification', () => {
     expect(websiteJob).toContain('npm test --prefix website');
   });
 
+  test.each([
+    ['verify', 'website'],
+    ['production-config', 'ios-native-build'],
+  ])('provides an explicit non-deployed Live URL fixture for the %s static checks', (job, nextJob) => {
+    const jobSource = matchingBlock(ciWorkflow, `  ${job}:`, `  ${nextJob}:`);
+
+    expect(jobSource).toContain('BOLO_LIVE_API_URL: https://live.example.test');
+  });
+
   test('restores static validation of every committed Maestro flow', () => {
     const manifest = JSON.parse(read('package.json')) as {
       scripts: Record<string, string>;

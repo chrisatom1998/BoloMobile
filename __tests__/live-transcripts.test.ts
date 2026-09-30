@@ -17,11 +17,39 @@ describe('Live transcript display groups', () => {
   it('merges provisional groups when a late bridging fragment arrives', () => {
     const store = createLiveTranscriptStore('test');
     const first = store.append('you', { delta: 'First', start_ms: 0, end_ms: 100 })!;
-    store.append('you', { delta: ' third', start_ms: 2000, end_ms: 2100 });
-    const update = store.append('you', { delta: ' second', start_ms: 1000, end_ms: 1100 })!;
+    store.append('you', { delta: ' second', start_ms: 2000, end_ms: 2100 });
+    const update = store.append('you', { delta: ' third', start_ms: 1000, end_ms: 1100 })!;
     expect(update.rows).toHaveLength(1);
     expect(update.row.id).toBe(first.row.id);
     expect(update.row.text).toBe('First second third');
+  });
+
+  it.each(['you', 'asha'] as const)('keeps %s deltas in delivery order when timestamps regress or overlap', (speaker) => {
+    const store = createLiveTranscriptStore('test');
+    const fragments = [
+      { delta: 'First', start_ms: 300, end_ms: 600 },
+      { delta: ' second', start_ms: 100, end_ms: 400 },
+      { delta: ' third', start_ms: 100, end_ms: 200 },
+    ];
+    const first = store.append(speaker, fragments[0]!)!;
+    store.append(speaker, fragments[1]!);
+    const update = store.append(speaker, fragments[2]!)!;
+    expect(update.row).toMatchObject({ id: first.row.id, text: 'First second third', startMs: 100, endMs: 600 });
+    expect(update.row.fragments).toEqual(fragments);
+  });
+
+  it('preserves global delivery order when merging groups with interleaved arrivals', () => {
+    const store = createLiveTranscriptStore('test');
+    const first = store.append('you', { delta: 'First', start_ms: 0, end_ms: 100 })!;
+    const otherSpeaker = store.append('asha', { delta: 'Yes?', start_ms: 50, end_ms: 100 })!;
+    store.append('you', { delta: ' second', start_ms: 5000, end_ms: 5100 });
+    store.append('you', { delta: ' third', start_ms: 100, end_ms: 200 });
+    store.append('you', { delta: ' fourth', start_ms: 5100, end_ms: 5200 });
+    const update = store.append('you', { delta: ' fifth', start_ms: 1200, end_ms: 4000 })!;
+    expect(update.rows.map((row) => row.id)).toEqual([first.row.id, otherSpeaker.row.id]);
+    expect(update.row).toMatchObject({ text: 'First second third fourth fifth', startMs: 0, endMs: 5200 });
+    expect(update.row.fragments.map((part) => part.delta)).toEqual(['First', ' second', ' third', ' fourth', ' fifth']);
+    expect(update.rows[1]!.text).toBe('Yes?');
   });
 
   it('retains repeated words, deduplicates events, and rejects invalid intervals', () => {
@@ -42,6 +70,14 @@ describe('Live transcript display groups', () => {
     for (let i = 0; i < 120; i++) snapshot = store.append('you', { delta: `word ${i}`, start_ms: i * 3000, end_ms: i * 3000 + 1 });
     expect(snapshot!.rows).toHaveLength(100);
     expect(snapshot!.rows[0]!.text).toBe('word 20');
+  });
+
+  it('starts another bounded group after 200 consecutive fragments', () => {
+    const store = createLiveTranscriptStore('test');
+    let snapshot;
+    for (let i = 0; i < 205; i++) snapshot = store.append('you', { delta: `${i} `, start_ms: i, end_ms: i + 1 });
+    expect(snapshot!.rows.map((row) => row.fragments.length)).toEqual([200, 5]);
+    expect(snapshot!.rows.map((row) => row.text).join('')).toBe(Array.from({ length: 205 }, (_, i) => `${i} `).join(''));
   });
 });
 

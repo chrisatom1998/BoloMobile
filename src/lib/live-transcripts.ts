@@ -18,6 +18,9 @@ export type LiveTranscriptRow = {
 const CAPTION_GROUP_GAP_MS = 1_200;
 export function createLiveTranscriptStore(prefix: string) {
   const seen = new Set<string>();
+  // Delivery order survives group merges without retaining evicted fragments.
+  const arrivalOrder = new WeakMap<LiveTranscriptFragment, number>();
+  let nextArrival = 0;
   let nextId = 0;
   let rows: LiveTranscriptRow[] = [];
   return {
@@ -32,8 +35,11 @@ export function createLiveTranscriptStore(prefix: string) {
         && fragment.start_ms <= row.endMs + CAPTION_GROUP_GAP_MS
         && fragment.end_ms >= row.startMs - CAPTION_GROUP_GAP_MS);
       const first = matching[0];
-      const fragments = [...matching.flatMap((row) => row.fragments), { ...fragment }]
-        .sort((a, b) => a.start_ms - b.start_ms || a.end_ms - b.end_ms);
+      const incoming = { ...fragment };
+      arrivalOrder.set(incoming, nextArrival++);
+      // Timestamps only group captions; Live deltas accumulate in delivery order.
+      const fragments = [...matching.flatMap((row) => row.fragments), incoming]
+        .sort((a, b) => arrivalOrder.get(a)! - arrivalOrder.get(b)!);
       const row: LiveTranscriptRow = {
         id: first?.id ?? `${prefix}-${nextId++}`,
         speaker,

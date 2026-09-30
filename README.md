@@ -10,9 +10,13 @@ Use Node.js 22.23.2, pinned in `.nvmrc`, and npm. With nvm or nvm-windows, run `
 
 ```powershell
 npm ci
+# Replace with your trusted Live server before building or connecting the app
+$env:BOLO_LIVE_API_URL = 'https://your-live-server.example'
 npm run verify
 npx expo start --dev-client
 ```
+
+`npm run verify` includes production configuration validation and requires an explicit `BOLO_LIVE_API_URL`. For static checks only, `https://live.example.test` is a non-deployed fixture; never use it in a shipping build. URL validation does not contact the server or establish Live-session readiness.
 
 Install a development build on your device before connecting to the local server. To create one with the checked-in EAS development profile, run `node scripts/run-eas-from-app-root.mjs build --platform android --profile development` (use `--platform ios` for iOS), then install the resulting build. Expo Go cannot load the app's custom WebRTC native module.
 
@@ -22,7 +26,7 @@ The portable backend reference in `backend/live.ts` implements `POST /api/live-c
 
 GPT-Live is a continuous bidirectional conversation. The orb mutes or unmutes the microphone; it does not commit audio or request a generated turn. Microphone and assistant playback states are independent. Input and output captions can update simultaneously, and revisable timestamped transcript rows are saved without inventing response-completion events. Live transcript deltas never trigger separate TTS requests. Typed coaching and replay are disabled until the live session ends.
 
-Before distributing this iOS update, configure a trusted server implementing `/api/live-call` and `/api/live-status`. Set `BOLO_LIVE_API_URL=https://your-live-server.example` in the EAS build environment; Expo embeds this public base URL as `extra.boloLiveApiUrl`. The Live client never falls back to the existing typed-coaching backend. An unset URL produces a visible configuration error. The reference backend is not deployed by this iOS migration. On that server, configure an OpenAI key with `gpt-live-1` access, then run the non-session capability check and a real WebRTC smoke test from an EAS development build on a device. Verify microphone mute/unmute, overlapping speech, Romanized captions, language selection, disconnect/reconnect, interruption/background cleanup, and transcript persistence. A passing capability check does not establish successful SDP negotiation or native audio playback. No native device or production GPT-Live session verification is implied by the source migration. Consent version 9 re-discloses continuous microphone behavior and history sent during live startup.
+Before distributing this iOS update, configure a trusted server implementing `/api/live-call` and `/api/live-status`. Set `BOLO_LIVE_API_URL=https://your-live-server.example` in the EAS build environment; Expo embeds this public base URL as `extra.boloLiveApiUrl`. The Live client never falls back to the existing typed-coaching backend. Production builds and `npm run production:validate` reject an unset or blank URL. Development and preview configuration may omit it, in which case the app shows a visible configuration error. The reference backend is not deployed by this iOS migration. On that server, configure an OpenAI key with `gpt-live-1` access, then run the non-session capability check and a real WebRTC smoke test from an EAS development build on a device. Verify microphone mute/unmute, overlapping speech, Romanized captions, language selection, disconnect/reconnect, interruption/background cleanup, and transcript persistence. A passing capability check does not establish successful SDP negotiation or native audio playback. No native device or production GPT-Live session verification is implied by the source migration. Consent version 9 re-discloses continuous microphone behavior and history sent during live startup.
 
 To refresh bundled lesson audio after an intentional Asha voice-profile change, run `node scripts/generate-offline-hindi-audio.mjs`. It sends only the app's checked-in lesson phrases to the reviewed endpoint, writes content-addressed AAC/M4A assets, and is safe to rerun after an interrupted generation.
 
@@ -36,9 +40,10 @@ The permanent App Store and Play identity is `com.bolo.hindi`. Production builds
 $env:BOLO_APP_IDENTIFIER = 'com.bolo.hindi'
 $env:BOLO_EAS_PROJECT_ID = '573b5aad-b676-44aa-8ec4-34b831b6d5ff'
 $env:BOLO_EXPO_OWNER = 'appdevcmjatom'
+$env:BOLO_LIVE_API_URL = 'https://your-live-server.example'
 ```
 
-The same values are configured in the EAS `production` environment so cloud builds resolve the identical app identity. Apple and Google treat this identifier as permanent; changing it creates a different app.
+Replace the Live URL example with the trusted server's HTTPS base URL, without credentials, query parameters, or a fragment. Configure the same identity values and real `BOLO_LIVE_API_URL` in the EAS `production` environment so cloud builds resolve the reviewed configuration. Apple and Google treat this identifier as permanent; changing it creates a different app.
 
 Apple metadata also requires publisher-owned review details when `eas metadata:push` runs:
 
@@ -103,6 +108,8 @@ The v1 iOS scope is phone-only. Re-enabling iPad support also requires iPad layo
 The original artwork can be regenerated with `python scripts/generate-store-assets.py`; regeneration needs Pillow and a Devanagari font. Generated PNG files are checked in, so Pillow is not a runtime or build dependency.
 
 ## Release verification
+
+Set the production identity and real Live server URL described above before running these commands.
 
 ```powershell
 npm run verify

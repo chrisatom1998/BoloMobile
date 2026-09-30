@@ -51,6 +51,10 @@ module.exports = ({ config }) => {
     throw new Error('Production builds require BOLO_EAS_PROJECT_ID and BOLO_EXPO_OWNER from the publisher\'s Expo account.');
   }
 
+  if (isProduction && !boloLiveApiUrl) {
+    throw new Error('Production builds require BOLO_LIVE_API_URL for a trusted HTTPS Live server.');
+  }
+
   const plugins = (Array.isArray(config.plugins) ? config.plugins : []).map((plugin) => {
     if (!Array.isArray(plugin) || plugin[0] !== 'expo-widgets') return plugin;
     const [name, options] = plugin;

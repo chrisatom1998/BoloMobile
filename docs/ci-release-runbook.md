@@ -8,6 +8,8 @@ Create an active branch ruleset for `main`. Require a pull request, require the 
 
 `required-checks` uses `if: always()` and fails unless all nine merge jobs report `success`: `dependency-audit`, `verify`, `website`, `expo-doctor`, `ios-prebuild`, `production-config`, `ios-native-build`, `maestro-smoke`, and `security`. This aggregate is intentionally fail-closed: a failed prerequisite that skips a downstream native job cannot be reported as an acceptable skipped required check. The dependency exception approval gate is included even when the separate security scan succeeds.
 
+The `verify` and `production-config` jobs set `BOLO_LIVE_API_URL=https://live.example.test` explicitly for static configuration checks. This non-deployed fixture is never a production default and does not verify server availability or native Live audio. Local `npm run verify` and `npm run production:validate` also require an explicit Live URL; use the real trusted endpoint for release checks.
+
 Do not add CodeQL, the scheduled nightly workflow, release preflight, TestFlight upload, or physical signoff as required merge checks. A sole owner cannot satisfy an independent approval rule; add a trusted reviewer before requiring one approval or preventing self-approval.
 
 In **Settings → Actions → General**, set the default `GITHUB_TOKEN` permission to read-only, leave “Allow GitHub Actions to create and approve pull requests” disabled, and require approval for workflows from outside collaborators. Where the account plan permits, allow only GitHub-authored actions and explicitly approved third-party actions. Workflow actions are pinned to verified full commit SHAs with their release tags in comments; review and merge Dependabot SHA-update PRs rather than restoring moving tags.
@@ -68,6 +70,7 @@ Create these repository variables:
 - `BOLO_EAS_PROJECT_ID=<EAS project UUID>`
 - `BOLO_EXPO_OWNER=<Expo owner>`
 - `PRODUCTION_API_URL=<production HTTPS API URL>`
+- `PRODUCTION_LIVE_API_URL=<trusted production HTTPS Live server base URL>`
 - `PRODUCTION_PUBLIC_SITE_URL=<production HTTPS public-site URL>`
 - `STAGING_API_URL=<staging HTTPS API URL>`
 - `STAGING_PUBLIC_SITE_URL=<staging HTTPS public-site URL>`
@@ -88,7 +91,7 @@ Create GitHub environment `ios-release`, restrict deployments to `main`, and add
 - `BOLO_REVIEW_EMAIL`
 - `BOLO_REVIEW_PHONE`
 
-The EAS production environment must contain matching production identity/endpoints and any build-time secrets. EAS environment values and GitHub environment values are separate stores.
+The EAS production environment must contain matching production identity/endpoints, including `BOLO_LIVE_API_URL` matching GitHub's `PRODUCTION_LIVE_API_URL`, and any build-time secrets. Production config rejects missing or blank Live URLs, non-HTTPS URLs, URL credentials, query parameters, and fragments. EAS environment values and GitHub environment values are separate stores.
 
 This repository is private and owned by a personal account. Do not treat an environment name in workflow YAML as proof of a human approval gate: on plans that do not support required reviewers for private repositories, GitHub cannot enforce that reviewer, and referencing a missing environment creates it without protection. Here, `ios-release` scopes secrets and restricts deployment to `main`; the manual workflow dispatch is the release-start authorization. If the repository moves to a plan and ownership model that supports private-repository required reviewers, add one there as an additional gate.
 

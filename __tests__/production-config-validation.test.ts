@@ -21,6 +21,7 @@ const productionEnvironment = {
   BOLO_APP_IDENTIFIER: 'com.bolo.hindi',
   BOLO_EAS_PROJECT_ID: '573b5aad-b676-44aa-8ec4-34b831b6d5ff',
   BOLO_EXPO_OWNER: 'appdevcmjatom',
+  BOLO_LIVE_API_URL: 'https://live.example.test',
   EAS_BUILD_PROFILE: 'production',
 } as const;
 
@@ -54,7 +55,7 @@ function runPublicPageValidation(extra: Record<string, string>) {
 }
 
 describe('production configuration validator', () => {
-  it('accepts the checked-in production configuration', () => {
+  it('accepts the checked-in production configuration with an explicit HTTPS Live server', () => {
     const result = runValidator();
 
     expect({
@@ -66,6 +67,29 @@ describe('production configuration validator', () => {
       stderr: '',
       stdout: expect.any(String),
     });
+  });
+
+  it.each([undefined, '', ' \t\n '])('rejects a missing or blank Live URL (%j) even outside a production shell', (url) => {
+    const result = runValidator([], {
+      BOLO_LIVE_API_URL: url,
+      EAS_BUILD_PROFILE: undefined,
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Production builds require BOLO_LIVE_API_URL');
+  });
+
+  it.each([
+    'not-a-url',
+    'http://live.example.test',
+    `https://user${':'}pass@live.example.test`,
+    `https://live.example.test?${'client=embedded-config'}`,
+    'https://live.example.test#embedded-config',
+  ])('rejects a malformed or unsafe Live URL %s', (url) => {
+    const result = runValidator([], { BOLO_LIVE_API_URL: url });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('BOLO_LIVE_API_URL');
   });
 
   it('rejects a standard OpenAI key exposed through an Expo public variable', () => {

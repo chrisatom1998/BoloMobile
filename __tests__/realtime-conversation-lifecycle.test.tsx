@@ -121,10 +121,10 @@ describe('GPT-Live conversation lifecycle', () => {
     const { result, unmount } = await mount({ onTranscriptSnapshot, onTurnComplete, onInputTranscriptComplete });
     await act(async () => { await result.current.connect(); });
     await act(async () => {
-      emit({ type: 'session.input_transcript.delta', event_id: 'u2', delta: ' world', start_ms: 300, end_ms: 500 });
+      emit({ type: 'session.input_transcript.delta', event_id: 'u2', delta: 'Hello', start_ms: 300, end_ms: 500 });
       emit({ type: 'session.output_transcript.delta', event_id: 'a1', delta: 'Hello!', start_ms: 250, end_ms: 600 });
-      emit({ type: 'session.input_transcript.delta', event_id: 'u1', delta: 'Hello', start_ms: 100, end_ms: 300 });
-      emit({ type: 'session.input_transcript.delta', event_id: 'u1', delta: 'Hello', start_ms: 100, end_ms: 300 });
+      emit({ type: 'session.input_transcript.delta', event_id: 'u1', delta: ' world', start_ms: 100, end_ms: 300 });
+      emit({ type: 'session.input_transcript.delta', event_id: 'u1', delta: ' world', start_ms: 100, end_ms: 300 });
       emit({ type: 'response.done', response: { status: 'completed' } });
     });
     const snapshot = onTranscriptSnapshot.mock.calls.at(-1)![0];

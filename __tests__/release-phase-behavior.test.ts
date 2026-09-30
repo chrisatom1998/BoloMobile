@@ -46,6 +46,7 @@ const fakePublisherEnvironment: Record<string, string> = {
   BOLO_APP_IDENTIFIER: 'com.example.fake',
   BOLO_EAS_PROJECT_ID: '00000000-0000-4000-8000-000000000000',
   BOLO_EXPO_OWNER: 'example-owner',
+  BOLO_LIVE_API_URL: 'https://live.example.test',
   BOLO_PUBLISHER_NAME: 'Example Company',
   BOLO_SUPPORT_EMAIL: 'support@example.test',
   BOLO_REVIEW_FIRST_NAME: 'Example',

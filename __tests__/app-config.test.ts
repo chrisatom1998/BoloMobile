@@ -27,6 +27,7 @@ describe('Expo app configuration', () => {
     delete process.env.EAS_BUILD_PROFILE;
     delete process.env.BOLO_PUBLIC_SITE_URL;
     delete process.env.BOLO_API_URL;
+    delete process.env.BOLO_LIVE_API_URL;
   });
 
   afterEach(() => {

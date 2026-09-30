@@ -119,7 +119,7 @@ function isLiveCallResponse(value: unknown): value is LiveCallResponse {
     && isBoundedText(value.answerSdp, 64_000)
     && value.answerSdp.startsWith('v=0')
     && /(?:^|\r?\n)m=audio /u.test(value.answerSdp)
-    && isBoundedText(value.sessionId, 200);
+    && isBoundedText(value.sessionId, 256);
 }
 
 function isAiVoiceAudio(value: unknown): value is AiVoiceAudio {
