@@ -114,6 +114,78 @@ describe('Realtime peer setup cleanup', () => {
     expect(microphone.enabled).toBe(false);
   });
 
+  it.each(['native', 'web'])('uses the documented direct Live peer configuration on %s', async platform => {
+    const { peer, stream } = mountWebPeer();
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockReturnValue(peer);
+    const createSession = platform === 'native' ? createNativeSession : createWebSession;
+    const session = await createSession({ exchangeSdp: async () => 'answer', onClose: jest.fn(), onMessage: jest.fn() });
+    expect(platform === 'native' ? RTCPeerConnection : globalThis.RTCPeerConnection).toHaveBeenCalledWith();
+    session.close();
+  });
+
+  it.each(['native', 'web'])('allows gathering plus backend exchange to exceed fifteen seconds on %s', async platform => {
+    const { peer, stream, microphone } = mountWebPeer();
+    peer.iceGatheringState = 'gathering';
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockReturnValue(peer);
+    const exchange = deferred<string>();
+    const exchangeSdp = jest.fn(() => exchange.promise);
+    const createSession = platform === 'native' ? createNativeSession : createWebSession;
+    const pending = createSession({ exchangeSdp, onClose: jest.fn(), onMessage: jest.fn() }).catch(error => error);
+    await jest.advanceTimersByTimeAsync(8_000);
+    expect(exchangeSdp).not.toHaveBeenCalled();
+    peer.iceGatheringState = 'complete';
+    await jest.advanceTimersByTimeAsync(50);
+    expect(exchangeSdp).toHaveBeenCalledWith('gathered-offer', expect.anything());
+    await jest.advanceTimersByTimeAsync(12_000);
+    expect(microphone.enabled).toBe(false);
+    expect(peer.close).not.toHaveBeenCalled();
+    exchange.resolve('answer');
+    const session = await pending;
+    expect(peer.setRemoteDescription).toHaveBeenCalledWith({ type: 'answer', sdp: 'answer' });
+    session.close();
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['native', 'web'])('cancels incomplete gathering and prevents later exchange on %s', async platform => {
+    const { peer, stream, microphone, dataChannel } = mountWebPeer();
+    peer.iceGatheringState = 'gathering';
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockReturnValue(peer);
+    const controller = new AbortController();
+    const exchangeSdp = jest.fn(async () => 'answer');
+    const createSession = platform === 'native' ? createNativeSession : createWebSession;
+    const pending = createSession({ exchangeSdp, onClose: jest.fn(), onMessage: jest.fn(), signal: controller.signal }).catch(error => error);
+    await jest.advanceTimersByTimeAsync(8_000);
+    controller.abort();
+    expect(await pending).toEqual(expect.objectContaining({ message: 'The live voice connection was canceled.' }));
+    peer.iceGatheringState = 'complete';
+    await jest.advanceTimersByTimeAsync(50);
+    expect(exchangeSdp).not.toHaveBeenCalled();
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(dataChannel.close).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it.each(['native', 'web'])('fails closed if gathering never completes on %s', async platform => {
+    const { peer, stream, microphone, dataChannel } = mountWebPeer();
+    peer.iceGatheringState = 'gathering';
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockReturnValue(peer);
+    const exchangeSdp = jest.fn(async () => 'answer');
+    const createSession = platform === 'native' ? createNativeSession : createWebSession;
+    const pending = createSession({ exchangeSdp, onClose: jest.fn(), onMessage: jest.fn() }).catch(error => error);
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(await pending).toEqual(expect.objectContaining({ message: expect.stringContaining('network candidates') }));
+    expect(exchangeSdp).not.toHaveBeenCalled();
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(dataChannel.close).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('closes the native microphone and peer when abort fires during remote description setup', async () => {
     const remoteDescription = deferred<void>();
     const microphone = { enabled: true, stop: jest.fn() };
@@ -292,7 +364,7 @@ describe('Realtime peer setup cleanup', () => {
 
     await flushMicrotasks();
     expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
-    jest.advanceTimersByTime(15_000);
+    jest.advanceTimersByTime(45_000);
     await flushMicrotasks();
 
     expect(rejection).toEqual(expect.objectContaining({ message: 'The live voice connection took too long to negotiate.' }));
@@ -464,7 +536,7 @@ describe('Realtime peer setup cleanup', () => {
       onMessage: jest.fn(),
       signal: new AbortController().signal,
     });
-    expect(RTCPeerConnection).toHaveBeenCalledWith({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    expect(RTCPeerConnection).toHaveBeenCalledWith();
     peer.iceConnectionState = 'disconnected';
     peerHandlers.get('iceconnectionstatechange')?.();
     jest.advanceTimersByTime(9_999);
@@ -487,7 +559,7 @@ describe('Realtime peer setup cleanup', () => {
       onMessage: jest.fn(),
       signal: new AbortController().signal,
     });
-    expect(globalThis.RTCPeerConnection).toHaveBeenCalledWith({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    expect(globalThis.RTCPeerConnection).toHaveBeenCalledWith();
     peer.iceConnectionState = 'disconnected';
     peerHandlers.get('iceconnectionstatechange')?.();
     jest.advanceTimersByTime(9_999);

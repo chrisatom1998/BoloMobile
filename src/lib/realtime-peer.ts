@@ -8,9 +8,9 @@ import { observeLivePlayback } from '@/lib/live-playback';
 import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-peer.types';
 
 
-const PEER_CONFIGURATION = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const DISCONNECTED_WATCHDOG_MS = 10_000;
-const NEGOTIATION_TIMEOUT_MS = 15_000;
+// Allow the 10s ICE gather and 30s backend request budgets, plus native setup.
+const NEGOTIATION_TIMEOUT_MS = 45_000;
 
 type NativeEventTarget = {
   addEventListener(
@@ -49,7 +49,9 @@ export async function createRealtimePeerSession({
   let peer!: RTCPeerConnection;
   let dataChannel: ReturnType<RTCPeerConnection['createDataChannel']>;
   try {
-    peer = new RTCPeerConnection(PEER_CONFIGURATION);
+    // Live connects to OpenAI's reachable peer, as in its WebRTC quickstart.
+    // Extra STUN lookups can hold gathering open on restricted mobile networks.
+    peer = new RTCPeerConnection();
     peer.addTrack(microphone, stream);
     dataChannel = peer.createDataChannel('oai-events');
   } catch (cause) {

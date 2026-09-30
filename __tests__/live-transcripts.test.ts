@@ -66,6 +66,27 @@ describe('Live media state', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it('allows gathering to finish after five seconds without using a partial offer', async () => {
+    let state = 'gathering';
+    let ready = false;
+    const pending = waitForLiveIceGathering(() => state, new AbortController().signal)
+      .then(() => { ready = true; }).catch(error => error);
+    await jest.advanceTimersByTimeAsync(8_000);
+    expect(ready).toBe(false);
+    state = 'complete';
+    await jest.advanceTimersByTimeAsync(50);
+    expect(await pending).toBeUndefined();
+    expect(ready).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('still rejects gathering that never completes and releases its timers', async () => {
+    const pending = waitForLiveIceGathering(() => 'gathering', new AbortController().signal).catch(error => error);
+    await jest.advanceTimersByTimeAsync(10_000);
+    expect(await pending).toEqual(expect.objectContaining({ message: expect.stringContaining('network candidates') }));
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('derives output activity from received audio energy and stops polling on cleanup', async () => {
     const onChange = jest.fn();
     let level = 0;

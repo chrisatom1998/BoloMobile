@@ -11,7 +11,9 @@ export async function waitForLiveIceGathering(getState: () => string, signal: Ab
     };
     const abort = () => finish(new Error('The live voice connection was canceled.'));
     const poll = setInterval(() => { if (getState() === 'complete') finish(); }, 50);
-    const timeout = setTimeout(() => finish(new Error('The live voice connection could not gather network candidates.')), 5_000);
+    // Match the documented Live WebRTC gathering budget. A slow interface must
+    // not discard an otherwise usable offer after only five seconds.
+    const timeout = setTimeout(() => finish(new Error('The live voice connection could not gather network candidates.')), 10_000);
     signal.addEventListener('abort', abort, { once: true });
     if (signal.aborted) abort();
   });
