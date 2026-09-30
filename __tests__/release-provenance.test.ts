@@ -161,4 +161,13 @@ describe('release source provenance', () => {
     expect(easJson.cli.version).toMatch(/^\d+\.\d+\.\d+$/u);
     expect(wrapper).toContain(`const easCli = 'eas-cli@${easJson.cli.version}'`);
   });
+
+  it('matches the hosted GitHub build CLI in the profile and release commands', () => {
+    const easJson = require('../eas.json') as { cli: { version: string } };
+    const workflow = readFileSync(resolve(process.cwd(), '.github/workflows/release-ios.yml'), 'utf8');
+    expect(easJson.cli.version).toBe('24.8.0');
+    const versions = [...workflow.matchAll(/npx eas-cli@([^\s]+) /gu)].map(match => match[1]);
+    expect(versions).toHaveLength(3);
+    expect(versions.every(version => version === easJson.cli.version)).toBe(true);
+  });
 });

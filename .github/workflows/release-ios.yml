@@ -123,7 +123,7 @@ jobs:
           BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
           BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
         run: |
-          npx eas-cli@21.0.0 build \
+          npx eas-cli@24.8.0 build \
             --platform ios \
             --profile production \
             --non-interactive \
@@ -136,7 +136,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           BUILD_ID="$(node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync('eas-build.json','utf8')); const build=Array.isArray(value)?value[0]:value; if(!build?.id) process.exit(2); process.stdout.write(build.id)")"
-          npx eas-cli@21.0.0 build:view "$BUILD_ID" --json > eas-build-view.json
+          npx eas-cli@24.8.0 build:view "$BUILD_ID" --json > eas-build-view.json
           ARTIFACT_URL="$(node -e "const fs=require('fs'); const build=JSON.parse(fs.readFileSync('eas-build-view.json','utf8')); const url=build?.artifacts?.buildUrl || build?.artifacts?.applicationArchiveUrl; if(!url) process.exit(2); process.stdout.write(url)")"
           echo "build_id=$BUILD_ID" >> "$GITHUB_OUTPUT"
           curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 --output Bolo.ipa "$ARTIFACT_URL"
@@ -170,7 +170,7 @@ jobs:
           BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
           WHAT_TO_TEST: ${{ inputs.what_to_test }}
         run: |
-          npx eas-cli@21.0.0 submit \
+          npx eas-cli@24.8.0 submit \
             --platform ios \
             --id "${{ steps.eas_build.outputs.build_id }}" \
             --profile production \
