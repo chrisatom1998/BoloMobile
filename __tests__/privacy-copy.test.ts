@@ -17,6 +17,15 @@ const lifecycleFacts = [
 ];
 
 describe('live voice privacy copy', () => {
+  it('discloses post-End transcript analysis and temporary unsaved recaps', () => {
+    for (const path of ['src/components/ai-consent-gate.tsx', 'src/app/privacy.tsx', 'store/privacy-declarations.md']) {
+      const disclosure = read(path);
+      expect(disclosure).toMatch(/after you tap End/iu);
+      expect(disclosure).toMatch(/conversation recap/iu);
+      expect(disclosure).toMatch(/unsaved recaps[\s\S]{0,80}temporary/iu);
+    }
+  });
+
   it('states the complete microphone lifecycle in every checked-in disclosure', () => {
     const listings = JSON.parse(read('store/listings.json')) as {
       apple: { description: string; reviewNotes: string };

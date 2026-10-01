@@ -28,6 +28,8 @@ type Props = {
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
   onError: (message: string) => void;
+  /** Called only after an explicit End has synchronously released microphone/audio. */
+  onSessionEnded?: () => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
   onDisconnectReady?: (disconnect: (() => void) | null) => void;
@@ -130,9 +132,10 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onSessionEnded, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, enabled, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
+  const endHandledRef = useRef(false);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
@@ -153,6 +156,7 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
 
   const press = useCallback(() => {
     if (blocked) return;
+    if (voice.status === 'disconnected') endHandledRef.current = false;
     if (voice.microphoneEnabled) {
       hapticTap();
       void Promise.resolve().then(voice.finishTurn).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
@@ -177,9 +181,13 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
   }, [onDisconnectReady, voice.disconnect]);
 
   const endSession = useCallback(() => {
+    if (endHandledRef.current) return;
+    endHandledRef.current = true;
+    const completed = voice.status !== 'connecting' && voice.status !== 'disconnected';
     hapticSelect();
     voice.disconnect();
-  }, [voice]);
+    if (completed) onSessionEnded?.();
+  }, [onSessionEnded, voice]);
 
   return (
     <View style={[styles.stage, compact && styles.stageCompact, minimal && styles.stageMinimal]} testID="realtime-voice-stage">

@@ -77,10 +77,12 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTranscriptChange,
       onTurnActionReady,
       onTranscriptSnapshot,
+      onSessionEnded,
       responseLanguage,
     }: {
       disabled?: boolean;
       onError: (message: string) => void;
+      onSessionEnded?: () => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
@@ -88,9 +90,10 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string; startMs: number; endMs: number; fragments: never[] }[]) => void;
       responseLanguage: 'en' | 'hi';
     }) => {
+      const sessionRef = mockReact.useRef(0);
       const onTurnComplete = (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => onTranscriptSnapshot?.([
-        { id: 'live-user', speaker: 'you', text: turn.transcript, startMs: 0, endMs: 1000, fragments: [] },
-        { id: 'live-asha', speaker: 'asha', text: turn.reply, startMs: 500, endMs: 1500, fragments: [] },
+        { id: `live-user-${sessionRef.current}`, speaker: 'you', text: turn.transcript, startMs: 0, endMs: 1000, fragments: [] },
+        { id: `live-asha-${sessionRef.current}`, speaker: 'asha', text: turn.reply, startMs: 500, endMs: 1500, fragments: [] },
       ]);
       mockReact.useEffect(() => {
         onTurnActionReady?.(() => onStatusChange?.('recording'));
@@ -99,7 +102,10 @@ jest.mock('@/components/realtime-voice-button', () => {
       return mockReact.createElement(
       mockReact.Fragment,
       null,
+      mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock final caption and End', onPress: () => { onTurnComplete({ transcript: 'Mujhe chai hai.', reply: 'Try mujhe chai chahiye.', language: 'en' }); onStatusChange?.('disconnected'); onSessionEnded?.(); } }),
+      mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock whitespace transcript', onPress: () => onTurnComplete({ transcript: '  Mujhe chai hai.  ', reply: 'Try mujhe chai chahiye.', language: 'en' }) }),
       mockReact.createElement(MockText, { testID: 'mock-realtime-language' }, responseLanguage),
+      mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock explicit End', onPress: () => { onStatusChange?.('disconnected'); onSessionEnded?.(); } }, mockReact.createElement(MockText, null, 'End')),
       mockReact.createElement(
         MockPressable,
         {
@@ -140,7 +146,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock realtime connecting',
-          onPress: () => onStatusChange?.('connecting'),
+          onPress: () => { sessionRef.current += 1; onStatusChange?.('connecting'); },
         },
         mockReact.createElement(MockText, null, 'Mock connecting'),
       ),
@@ -236,6 +242,7 @@ jest.mock('@/state/app-state', () => ({
   __clearChatHistoryMock: jest.fn(),
   __markLiveTurnMock: jest.fn(),
   __togglePhraseMock: jest.fn(),
+  __savePhraseMock: jest.fn(),
   useAppState: () => {
     const appState = jest.requireMock('@/state/app-state') as {
       __appendChatMessagesMock: jest.Mock;
@@ -243,6 +250,7 @@ jest.mock('@/state/app-state', () => ({
       __clearChatHistoryMock: jest.Mock;
       __markLiveTurnMock: jest.Mock;
       __togglePhraseMock: jest.Mock;
+  __savePhraseMock: jest.Mock;
     };
     const [chatHistory, setChatHistory] = mockReact.useState<
       { id: string; role: 'you' | 'asha'; text: string; language?: 'en' | 'hi' }[]
@@ -287,6 +295,7 @@ jest.mock('@/state/app-state', () => ({
       phraseReviews: {},
       phrases: [],
       togglePhrase: appState.__togglePhraseMock,
+      savePhrase: appState.__savePhraseMock,
       updateLearnerProfile: (update: Partial<typeof learnerProfile>) => setLearnerProfile((current) => ({ ...current, ...update })),
     };
   },
@@ -300,6 +309,7 @@ jest.mock('@/lib/speech', () => ({
 
 jest.mock('@/services/bolo-api', () => ({
   getContextualWordDefinition: jest.fn(),
+  getConversationRecap: jest.fn(),
   prepareSavedPhraseFromText: jest.fn(),
   reportGeneratedMessage: jest.fn(),
   sendMobileChat: jest.fn(),
@@ -307,6 +317,7 @@ jest.mock('@/services/bolo-api', () => ({
 
 const boloApi = jest.requireMock('@/services/bolo-api') as {
   getContextualWordDefinition: jest.Mock;
+  getConversationRecap: jest.Mock;
   prepareSavedPhraseFromText: jest.Mock;
   reportGeneratedMessage: jest.Mock;
   sendMobileChat: jest.Mock;
@@ -322,6 +333,7 @@ const appState = jest.requireMock('@/state/app-state') as {
   __clearChatHistoryMock: jest.Mock;
   __markLiveTurnMock: jest.Mock;
   __togglePhraseMock: jest.Mock;
+  __savePhraseMock: jest.Mock;
 };
 
 function deferred<T>() {
@@ -1214,5 +1226,73 @@ describe('live audio control exclusion', () => {
 
     await view.unmount();
     await flushMicrotasks();
+  });
+});
+
+
+describe('end-of-conversation recap screen integration', () => {
+  beforeEach(() => {
+    jest.clearAllMocks(); mockAiConsent = true;
+    Object.defineProperty(AppState, 'currentState', { configurable: true, writable: true, value: 'active' });
+    boloApi.getConversationRecap.mockResolvedValue({ corrections: [] });
+  });
+  it('includes the final caption when caption and End arrive in one batch', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock final caption and End'));
+    expect(boloApi.getConversationRecap).toHaveBeenCalledTimes(1);
+    expect(boloApi.getConversationRecap.mock.calls[0]?.[0].messages[0].text).toBe('Mujhe chai hai.');
+    expect(view.getByText('Conversation recap')).toBeTruthy();
+    await view.unmount();
+  });
+  it('uses the same normalized transcript snapshot as persisted chat', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock whitespace transcript'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    expect(boloApi.getConversationRecap.mock.calls[0]?.[0].messages[0].text).toBe('Mujhe chai hai.');
+    expect(view.getByText('Conversation recap')).toBeTruthy();
+    await view.unmount();
+  });
+  it('requests only the latest session snapshot after explicit End, not on disconnect or error', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(boloApi.getConversationRecap).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Mock realtime error'));
+    expect(boloApi.getConversationRecap).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    expect(boloApi.getConversationRecap).toHaveBeenCalledTimes(1);
+    const input = boloApi.getConversationRecap.mock.calls[0]?.[0];
+    expect(input.messages).toHaveLength(2);
+    expect(input.messages[0].text).toBe('मेरा नाम क्रिस है।');
+    expect(input.messages.some((row: { text: string }) => row.text === 'Namaste')).toBe(false);
+    expect(speech.speakText).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+  it('cancels an in-flight recap on reconnect and ignores its stale response', async () => {
+    const pending = deferred<{ corrections: [] }>(); boloApi.getConversationRecap.mockReturnValue(pending.promise);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    const signal = boloApi.getConversationRecap.mock.calls[0]?.[1] as AbortSignal;
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(signal.aborted).toBe(true);
+    await act(async () => pending.resolve({ corrections: [] }));
+    expect(view.queryByText('Conversation recap')).toBeNull();
+    await view.unmount();
+  });
+  it('clears unsaved recap and cancels network work when consent is withdrawn', async () => {
+    const pending = deferred<{ corrections: [] }>(); boloApi.getConversationRecap.mockReturnValue(pending.promise);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    const signal = boloApi.getConversationRecap.mock.calls[0]?.[1] as AbortSignal;
+    mockAiConsent = false; await view.rerender(<LiveScreen />);
+    expect(signal.aborted).toBe(true);
+    await act(async () => pending.resolve({ corrections: [] }));
+    expect(view.queryByText('Conversation recap')).toBeNull();
+    await view.unmount();
   });
 });

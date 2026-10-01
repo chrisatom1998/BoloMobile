@@ -62,6 +62,7 @@ type AppActions = {
   completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
   togglePhrase: (phrase: SavedPhrase) => void;
+  savePhrase: (phrase: SavedPhrase) => void;
   removePhrase: (hi: string) => void;
   checkpointScene: (sceneId: string, nextBeatIndex: number) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
@@ -326,6 +327,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['phrases', 'phraseReviews']);
   }, [commit]);
 
+  // Recap Save is idempotent, unlike the existing bookmark toggle. Check the
+  // synchronous state ref so two taps in the same render cannot unsave a card.
+  const savePhrase = useCallback((phrase: SavedPhrase) => {
+    const normalized = sanitizePhrases(JSON.stringify([phrase]))[0];
+    if (!normalized || stateRef.current.phrases.some((saved) => saved.hi.trim().toLowerCase() === normalized.hi.toLowerCase())) return;
+    togglePhrase(normalized);
+  }, [togglePhrase]);
+
   const removePhrase = useCallback((hi: string) => {
     commit((current) => {
       const phraseReviews = { ...current.phraseReviews };
@@ -519,6 +528,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     completeOnboarding,
     updateLearnerProfile,
     togglePhrase,
+    savePhrase,
     removePhrase,
     checkpointScene,
     markSceneComplete,
@@ -532,7 +542,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setReminder,
     setMotionPreference,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, savePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,

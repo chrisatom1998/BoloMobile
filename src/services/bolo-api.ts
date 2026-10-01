@@ -1,5 +1,7 @@
 import Constants from 'expo-constants';
 
+import { parseRecapResponse, selectRecapMessages, type RecapMessage, type RecapResponse } from '../../shared/conversation-recap';
+
 import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens } from '@/lib/contextual-word-definition';
@@ -205,6 +207,20 @@ export function buildMobileChatPayload(input: MobileChatInput) {
 
 export function sendMobileChat(input: MobileChatInput, signal?: AbortSignal) {
   return post('/api/mobile-chat', buildMobileChatPayload(input), isMobileChatResponse, signal);
+}
+
+export async function getConversationRecap(input: {
+  clientId: string;
+  messages: readonly RecapMessage[];
+}, signal?: AbortSignal): Promise<RecapResponse> {
+  if (signal?.aborted) throw new BoloApiError('The request was canceled.');
+  if (typeof input.clientId !== 'string' || !/^[A-Za-z0-9-]{8,64}$/u.test(input.clientId) || !Array.isArray(input.messages)) {
+    throw new BoloApiError('Bolo could not prepare this conversation recap.');
+  }
+  const messages = selectRecapMessages(input.messages);
+  if (!messages.some(row => row.role === 'you')) return { corrections: [] };
+  return post('/api/conversation-recap', { clientId: input.clientId, messages },
+    (value): value is RecapResponse => parseRecapResponse(value, messages) !== null, signal);
 }
 
 export async function getContextualWordDefinition(input: {

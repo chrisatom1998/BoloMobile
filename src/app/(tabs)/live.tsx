@@ -8,6 +8,7 @@ import { Animated, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { ConversationRecapSheet } from '@/components/conversation-recap-sheet';
 import { ChatMessageRow } from '@/components/chat-message-row';
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
 import { LiveComposer } from '@/components/live-composer';
@@ -15,6 +16,7 @@ import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
+import { useConversationRecap } from '@/hooks/use-conversation-recap';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { type EffectiveMotion, useMotionPreference } from '@/hooks/use-motion-preference';
@@ -29,6 +31,7 @@ import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/ser
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import type { RecapCorrection } from '../../../shared/conversation-recap';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -77,7 +80,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth <= 430;
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], savePhrase, togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
@@ -93,6 +96,13 @@ export default function LiveScreen() {
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [screenFocused, setScreenFocused] = useState(true);
   const liveSnapshotIdsRef = useRef<string[]>([]);
+  const liveSnapshotRef = useRef<ChatMessage[]>([]);
+  const { state: recapState, start: startRecap, close: closeRecap, retry: retryRecap, dismiss: dismissRecapCorrection } = useConversationRecap({ clientId, enabled: aiConsent && screenFocused, history: chatHistory });
+  const endConversation = useCallback(() => { startRecap(liveSnapshotRef.current); }, [startRecap]);
+  const saveRecapCorrection = useCallback((correction: RecapCorrection) => {
+    if (!aiConsent || !screenFocused || recapState?.status !== 'ready' || !recapState.corrections.includes(correction)) return;
+    savePhrase({ hi: correction.hi, latin: correction.latin, en: correction.en });
+  }, [aiConsent, recapState, savePhrase, screenFocused]);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
@@ -165,11 +175,12 @@ export default function LiveScreen() {
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
+      closeRecap();
       setScreenFocused(false);
       if (practiced.current) addPracticeSeconds(elapsedSeconds());
       void stopSpeaking();
     };
-  }, [addPracticeSeconds, elapsedSeconds, resetPracticeTimer]));
+  }, [addPracticeSeconds, closeRecap, elapsedSeconds, resetPracticeTimer]));
 
   // Tabs stay mounted and iOS can kill a backgrounded app without running the
   // focus cleanup. Persist the active portion of a real practice visit before
@@ -224,11 +235,12 @@ export default function LiveScreen() {
     const messages: ChatMessage[] = rows.filter((row) => row.text.trim()).map((row) => ({
       id: row.id,
       role: row.speaker,
-      text: row.text,
+      text: row.text.trim(),
       ...(row.speaker === 'asha' ? { language: responseLanguage } : {}),
     }));
     // The whole snapshot is revisable: late timestamped deltas can merge two
     // provisional rows. Remove prior snapshot IDs so no stale row survives.
+    liveSnapshotRef.current = messages;
     replaceLiveChatSnapshot(liveSnapshotIdsRef.current, messages);
     liveSnapshotIdsRef.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
@@ -258,13 +270,15 @@ export default function LiveScreen() {
   }, [clearAudioError, languageControlLocked, responseLanguage, updateLearnerProfile]);
 
   const clearSavedChat = useCallback(() => {
+    closeRecap();
+    liveSnapshotRef.current = [];
     void stopSpeaking();
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
     selectedChatTextRef.current.clear();
     setWordDefinitionPhrase(null);
     clearChatHistory();
-  }, [clearChatHistory]);
+  }, [clearChatHistory, closeRecap]);
 
   const rememberSelectedChatText = useCallback((messageId: string, selection: { sourceText: string; text: string }) => {
     const pendingClear = selectionClearTimersRef.current.get(messageId);
@@ -357,12 +371,14 @@ export default function LiveScreen() {
     if (status === 'recording') setError('');
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
+      closeRecap();
+      liveSnapshotRef.current = [];
       liveSnapshotIdsRef.current = [];
       setLiveAshaTranscript('');
       setLiveUserTranscript('');
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') observe('voice_connection_succeeded');
-  }, []);
+  }, [closeRecap]);
   const showRealtimeError = useCallback((message: string) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
     // count failures that happen while a connection attempt is in flight.
@@ -518,7 +534,7 @@ export default function LiveScreen() {
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
                   </View>
-                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
+                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} onSessionEnded={endConversation} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
                   <View style={styles.heroCopy}>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
@@ -631,6 +647,7 @@ export default function LiveScreen() {
         </ScrollView>
         <LiveComposer disabled={busy || realtimeLocked} onSend={submitMessage} styles={styles} />
       </View> : null}
+      {recapState && aiConsent && screenFocused ? <ConversationRecapSheet state={recapState} onClose={closeRecap} onRetry={retryRecap} onDismiss={dismissRecapCorrection} onSave={saveRecapCorrection} savedPhraseKeys={phrases.map((phrase) => phrase.hi.trim().toLowerCase())} reducedMotion={reducedMotion} /> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
       {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible /> : null}
     </KeyboardAvoidingView>

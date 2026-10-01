@@ -17,7 +17,7 @@ jest.mock('@/lib/haptics', () => ({
 const mockDisconnect = jest.fn();
 const mockStartTurn = jest.fn(async () => undefined);
 const mockFinishTurn = jest.fn(async () => undefined);
-let mockVoiceStatus: 'disconnected' | 'ready' | 'recording' | 'responding' = 'ready';
+let mockVoiceStatus: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding' = 'ready';
 
 jest.mock('@/hooks/use-realtime-conversation', () => ({
   useRealtimeConversation: () => ({
@@ -40,6 +40,28 @@ describe('realtime voice accessibility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockVoiceStatus = 'ready';
+  });
+
+  it('ends audio before requesting a recap and ignores duplicate End taps', async () => {
+    const order: string[] = [];
+    mockDisconnect.mockImplementation(() => { order.push('disconnect'); });
+    const onSessionEnded = jest.fn(() => { order.push('recap'); });
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onSessionEnded={onSessionEnded} />);
+    const end = view.getByLabelText('End live voice session');
+    await fireEvent.press(end);
+    await fireEvent.press(end);
+    expect(order).toEqual(['disconnect', 'recap']);
+    await view.unmount();
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not request a recap when cancelling a connection attempt', async () => {
+    mockVoiceStatus = 'connecting';
+    const onSessionEnded = jest.fn();
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onSessionEnded={onSessionEnded} />);
+    await fireEvent.press(view.getByLabelText('End live voice session'));
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
+    expect(onSessionEnded).not.toHaveBeenCalled();
   });
 
   it('uses the large glowing orb as the only visible start control', async () => {
