@@ -24,6 +24,7 @@ function collectTestIds(node: unknown, ids: string[] = []) {
 }
 
 const mockRouterPush = jest.fn();
+const mockConnectionHistory = jest.fn();
 const longDevanagariReply = 'आप कैसे हैं? धन्यवाद, आशा। ज़रूर। आप कैसे हैं? धन्यवाद, आशा। ज़रूर।';
 
 jest.mock('expo-router', () => ({
@@ -79,12 +80,14 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTurnActionReady,
       onTranscriptSnapshot,
       onSessionEnded,
+      onConnectionStart,
       responseLanguage,
     }: {
       children?: mockReact.ReactNode;
       disabled?: boolean;
       onError: (message: string) => void;
-      onSessionEnded?: () => void;
+      onSessionEnded?: (completed?: boolean) => void;
+      onConnectionStart?: (signal: AbortSignal) => Promise<{ role: 'you' | 'asha'; text: string }[]>;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
@@ -109,6 +112,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock whitespace transcript', onPress: () => onTurnComplete({ transcript: '  Mujhe chai hai.  ', reply: 'Try mujhe chai chahiye.', language: 'en' }) }),
       mockReact.createElement(MockText, { testID: 'mock-realtime-language' }, responseLanguage),
       mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock explicit End', onPress: () => { onStatusChange?.('disconnected'); onSessionEnded?.(); } }, mockReact.createElement(MockText, null, 'End')),
+      mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock cancel connecting End', onPress: () => { onStatusChange?.('disconnected'); onSessionEnded?.(false); } }),
       mockReact.createElement(
         MockPressable,
         {
@@ -149,7 +153,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock realtime connecting',
-          onPress: () => { sessionRef.current += 1; onStatusChange?.('connecting'); },
+          onPress: async () => { sessionRef.current += 1; onStatusChange?.('connecting'); mockConnectionHistory(await onConnectionStart?.(new AbortController().signal)); },
         },
         mockReact.createElement(MockText, null, 'Mock connecting'),
       ),
@@ -238,6 +242,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 let mockAiConsent = true;
+let mockInitialChatHistory: { id: string; role: 'you' | 'asha'; text: string }[] = [];
 
 jest.mock('@/state/app-state', () => ({
   __appendChatMessagesMock: jest.fn(),
@@ -257,7 +262,7 @@ jest.mock('@/state/app-state', () => ({
     };
     const [chatHistory, setChatHistory] = mockReact.useState<
       { id: string; role: 'you' | 'asha'; text: string; language?: 'en' | 'hi' }[]
-    >([]);
+    >(mockInitialChatHistory);
     const [learnerProfile, setLearnerProfile] = mockReact.useState<{
       completed: boolean;
       level: 'new' | 'beginner' | 'intermediate';
@@ -281,9 +286,10 @@ jest.mock('@/state/app-state', () => ({
       appState.__appendChatMessagesMock(messages);
       setChatHistory((current) => [...current.filter((row) => !previousIds.includes(row.id)), ...messages].slice(-100));
     }, []);
-    const clearChatHistory = mockReact.useCallback(() => {
+    const clearChatHistory = mockReact.useCallback(async () => {
       appState.__clearChatHistoryMock();
       setChatHistory([]);
+      return true;
     }, []);
     return {
       addPracticeSeconds: appState.__addPracticeSecondsMock,
@@ -1235,10 +1241,99 @@ describe('live audio control exclusion', () => {
 
 describe('end-of-conversation recap screen integration', () => {
   beforeEach(() => {
-    jest.clearAllMocks(); mockAiConsent = true;
+    jest.clearAllMocks(); mockAiConsent = true; mockInitialChatHistory = [];
     Object.defineProperty(AppState, 'currentState', { configurable: true, writable: true, value: 'active' });
     boloApi.getConversationRecap.mockResolvedValue({ corrections: [] });
   });
+  afterEach(() => { mockInitialChatHistory = []; });
+  it('clears initially hydrated history at the first fresh voice start', async () => {
+    mockInitialChatHistory = [{ id: 'persisted-old', role: 'asha', text: 'Previous app visit' }];
+    const view = await render(<LiveScreen />);
+    expect(view.getByLabelText('Selectable chat text: Previous app visit')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(view.queryByLabelText('Selectable chat text: Previous app visit')).toBeNull();
+    expect(mockConnectionHistory).toHaveBeenLastCalledWith([]);
+    await view.unmount();
+  });
+
+  it('starts fresh after explicit End cancels a reconnect, without requesting a recap for the canceled attempt', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock cancel connecting End'));
+    expect(boloApi.getConversationRecap).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(view.queryByLabelText('Selectable chat text: Hello there.')).toBeNull();
+    expect(mockConnectionHistory).toHaveBeenLastCalledWith([]);
+    await view.unmount();
+  });
+  it('keeps an ended transcript for recap, then clears it before starting a fresh conversation', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
+    expect(view.getByText('Conversation recap')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(view.queryByLabelText('Selectable chat text: Hello there.')).toBeNull();
+    expect(view.queryByText('Conversation recap')).toBeNull();
+    expect(mockConnectionHistory).toHaveBeenLastCalledWith([]);
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    const last = boloApi.getConversationRecap.mock.calls.at(-1)?.[0];
+    expect(last.messages.map((row: { text: string }) => row.text)).toEqual(['मेरा नाम क्रिस है।', longDevanagariReply]);
+    expect(appState.__savePhraseMock).not.toHaveBeenCalled();
+    expect(appState.__togglePhraseMock).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
+  it('retains the current conversation through reconnect and includes both transports in its recap', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
+    expect(mockConnectionHistory.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({ text: 'Namaste' }), expect.objectContaining({ text: 'Hello there.' }),
+    ]);
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock explicit End'));
+    expect(boloApi.getConversationRecap.mock.calls.at(-1)?.[0].messages.map((row: { text: string }) => row.text)).toEqual(['Namaste', 'Hello there.', 'मेरा नाम क्रिस है।', longDevanagariReply]);
+    await view.unmount();
+  });
+
+  it('includes completed typed fallback turns when reconnecting the same voice conversation', async () => {
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Here is your typed correction.', language: 'en' });
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please correct this typed fallback.');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+
+    expect(view.getByLabelText('Selectable chat text: Please correct this typed fallback.')).toBeTruthy();
+    expect(view.getByLabelText('Selectable chat text: Here is your typed correction.')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(mockConnectionHistory.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({ role: 'you', text: 'Namaste' }),
+      expect.objectContaining({ role: 'asha', text: 'Hello there.' }),
+      expect.objectContaining({ role: 'you', text: 'Please correct this typed fallback.' }),
+      expect.objectContaining({ role: 'asha', text: 'Here is your typed correction.' }),
+    ]);
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
   it('includes the final caption when caption and End arrive in one batch', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock final caption and End'));

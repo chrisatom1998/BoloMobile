@@ -71,7 +71,7 @@ type AppActions = {
   addPracticeSeconds: (seconds: number) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
-  clearChatHistory: () => void;
+  clearChatHistory: () => Promise<boolean>;
   setAiConsent: (consent: boolean) => Promise<boolean>;
   setReminder: (reminder: ReminderSettings) => void;
   setMotionPreference: (preference: MotionPreference) => void;
@@ -181,6 +181,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
   const liveSnapshotWriteQueuedRef = useRef(false);
+  const pendingChatClearRef = useRef<{
+    clientId: string;
+    history: ChatMessage[];
+    rollback: { history: ChatMessage[] };
+  } | null>(null);
 
   const replaceState = useCallback((next: PersistedState) => {
     stateRef.current = next;
@@ -462,9 +467,38 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     });
   }, [enqueuePersistence, replaceState]);
 
-  const clearChatHistory = useCallback(() => {
-    commit((current) => current.chatHistory.length === 0 ? current : { ...current, chatHistory: [] }, ['chatHistory']);
-  }, [commit]);
+  const clearChatHistory = useCallback(async () => {
+    if (clearingAllDataRef.current) return false;
+    const previous = stateRef.current;
+    const pendingClear = pendingChatClearRef.current;
+    const rollback = pendingClear?.clientId === previous.clientId && pendingClear.history === previous.chatHistory
+      ? pendingClear.rollback
+      : { history: previous.chatHistory };
+    const next = { ...previous, chatHistory: [] };
+    const clear = { clientId: previous.clientId, history: next.chatHistory, rollback };
+    pendingChatClearRef.current = clear;
+    replaceState(next);
+    try {
+      // New voice connections await this result so old persisted captions
+      // cannot return after the new conversation has already begun.
+      await enqueuePersistence(() => persistState(next, ['chatHistory']));
+      // Overlapping clears share the last restorable history. A successful
+      // clear advances that baseline so a later failure cannot revive it.
+      rollback.history = next.chatHistory;
+      return !clearingAllDataRef.current && stateRef.current.clientId === previous.clientId;
+    } catch (error) {
+      reportPersistenceFailure(error);
+      // A canceled start can already have queued a newer clear. Equal empty
+      // arrays are different boundaries; an older failure must not undo one.
+      const current = stateRef.current;
+      if (current.clientId === previous.clientId && current.chatHistory === next.chatHistory) {
+        replaceState({ ...current, chatHistory: rollback.history });
+      }
+      return false;
+    } finally {
+      if (pendingChatClearRef.current === clear) pendingChatClearRef.current = null;
+    }
+  }, [enqueuePersistence, replaceState]);
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
     if (clearingAllDataRef.current) return false;

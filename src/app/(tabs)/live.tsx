@@ -26,7 +26,7 @@ import { showAppAlert } from '@/lib/app-alert';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
-import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
+import { DEFAULT_MOTION_PREFERENCE, replaceChatHistorySnapshot } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
@@ -97,8 +97,13 @@ export default function LiveScreen() {
   const [screenFocused, setScreenFocused] = useState(true);
   const liveSnapshotIdsRef = useRef<string[]>([]);
   const liveSnapshotRef = useRef<ChatMessage[]>([]);
+  const needsNewConversationRef = useRef(true);
+  const conversationClientIdRef = useRef(clientId);
   const { state: recapState, start: startRecap, close: closeRecap, retry: retryRecap, dismiss: dismissRecapCorrection } = useConversationRecap({ clientId, enabled: aiConsent && screenFocused, history: chatHistory });
-  const endConversation = useCallback(() => { startRecap(liveSnapshotRef.current); }, [startRecap]);
+  const endConversation = useCallback((completed = true) => {
+    needsNewConversationRef.current = true;
+    if (completed) startRecap(liveSnapshotRef.current);
+  }, [startRecap]);
   const saveRecapCorrection = useCallback((correction: RecapCorrection) => {
     if (!aiConsent || !screenFocused || recapState?.status !== 'ready' || !recapState.corrections.includes(correction)) return;
     savePhrase({ hi: correction.hi, latin: correction.latin, en: correction.en });
@@ -240,7 +245,7 @@ export default function LiveScreen() {
     }));
     // The whole snapshot is revisable: late timestamped deltas can merge two
     // provisional rows. Remove prior snapshot IDs so no stale row survives.
-    liveSnapshotRef.current = messages;
+    liveSnapshotRef.current = replaceChatHistorySnapshot(liveSnapshotRef.current, liveSnapshotIdsRef.current, messages);
     replaceLiveChatSnapshot(liveSnapshotIdsRef.current, messages);
     liveSnapshotIdsRef.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
@@ -271,14 +276,45 @@ export default function LiveScreen() {
 
   const clearSavedChat = useCallback(() => {
     closeRecap();
+    needsNewConversationRef.current = true;
     liveSnapshotRef.current = [];
+    liveSnapshotIdsRef.current = [];
     void stopSpeaking();
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
     selectedChatTextRef.current.clear();
     setWordDefinitionPhrase(null);
-    clearChatHistory();
+    void clearChatHistory();
   }, [clearChatHistory, closeRecap]);
+
+  const beginRealtimeConnection = useCallback(async (signal: AbortSignal) => {
+    if (signal.aborted) return [];
+    const startsNewConversation = needsNewConversationRef.current || conversationClientIdRef.current !== clientId;
+    if (startsNewConversation) {
+      // Keep the ended chat available for review until the learner starts again.
+      // A transport retry within an unfinished conversation must not clear it.
+      const cleared = await clearChatHistory();
+      if (signal.aborted) return [];
+      if (!cleared) throw new Error('Bolo could not clear the previous chat. Check available storage, then try starting again.');
+      liveSnapshotRef.current = [];
+      selectedChatTextRef.current.clear();
+      selectionClearTimersRef.current.forEach(clearTimeout);
+      selectionClearTimersRef.current.clear();
+      setPhraseMessage(null);
+      setWordDefinitionPhrase(null);
+      needsNewConversationRef.current = false;
+      conversationClientIdRef.current = clientId;
+    }
+    closeRecap();
+    // The new transport will have different revisable row IDs. Earlier rows
+    // from this same conversation remain in history and in the final recap.
+    liveSnapshotIdsRef.current = [];
+    setLiveAshaTranscript('');
+    setLiveUserTranscript('');
+    // Resumed voice also needs completed typed fallback turns. A fresh start
+    // must not reuse this callback's history from before the persisted clear.
+    return startsNewConversation ? [] : chatHistory;
+  }, [chatHistory, clearChatHistory, clientId, closeRecap]);
 
   const rememberSelectedChatText = useCallback((messageId: string, selection: { sourceText: string; text: string }) => {
     const pendingClear = selectionClearTimersRef.current.get(messageId);
@@ -371,14 +407,9 @@ export default function LiveScreen() {
     if (status === 'recording') setError('');
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
-      closeRecap();
-      liveSnapshotRef.current = [];
-      liveSnapshotIdsRef.current = [];
-      setLiveAshaTranscript('');
-      setLiveUserTranscript('');
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') observe('voice_connection_succeeded');
-  }, [closeRecap]);
+  }, []);
   const showRealtimeError = useCallback((message: string) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
     // count failures that happen while a connection attempt is in flight.
@@ -534,7 +565,7 @@ export default function LiveScreen() {
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
                   </View>
-                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} onSessionEnded={endConversation} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal">
+                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} onSessionEnded={endConversation} onConnectionStart={beginRealtimeConnection} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal">
                     <View style={styles.heroCopy}>
                       <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                       <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>

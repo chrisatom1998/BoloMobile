@@ -70,13 +70,13 @@ describe('realtime voice accessibility', () => {
     expect(mockDisconnect).toHaveBeenCalledTimes(2);
   });
 
-  it('does not request a recap when cancelling a connection attempt', async () => {
+  it('marks an explicit end while cancelling a connection without requesting a recap', async () => {
     mockVoiceStatus = 'connecting';
     const onSessionEnded = jest.fn();
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onSessionEnded={onSessionEnded} />);
     await fireEvent.press(view.getByLabelText('End chat'));
     expect(mockDisconnect).toHaveBeenCalledTimes(1);
-    expect(onSessionEnded).not.toHaveBeenCalled();
+    expect(onSessionEnded).toHaveBeenCalledWith(false);
   });
 
   it('uses the large glowing orb as the only visible start control', async () => {
