@@ -44,7 +44,21 @@ tags:
 - extendedWaitUntil:
     visible: "Your microphone is on"
     timeout: 15000
-- tapOn: "End live voice session"
+- scrollUntilVisible:
+    element:
+      text: "End chat"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+- tapOn: "End chat"
+- scrollUntilVisible:
+    element:
+      text: "Start a voice conversation"
+    direction: UP
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
 - assertVisible: "Ready when you are"
 - assertVisible: "Start a voice conversation"
 - scrollUntilVisible:
@@ -67,6 +81,20 @@ tags:
     visible: "Unmute microphone"
     timeout: 15000
 - assertVisible: ".*(Your microphone is muted|Asha is speaking).*"
-- tapOn: "End live voice session"
+- scrollUntilVisible:
+    element:
+      text: "End chat"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+- tapOn: "End chat"
+- scrollUntilVisible:
+    element:
+      text: "Start a voice conversation"
+    direction: UP
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
 - assertVisible: "Ready when you are"
 - assertVisible: "Start a voice conversation"

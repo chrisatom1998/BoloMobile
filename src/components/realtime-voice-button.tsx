@@ -1,5 +1,5 @@
 import { Mic, MicOff, X } from 'lucide-react-native';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -19,6 +19,8 @@ import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types'
 
 type Props = {
   clientId: string;
+  /** Status/helper content shown between the orb and the End chat action. */
+  children?: ReactNode;
   history?: Pick<ChatMessage, 'role' | 'text'>[];
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
@@ -132,7 +134,7 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onSessionEnded, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton({ children, clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onSessionEnded, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, enabled, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const endHandledRef = useRef(false);
@@ -190,38 +192,44 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
   }, [onSessionEnded, voice]);
 
   return (
-    <View style={[styles.stage, compact && styles.stageCompact, minimal && styles.stageMinimal]} testID="realtime-voice-stage">
-      <View style={[styles.ring, styles.ringOuter, compact && styles.ringOuterCompact, minimal && styles.ringOuterMinimal]} />
-      <View style={[styles.ring, styles.ringMiddle, compact && styles.ringMiddleCompact, minimal && styles.ringMiddleMinimal]} />
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.ring, styles.ringInner, compact && styles.ringInnerCompact, minimal && styles.ringInnerMinimal, voice.status === 'recording' && styles.ringInnerRecording, rippleStyle]}
-      />
-      <Animated.View style={orbStyle}>
-        <Pressable
-          accessibilityLabel={labels[voice.status]}
-          accessibilityHint={connected ? 'The microphone stays on until you mute it or end the session. You can speak while Asha is speaking.' : 'Starts live conversation with your microphone on.'}
-          accessibilityRole="button"
-          accessibilityState={{ disabled: blocked }}
-          disabled={blocked}
-          onPress={press}
-          style={[styles.orb, compact && styles.orbCompact, minimal && styles.orbMinimal, connected && styles.orbActive, voice.status === 'recording' && styles.orbRecording, blocked && styles.disabled]}
-          testID="realtime-voice-orb"
-        >
-          <View style={styles.orbHighlight} />
-          {voice.status === 'ready' || voice.status === 'responding'
-            ? <Mic color={colors.white} size={voiceIconSize} />
-            : voice.status === 'recording'
-              ? <MicOff color={colors.white} size={voiceIconSize} />
-              : <Text style={[styles.orbGlyph, minimal && styles.orbGlyphMinimal]}>आ</Text>}
-        </Pressable>
-      </Animated.View>
+    <>
+      <View style={[styles.stage, compact && styles.stageCompact, minimal && styles.stageMinimal]} testID="realtime-voice-stage">
+        <View style={[styles.ring, styles.ringOuter, compact && styles.ringOuterCompact, minimal && styles.ringOuterMinimal]} />
+        <View style={[styles.ring, styles.ringMiddle, compact && styles.ringMiddleCompact, minimal && styles.ringMiddleMinimal]} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.ring, styles.ringInner, compact && styles.ringInnerCompact, minimal && styles.ringInnerMinimal, voice.status === 'recording' && styles.ringInnerRecording, rippleStyle]}
+        />
+        <Animated.View style={orbStyle}>
+          <Pressable
+            accessibilityLabel={labels[voice.status]}
+            accessibilityHint={connected ? 'The microphone stays on until you mute it or end the session. You can speak while Asha is speaking.' : 'Starts live conversation with your microphone on.'}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: blocked }}
+            disabled={blocked}
+            onPress={press}
+            style={[styles.orb, compact && styles.orbCompact, minimal && styles.orbMinimal, connected && styles.orbActive, voice.status === 'recording' && styles.orbRecording, blocked && styles.disabled]}
+            testID="realtime-voice-orb"
+          >
+            <View style={styles.orbHighlight} />
+            {voice.status === 'ready' || voice.status === 'responding'
+              ? <Mic color={colors.white} size={voiceIconSize} />
+              : voice.status === 'recording'
+                ? <MicOff color={colors.white} size={voiceIconSize} />
+                : <Text style={[styles.orbGlyph, minimal && styles.orbGlyphMinimal]}>आ</Text>}
+          </Pressable>
+        </Animated.View>
+      </View>
+      {children}
       {connected ? (
-        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
-          <X color={colors.danger} size={18} />
-        </Pressable>
+        <View style={styles.endRow} testID="realtime-end-row">
+          <Pressable accessibilityLabel="End chat" accessibilityHint="Stops the live voice session." accessibilityRole="button" onPress={endSession} style={styles.endButton}>
+            <X accessible={false} color={colors.danger} size={18} />
+            <Text style={styles.endButtonText}>End chat</Text>
+          </Pressable>
+        </View>
       ) : null}
-    </View>
+    </>
   );
 }
 
@@ -248,8 +256,8 @@ const useStyles = makeStyles((c) => ({
   orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.17)' },
   orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '900' },
   orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },
-  endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
-  endButtonCompact: { right: -spacing.lg },
-  endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
+  endRow: { alignSelf: 'stretch', alignItems: 'center', paddingTop: spacing.sm },
+  endButton: { minWidth: 140, minHeight: 48, maxWidth: '100%', borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  endButtonText: { minWidth: 0, flexShrink: 1, color: c.danger, fontSize: 16, lineHeight: 22, fontWeight: '700', textAlign: 'center' },
   disabled: { opacity: 0.5 },
 }));

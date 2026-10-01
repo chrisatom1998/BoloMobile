@@ -70,6 +70,7 @@ jest.mock('@/components/ai-consent-gate', () => {
 jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
+      children,
       disabled,
       onError,
       onInputTranscriptComplete,
@@ -80,6 +81,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onSessionEnded,
       responseLanguage,
     }: {
+      children?: mockReact.ReactNode;
       disabled?: boolean;
       onError: (message: string) => void;
       onSessionEnded?: () => void;
@@ -102,6 +104,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       return mockReact.createElement(
       mockReact.Fragment,
       null,
+      children,
       mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock final caption and End', onPress: () => { onTurnComplete({ transcript: 'Mujhe chai hai.', reply: 'Try mujhe chai chahiye.', language: 'en' }); onStatusChange?.('disconnected'); onSessionEnded?.(); } }),
       mockReact.createElement(MockPressable, { accessibilityLabel: 'Mock whitespace transcript', onPress: () => onTurnComplete({ transcript: '  Mujhe chai hai.  ', reply: 'Try mujhe chai chahiye.', language: 'en' }) }),
       mockReact.createElement(MockText, { testID: 'mock-realtime-language' }, responseLanguage),

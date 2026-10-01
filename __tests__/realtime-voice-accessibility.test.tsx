@@ -1,5 +1,7 @@
-import { fireEvent, render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
+import { StyleSheet, Text, View } from 'react-native';
+
+const { readFileSync } = require('fs') as { readFileSync: (path: string, encoding: 'utf8') => string };
 
 jest.mock('lucide-react-native', () => ({
   Mic: () => null,
@@ -47,7 +49,7 @@ describe('realtime voice accessibility', () => {
     mockDisconnect.mockImplementation(() => { order.push('disconnect'); });
     const onSessionEnded = jest.fn(() => { order.push('recap'); });
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onSessionEnded={onSessionEnded} />);
-    const end = view.getByLabelText('End live voice session');
+    const end = view.getByLabelText('End chat');
     await fireEvent.press(end);
     await fireEvent.press(end);
     expect(order).toEqual(['disconnect', 'recap']);
@@ -55,11 +57,24 @@ describe('realtime voice accessibility', () => {
     expect(onSessionEnded).toHaveBeenCalledTimes(1);
   });
 
+  it('resolves both Maestro End selectors to the real end-session action', async () => {
+    const flow = readFileSync('.maestro/flows/05-realtime-voice-turns.yaml', 'utf8');
+    const selectors = [...flow.matchAll(/^- tapOn: "(End[^"\n]+)"/gmu)].map((match) => match[1]);
+    expect(selectors).toHaveLength(2);
+
+    for (const selector of selectors) {
+      const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
+      await fireEvent.press(view.getByRole('button', { name: selector }));
+      await view.unmount();
+    }
+    expect(mockDisconnect).toHaveBeenCalledTimes(2);
+  });
+
   it('does not request a recap when cancelling a connection attempt', async () => {
     mockVoiceStatus = 'connecting';
     const onSessionEnded = jest.fn();
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onSessionEnded={onSessionEnded} />);
-    await fireEvent.press(view.getByLabelText('End live voice session'));
+    await fireEvent.press(view.getByLabelText('End chat'));
     expect(mockDisconnect).toHaveBeenCalledTimes(1);
     expect(onSessionEnded).not.toHaveBeenCalled();
   });
@@ -74,7 +89,8 @@ describe('realtime voice accessibility', () => {
     expect(style.height).toBe(168);
     expect(style.backgroundColor).toBe('#E76B48');
     expect(view.queryByText('Start a voice conversation')).toBeNull();
-    expect(view.queryByLabelText('End live voice session')).toBeNull();
+    expect(view.queryByLabelText('End chat')).toBeNull();
+    expect(view.queryByText('End chat')).toBeNull();
     await fireEvent.press(start);
     expect(mockStartTurn).toHaveBeenCalledTimes(1);
     expect(haptics.hapticStartRecording).not.toHaveBeenCalled();
@@ -83,15 +99,17 @@ describe('realtime voice accessibility', () => {
   it('keeps both voice actions at least 44 points and exposes disabled state', async () => {
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" disabled onError={jest.fn()} onTurnComplete={jest.fn()} />);
     const start = view.getByLabelText('Unmute microphone');
-    const end = view.getByLabelText('End live voice session');
+    const end = view.getByLabelText('End chat');
 
     const startStyle = StyleSheet.flatten(start.props.style);
     expect(startStyle.width).toBeGreaterThanOrEqual(44);
     expect(startStyle.height).toBeGreaterThanOrEqual(44);
     expect(start.props.accessibilityState).toEqual({ disabled: true });
     const endStyle = StyleSheet.flatten(end.props.style);
-    expect(endStyle.width).toBeGreaterThanOrEqual(44);
-    expect(endStyle.height).toBeGreaterThanOrEqual(44);
+    expect(endStyle.minWidth).toBeGreaterThanOrEqual(48);
+    expect(endStyle.minHeight).toBeGreaterThanOrEqual(48);
+    await fireEvent.press(end);
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
   });
 
   it('uses the orb to unmute and mute the microphone', async () => {
@@ -142,25 +160,69 @@ describe('realtime voice accessibility', () => {
     expect(orb.height).toBe(88);
   });
 
-  it('offsets the compact end button beyond the orb hit rect', async () => {
-    const compact = await render(<RealtimeVoiceButton clientId="client-12345678" compact onError={jest.fn()} onTurnComplete={jest.fn()} />);
-    const compactEnd = StyleSheet.flatten(compact.getByLabelText('End live voice session').props.style);
+  it.each(['connecting', 'ready', 'recording', 'responding'] as const)('shows a labeled End chat button while %s', async (status) => {
+    mockVoiceStatus = status;
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
+    const end = view.getByRole('button', { name: 'End chat' });
 
-    // In the 220pt compact stage, right -16 starts the 48pt end button at x=188, beyond the 148pt orb's x=184 edge.
-    expect(compactEnd.right).toBe(-16);
-    await compact.unmount();
-
-    const regular = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
-    const regularEnd = StyleSheet.flatten(regular.getByLabelText('End live voice session').props.style);
-    expect(regularEnd.right ?? 0).toBe(0);
+    expect(within(end).getByText('End chat')).toBeTruthy();
+    expect(end.props.accessibilityHint).toBe('Stops the live voice session.');
+    expect(end.props.disabled).not.toBe(true);
   });
 
-  it('places the minimal end control at the full-width stage edge with visible palette colors', async () => {
-    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
-    const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
-    const end = StyleSheet.flatten(view.getByLabelText('End live voice session').props.style);
+  it('keeps End chat usable when the connection is disabled by the host', async () => {
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" enabled={false} disabled onError={jest.fn()} />);
+    await fireEvent.press(view.getByRole('button', { name: 'End chat' }));
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
+  });
 
-    expect(stage.width).toBe('100%');
-    expect(end).toMatchObject({ backgroundColor: '#FBEDEA', borderColor: '#E4B5AE', right: 0, top: 28 });
+  it.each([
+    { name: 'regular', compact: false, size: 'regular' as const, width: 282, height: 282, orbSize: 168 },
+    { name: 'compact', compact: true, size: 'regular' as const, width: 220, height: 220, orbSize: 148 },
+    { name: 'minimal', compact: false, size: 'minimal' as const, width: '100%', height: 104, orbSize: 88 },
+    { name: 'compact minimal', compact: true, size: 'minimal' as const, width: '100%', height: 104, orbSize: 88 },
+  ])('places End chat below the unchanged $name orb and helper copy', async ({ compact, size, width, height, orbSize }) => {
+    const view = await render(
+      <View>
+        <RealtimeVoiceButton clientId="client-12345678" compact={compact} onError={jest.fn()} size={size}>
+          <Text testID="voice-helper">Your microphone is muted</Text>
+        </RealtimeVoiceButton>
+      </View>,
+    );
+    const stage = view.getByTestId('realtime-voice-stage');
+    const row = view.getByTestId('realtime-end-row');
+    const end = view.getByRole('button', { name: 'End chat' });
+    const root = view.toJSON() as { children: { props: { testID?: string } }[] };
+
+    expect(root.children.map((node) => node.props.testID)).toEqual(['realtime-voice-stage', 'voice-helper', 'realtime-end-row']);
+    expect(within(stage).queryByRole('button', { name: 'End chat' })).toBeNull();
+    expect(within(row).getByText('End chat')).toBeTruthy();
+    expect(StyleSheet.flatten(stage.props.style)).toMatchObject({ width, height });
+    expect(StyleSheet.flatten(view.getByTestId('realtime-voice-orb').props.style)).toMatchObject({ width: orbSize, height: orbSize });
+    expect(StyleSheet.flatten(row.props.style)).toMatchObject({ alignSelf: 'stretch', alignItems: 'center' });
+    for (const element of [row, end]) {
+      const style = StyleSheet.flatten(element.props.style);
+      expect(style.position).not.toBe('absolute');
+      expect(style.height).toBeUndefined();
+      expect(style.top).toBeUndefined();
+      expect(style.right).toBeUndefined();
+    }
+  });
+
+  it('lets the soft-red End chat pill grow and wrap instead of clipping large text', async () => {
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="minimal" />);
+    const end = view.getByRole('button', { name: 'End chat' });
+    const label = within(end).getByText('End chat');
+    const style = StyleSheet.flatten(end.props.style);
+
+    expect(style).toMatchObject({ minWidth: 140, minHeight: 48, maxWidth: '100%', backgroundColor: '#FBEDEA', borderColor: '#E4B5AE' });
+    expect(style.width).toBeUndefined();
+    expect(style.height).toBeUndefined();
+    expect(style.maxHeight).toBeUndefined();
+    expect(StyleSheet.flatten(label.props.style)).toMatchObject({ color: '#A93B2B', flexShrink: 1 });
+    expect(label.props.allowFontScaling).not.toBe(false);
+    expect(label.props.maxFontSizeMultiplier).toBeUndefined();
+    expect(label.props.numberOfLines).toBeUndefined();
+    expect(label.props.adjustsFontSizeToFit).not.toBe(true);
   });
 });
