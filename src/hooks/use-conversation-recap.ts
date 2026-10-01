@@ -89,6 +89,10 @@ export function useConversationRecap({ clientId, enabled, history }: {
   useEffect(() => {
     mounted.current = true;
     const subscription = AppState.addEventListener('change', (next) => {
+      // iOS reports `inactive` for Control Center, Notification Center, and
+      // incoming-call banners. That is still foreground; only backgrounding
+      // is a hard recap cancel.
+      if (next === 'inactive') return;
       active.current = next === 'active';
       if (!active.current) close();
     });

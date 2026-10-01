@@ -102,6 +102,20 @@ describe('temporary conversation recap lifecycle', () => {
     await view.unmount(); expect(remove).toHaveBeenCalled();
   });
 
+  it('keeps an in-flight recap through a transient iOS inactive overlay', async () => {
+    let listener!: (state: AppStateStatus) => void;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_, handler) => { listener = handler; return { remove: jest.fn() }; });
+    const pending = deferred<RecapResponse>(); getConversationRecap.mockReturnValue(pending.promise);
+    const view = await setup();
+    await act(async () => view.result.current.start(messages));
+    await act(async () => listener('inactive'));
+    expect(getConversationRecap.mock.calls[0]![1].aborted).toBe(false);
+    expect(view.result.current.state).toEqual({ status: 'loading' });
+    await act(async () => { pending.resolve(response); listener('active'); });
+    expect(view.result.current.state).toEqual({ status: 'ready', corrections: response.corrections });
+    expect(getConversationRecap).toHaveBeenCalledTimes(1);
+  });
+
   it('can close and start a new recap in one batch without losing the new request', async () => {
     const pending = deferred<RecapResponse>(); getConversationRecap.mockReturnValueOnce(pending.promise);
     const view = await setup();
