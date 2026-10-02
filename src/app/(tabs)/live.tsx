@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,10 +25,10 @@ import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { observe } from '@/lib/observability';
-import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
+import { speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE, replaceChatHistorySnapshot } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
-import { useAppState } from '@/state/app-state';
+import { useAppState, type TypedReplyRequest } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { RecapCorrection } from '../../../shared/conversation-recap';
@@ -80,7 +80,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth <= 430;
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], savePhrase, togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, beginTypedReply, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], savePhrase, togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
@@ -109,8 +109,12 @@ export default function LiveScreen() {
     savePhrase({ hi: correction.hi, latin: correction.latin, en: correction.en });
   }, [aiConsent, recapState, savePhrase, screenFocused]);
   const practiced = useRef(false);
+  const practiceClientIdRef = useRef(clientId);
   const mountedRef = useRef(true);
-  const requestRef = useRef<AbortController | null>(null);
+  const requestRef = useRef<TypedReplyRequest | null>(null);
+  const focusedRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
+  const privacyRef = useRef({ aiConsent, clientId });
   const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
@@ -174,35 +178,55 @@ export default function LiveScreen() {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
   }, []);
 
+  const cancelTypedReply = useCallback(() => {
+    requestRef.current?.controller.abort();
+  }, []);
+
+  useLayoutEffect(() => {
+    const identityChanged = privacyRef.current.clientId !== clientId;
+    privacyRef.current = { aiConsent, clientId };
+    if (!aiConsent || identityChanged) cancelTypedReply();
+    if (identityChanged) {
+      // A deleted identity must not gain practice again on a later blur.
+      practiced.current = false;
+      resetPracticeTimer();
+    }
+  }, [aiConsent, cancelTypedReply, clientId, resetPracticeTimer]);
+
   useFocusEffect(useCallback(() => {
+    focusedRef.current = true;
     setScreenFocused(true);
     practiced.current = false;
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
+      focusedRef.current = false;
+      cancelTypedReply();
       closeRecap();
       setScreenFocused(false);
-      if (practiced.current) addPracticeSeconds(elapsedSeconds());
+      if (practiced.current) addPracticeSeconds(elapsedSeconds(), practiceClientIdRef.current);
       void stopSpeaking();
     };
-  }, [addPracticeSeconds, closeRecap, elapsedSeconds, resetPracticeTimer]));
+  }, [addPracticeSeconds, cancelTypedReply, closeRecap, elapsedSeconds, resetPracticeTimer]));
 
   // Tabs stay mounted and iOS can kill a backgrounded app without running the
   // focus cleanup. Persist the active portion of a real practice visit before
   // backgrounding, then reset so a later blur cannot count it twice.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
+      appStateRef.current = nextState;
+      if (nextState === 'background') cancelTypedReply();
       if (nextState === 'active') {
         backgroundCheckpointedRef.current = false;
         return;
       }
       if (nextState !== 'background' || !practiced.current || backgroundCheckpointedRef.current) return;
       backgroundCheckpointedRef.current = true;
-      addPracticeSeconds(elapsedSeconds());
+      addPracticeSeconds(elapsedSeconds(), practiceClientIdRef.current);
       resetPracticeTimer();
     });
     return () => subscription?.remove();
-  }, [addPracticeSeconds, elapsedSeconds, resetPracticeTimer]);
+  }, [addPracticeSeconds, cancelTypedReply, elapsedSeconds, resetPracticeTimer]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -210,7 +234,7 @@ export default function LiveScreen() {
     const selectionClearTimers = selectionClearTimersRef.current;
     return () => {
       mountedRef.current = false;
-      requestRef.current?.abort();
+      requestRef.current?.controller.abort();
       requestRef.current = null;
       reportControllers.forEach((controller) => controller.abort());
       reportControllers.clear();
@@ -224,16 +248,16 @@ export default function LiveScreen() {
     if (!mountedRef.current) return;
     scrollAfterContentChangeRef.current = true;
     const now = Date.now();
-    void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     const additions: ChatMessage[] = [];
     if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
     additions.push({ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language });
     appendChatMessages(additions);
     if (!practiced.current) {
       practiced.current = true;
+      practiceClientIdRef.current = clientId;
       markLiveTurn();
     }
-  }, [appendChatMessages, markLiveTurn]);
+  }, [appendChatMessages, clientId, markLiveTurn]);
 
   const recordLiveSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     if (!mountedRef.current) return;
@@ -253,9 +277,10 @@ export default function LiveScreen() {
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
     if (messages.some((row) => row.role === 'you') && !practiced.current) {
       practiced.current = true;
+      practiceClientIdRef.current = clientId;
       markLiveTurn();
     }
-  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
+  }, [clientId, markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
 
   const playReply = useCallback((message: ChatMessage) => {
     if (!aiConsent || replyPlaybackLocked) return;
@@ -356,20 +381,37 @@ export default function LiveScreen() {
 
   const sendText = useCallback(async (raw: string) => {
     const text = raw.trim().slice(0, 500);
-    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return;
+    if (!text || !mountedRef.current || !focusedRef.current || appStateRef.current !== 'active'
+      || !privacyRef.current.aiConsent || privacyRef.current.clientId !== clientId
+      || realtimeStatusRef.current !== 'disconnected' || requestRef.current) return;
+    // The provider checks live privacy intent, including writes still queued on
+    // disk, and owns this handle until chat and its generated speech settle.
+    const request = beginTypedReply(clientId);
+    if (!request) return;
+    const { controller } = request;
+    requestRef.current = request;
+    const finish = () => {
+      request.release();
+      if (requestRef.current !== request) return;
+      requestRef.current = null;
+      if (mountedRef.current) {
+        setPendingUserMessage(null);
+        setBusy(false);
+      }
+    };
+    const isCurrent = () => mountedRef.current && focusedRef.current
+      && (appStateRef.current === 'active' || appStateRef.current === 'inactive')
+      && privacyRef.current.aiConsent && privacyRef.current.clientId === clientId
+      && requestRef.current === request && !controller.signal.aborted;
+    controller.signal.addEventListener('abort', finish, { once: true });
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     scrollAfterContentChangeRef.current = true;
     setPendingUserMessage(userMessage);
     setBusy(true);
     setError('');
-    const controller = new AbortController();
-    requestRef.current = controller;
     try {
       const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
-      if (!mountedRef.current || controller.signal.aborted) {
-        if (mountedRef.current) clearPendingUserMessage(userMessage.id);
-        return;
-      }
+      if (!isCurrent()) return;
       clearPendingUserMessage(userMessage.id);
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
       if (realtimeStatusRef.current === 'disconnected') {
@@ -377,24 +419,19 @@ export default function LiveScreen() {
           if (result.language === 'hi') await speakText(result.reply, controller.signal, 1, 'hi', 'playback', true);
           else await speakText(result.reply, controller.signal, 1, undefined, 'playback', true);
         } catch (cause) {
-          if (mountedRef.current && !controller.signal.aborted) {
+          if (isCurrent()) {
             const reason = cause instanceof Error ? cause.message : 'Bolo could not play the AI voice.';
             setError(`Asha replied, but the voice audio could not play. ${reason}`);
           }
         }
       }
     } catch (cause) {
-      if (mountedRef.current) clearPendingUserMessage(userMessage.id);
-      if (mountedRef.current && !controller.signal.aborted) {
-        setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
-      }
+      if (isCurrent()) setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
     } finally {
-      if (requestRef.current === controller) {
-        requestRef.current = null;
-        if (mountedRef.current) setBusy(false);
-      }
+      controller.signal.removeEventListener('abort', finish);
+      finish();
     }
-  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
+  }, [beginTypedReply, chatHistory, clearPendingUserMessage, clientId, recordTurn, responseLanguage]);
 
   const submitMessage = useCallback((text: string) => {
     void sendText(text);

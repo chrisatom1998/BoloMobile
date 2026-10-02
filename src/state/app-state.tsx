@@ -57,7 +57,13 @@ type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   reviewStreak: number;
 };
 
+export type TypedReplyRequest = {
+  controller: AbortController;
+  release: () => void;
+};
+
 type AppActions = {
+  beginTypedReply: (clientId: string) => TypedReplyRequest | null;
   setGoal: (goal: 5 | 10 | 15) => void;
   completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
@@ -68,7 +74,7 @@ type AppActions = {
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
   reviewPhrase: (hi: string, remembered: boolean) => void;
   markLiveTurn: (seconds?: number) => void;
-  addPracticeSeconds: (seconds: number) => void;
+  addPracticeSeconds: (seconds: number, expectedClientId?: string) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
   clearChatHistory: () => Promise<boolean>;
@@ -180,6 +186,28 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const stateRef = useRef<PersistedState>(initialState);
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
+  const pendingConsentChangesRef = useRef(0);
+  const typedReplyControllersRef = useRef(new Set<AbortController>());
+
+  const cancelTypedReplies = useCallback(() => {
+    typedReplyControllersRef.current.forEach((controller) => controller.abort());
+  }, []);
+
+  const beginTypedReply = useCallback((clientId: string): TypedReplyRequest | null => {
+    const current = stateRef.current;
+    if (clearingAllDataRef.current || pendingConsentChangesRef.current > 0 || !current.aiConsent || current.clientId !== clientId) return null;
+    const controller = new AbortController();
+    const release = () => {
+      typedReplyControllersRef.current.delete(controller);
+      controller.signal.removeEventListener('abort', release);
+    };
+    typedReplyControllersRef.current.add(controller);
+    // Release synchronously even if a canceled network request never settles.
+    controller.signal.addEventListener('abort', release, { once: true });
+    return { controller, release };
+  }, []);
+
+  useEffect(() => cancelTypedReplies, [cancelTypedReplies]);
   const liveSnapshotWriteQueuedRef = useRef(false);
   const pendingChatClearRef = useRef<{
     clientId: string;
@@ -431,8 +459,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['practice', 'practiceHistory', 'streakDays']);
   }, [commit]);
 
-  const addPracticeSeconds = useCallback((seconds: number) => {
+  const addPracticeSeconds = useCallback((seconds: number, expectedClientId?: string) => {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
+    // Lifecycle callbacks may fire before React commits an identity reset.
+    if (expectedClientId !== undefined && stateRef.current.clientId !== expectedClientId) return;
     commit((current) => {
       const elapsed = cappedPracticeSeconds(current.practice.seconds, seconds);
       const practice = { ...current.practice, seconds: elapsed.total };
@@ -502,9 +532,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
     if (clearingAllDataRef.current) return false;
-    let nextConsent: PersistedState['aiConsent'];
+    // Privacy intent takes effect before queued persistence. Failed writes may
+    // restore the previous choice, but must never revive an old request.
+    pendingConsentChangesRef.current += 1;
+    if (!aiConsent) cancelTypedReplies();
     try {
-      nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
+      const nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
+      if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
+      return true;
     } catch (error) {
       const action = aiConsent ? 'enable' : 'withdraw';
       reportPersistenceFailure(
@@ -512,10 +547,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         `Bolo could not ${action} AI consent because the privacy choice could not be saved. Your previous choice is still active.`,
       );
       return false;
+    } finally {
+      pendingConsentChangesRef.current -= 1;
     }
-    if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
-    return true;
-  }, [enqueuePersistence, replaceState]);
+  }, [cancelTypedReplies, enqueuePersistence, replaceState]);
 
   const setReminder = useCallback((reminder: ReminderSettings) => {
     commit((current) => ({ ...current, reminder }), ['reminder']);
@@ -528,6 +563,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
+    cancelTypedReplies();
     const next: PersistedState = {
       ...initialState,
       practice: emptyPractice(),
@@ -555,9 +591,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch (error) {
       console.warn('Bolo could not clear stored diagnostics.', error);
     }
-  }, [enqueuePersistence, replaceState, state.reminder]);
+  }, [cancelTypedReplies, enqueuePersistence, replaceState, state.reminder]);
 
   const actions = useMemo<AppActions>(() => ({
+    beginTypedReply,
     setGoal,
     completeOnboarding,
     updateLearnerProfile,
@@ -576,7 +613,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setReminder,
     setMotionPreference,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, savePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
+  }), [beginTypedReply, setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, savePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,

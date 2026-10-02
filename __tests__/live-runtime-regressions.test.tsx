@@ -294,6 +294,10 @@ jest.mock('@/state/app-state', () => ({
     return {
       addPracticeSeconds: appState.__addPracticeSecondsMock,
       aiConsent: mockAiConsent,
+      beginTypedReply: (clientId: string) => !mockAiConsent || clientId !== 'client-12345678' ? null : {
+        controller: new AbortController(),
+        release: () => {},
+      },
       appendChatMessages,
       replaceLiveChatSnapshot,
       chatHistory,
@@ -375,6 +379,10 @@ function getOnPress(instance: unknown) {
   }
   throw new Error('The rendered element does not have an onPress callback.');
 }
+
+beforeEach(() => {
+  Object.defineProperty(AppState, 'currentState', { configurable: true, writable: true, value: 'active' });
+});
 
 describe('live consent layout', () => {
   beforeEach(() => {
@@ -1154,7 +1162,7 @@ describe('live practice time', () => {
     expect(appState.__markLiveTurnMock).toHaveBeenCalledTimes(1);
 
     await act(async () => appStateListener?.('background'));
-    expect(appState.__addPracticeSecondsMock).toHaveBeenCalledWith(42);
+    expect(appState.__addPracticeSecondsMock).toHaveBeenCalledWith(42, 'client-12345678');
     await act(async () => appStateListener?.('background'));
     expect(appState.__addPracticeSecondsMock).toHaveBeenCalledTimes(1);
     await act(async () => appStateListener?.('active'));

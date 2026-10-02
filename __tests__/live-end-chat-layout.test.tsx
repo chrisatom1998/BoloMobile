@@ -53,6 +53,10 @@ jest.mock('@/state/app-state', () => {
   const state = {
     addPracticeSeconds: jest.fn(),
     aiConsent: true,
+    beginTypedReply: (clientId: string) => clientId !== 'client-12345678' ? null : {
+      controller: new AbortController(),
+      release: () => {},
+    },
     appendChatMessages: jest.fn(),
     replaceLiveChatSnapshot: jest.fn(),
     chatHistory: [],
