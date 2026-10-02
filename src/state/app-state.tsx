@@ -40,6 +40,7 @@ import {
 import type { ChatMessage, LearnerProfile, MotionPreference, ReminderSettings, SavedPhrase } from '@/state/app-state-types';
 
 type PersistedKey = keyof typeof storageKeys;
+type SavedPhraseState = Pick<PersistedState, 'phrases' | 'phraseReviews'>;
 
 type SceneCompletion = {
   score: number;
@@ -57,20 +58,27 @@ type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   reviewStreak: number;
 };
 
+export type TypedReplyRequest = {
+  controller: AbortController;
+  release: () => void;
+};
+
 type AppActions = {
+  beginTypedReply: (clientId: string) => TypedReplyRequest | null;
   setGoal: (goal: 5 | 10 | 15) => void;
   completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
-  togglePhrase: (phrase: SavedPhrase) => void;
-  removePhrase: (hi: string) => void;
+  togglePhrase: (phrase: SavedPhrase) => Promise<boolean>;
+  savePhrase: (phrase: SavedPhrase) => Promise<boolean>;
+  removePhrase: (hi: string) => Promise<boolean>;
   checkpointScene: (sceneId: string, nextBeatIndex: number) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
-  reviewPhrase: (hi: string, remembered: boolean) => void;
+  reviewPhrase: (hi: string, remembered: boolean) => Promise<void>;
   markLiveTurn: (seconds?: number) => void;
-  addPracticeSeconds: (seconds: number) => void;
+  addPracticeSeconds: (seconds: number, expectedClientId?: string) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
-  clearChatHistory: () => void;
+  clearChatHistory: () => Promise<boolean>;
   setAiConsent: (consent: boolean) => Promise<boolean>;
   setReminder: (reminder: ReminderSettings) => void;
   setMotionPreference: (preference: MotionPreference) => void;
@@ -145,6 +153,38 @@ async function persistState(state: PersistedState, keys: PersistedKey[]) {
   await AsyncStorage.multiSet(storageEntries(state, keys));
 }
 
+async function readSavedPhraseState(): Promise<SavedPhraseState> {
+  const stored = Object.fromEntries(await AsyncStorage.multiGet([storageKeys.phrases, storageKeys.phraseReviews]));
+  const phrases = stored[storageKeys.phrases];
+  const phraseReviews = stored[storageKeys.phraseReviews];
+  // Only an explicit null means a missing key. An incomplete/failed read must
+  // never turn an unknown collection into an empty replacement.
+  if (phrases === undefined || phraseReviews === undefined) {
+    throw new Error('Incomplete saved-phrase read.');
+  }
+  return {
+    phrases: sanitizePhrases(phrases),
+    phraseReviews: sanitizePhraseReviews(phraseReviews),
+  };
+}
+
+function withSavedPhrase(current: SavedPhraseState, phrase: SavedPhrase): SavedPhraseState {
+  if (current.phrases.some((saved) => saved.hi.trim().toLowerCase() === phrase.hi.toLowerCase())) return current;
+  const phrases = [...current.phrases, phrase].slice(-100);
+  const phraseReviews = { ...current.phraseReviews, [phrase.hi]: defaultPhraseReview() };
+  const kept = new Set(phrases.map((saved) => saved.hi));
+  for (const hi of Object.keys(phraseReviews)) {
+    if (!kept.has(hi)) delete phraseReviews[hi];
+  }
+  return { phrases, phraseReviews };
+}
+
+function withoutSavedPhrase(current: SavedPhraseState, hi: string): SavedPhraseState {
+  const phraseReviews = { ...current.phraseReviews };
+  delete phraseReviews[hi];
+  return { phrases: current.phrases.filter((phrase) => phrase.hi !== hi), phraseReviews };
+}
+
 function reportPersistenceFailure(error: unknown, message = 'Your last change was not saved and has been restored. Check available storage and try again.') {
   console.warn('Bolo could not save local progress.', error);
   observe('runtime_error');
@@ -179,7 +219,35 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const stateRef = useRef<PersistedState>(initialState);
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
+  const phraseOperationEpochRef = useRef(0);
+  const pendingConsentChangesRef = useRef(0);
+  const typedReplyControllersRef = useRef(new Set<AbortController>());
+
+  const cancelTypedReplies = useCallback(() => {
+    typedReplyControllersRef.current.forEach((controller) => controller.abort());
+  }, []);
+
+  const beginTypedReply = useCallback((clientId: string): TypedReplyRequest | null => {
+    const current = stateRef.current;
+    if (clearingAllDataRef.current || pendingConsentChangesRef.current > 0 || !current.aiConsent || current.clientId !== clientId) return null;
+    const controller = new AbortController();
+    const release = () => {
+      typedReplyControllersRef.current.delete(controller);
+      controller.signal.removeEventListener('abort', release);
+    };
+    typedReplyControllersRef.current.add(controller);
+    // Release synchronously even if a canceled network request never settles.
+    controller.signal.addEventListener('abort', release, { once: true });
+    return { controller, release };
+  }, []);
+
+  useEffect(() => cancelTypedReplies, [cancelTypedReplies]);
   const liveSnapshotWriteQueuedRef = useRef(false);
+  const pendingChatClearRef = useRef<{
+    clientId: string;
+    history: ChatMessage[];
+    rollback: { history: ChatMessage[] };
+  } | null>(null);
 
   const replaceState = useCallback((next: PersistedState) => {
     stateRef.current = next;
@@ -194,7 +262,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     let active = true;
-    void (async () => {
+    const epoch = phraseOperationEpochRef.current;
+    void enqueuePersistence(async () => {
       try {
         const pairs = await AsyncStorage.multiGet(Object.values(storageKeys));
         const stored = Object.fromEntries(pairs);
@@ -220,10 +289,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           replaceState(next);
           setHydrated(true);
           if (clientId !== readStored(storageKeys.clientId)) {
-            void enqueuePersistence(() => AsyncStorage.setItem(storageKeys.clientId, clientId)).catch(reportPersistenceFailure);
+            void enqueuePersistence(async () => {
+              if (epoch === phraseOperationEpochRef.current) await AsyncStorage.setItem(storageKeys.clientId, clientId);
+            }).catch(reportPersistenceFailure);
           }
           if (readStored(storageKeys.aiConsent) && !next.aiConsent) {
-            void enqueuePersistence(() => AsyncStorage.removeItem(storageKeys.aiConsent)).catch(reportPersistenceFailure);
+            void enqueuePersistence(async () => {
+              if (epoch === phraseOperationEpochRef.current) await AsyncStorage.removeItem(storageKeys.aiConsent);
+            }).catch(reportPersistenceFailure);
           }
         }
       } catch (error) {
@@ -236,7 +309,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           showAppAlert('Could not load saved progress', 'Bolo opened with temporary defaults. Check available storage before making changes.');
         }
       }
-    })();
+    });
     return () => {
       active = false;
     };
@@ -307,32 +380,63 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     commit((current) => ({ ...current, learnerProfile: { ...current.learnerProfile, ...profile } }), ['learnerProfile']);
   }, [commit]);
 
-  const togglePhrase = useCallback((phrase: SavedPhrase) => {
-    commit((current) => {
-      const exists = current.phrases.some((saved) => saved.hi === phrase.hi);
-      const phrases = exists
-        ? current.phrases.filter((saved) => saved.hi !== phrase.hi)
-        : [...current.phrases, phrase].slice(-100);
-      const phraseReviews = { ...current.phraseReviews };
-      if (exists) delete phraseReviews[phrase.hi];
-      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
-      // The 100-phrase cap can drop the oldest phrase; drop its review entry too
-      // so orphans never accumulate in storage.
-      const kept = new Set(phrases.map((saved) => saved.hi));
-      for (const hi of Object.keys(phraseReviews)) {
-        if (!kept.has(hi)) delete phraseReviews[hi];
+  const commitPhraseChange = useCallback((updater: (current: SavedPhraseState) => SavedPhraseState | null) => {
+    if (clearingAllDataRef.current) return Promise.resolve(false);
+    const epoch = phraseOperationEpochRef.current;
+    return enqueuePersistence(async () => {
+      if (clearingAllDataRef.current || epoch !== phraseOperationEpochRef.current) return false;
+      let current: SavedPhraseState;
+      try {
+        // Read and mutate inside one queue operation, including after a failed
+        // hydration or ambiguous write. Never persist the temporary defaults.
+        current = await readSavedPhraseState();
+      } catch (error) {
+        console.warn('Bolo could not load saved phrases.', error);
+        observe('runtime_error');
+        showAppAlert('Could not load saved phrases', 'Your saved phrases could not be read, so this change was not made. Check available storage and try again.');
+        return false;
       }
-      return { ...current, phrases, phraseReviews };
-    }, ['phrases', 'phraseReviews']);
-  }, [commit]);
+      if (clearingAllDataRef.current || epoch !== phraseOperationEpochRef.current) return false;
+      replaceState({ ...stateRef.current, ...current });
+      const next = updater(current);
+      if (!next) return false;
+      if (next === current) return true;
+      try {
+        await persistState({ ...stateRef.current, ...next }, ['phrases', 'phraseReviews']);
+        // A clear queued during the write runs next and replaces this state.
+        // Publish the durable result even if that subsequent clear might fail.
+        replaceState({ ...stateRef.current, ...next });
+        return !clearingAllDataRef.current && epoch === phraseOperationEpochRef.current;
+      } catch (error) {
+        // multiSet can partially succeed on some platforms. Do not advertise
+        // rollback or reuse an optimistic snapshot for the next operation.
+        reportPersistenceFailure(error, 'Bolo could not confirm that your phrase change was saved. Check available storage and try again.');
+        return false;
+      }
+    });
+  }, [enqueuePersistence, replaceState]);
+
+  const togglePhrase = useCallback((phrase: SavedPhrase) => {
+    const normalized = sanitizePhrases(JSON.stringify([phrase]))[0];
+    if (!normalized) return Promise.resolve(false);
+    // Capture the displayed intent. A Save tapped while hydration showed
+    // temporary defaults must not remove a phrase recovered from storage.
+    const remove = stateRef.current.phrases.some((saved) => saved.hi === normalized.hi);
+    return commitPhraseChange((current) => remove
+      ? withoutSavedPhrase(current, normalized.hi)
+      : withSavedPhrase(current, normalized));
+  }, [commitPhraseChange]);
+
+  const savePhrase = useCallback((phrase: SavedPhrase) => {
+    const normalized = sanitizePhrases(JSON.stringify([phrase]))[0];
+    if (!normalized) return Promise.resolve(false);
+    // Deduplicate inside the queue, after recovery and earlier saves finish.
+    return commitPhraseChange((current) => withSavedPhrase(current, normalized));
+  }, [commitPhraseChange]);
 
   const removePhrase = useCallback((hi: string) => {
-    commit((current) => {
-      const phraseReviews = { ...current.phraseReviews };
-      delete phraseReviews[hi];
-      return { ...current, phrases: current.phrases.filter((phrase) => phrase.hi !== hi), phraseReviews };
-    }, ['phrases', 'phraseReviews']);
-  }, [commit]);
+    return commitPhraseChange((current) => withoutSavedPhrase(current, hi));
+  }, [commitPhraseChange]);
 
   const checkpointScene = useCallback((sceneId: string, nextBeatIndex: number) => {
     commit((current) => {
@@ -378,14 +482,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['practice', 'practiceHistory', 'sceneProgress', 'streakDays']);
   }, [commit]);
 
-  const reviewPhrase = useCallback((hi: string, remembered: boolean) => {
-    commit((current) => {
-      if (!current.phrases.some((phrase) => phrase.hi === hi)) return current;
+  const reviewPhrase = useCallback(async (hi: string, remembered: boolean) => {
+    const epoch = phraseOperationEpochRef.current;
+    const saved = await commitPhraseChange((current) => {
+      if (!current.phrases.some((phrase) => phrase.hi === hi)) return null;
       const previous = current.phraseReviews[hi] ?? defaultPhraseReview();
       const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
       const intervalDays = remembered ? reviewIntervals[mastery] ?? 0 : 0;
       const today = dateKey();
-      const reviewStreakDays = [...new Set([...current.reviewStreakDays, today])].sort().slice(-400);
       return {
         ...current,
         phraseReviews: {
@@ -399,11 +503,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             totalReviews: previous.totalReviews + 1,
           },
         },
-        practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
-        reviewStreakDays,
       };
-    }, ['phraseReviews', 'practiceHistory', 'reviewStreakDays']);
-  }, [commit]);
+    });
+    if (!saved || epoch !== phraseOperationEpochRef.current) return;
+    // Apply counters to the latest state only after the phrase write succeeds.
+    // Other practice actions may have happened while storage was pending.
+    commit((current) => ({
+      ...current,
+      practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
+      reviewStreakDays: [...new Set([...current.reviewStreakDays, dateKey()])].sort().slice(-400),
+    }), ['practiceHistory', 'reviewStreakDays']);
+  }, [commit, commitPhraseChange]);
 
   const markLiveTurn = useCallback((seconds = 0) => {
     commit((current) => {
@@ -417,8 +527,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['practice', 'practiceHistory', 'streakDays']);
   }, [commit]);
 
-  const addPracticeSeconds = useCallback((seconds: number) => {
+  const addPracticeSeconds = useCallback((seconds: number, expectedClientId?: string) => {
     if (!Number.isFinite(seconds) || seconds <= 0) return;
+    // Lifecycle callbacks may fire before React commits an identity reset.
+    if (expectedClientId !== undefined && stateRef.current.clientId !== expectedClientId) return;
     commit((current) => {
       const elapsed = cappedPracticeSeconds(current.practice.seconds, seconds);
       const practice = { ...current.practice, seconds: elapsed.total };
@@ -453,15 +565,49 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     });
   }, [enqueuePersistence, replaceState]);
 
-  const clearChatHistory = useCallback(() => {
-    commit((current) => current.chatHistory.length === 0 ? current : { ...current, chatHistory: [] }, ['chatHistory']);
-  }, [commit]);
+  const clearChatHistory = useCallback(async () => {
+    if (clearingAllDataRef.current) return false;
+    const previous = stateRef.current;
+    const pendingClear = pendingChatClearRef.current;
+    const rollback = pendingClear?.clientId === previous.clientId && pendingClear.history === previous.chatHistory
+      ? pendingClear.rollback
+      : { history: previous.chatHistory };
+    const next = { ...previous, chatHistory: [] };
+    const clear = { clientId: previous.clientId, history: next.chatHistory, rollback };
+    pendingChatClearRef.current = clear;
+    replaceState(next);
+    try {
+      // New voice connections await this result so old persisted captions
+      // cannot return after the new conversation has already begun.
+      await enqueuePersistence(() => persistState(next, ['chatHistory']));
+      // Overlapping clears share the last restorable history. A successful
+      // clear advances that baseline so a later failure cannot revive it.
+      rollback.history = next.chatHistory;
+      return !clearingAllDataRef.current && stateRef.current.clientId === previous.clientId;
+    } catch (error) {
+      reportPersistenceFailure(error);
+      // A canceled start can already have queued a newer clear. Equal empty
+      // arrays are different boundaries; an older failure must not undo one.
+      const current = stateRef.current;
+      if (current.clientId === previous.clientId && current.chatHistory === next.chatHistory) {
+        replaceState({ ...current, chatHistory: rollback.history });
+      }
+      return false;
+    } finally {
+      if (pendingChatClearRef.current === clear) pendingChatClearRef.current = null;
+    }
+  }, [enqueuePersistence, replaceState]);
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
     if (clearingAllDataRef.current) return false;
-    let nextConsent: PersistedState['aiConsent'];
+    // Privacy intent takes effect before queued persistence. Failed writes may
+    // restore the previous choice, but must never revive an old request.
+    pendingConsentChangesRef.current += 1;
+    if (!aiConsent) cancelTypedReplies();
     try {
-      nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
+      const nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
+      if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
+      return true;
     } catch (error) {
       const action = aiConsent ? 'enable' : 'withdraw';
       reportPersistenceFailure(
@@ -469,10 +615,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         `Bolo could not ${action} AI consent because the privacy choice could not be saved. Your previous choice is still active.`,
       );
       return false;
+    } finally {
+      pendingConsentChangesRef.current -= 1;
     }
-    if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
-    return true;
-  }, [enqueuePersistence, replaceState]);
+  }, [cancelTypedReplies, enqueuePersistence, replaceState]);
 
   const setReminder = useCallback((reminder: ReminderSettings) => {
     commit((current) => ({ ...current, reminder }), ['reminder']);
@@ -485,6 +631,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
+    phraseOperationEpochRef.current += 1;
+    cancelTypedReplies();
     const next: PersistedState = {
       ...initialState,
       practice: emptyPractice(),
@@ -512,13 +660,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch (error) {
       console.warn('Bolo could not clear stored diagnostics.', error);
     }
-  }, [enqueuePersistence, replaceState, state.reminder]);
+  }, [cancelTypedReplies, enqueuePersistence, replaceState, state.reminder]);
 
   const actions = useMemo<AppActions>(() => ({
+    beginTypedReply,
     setGoal,
     completeOnboarding,
     updateLearnerProfile,
     togglePhrase,
+    savePhrase,
     removePhrase,
     checkpointScene,
     markSceneComplete,
@@ -532,7 +682,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setReminder,
     setMotionPreference,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
+  }), [beginTypedReply, setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, savePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,

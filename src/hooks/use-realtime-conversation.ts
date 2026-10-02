@@ -20,6 +20,8 @@ type Options = {
   enabled?: boolean;
   responseLanguage?: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
+  /** Establishes the conversation boundary and supplies context before SDP exchange. */
+  onConnectionStart?: (signal: AbortSignal) => { role: 'you' | 'asha'; text: string }[] | Promise<{ role: 'you' | 'asha'; text: string }[]>;
   onError: (message: string) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
@@ -164,11 +166,17 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       }
       await stopSpeaking();
       if (!current()) return;
+      // Await the persisted boundary, then pin its returned context rather
+      // than relying on React to have replaced the old history prop already.
+      const history = callbacksRef.current.onConnectionStart
+        ? await callbacksRef.current.onConnectionStart(controller.signal)
+        : callbacksRef.current.history;
+      if (!current()) return;
       await setVoiceAudioMode('realtime');
       if (!current()) return;
       attemptPeer = await createRealtimePeerSession({
         exchangeSdp: async (offerSdp, signal) => {
-          const call = await createLiveCall({ clientId, offerSdp, responseLanguage, history: callbacksRef.current.history }, signal);
+          const call = await createLiveCall({ clientId, offerSdp, responseLanguage, history }, signal);
           return call.answerSdp;
         },
         signal: controller.signal,

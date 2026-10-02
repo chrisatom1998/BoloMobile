@@ -32,6 +32,7 @@ const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage
 };
 const { showAppAlert } = jest.requireMock('../src/lib/app-alert') as { showAppAlert: jest.Mock };
 const { observe } = jest.requireMock('../src/lib/observability') as { observe: jest.Mock };
+const boundaryCleared = jest.fn();
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -70,7 +71,8 @@ function HistoryHarness() {
           replaceLiveChatSnapshot(['live-1', 'live-2'], [{ id: 'live-1', role: 'you', text: `Hello there ${index}` }]);
         }
       }} />
-      <Pressable accessibilityLabel="Clear chat history" onPress={clearChatHistory} />
+      <Pressable accessibilityLabel="Clear chat history" onPress={() => { void clearChatHistory(); }} />
+      <Pressable accessibilityLabel="Clear before new conversation" onPress={() => { void Promise.resolve(clearChatHistory()).then(boundaryCleared); }} />
       <Pressable accessibilityLabel="Clear all data" onPress={() => void clearAllData()} />
     </View>
   );
@@ -81,6 +83,110 @@ describe('chat history provider persistence', () => {
     jest.clearAllMocks();
     asyncStorage.__store.clear();
     asyncStorage.__store.set(storageKeys.clientId, 'client-12345678');
+  });
+
+  it('confirms a new-conversation clear only after persistence succeeds and leaves phrase/review data untouched', async () => {
+    asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'you', text: 'Previous conversation' }]));
+    const phrase = { hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' };
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([phrase]));
+    const beforePhrases = asyncStorage.__store.get(storageKeys.phrases);
+    const pending = deferred<void>();
+    asyncStorage.multiSet.mockImplementationOnce(async (entries: [string, string][]) => {
+      await pending.promise;
+      entries.forEach(([key, value]) => asyncStorage.__store.set(key, value));
+    });
+    const view = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+    await waitFor(() => expect(view.getByTestId('history').props.children).toContain('Previous conversation'));
+    await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+    expect(boundaryCleared).not.toHaveBeenCalled();
+    pending.resolve();
+    await waitFor(() => expect(boundaryCleared).toHaveBeenCalledWith(true));
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    expect(asyncStorage.__store.get(storageKeys.phrases)).toBe(beforePhrases);
+    expect(asyncStorage.multiSet.mock.calls.flatMap(([entries]) => entries.map(([key]: [string, string]) => key))).toEqual([storageKeys.chatHistory]);
+    await view.unmount();
+  });
+
+  it('reports a failed clear as false and restores the previous transcript for a safe retry', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'you', text: 'Previous conversation' }]));
+      asyncStorage.multiSet.mockRejectedValueOnce(new Error('disk full'));
+      const view = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+      await waitFor(() => expect(view.getByTestId('history').props.children).toContain('Previous conversation'));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      await waitFor(() => expect(boundaryCleared).toHaveBeenCalledWith(false));
+      expect(view.getByTestId('history').props.children).toContain('Previous conversation');
+      expect(showAppAlert).toHaveBeenCalled();
+      await view.unmount();
+    } finally { warning.mockRestore(); }
+  });
+
+  it('does not let a canceled earlier clear restore old captions over a newer successful clear', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'you', text: 'Previous conversation' }]));
+      let rejectFirst!: (error: Error) => void;
+      asyncStorage.multiSet.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectFirst = reject; }));
+      const view = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+      await waitFor(() => expect(view.getByTestId('history').props.children).toContain('Previous conversation'));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      rejectFirst(new Error('first clear failed'));
+      await waitFor(() => expect(boundaryCleared.mock.calls.map(([success]) => success)).toEqual([false, true]));
+      expect(view.getByTestId('history').props.children).toBe('empty');
+      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+      await view.unmount();
+    } finally { warning.mockRestore(); }
+  });
+
+  it('restores the original transcript when overlapping new-conversation clears both fail', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const previousHistory = [{ id: 'old', role: 'you', text: 'Previous conversation' }];
+      asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify(previousHistory));
+      let rejectFirst!: (error: Error) => void;
+      asyncStorage.multiSet
+        .mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectFirst = reject; }))
+        .mockRejectedValueOnce(new Error('second clear failed'));
+      const view = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+      await waitFor(() => expect(view.getByTestId('history').props.children).toContain('Previous conversation'));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      rejectFirst(new Error('first clear failed'));
+      await waitFor(() => expect(boundaryCleared.mock.calls.map(([success]) => success)).toEqual([false, false]));
+
+      expect(view.getByTestId('history').props.children).toBe('old:Previous conversation');
+      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual(previousHistory);
+      await view.unmount();
+    } finally { warning.mockRestore(); }
+  });
+
+  it('keeps a successful earlier clear when an overlapping later clear fails', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'you', text: 'Previous conversation' }]));
+      const pending = deferred<void>();
+      asyncStorage.multiSet
+        .mockImplementationOnce(async (entries: [string, string][]) => {
+          await pending.promise;
+          entries.forEach(([key, value]) => asyncStorage.__store.set(key, value));
+        })
+        .mockRejectedValueOnce(new Error('second clear failed'));
+      const view = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
+      await waitFor(() => expect(view.getByTestId('history').props.children).toContain('Previous conversation'));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1));
+      await fireEvent.press(view.getByLabelText('Clear before new conversation'));
+      pending.resolve();
+      await waitFor(() => expect(boundaryCleared.mock.calls.map(([success]) => success)).toEqual([true, false]));
+
+      expect(view.getByTestId('history').props.children).toBe('empty');
+      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+      await view.unmount();
+    } finally { warning.mockRestore(); }
   });
 
   it('hydrates history, persists a completed pair atomically, and restores it after remount', async () => {

@@ -1,6 +1,6 @@
 # Store privacy declarations
 
-Updated for the GPT-Live client migration on September 11, 2026. AI data-use consent notice version: 9. These declarations cover consent-gated AI speech, typed coaching, continuous GPT-Live conversation with bounded startup history, pronunciation checks, a random installation identifier, optional reports, and deletion. Production GPT-Live session and native device verification are separate rollout checks; this document does not claim those checks have passed.
+Updated for the GPT-Live client migration on September 11, 2026. AI data-use consent notice version: 10. These declarations cover consent-gated AI speech, typed coaching, continuous GPT-Live conversation with bounded startup history, pronunciation checks, a random installation identifier, optional reports, and deletion. Production GPT-Live session and native device verification are separate rollout checks; this document does not claim those checks have passed.
 
 ## Apple App Privacy
 
@@ -73,3 +73,7 @@ Official references:
 - Apple age ratings: https://developer.apple.com/help/app-store-connect/reference/app-information/age-ratings-values-and-definitions
 - Google Play Data safety: https://support.google.com/googleplay/android-developer/answer/10787469?hl=en
 - Google Play AI-generated content policy: https://support.google.com/googleplay/android-developer/answer/14094294?hl=en-EN
+
+## Conversation recap (October 1, 2026)
+
+After you tap End, Bolo sends a bounded transcript from that conversation and the random app identifier through its backend to OpenAI to prepare a conversation recap. Unsaved recaps are temporary; only phrases you explicitly save enter your on-device review queue. Recaps never create audio recordings or a learner-error score. Dismiss and “Transcription was wrong” discard a suggestion without affecting learning progress. Closing the sheet, starting a new session, clearing chat, leaving/backgrounding, or withdrawing consent cancels the app request and discards the temporary recap; already-started server processing may continue until its deadline. Saved phrases use the existing local deletion controls. The recap endpoint source requires a separate backend release before rollout; update the hosted public privacy policy to match this disclosure before enabling it.

@@ -46,6 +46,43 @@ beforeEach(() => {
 afterEach(() => jest.useRealTimers());
 
 describe('GPT-Live conversation lifecycle', () => {
+  it('uses the synchronous conversation boundary history instead of a stale render when opening the peer', async () => {
+    const onConnectionStart = jest.fn(() => []);
+    const { result, unmount } = await mount({ history: [{ role: 'you', text: 'Earlier conversation' }], onConnectionStart });
+    await act(async () => { await result.current.connect(); });
+    await peerOptions.exchangeSdp('offer', new AbortController().signal);
+    expect(onConnectionStart).toHaveBeenCalledTimes(1);
+    expect(createLiveCall).toHaveBeenLastCalledWith(expect.objectContaining({ history: [] }), expect.anything());
+    await unmount();
+  });
+
+  it('waits for the persisted conversation boundary before creating a peer and stops if it fails', async () => {
+    let reject!: (error: Error) => void;
+    const onConnectionStart = jest.fn(() => new Promise<never>((_resolve, fail) => { reject = fail; }));
+    const { result, unmount } = await mount({ onConnectionStart });
+    let connection!: Promise<unknown>;
+    await act(async () => { connection = result.current.connect().catch((error) => error); await flush(); });
+    expect(createPeerMock).not.toHaveBeenCalled();
+    await act(async () => { reject(new Error('Could not clear previous chat.')); await connection; });
+    expect(await connection).toEqual(expect.objectContaining({ message: 'Could not clear previous chat.' }));
+    expect(createPeerMock).not.toHaveBeenCalled();
+    expect(createLiveCall).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('does not open a peer when End cancels an awaited conversation boundary', async () => {
+    let resolve!: (history: []) => void;
+    const onConnectionStart = jest.fn(() => new Promise<[]>((done) => { resolve = done; }));
+    const { result, unmount } = await mount({ onConnectionStart });
+    let connection!: Promise<void>;
+    await act(async () => { connection = result.current.connect(); await flush(); });
+    await act(async () => { result.current.disconnect(); resolve([]); await connection; });
+    expect(createPeerMock).not.toHaveBeenCalled();
+    expect(createLiveCall).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('disconnected');
+    await unmount();
+  });
+
   it('rejects Simulator before requesting microphone access', async () => {
     mockIsDevice = false;
     const { result, unmount } = await mount();

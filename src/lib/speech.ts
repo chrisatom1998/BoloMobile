@@ -157,6 +157,7 @@ async function loadSpeechAudio(chunk: SpeechChunk, signal: AbortSignal) {
   if (signal.aborted) return undefined;
 
   const audio = await requestSpeechAudio(chunk.text, signal, chunk.language);
+  if (signal.aborted) return undefined;
   rememberAudio(key, audio);
   return audio;
 }

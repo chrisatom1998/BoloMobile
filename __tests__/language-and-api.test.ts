@@ -259,9 +259,7 @@ describe('connected coaching contract', () => {
       ok: true,
       status: 200,
       json: async () => ({
-        transcript: '',
-        reply: '```json\n{"hi":"आप कैसे हैं?","latin":"Aap kaise hain?","en":"How are you?"}\n```',
-        language: 'en',
+        hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?', en: 'How are you?',
       }),
     }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -276,25 +274,22 @@ describe('connected coaching contract', () => {
         en: 'How are you?',
       });
       const [, init] = expectDefined(fetchMock.mock.calls[0]);
-      const payload = JSON.parse(String(init?.body)) as { messages: unknown[]; text: string };
-      expect(payload.messages).toEqual([]);
-      expect(payload.text).not.toContain('Never use Devanagari.');
-      expect(payload.text).toContain('Use Devanagari only in "hi"');
-      expect(payload.text).toContain('How are you?');
+      const payload = JSON.parse(String(init?.body));
+      expect(payload).toEqual({ clientId: 'client-12345678', text: 'How are you?' });
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it('prepares a Romanized selection from its retained Devanagari source instead of requiring JSON from the chat service', async () => {
+  it('prepares a Romanized selection through the phrase service without widening it to the retained source', async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
       ok: true,
       status: 200,
       json: async () => ({
-        transcript: '',
-        reply: 'I am shopping for clothes.',
-        language: 'en',
+        hi: 'मैं कपड़ों की खरीदारी कर रहा हूँ',
+        latin: 'Main kapadon kee khareedaaree kar rahaa hoon',
+        en: 'I am shopping for clothes.',
       }),
     }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -311,9 +306,8 @@ describe('connected coaching contract', () => {
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const [, init] = expectDefined(fetchMock.mock.calls[0]);
-      const payload = JSON.parse(String(init?.body)) as { responseLanguage?: string; text: string };
-      expect(payload.responseLanguage).toBeUndefined();
-      expect(payload.text).toContain('Phrase: "मैं कपड़ों की खरीदारी कर रहा हूँ"');
+      const payload = JSON.parse(String(init?.body));
+      expect(payload).toEqual({ clientId: 'client-12345678', text: 'Main kapadon kee khareedaaree kar rahaa hoon' });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -325,9 +319,7 @@ describe('connected coaching contract', () => {
       ok: true,
       status: 200,
       json: async () => ({
-        transcript: '',
-        reply: '{"hi":"नमस्ते","latin":"नमस्ते","en":"Hello"}',
-        language: 'en',
+        hi: 'नमस्ते', latin: 'नमस्ते', en: 'Hello',
       }),
     })) as unknown as typeof fetch;
 
@@ -335,7 +327,7 @@ describe('connected coaching contract', () => {
       await expect(prepareSavedPhraseFromText({
         clientId: 'client-12345678',
         text: 'Hello',
-      })).rejects.toThrow('Bolo could not prepare that phrase.');
+      })).rejects.toThrow('Bolo returned an invalid response.');
     } finally {
       globalThis.fetch = originalFetch;
     }
