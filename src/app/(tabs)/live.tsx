@@ -80,7 +80,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth <= 430;
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, beginTypedReply, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], savePhrase, togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, beginTypedReply, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], savePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
@@ -491,12 +491,13 @@ export default function LiveScreen() {
     ]);
   }, [clientId, reported]);
 
-  const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
+  const saveTranscriptPhrase = useCallback(async (phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
-    if (!alreadySaved) togglePhrase(phrase);
     setPhraseMessage(null);
-    setTimeout(() => showAppAlert(alreadySaved ? 'Phrase already saved' : 'Phrase saved', `${phrase.latin} — ${phrase.en}`), 0);
-  }, [phrases, togglePhrase]);
+    const saved = await savePhrase(phrase);
+    if (!saved || !mountedRef.current || !focusedRef.current || privacyRef.current.clientId !== clientId) return;
+    showAppAlert(alreadySaved ? 'Phrase already saved' : 'Phrase saved', `${phrase.latin} — ${phrase.en}`);
+  }, [clientId, phrases, savePhrase]);
 
   const featuredPhrase = realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
     <View style={styles.featuredPhraseSection} testID="featured-phrase-section">

@@ -40,6 +40,7 @@ import {
 import type { ChatMessage, LearnerProfile, MotionPreference, ReminderSettings, SavedPhrase } from '@/state/app-state-types';
 
 type PersistedKey = keyof typeof storageKeys;
+type SavedPhraseState = Pick<PersistedState, 'phrases' | 'phraseReviews'>;
 
 type SceneCompletion = {
   score: number;
@@ -67,12 +68,12 @@ type AppActions = {
   setGoal: (goal: 5 | 10 | 15) => void;
   completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
-  togglePhrase: (phrase: SavedPhrase) => void;
-  savePhrase: (phrase: SavedPhrase) => void;
-  removePhrase: (hi: string) => void;
+  togglePhrase: (phrase: SavedPhrase) => Promise<boolean>;
+  savePhrase: (phrase: SavedPhrase) => Promise<boolean>;
+  removePhrase: (hi: string) => Promise<boolean>;
   checkpointScene: (sceneId: string, nextBeatIndex: number) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
-  reviewPhrase: (hi: string, remembered: boolean) => void;
+  reviewPhrase: (hi: string, remembered: boolean) => Promise<void>;
   markLiveTurn: (seconds?: number) => void;
   addPracticeSeconds: (seconds: number, expectedClientId?: string) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
@@ -152,6 +153,38 @@ async function persistState(state: PersistedState, keys: PersistedKey[]) {
   await AsyncStorage.multiSet(storageEntries(state, keys));
 }
 
+async function readSavedPhraseState(): Promise<SavedPhraseState> {
+  const stored = Object.fromEntries(await AsyncStorage.multiGet([storageKeys.phrases, storageKeys.phraseReviews]));
+  const phrases = stored[storageKeys.phrases];
+  const phraseReviews = stored[storageKeys.phraseReviews];
+  // Only an explicit null means a missing key. An incomplete/failed read must
+  // never turn an unknown collection into an empty replacement.
+  if (phrases === undefined || phraseReviews === undefined) {
+    throw new Error('Incomplete saved-phrase read.');
+  }
+  return {
+    phrases: sanitizePhrases(phrases),
+    phraseReviews: sanitizePhraseReviews(phraseReviews),
+  };
+}
+
+function withSavedPhrase(current: SavedPhraseState, phrase: SavedPhrase): SavedPhraseState {
+  if (current.phrases.some((saved) => saved.hi.trim().toLowerCase() === phrase.hi.toLowerCase())) return current;
+  const phrases = [...current.phrases, phrase].slice(-100);
+  const phraseReviews = { ...current.phraseReviews, [phrase.hi]: defaultPhraseReview() };
+  const kept = new Set(phrases.map((saved) => saved.hi));
+  for (const hi of Object.keys(phraseReviews)) {
+    if (!kept.has(hi)) delete phraseReviews[hi];
+  }
+  return { phrases, phraseReviews };
+}
+
+function withoutSavedPhrase(current: SavedPhraseState, hi: string): SavedPhraseState {
+  const phraseReviews = { ...current.phraseReviews };
+  delete phraseReviews[hi];
+  return { phrases: current.phrases.filter((phrase) => phrase.hi !== hi), phraseReviews };
+}
+
 function reportPersistenceFailure(error: unknown, message = 'Your last change was not saved and has been restored. Check available storage and try again.') {
   console.warn('Bolo could not save local progress.', error);
   observe('runtime_error');
@@ -186,6 +219,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const stateRef = useRef<PersistedState>(initialState);
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
+  const phraseOperationEpochRef = useRef(0);
   const pendingConsentChangesRef = useRef(0);
   const typedReplyControllersRef = useRef(new Set<AbortController>());
 
@@ -228,7 +262,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     let active = true;
-    void (async () => {
+    const epoch = phraseOperationEpochRef.current;
+    void enqueuePersistence(async () => {
       try {
         const pairs = await AsyncStorage.multiGet(Object.values(storageKeys));
         const stored = Object.fromEntries(pairs);
@@ -254,10 +289,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           replaceState(next);
           setHydrated(true);
           if (clientId !== readStored(storageKeys.clientId)) {
-            void enqueuePersistence(() => AsyncStorage.setItem(storageKeys.clientId, clientId)).catch(reportPersistenceFailure);
+            void enqueuePersistence(async () => {
+              if (epoch === phraseOperationEpochRef.current) await AsyncStorage.setItem(storageKeys.clientId, clientId);
+            }).catch(reportPersistenceFailure);
           }
           if (readStored(storageKeys.aiConsent) && !next.aiConsent) {
-            void enqueuePersistence(() => AsyncStorage.removeItem(storageKeys.aiConsent)).catch(reportPersistenceFailure);
+            void enqueuePersistence(async () => {
+              if (epoch === phraseOperationEpochRef.current) await AsyncStorage.removeItem(storageKeys.aiConsent);
+            }).catch(reportPersistenceFailure);
           }
         }
       } catch (error) {
@@ -270,7 +309,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           showAppAlert('Could not load saved progress', 'Bolo opened with temporary defaults. Check available storage before making changes.');
         }
       }
-    })();
+    });
     return () => {
       active = false;
     };
@@ -341,40 +380,63 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     commit((current) => ({ ...current, learnerProfile: { ...current.learnerProfile, ...profile } }), ['learnerProfile']);
   }, [commit]);
 
-  const togglePhrase = useCallback((phrase: SavedPhrase) => {
-    commit((current) => {
-      const exists = current.phrases.some((saved) => saved.hi === phrase.hi);
-      const phrases = exists
-        ? current.phrases.filter((saved) => saved.hi !== phrase.hi)
-        : [...current.phrases, phrase].slice(-100);
-      const phraseReviews = { ...current.phraseReviews };
-      if (exists) delete phraseReviews[phrase.hi];
-      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
-      // The 100-phrase cap can drop the oldest phrase; drop its review entry too
-      // so orphans never accumulate in storage.
-      const kept = new Set(phrases.map((saved) => saved.hi));
-      for (const hi of Object.keys(phraseReviews)) {
-        if (!kept.has(hi)) delete phraseReviews[hi];
+  const commitPhraseChange = useCallback((updater: (current: SavedPhraseState) => SavedPhraseState | null) => {
+    if (clearingAllDataRef.current) return Promise.resolve(false);
+    const epoch = phraseOperationEpochRef.current;
+    return enqueuePersistence(async () => {
+      if (clearingAllDataRef.current || epoch !== phraseOperationEpochRef.current) return false;
+      let current: SavedPhraseState;
+      try {
+        // Read and mutate inside one queue operation, including after a failed
+        // hydration or ambiguous write. Never persist the temporary defaults.
+        current = await readSavedPhraseState();
+      } catch (error) {
+        console.warn('Bolo could not load saved phrases.', error);
+        observe('runtime_error');
+        showAppAlert('Could not load saved phrases', 'Your saved phrases could not be read, so this change was not made. Check available storage and try again.');
+        return false;
       }
-      return { ...current, phrases, phraseReviews };
-    }, ['phrases', 'phraseReviews']);
-  }, [commit]);
+      if (clearingAllDataRef.current || epoch !== phraseOperationEpochRef.current) return false;
+      replaceState({ ...stateRef.current, ...current });
+      const next = updater(current);
+      if (!next) return false;
+      if (next === current) return true;
+      try {
+        await persistState({ ...stateRef.current, ...next }, ['phrases', 'phraseReviews']);
+        // A clear queued during the write runs next and replaces this state.
+        // Publish the durable result even if that subsequent clear might fail.
+        replaceState({ ...stateRef.current, ...next });
+        return !clearingAllDataRef.current && epoch === phraseOperationEpochRef.current;
+      } catch (error) {
+        // multiSet can partially succeed on some platforms. Do not advertise
+        // rollback or reuse an optimistic snapshot for the next operation.
+        reportPersistenceFailure(error, 'Bolo could not confirm that your phrase change was saved. Check available storage and try again.');
+        return false;
+      }
+    });
+  }, [enqueuePersistence, replaceState]);
 
-  // Recap Save is idempotent, unlike the existing bookmark toggle. Check the
-  // synchronous state ref so two taps in the same render cannot unsave a card.
+  const togglePhrase = useCallback((phrase: SavedPhrase) => {
+    const normalized = sanitizePhrases(JSON.stringify([phrase]))[0];
+    if (!normalized) return Promise.resolve(false);
+    // Capture the displayed intent. A Save tapped while hydration showed
+    // temporary defaults must not remove a phrase recovered from storage.
+    const remove = stateRef.current.phrases.some((saved) => saved.hi === normalized.hi);
+    return commitPhraseChange((current) => remove
+      ? withoutSavedPhrase(current, normalized.hi)
+      : withSavedPhrase(current, normalized));
+  }, [commitPhraseChange]);
+
   const savePhrase = useCallback((phrase: SavedPhrase) => {
     const normalized = sanitizePhrases(JSON.stringify([phrase]))[0];
-    if (!normalized || stateRef.current.phrases.some((saved) => saved.hi.trim().toLowerCase() === normalized.hi.toLowerCase())) return;
-    togglePhrase(normalized);
-  }, [togglePhrase]);
+    if (!normalized) return Promise.resolve(false);
+    // Deduplicate inside the queue, after recovery and earlier saves finish.
+    return commitPhraseChange((current) => withSavedPhrase(current, normalized));
+  }, [commitPhraseChange]);
 
   const removePhrase = useCallback((hi: string) => {
-    commit((current) => {
-      const phraseReviews = { ...current.phraseReviews };
-      delete phraseReviews[hi];
-      return { ...current, phrases: current.phrases.filter((phrase) => phrase.hi !== hi), phraseReviews };
-    }, ['phrases', 'phraseReviews']);
-  }, [commit]);
+    return commitPhraseChange((current) => withoutSavedPhrase(current, hi));
+  }, [commitPhraseChange]);
 
   const checkpointScene = useCallback((sceneId: string, nextBeatIndex: number) => {
     commit((current) => {
@@ -420,14 +482,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['practice', 'practiceHistory', 'sceneProgress', 'streakDays']);
   }, [commit]);
 
-  const reviewPhrase = useCallback((hi: string, remembered: boolean) => {
-    commit((current) => {
-      if (!current.phrases.some((phrase) => phrase.hi === hi)) return current;
+  const reviewPhrase = useCallback(async (hi: string, remembered: boolean) => {
+    const epoch = phraseOperationEpochRef.current;
+    const saved = await commitPhraseChange((current) => {
+      if (!current.phrases.some((phrase) => phrase.hi === hi)) return null;
       const previous = current.phraseReviews[hi] ?? defaultPhraseReview();
       const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
       const intervalDays = remembered ? reviewIntervals[mastery] ?? 0 : 0;
       const today = dateKey();
-      const reviewStreakDays = [...new Set([...current.reviewStreakDays, today])].sort().slice(-400);
       return {
         ...current,
         phraseReviews: {
@@ -441,11 +503,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             totalReviews: previous.totalReviews + 1,
           },
         },
-        practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
-        reviewStreakDays,
       };
-    }, ['phraseReviews', 'practiceHistory', 'reviewStreakDays']);
-  }, [commit]);
+    });
+    if (!saved || epoch !== phraseOperationEpochRef.current) return;
+    // Apply counters to the latest state only after the phrase write succeeds.
+    // Other practice actions may have happened while storage was pending.
+    commit((current) => ({
+      ...current,
+      practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
+      reviewStreakDays: [...new Set([...current.reviewStreakDays, dateKey()])].sort().slice(-400),
+    }), ['practiceHistory', 'reviewStreakDays']);
+  }, [commit, commitPhraseChange]);
 
   const markLiveTurn = useCallback((seconds = 0) => {
     commit((current) => {
@@ -563,6 +631,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
+    phraseOperationEpochRef.current += 1;
     cancelTypedReplies();
     const next: PersistedState = {
       ...initialState,

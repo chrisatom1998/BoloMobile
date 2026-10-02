@@ -250,7 +250,7 @@ jest.mock('@/state/app-state', () => ({
   __clearChatHistoryMock: jest.fn(),
   __markLiveTurnMock: jest.fn(),
   __togglePhraseMock: jest.fn(),
-  __savePhraseMock: jest.fn(),
+  __savePhraseMock: jest.fn(async () => true),
   useAppState: () => {
     const appState = jest.requireMock('@/state/app-state') as {
       __appendChatMessagesMock: jest.Mock;
@@ -939,7 +939,7 @@ describe('live coaching state', () => {
     expect(view.getByLabelText('English phrase meaning').props.value).toBe('How are you?');
     await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
 
-    expect(appState.__togglePhraseMock).toHaveBeenCalledWith({
+    expect(appState.__savePhraseMock).toHaveBeenCalledWith({
       hi: 'आप कैसे हैं?',
       latin: 'Aap kaise hain?',
       en: 'How are you?',
@@ -947,6 +947,26 @@ describe('live coaching state', () => {
     expect(view.queryByLabelText('Selected transcript text')).toBeNull();
     await view.unmount();
     await flushMicrotasks();
+  });
+
+  it.each([true, false])('only confirms transcript saving after persistence succeeds: %s', async (saved) => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const pending = deferred<boolean>();
+    appState.__savePhraseMock.mockReturnValueOnce(pending.promise);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    await flushMicrotasks();
+    expect(alert).not.toHaveBeenCalledWith('Phrase saved', expect.any(String));
+    await act(async () => { pending.resolve(saved); });
+    await flushMicrotasks();
+    if (saved) expect(alert).toHaveBeenCalledWith('Phrase saved', 'Namaste — Hello');
+    else expect(alert).not.toHaveBeenCalledWith('Phrase saved', expect.any(String));
+    await view.unmount();
   });
 
   it('retains the original Hindi source behind a selected Romanized chat phrase', async () => {
