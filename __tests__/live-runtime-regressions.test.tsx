@@ -1265,6 +1265,7 @@ describe('live audio control exclusion', () => {
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     await fireEvent.press(view.getByLabelText('Mock completed realtime reply'));
 
+    expect(view.getByLabelText('Selectable chat text: Namaste')).toBeTruthy();
     const listen = view.getByLabelText('Read reply aloud: A completed voice reply.');
     expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(false);
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));

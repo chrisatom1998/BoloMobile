@@ -100,6 +100,7 @@ export default function LiveScreen() {
   const practiced = useRef(false);
   const liveAshaTranscriptRef = useRef('');
   const liveUserTranscriptRef = useRef('');
+  const lastRecordedVoiceTranscriptRef = useRef('');
   const pendingAshaSaveRef = useRef<{ finish: (result: unknown) => void } | null>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
@@ -295,6 +296,7 @@ export default function LiveScreen() {
   const recordRealtimeInputTranscript = useCallback((result: RealtimeInputTranscript) => {
     if (!mountedRef.current || !result.transcript.trim()) return;
     appendChatMessages([{ id: `you-voice-${result.itemId}`, role: 'you', text: result.transcript.trim() }]);
+    lastRecordedVoiceTranscriptRef.current = result.transcript.trim();
   }, [appendChatMessages]);
 
   const recordRealtimeReply = useCallback((result: { reply: string; language: 'en' | 'hi' }) => {
@@ -449,8 +451,14 @@ export default function LiveScreen() {
     liveUserTranscriptRef.current = turn.transcript.trim();
     setLiveAshaTranscript(turn.reply.trim());
     setLiveUserTranscript(turn.transcript.trim());
-    recordRealtimeReply(turn);
-  }, [recordRealtimeReply]);
+    const transcript = turn.transcript.trim();
+    if (transcript && lastRecordedVoiceTranscriptRef.current !== transcript) {
+      recordTurn(turn);
+      lastRecordedVoiceTranscriptRef.current = transcript;
+    } else {
+      recordRealtimeReply(turn);
+    }
+  }, [recordRealtimeReply, recordTurn]);
   const requestSaveLivePhrase = useCallback((text: string) => {
     const original = text;
     setPhraseMessage({

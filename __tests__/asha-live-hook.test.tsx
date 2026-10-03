@@ -108,6 +108,35 @@ describe('useAshaLiveConversation', () => {
     await unmount();
   });
 
+  it('updates muted state locally when the learner mutes, unmutes, or interrupts', async () => {
+    const peer = makePeer();
+    let onMessage: (message: string) => void = () => undefined;
+    peerMock.mockImplementation(async (peerOptions) => {
+      onMessage = peerOptions.onMessage;
+      peerOptions.onMessage(JSON.stringify({ type: 'session.started', session: { id: 'live_test' } }));
+      return peer;
+    });
+    const { result, unmount } = await renderHook(() => useAshaLiveConversation(options()));
+    await act(async () => { await result.current.connect(); });
+
+    await act(() => result.current.toggleMute());
+    expect(result.current.muted).toBe(true);
+    expect(peer.setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
+    expect(peer.send).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'session.input_audio.mute' }));
+
+    await act(() => result.current.toggleMute());
+    expect(result.current.muted).toBe(false);
+    expect(peer.setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+    expect(peer.send).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'session.input_audio.unmute' }));
+
+    await act(() => onMessage(JSON.stringify({ type: 'session.input_audio.muted' })));
+    expect(result.current.muted).toBe(true);
+    await act(() => result.current.interrupt());
+    expect(result.current.muted).toBe(false);
+    expect(peer.send).toHaveBeenLastCalledWith(expect.objectContaining({ type: 'session.input_audio.unmute' }));
+    await unmount();
+  });
+
   it('invalidates in-flight backend work when the learner interrupts', async () => {
     const peer = makePeer();
     let onMessage: (message: string) => void = () => undefined;
