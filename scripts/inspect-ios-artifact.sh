@@ -275,7 +275,10 @@ with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
 
     secret_patterns = [
         re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
-        re.compile(rb"sk-(?:proj-)?[A-Za-z0-9_-]{20,}"),
+        # Hermes stores adjacent strings in one byte table. Without a left token
+        # boundary, ordinary entries ending in words such as "mask-" look like
+        # an OpenAI key followed by the next string-table entries.
+        re.compile(rb"(?<![A-Za-z0-9_])sk-(?:proj-)?[A-Za-z0-9_-]{20,}"),
         re.compile(rb"ek_[A-Za-z0-9_-]{24,}"),
         re.compile(rb"AKIA[0-9A-Z]{16}"),
         re.compile(rb"gh[pousr]_[A-Za-z0-9]{36,}"),
