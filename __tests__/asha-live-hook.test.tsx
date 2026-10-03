@@ -100,8 +100,25 @@ describe('useAshaLiveConversation', () => {
     expect(peer.setPlaybackEnabled).toHaveBeenCalledWith(false);
     expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
       type: 'session.instructions.append',
+      delegation_id: null,
       content: expect.stringMatching(/Discard any unfinished reply[\s\S]*Speak only Hindi/u),
     }));
+    const languageEvent = peer.send.mock.calls
+      .map(([event]) => event as { content?: string; event_id?: string })
+      .find((event) => event.event_id?.startsWith('bolo_language_hi_'));
+    expect(languageEvent?.content?.length).toBeLessThan(2_000);
+    expect(result.current.activeResponseLanguage).toBe('en');
+    expect(result.current.languageUpdatePending).toBe(true);
+    expect(result.current.status).toBe('thinking');
+
+    await act(() => onMessage(JSON.stringify({ type: 'session.instructions.appended', client_event_id: 'obsolete-language-event' })));
+    expect(result.current.activeResponseLanguage).toBe('en');
+    expect(result.current.languageUpdatePending).toBe(true);
+
+    await act(() => onMessage(JSON.stringify({ type: 'session.instructions.appended', client_event_id: languageEvent?.event_id })));
+    expect(result.current.activeResponseLanguage).toBe('hi');
+    expect(result.current.languageUpdatePending).toBe(false);
+    expect(result.current.status).toBe('listening');
     await act(() => onMessage(JSON.stringify({ type: 'session.output_transcript.delta', event_id: 'old-tail', delta: ' stale tail' })));
     expect(onTranscript).not.toHaveBeenCalled();
 
@@ -111,6 +128,39 @@ describe('useAshaLiveConversation', () => {
     await act(() => onMessage(JSON.stringify({ type: 'session.output_transcript.delta', event_id: 'new-answer', delta: 'ज़रूर।' })));
     expect(onTranscript).toHaveBeenCalledWith(expect.objectContaining({ speaker: 'asha', text: 'ज़रूर।' }));
     expect(peer.close).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('reports a rejected spoken-language update without claiming that it was applied', async () => {
+    const peer = makePeer();
+    let onMessage: (message: string) => void = () => undefined;
+    peerMock.mockImplementation(async (peerOptions) => {
+      onMessage = peerOptions.onMessage;
+      peerOptions.onMessage(JSON.stringify({ type: 'session.started', session: { id: 'live_test' } }));
+      return peer;
+    });
+    const onError = jest.fn();
+    const { result, rerender, unmount } = await renderHook(
+      ({ language }: { language: 'en' | 'hi' }) => useAshaLiveConversation(options({ onError, responseLanguage: language })),
+      { initialProps: { language: 'en' as const } },
+    );
+    await act(async () => { await result.current.connect(); });
+    await rerender({ language: 'hi' });
+    const languageEvent = peer.send.mock.calls
+      .map(([event]) => event as { event_id?: string })
+      .find((event) => event.event_id?.startsWith('bolo_language_hi_'));
+
+    await act(() => onMessage(JSON.stringify({
+      type: 'error',
+      client_event_id: languageEvent?.event_id,
+      error: { message: 'Provider detail that should not be exposed.' },
+    })));
+
+    expect(result.current.activeResponseLanguage).toBe('en');
+    expect(result.current.languageUpdatePending).toBe(false);
+    expect(result.current.status).toBe('listening');
+    expect(onError).toHaveBeenCalledWith('Asha could not switch languages. End this chat and start a new conversation to use the selected language.');
+    expect(onError).not.toHaveBeenCalledWith(expect.stringContaining('Provider detail'));
     await unmount();
   });
 

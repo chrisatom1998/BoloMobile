@@ -32,7 +32,7 @@ describe('GPT-Live backend', () => {
     const request = JSON.parse(init.body as string);
     expect(request.transport).toEqual({ type: 'webrtc', sdp });
     expect(request.session).toMatchObject({ model: 'gpt-live-1', store: false, audio: { output: { voice: 'marin' } }, delegation: { type: 'responses', responses: { model: 'gpt-5.6-terra', tool_choice: 'none' } } });
-    expect(request.session.client.data_channel.allowed_client_events).toEqual(['session.close', 'session.input_audio.mute', 'session.input_audio.unmute', 'session.instructions.append']);
+    expect(request.session.client.data_channel.allowed_client_events).toEqual(['session.close', 'session.input_audio.mute', 'session.input_audio.unmute', 'session.instructions.append', 'response.item.create', 'response.create']);
     expect(request.session.instructions).toContain('Asha');
     expect(request.session.instructions).not.toContain('override');
     expect(request.session.input).toEqual([{ role: 'user', content: [{ type: 'input_text', text: 'Namaste' }] }, { role: 'assistant', content: [{ type: 'output_text', text: 'Hello' }] }]);

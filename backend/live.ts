@@ -85,7 +85,7 @@ function createSession(offerSdp: string, language: 'en' | 'hi', history: unknown
       instructions: liveInstructions(language),
       input: sanitizeLiveHistory(history),
       // Keep model selection and delegation configuration on the trusted backend.
-      client: { data_channel: { allowed_client_events: ['session.close', 'session.input_audio.mute', 'session.input_audio.unmute', 'session.instructions.append'] } },
+      client: { data_channel: { allowed_client_events: ['session.close', 'session.input_audio.mute', 'session.input_audio.unmute', 'session.instructions.append', 'response.item.create', 'response.create'] } },
       delegation: {
         type: 'responses',
         responses: {

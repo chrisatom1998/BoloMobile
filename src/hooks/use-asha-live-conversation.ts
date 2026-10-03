@@ -77,6 +77,7 @@ export function useAshaLiveConversation({
   const [status, setStatus] = useState<AshaLiveStatus>('disconnected');
   const [muted, setMuted] = useState(false);
   const [backendLoading, setBackendLoading] = useState(false);
+  const [activeResponseLanguage, setActiveResponseLanguage] = useState(responseLanguage);
   const peerRef = useRef<RealtimePeerSession | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const sessionStartedRef = useRef(false);
@@ -96,6 +97,8 @@ export function useAshaLiveConversation({
   const speakingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const responseLanguageRef = useRef(responseLanguage);
   const previousResponseLanguageRef = useRef(responseLanguage);
+  const pendingLanguageUpdateRef = useRef<{ eventId: string; language: AshaSpokenLanguage } | null>(null);
+  const [languageUpdatePending, setLanguageUpdatePending] = useState(false);
   const suppressStaleOutputRef = useRef(false);
   const callbacksRef = useRef({ onBackendLoadingChange, onError, onTranscript });
   const appStateRef = useRef(AppState.currentState);
@@ -132,6 +135,8 @@ export function useAshaLiveConversation({
     sessionIdRef.current = null;
     sessionStartedRef.current = false;
     greetingSentRef.current = false;
+    pendingLanguageUpdateRef.current = null;
+    setLanguageUpdatePending(false);
     suppressStaleOutputRef.current = false;
     completedCallIdsRef.current.clear();
     transcriptEventIdsRef.current.clear();
@@ -226,6 +231,17 @@ export function useAshaLiveConversation({
       return;
     }
 
+    if (event.type === 'session.instructions.appended') {
+      const pending = pendingLanguageUpdateRef.current;
+      if (pending && event.client_event_id === pending.eventId) {
+        setActiveResponseLanguage(pending.language);
+        pendingLanguageUpdateRef.current = null;
+        setLanguageUpdatePending(false);
+        setStatus('listening');
+      }
+      return;
+    }
+
     if (event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta') {
       if (!event.delta) return;
       const speaker = event.type === 'session.input_transcript.delta' ? 'you' : 'asha';
@@ -297,7 +313,17 @@ export function useAshaLiveConversation({
       releaseResources();
       return;
     }
-    if (event.type === 'error') callbacksRef.current.onError(event.error?.message || 'Asha’s live session encountered an error.');
+    if (event.type === 'error') {
+      const pending = pendingLanguageUpdateRef.current;
+      if (pending && event.client_event_id === pending.eventId) {
+        pendingLanguageUpdateRef.current = null;
+        setLanguageUpdatePending(false);
+        setStatus('listening');
+        callbacksRef.current.onError('Asha could not switch languages. End this chat and start a new conversation to use the selected language.');
+        return;
+      }
+      callbacksRef.current.onError(event.error?.message || 'Asha’s live session encountered an error.');
+    }
   }, [cancelObsoleteBackendWork, finishSessionStartup, releaseResources, runDelegatedTool, updateBackendLoading]);
 
   const connect = useCallback(async (recovery = false) => {
@@ -307,6 +333,9 @@ export function useAshaLiveConversation({
     connectAbortRef.current = controller;
     sessionStartedRef.current = false;
     greetingSentRef.current = false;
+    pendingLanguageUpdateRef.current = null;
+    setLanguageUpdatePending(false);
+    setActiveResponseLanguage(responseLanguageRef.current);
     completedCallIdsRef.current.clear();
     transcriptEventIdsRef.current.clear();
     setStatus(recovery ? 'reconnecting' : 'connecting');
@@ -377,7 +406,12 @@ export function useAshaLiveConversation({
     if (previousResponseLanguageRef.current === responseLanguage) return;
     previousResponseLanguageRef.current = responseLanguage;
     const peer = peerRef.current;
-    if (!peer || !sessionStartedRef.current) return;
+    if (!peer || !sessionStartedRef.current) {
+      setActiveResponseLanguage(responseLanguage);
+      pendingLanguageUpdateRef.current = null;
+      setLanguageUpdatePending(false);
+      return;
+    }
     const discardingInFlightReply = status === 'speaking' || status === 'thinking'
       || delegationGenerationsRef.current.size > 0 || toolAbortControllersRef.current.size > 0;
     cancelObsoleteBackendWork();
@@ -385,13 +419,16 @@ export function useAshaLiveConversation({
       suppressStaleOutputRef.current = true;
       peer.setPlaybackEnabled?.(false);
     }
+    const eventId = `bolo_language_${responseLanguage}_${Date.now()}`;
+    pendingLanguageUpdateRef.current = { eventId, language: responseLanguage };
+    setLanguageUpdatePending(true);
     peer.send({
       type: 'session.instructions.append',
-      event_id: `bolo_language_${responseLanguage}_${Date.now()}`,
+      event_id: eventId,
       delegation_id: null,
       content: `The learner explicitly switched spoken modes. Discard any unfinished reply from the previous mode. This policy applies to the next reply and every later reply until explicitly changed. ${buildAshaSpokenLanguageInstructions(responseLanguage)}`,
     });
-    setStatus('listening');
+    setStatus('thinking');
   }, [cancelObsoleteBackendWork, responseLanguage, status]);
 
   const toggleMute = useCallback(() => {
@@ -495,11 +532,13 @@ export function useAshaLiveConversation({
   }, [releaseResources]);
 
   return {
+    activeResponseLanguage,
     backendLoading,
     connect,
     createRecap,
     disconnect,
     interrupt,
+    languageUpdatePending,
     muted,
     sendGuidance,
     status,
