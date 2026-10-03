@@ -46,13 +46,13 @@ export default function LessonPlansScreen() {
       <View style={[styles.heading, largeTextLayout && styles.headingLarge]} testID="lesson-plans-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>Guided curriculum</JournalKicker>
-          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>One path, 100 small wins.</JournalDisplay>
-          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Each plan has ten focused lessons, with ten practice turns in each lesson.</Text>
+          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>{`One path, ${lessonPlans.reduce((total, plan) => total + plan.lessonIds.length, 0)} small wins.`}</JournalDisplay>
+          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Explore the guided plans or practice your own created lessons.</Text>
         </View>
         <JournalMotif accessibilityLabel="Lesson plans journal motif" size="tile" style={largeTextLayout ? styles.headingMotifLarge : undefined} />
       </View>
 
-      <View accessibilityLabel="Ten ordered lesson plans" style={styles.plans}>
+      <View accessibilityLabel={`${lessonPlans.length} ordered lesson plans`} style={styles.plans}>
         {lessonPlans.map((plan) => {
           const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
           const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
@@ -178,7 +178,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
         </View>
         <Text style={styles.detailCue}>
           {nextLessonIndex < 0
-            ? `All ten lessons are complete. Review ${currentLesson?.title ?? 'the final lesson'} to keep it warm.`
+            ? `${plan.lessonIds.length === 1 ? 'Your lesson is complete.' : `All ${plan.lessonIds.length} lessons are complete.`} Review ${currentLesson?.title ?? 'the final lesson'} to keep it warm.`
             : inProgressLessonId
               ? `Continue: lesson ${currentIndex + 1} · ${currentLesson?.title ?? 'ten practice turns'}`
               : `Next: lesson ${currentIndex + 1} · ${currentLesson?.title ?? 'ten practice turns'}`}
@@ -197,6 +197,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
               accessibilityLabel={`${lesson.title}, lesson ${index + 1} of ${plan.lessonIds.length}, ${status}`}
               accessibilityRole="button"
               key={lesson.id}
+              testID={`lesson-${lesson.id}`}
               onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lesson.id } })}
               style={[styles.lessonCard, isCurrent && styles.lessonCardCurrent, largeTextLayout && styles.lessonCardLarge]}
             >
@@ -204,7 +205,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
                 <Text style={[styles.lessonNumberText, isComplete && styles.lessonNumberTextComplete]}>{String(index + 1).padStart(2, '0')}</Text>
               </View>
               <View style={styles.lessonCopy}>
-                <Text style={styles.lessonStatus}>{status} · 10 turns</Text>
+                <Text style={styles.lessonStatus}>{status} · {lesson.beats.length} turns</Text>
                 <Text style={styles.lessonTitle}>{lesson.title}</Text>
                 <Text style={styles.lessonSubtitle}>{lesson.subtitle}</Text>
               </View>

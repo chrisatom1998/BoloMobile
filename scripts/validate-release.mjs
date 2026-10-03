@@ -202,12 +202,19 @@ for (const [page, url] of Object.entries(publicPages)) {
 }
 
 const resolvedApiUrl = resolvedConfig.extra?.boloApiUrl;
+const resolvedLiveApiUrl = resolvedConfig.extra?.boloLiveApiUrl;
 if (typeof resolvedApiUrl !== 'string' || new URL(resolvedApiUrl).protocol !== 'https:') {
   throw new Error('The production Bolo API URL must be an HTTPS URL exposed through the Expo configuration.');
+}
+if (typeof resolvedLiveApiUrl !== 'string' || new URL(resolvedLiveApiUrl).protocol !== 'https:') {
+  throw new Error('The production Bolo Live API URL must be an HTTPS URL exposed through the Expo configuration.');
 }
 const apiSource = readFileSync(resolve(root, 'src/services/bolo-api.ts'), 'utf8');
 if (!apiSource.includes('Constants.expoConfig?.extra?.boloApiUrl')) {
   throw new Error('src/services/bolo-api.ts must read its API base from extra.boloApiUrl.');
+}
+if (!apiSource.includes('Constants.expoConfig?.extra?.boloLiveApiUrl')) {
+  throw new Error('src/services/bolo-api.ts must read its Live API base from extra.boloLiveApiUrl.');
 }
 
 if (phase === 'final') {

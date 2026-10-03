@@ -6,8 +6,12 @@ const INDEPENDENT_VOWELS: Record<string, string> = {
   उ: 'u',
   ऊ: 'oo',
   ऋ: 'ri',
+  ऍ: 'ae',
+  ऎ: 'e',
   ए: 'e',
   ऐ: 'ai',
+  ऑ: 'o',
+  ऒ: 'o',
   ओ: 'o',
   औ: 'au',
 };
@@ -19,8 +23,12 @@ const VOWEL_SIGNS: Record<string, string> = {
   'ु': 'u',
   'ू': 'oo',
   'ृ': 'ri',
+  'ॅ': 'ae',
+  'ॆ': 'e',
   'े': 'e',
   'ै': 'ai',
+  'ॉ': 'o',
+  'ॊ': 'o',
   'ो': 'o',
   'ौ': 'au',
 };
@@ -33,6 +41,8 @@ const CONSONANTS: Record<string, string> = {
   प: 'p', फ: 'ph', ब: 'b', भ: 'bh', म: 'm',
   य: 'y', र: 'r', ल: 'l', व: 'v', श: 'sh', ष: 'sh', स: 's', ह: 'h', ळ: 'l',
   'क़': 'q', 'ख़': 'kh', 'ग़': 'gh', 'ज़': 'z', 'ड़': 'd', 'ढ़': 'dh', 'फ़': 'f', 'य़': 'y',
+  क़: 'q', ख़: 'kh', ग़: 'gh', ज़: 'z', ड़: 'd', ढ़: 'dh', फ़: 'f', य़: 'y',
+  ऩ: 'n', ऱ: 'r', ऴ: 'l',
 };
 
 const MARKS: Record<string, string> = {
@@ -52,6 +62,15 @@ const NUKTA = '़';
 const DEVANAGARI_LETTER_OR_MARK = /[\u0900-\u0963\u0971-\u097F]/u;
 const BOLO_WORD_SPELLINGS: Record<string, string> = {
   आशा: 'Asha',
+  पानी: 'paani',
+  कृपया: 'kripya',
+  आपका: 'aapka',
+  आएगा: 'aayega',
+  स्टॉप: 'stop',
+  फ़ॉर्म: 'form',
+  ऑफ़िस: 'office',
+  ऑफिस: 'office',
+  ऑर्डर: 'order',
 };
 
 function isWordBoundary(character: string | undefined) {

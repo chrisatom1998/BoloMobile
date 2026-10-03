@@ -112,7 +112,7 @@ jobs:
           BOLO_REVIEW_LAST_NAME: ${{ secrets.BOLO_REVIEW_LAST_NAME }}
           BOLO_REVIEW_EMAIL: ${{ secrets.BOLO_REVIEW_EMAIL }}
           BOLO_REVIEW_PHONE: ${{ secrets.BOLO_REVIEW_PHONE }}
-        run: npm run release:validate
+        run: npm run release:validate:ios:binary
       - name: Start signed EAS production build
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

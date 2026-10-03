@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useSpeakText } from '@/hooks/use-speak-text';
+import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
@@ -88,7 +89,7 @@ export default function ReviewScreen() {
         {revealed ? (
           <View style={styles.answer}>
             {showHindi ? <Text style={styles.hindi}>{phrase.hi}</Text> : null}
-            {showLatin ? <Text style={styles.latin}>{phrase.latin}</Text> : null}
+            {showLatin ? <Text style={styles.latin}>{learnerPhraseLatin(phrase.hi, phrase.latin)}</Text> : null}
             <View style={styles.audioRow}>
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase()} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>

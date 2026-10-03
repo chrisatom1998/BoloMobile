@@ -5,6 +5,7 @@ import {
   AI_VOICE_TEXT_LIMIT,
   buildMobileChatPayload,
   checkPronunciation,
+  createAshaLiveSession,
   createLiveCall,
   deleteMobileData,
   getBoloApiUrl,
@@ -378,7 +379,7 @@ describe('connected coaching contract', () => {
   it('exchanges the real offer and bounded history through the backend, without client credentials', async () => {
     const originalFetch = globalThis.fetch;
     const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
-    const fetchMock = jest.fn(async () => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId: 'live-session-123' }) }));
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId: 'live-session-123' }) }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     try {
       const history = Array.from({ length: 15 }, () => ({ role: 'you' as const, text: 'a'.repeat(900) }));
@@ -388,6 +389,31 @@ describe('connected coaching contract', () => {
         method: 'POST',
         body: JSON.stringify({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'hi', history: history.slice(-10).map((row) => ({ ...row, text: row.text.slice(0, 600) })) }),
       }));
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('uses the strict GPT-Live Asha contract without legacy language or history fields', async () => {
+    const originalFetch = globalThis.fetch;
+    const offerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
+    const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId: 'live-session-123' }) }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await expect(createAshaLiveSession({
+        clientId: 'client-12345678',
+        context: { learnerLevel: 'beginner', lessonId: 'greetings', recentContext: ['you: Namaste'] },
+        mode: 'lesson',
+        sdp: offerSdp,
+      })).resolves.toEqual({ session: { id: 'live-session-123' }, transport: { type: 'webrtc', sdp: answerSdp } });
+      const [, init] = expectDefined(fetchMock.mock.calls[0]);
+      expect(JSON.parse(String(init?.body))).toEqual({
+        clientId: 'client-12345678',
+        offerSdp,
+        mode: 'lesson',
+        context: { learnerLevel: 'beginner', lessonId: 'greetings', recentContext: ['you: Namaste'] },
+      });
+      expect(String(init?.body)).not.toContain('responseLanguage');
+      expect(String(init?.body)).not.toContain('history');
     } finally { globalThis.fetch = originalFetch; }
   });
 

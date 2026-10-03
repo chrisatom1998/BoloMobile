@@ -92,3 +92,10 @@ describe('RecallRevealPractice', () => {
     expect(onResolve).not.toHaveBeenCalled();
   });
 });
+
+it.each(['latin', 'devanagari', 'both'] as const)('reveals only the selected %s script', async (preference) => {
+  const view = await render(<RecallRevealPractice scriptPreference={preference} targetHi="मैं ठीक हूँ।" targetLatin="Main theek hoon." targetEn="I am well." onResolve={jest.fn()} />);
+  await fireEvent.press(view.getByTestId('scene-recall-reveal-show'));
+  expect(Boolean(view.queryByText('मैं ठीक हूँ।'))).toBe(preference !== 'latin');
+  expect(Boolean(view.queryByText('Main theek hoon.'))).toBe(preference !== 'devanagari');
+});

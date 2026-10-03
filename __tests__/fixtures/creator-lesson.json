@@ -1,0 +1,177 @@
+{
+  "id": "plan-creator-test-fixture-01",
+  "title": "Creator test lesson",
+  "subtitle": "Order, customize, and pay at cafés and restaurants",
+  "category": "Food",
+  "level": "Beginner",
+  "emoji": "🍽️",
+  "color": "#c86d32",
+  "place": "A local café",
+  "words": [
+    "मेन्यू",
+    "पानी",
+    "बिल"
+  ],
+  "beats": [
+    {
+      "npc": "बगल वाली मेज़ की प्लेट में आपको कच्चे प्याज़ का ढेर लगा दिखता है।",
+      "translation": "You spot raw onion piled high on the dish at the next table.",
+      "mode": "choice",
+      "prompt": "Choose the Hindi for “I need it without onions.”",
+      "tip": "Practice the whole phrase: Mujhe bina pyaaz chahiye.",
+      "choices": [
+        {
+          "hi": "मुझे बिना प्याज़ चाहिए।",
+          "latin": "Mujhe bina pyaaz chahiye.",
+          "en": "I need it without onions.",
+          "correct": true,
+          "reply": "बहुत अच्छा।"
+        },
+        {
+          "hi": "मैं शाकाहारी हूँ।",
+          "latin": "Main shaakahari hoon.",
+          "en": "I am vegetarian.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “I am vegetarian.” Try the phrase for “I need it without onions.”"
+        },
+        {
+          "hi": "मुझे एक मेन्यू दीजिए।",
+          "latin": "Mujhe ek menu dijiye.",
+          "en": "Please give me a menu.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “Please give me a menu.” Try the phrase for “I need it without onions.”"
+        }
+      ]
+    },
+    {
+      "npc": "आप तीनों ने साथ खाना खाया और बिल मेज़ के ठीक बीचोंबीच आ जाता है।",
+      "translation": "Three of you ate together and the bill lands in the middle.",
+      "mode": "choice",
+      "prompt": "Choose the Hindi for “Please split the bill.”",
+      "tip": "Practice the whole phrase: Bill baant dijiye.",
+      "choices": [
+        {
+          "hi": "मुझे पैक कर दीजिए।",
+          "latin": "Mujhe pack kar dijiye.",
+          "en": "Please pack this for me.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “Please pack this for me.” Try the phrase for “Please split the bill.”"
+        },
+        {
+          "hi": "क्या मैं कार्ड से भुगतान कर सकता हूँ?",
+          "latin": "Kya main card se bhugtaan kar sakta hoon?",
+          "en": "Can I pay by card?",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “Can I pay by card?” Try the phrase for “Please split the bill.”"
+        },
+        {
+          "hi": "बिल बाँट दीजिए।",
+          "latin": "Bill baant dijiye.",
+          "en": "Please split the bill.",
+          "correct": true,
+          "reply": "बहुत अच्छा।"
+        }
+      ]
+    },
+    {
+      "npc": "बोर्ड पर सब कुछ अच्छा लग रहा है और आपसे कुछ चुना ही नहीं जा रहा।",
+      "translation": "Everything on the board looks good and you cannot choose.",
+      "mode": "wordOrder",
+      "prompt": "Put the words in order to say “What is good today?”",
+      "tip": "Practice the whole phrase: Aaj kya achchha hai?",
+      "choices": [
+        {
+          "hi": "आज क्या अच्छा है?",
+          "latin": "Aaj kya achchha hai?",
+          "en": "What is good today?",
+          "correct": true,
+          "reply": "बहुत अच्छा।"
+        },
+        {
+          "hi": "मैं शाकाहारी हूँ।",
+          "latin": "Main shaakahari hoon.",
+          "en": "I am vegetarian.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “I am vegetarian.” Try the phrase for “What is good today?”"
+        },
+        {
+          "hi": "मुझे पैक कर दीजिए।",
+          "latin": "Mujhe pack kar dijiye.",
+          "en": "Please pack this for me.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “Please pack this for me.” Try the phrase for “What is good today?”"
+        }
+      ]
+    },
+    {
+      "npc": "आधी थाली अभी बची है और आपका पेट पहले ही भर चुका है।",
+      "translation": "Half the thali is left and you are already full.",
+      "mode": "recallReveal",
+      "prompt": "Say “Please pack this for me.” in Hindi before revealing the answer.",
+      "tip": "Practice the whole phrase: Mujhe pack kar dijiye.",
+      "choices": [
+        {
+          "hi": "मुझे पैक कर दीजिए।",
+          "latin": "Mujhe pack kar dijiye.",
+          "en": "Please pack this for me.",
+          "correct": true,
+          "reply": "बहुत अच्छा।"
+        },
+        {
+          "hi": "बिल बाँट दीजिए।",
+          "latin": "Bill baant dijiye.",
+          "en": "Please split the bill.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “Please split the bill.” Try the phrase for “Please pack this for me.”"
+        },
+        {
+          "hi": "मैं शाकाहारी हूँ।",
+          "latin": "Main shaakahari hoon.",
+          "en": "I am vegetarian.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “I am vegetarian.” Try the phrase for “Please pack this for me.”"
+        }
+      ]
+    },
+    {
+      "npc": "जब से स्टार्टर आए हैं, आपका गिलास खाली ही पड़ा है।",
+      "translation": "Your glass has been empty since the starters arrived.",
+      "mode": "choice",
+      "prompt": "Choose the Hindi for “Water, please.”",
+      "tip": "Practice the whole phrase: Paani dijiye, kripya.",
+      "choices": [
+        {
+          "hi": "क्या मैं कार्ड से भुगतान कर सकता हूँ?",
+          "latin": "Kya main card se bhugtaan kar sakta hoon?",
+          "en": "Can I pay by card?",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “Can I pay by card?” Try the phrase for “Water, please.”"
+        },
+        {
+          "hi": "मैं शाकाहारी हूँ।",
+          "latin": "Main shaakahari hoon.",
+          "en": "I am vegetarian.",
+          "correct": false,
+          "reply": "अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।",
+          "feedback": "This means “I am vegetarian.” Try the phrase for “Water, please.”"
+        },
+        {
+          "hi": "पानी दीजिए, कृपया।",
+          "latin": "Paani dijiye, kripya.",
+          "en": "Water, please.",
+          "correct": true,
+          "reply": "बहुत अच्छा।"
+        }
+      ]
+    }
+  ]
+}

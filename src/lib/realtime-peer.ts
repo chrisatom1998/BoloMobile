@@ -180,12 +180,25 @@ export async function createRealtimePeerSession({
     );
     return {
       close,
+      async closeGracefully() {
+        if (closed) return;
+        if (dataChannel.readyState === 'open') dataChannel.send(JSON.stringify({ type: 'session.close' }));
+        await new Promise<void>((resolve) => setTimeout(resolve, 400));
+        close();
+      },
       send(event) {
         if (closed || dataChannel.readyState !== 'open') throw new Error('The live voice session is not connected.');
         dataChannel.send(JSON.stringify(event));
       },
       setMicrophoneEnabled(enabled) {
         if (!closed) microphone.enabled = enabled;
+      },
+      setPlaybackEnabled(enabled) {
+        if (closed) return;
+        const receivers = (peer as RTCPeerConnection & { getReceivers?: () => { track?: { enabled: boolean; kind?: string } }[] }).getReceivers?.() ?? [];
+        receivers.forEach((receiver) => {
+          if (receiver.track?.kind === 'audio') receiver.track.enabled = enabled;
+        });
       },
     };
   } catch (cause) {

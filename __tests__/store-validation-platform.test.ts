@@ -67,7 +67,10 @@ describe('store validation platform scope', () => {
     return spawnSync(process.execPath, [join(sandboxRoot, 'scripts/validate-store-assets.mjs'), ...args], {
       cwd: sandboxRoot,
       encoding: 'utf8',
-      env: { PATH: process.env.PATH ?? '/usr/bin:/bin' },
+      env: {
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        BOLO_LIVE_API_URL: 'https://live.example.test',
+      },
     });
   }
 

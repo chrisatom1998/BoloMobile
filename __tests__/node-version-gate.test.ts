@@ -109,13 +109,20 @@ describe('production release command wiring', () => {
     );
   });
 
-  it('keeps production iOS build and submit behind the binary preflight', () => {
+  it('keeps production iOS build behind binary validation and submits only an explicit inspected build', () => {
     expect(packageJson.scripts['build:ios:production']).toBe(
       'npm run release:preflight:ios:binary && node ./scripts/run-eas-from-app-root.mjs build --platform ios --profile production',
     );
     expect(packageJson.scripts['submit:ios:production']).toBe(
-      'npm run release:preflight:ios:binary && node ./scripts/run-eas-from-app-root.mjs submit --platform ios --latest --profile production',
+      'npm run release:preflight:ios:binary && node ./scripts/submit-inspected-ios.mjs',
     );
+    const submitSource = require('fs').readFileSync(
+      require('path').resolve(process.cwd(), 'scripts/submit-inspected-ios.mjs'),
+      'utf8',
+    ) as string;
+    expect(submitSource).toContain('EAS_BUILD_ID');
+    expect(submitSource).toContain("'--id', buildId");
+    expect(submitSource).not.toContain("'--latest'");
   });
 
   it('leaves preview builds outside production release gates', () => {

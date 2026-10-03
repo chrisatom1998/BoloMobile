@@ -8,8 +8,8 @@ function read(path: string) {
 
 const lifecycleFacts = [
   /requests? microphone (?:access|permission)/iu,
-  /opens? (?:a )?(?:peer |WebRTC )?media stream/iu,
-  /microphone stays on continuously until you mute it/iu,
+  /opens? (?:a )?(?:full-duplex )?(?:peer |WebRTC )?media stream/iu,
+  /(?:microphone stays on continuously until you mute it|microphone track stays enabled during the active chat)/iu,
   /(?:stream(?: and its tracks)? (?:is|are) released|stream release)[\s\S]{0,160}End[\s\S]{0,100}leav/iu,
   /(?:stream(?: and its tracks)? (?:is|are) released|stream release)[\s\S]{0,240}(?:foreground|background)/iu,
   /does not create a recording file/iu,

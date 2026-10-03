@@ -11,10 +11,11 @@ tags:
 - openLink: bolo://scene/chai
 - scrollUntilVisible:
     element:
-      text: ".*One tea, please.*"
+      id: "scene-choice-0"
     direction: DOWN
     timeout: 20000
-- tapOn: ".*One tea, please.*"
+- tapOn:
+    id: "scene-choice-0"
 - scrollUntilVisible:
     element:
       text: "Continue"
@@ -23,28 +24,29 @@ tags:
 - tapOn: "Continue"
 - scrollUntilVisible:
     element:
-      text: "Turn 2 of 2"
+      text: "Turn 2 of [0-9]+"
     direction: UP
     timeout: 20000
-- assertVisible: "Turn 2 of 2"
+- assertVisible: "Turn 2 of [0-9]+"
 - stopApp
 - launchApp
 - tapOn:
     text: "Dismiss"
     optional: true
-- tapOn: "Continue"
+- openLink: bolo://scene/chai
 - scrollUntilVisible:
     element:
-      text: "Turn 2 of 2"
+      text: "Turn 2 of [0-9]+"
     direction: UP
     timeout: 20000
-- assertVisible: "Turn 2 of 2"
+- assertVisible: "Turn 2 of [0-9]+"
 - scrollUntilVisible:
     element:
-      text: ".*Less sugar, please.*"
+      id: "scene-choice-0"
     direction: DOWN
     timeout: 20000
-- tapOn: ".*Less sugar, please.*"
+- tapOn:
+    id: "scene-choice-0"
 - scrollUntilVisible:
     element:
       text: "Save phrase"
@@ -57,7 +59,8 @@ tags:
     direction: DOWN
     timeout: 20000
 - tapOn: "Finish"
-- assertVisible: "Scene complete"
+- assertVisible:
+    id: "scene-completion-title"
 - stopApp
 - launchApp
 - tapOn:

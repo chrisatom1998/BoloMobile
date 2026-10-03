@@ -71,21 +71,27 @@ jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
       disabled,
+      executeAshaTool,
       onError,
       onInputTranscriptComplete,
+      onSavePhraseRequest,
       onStatusChange,
       onTranscriptChange,
       onTurnActionReady,
       onTranscriptSnapshot,
+      onTurnComplete: completeTurn,
       responseLanguage,
     }: {
       disabled?: boolean;
+      executeAshaTool?: (request: { arguments: Record<string, unknown>; callId: string; name: string; sessionId: string; signal: AbortSignal }) => Promise<unknown>;
       onError: (message: string) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
+      onSavePhraseRequest?: (text: string) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
       onTurnActionReady?: (action: (() => void) | null) => void;
       onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string; startMs: number; endMs: number; fragments: never[] }[]) => void;
+      onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
       responseLanguage: 'en' | 'hi';
     }) => {
       const onTurnComplete = (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => onTranscriptSnapshot?.([
@@ -202,6 +208,31 @@ jest.mock('@/components/realtime-voice-button', () => {
           onPress: () => onStatusChange?.('disconnected'),
         },
         mockReact.createElement(MockText, null, 'Mock disconnected'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        { accessibilityLabel: 'Mock Asha completed turn', onPress: () => completeTurn?.({ transcript: '  Mera naam Chris hai.  ', reply: 'आपसे मिलकर खुशी हुई।', language: 'hi' }) },
+        mockReact.createElement(MockText, null, 'Mock Asha completed turn'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        { accessibilityLabel: 'Mock Asha save request', onPress: () => onSavePhraseRequest?.('कृपया धीरे बोलिए।') },
+        mockReact.createElement(MockText, null, 'Mock Asha save request'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        { accessibilityLabel: 'Mock Asha tools', onPress: () => {
+          if (!executeAshaTool) return;
+          const signal = new AbortController().signal;
+          void executeAshaTool({ arguments: {}, callId: 'lesson', name: 'read_active_lesson', sessionId: 'live_test', signal });
+          void executeAshaTool({ arguments: { sessionId: 'live_test' }, callId: 'recap', name: 'create_session_recap', sessionId: 'live_test', signal });
+          void executeAshaTool({ arguments: {}, callId: 'progress', name: 'get_learner_progress', sessionId: 'live_test', signal });
+          void executeAshaTool({ arguments: { text: 'नमस्ते' }, callId: 'meaning', name: 'lookup_contextual_meaning', sessionId: 'live_test', signal });
+          void executeAshaTool({ arguments: { feedbackType: 'pronunciation', learnerText: 'नमस्ते' }, callId: 'pronunciation', name: 'prepare_learning_feedback', sessionId: 'live_test', signal });
+          void executeAshaTool({ arguments: { feedbackType: 'grammar', learnerText: 'मैं ठीक' }, callId: 'grammar', name: 'prepare_learning_feedback', sessionId: 'live_test', signal });
+          void executeAshaTool({ arguments: { interactionCompleted: true, lessonId: 'lesson-1', outcome: 'completed' }, callId: 'update', name: 'update_completed_progress', sessionId: 'live_test', signal });
+        } },
+        mockReact.createElement(MockText, null, 'Mock Asha tools'),
       ),
       );
     },
@@ -875,6 +906,31 @@ describe('live coaching state', () => {
     expect(view.queryByLabelText(/live translation/iu)).toBeNull();
     expect(view.getByLabelText('Open chat history')).toBeTruthy();
 
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('connects compact Asha callbacks to turns, phrase confirmation, and scoped lesson tools', async () => {
+    boloApi.sendMobileChat.mockResolvedValue({ transcript: '', reply: 'A short explanation.', language: 'en' });
+    const view = await render(<LiveScreen />);
+    await flushMicrotasks();
+
+    await fireEvent.press(view.getByLabelText('Mock learner transcript'));
+    await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    await fireEvent.press(view.getByLabelText('Mock Asha completed turn'));
+    await fireEvent.press(view.getByLabelText('Mock Asha tools'));
+    await flushMicrotasks();
+
+    expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
+      expect.objectContaining({ role: 'you', text: 'Mera naam Chris hai.' }),
+      expect.objectContaining({ role: 'asha', text: 'आपसे मिलकर खुशी हुई।', language: 'hi' }),
+    ]);
+    expect(boloApi.sendMobileChat).toHaveBeenCalledTimes(2);
+    expect(appState.__markLiveTurnMock).toHaveBeenCalled();
+
+    await fireEvent.press(view.getByLabelText('Mock Asha save request'));
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('कृपया धीरे बोलिए।');
+    await fireEvent.press(view.getByRole('button', { name: 'Close phrase picker' }));
     await view.unmount();
     await flushMicrotasks();
   });

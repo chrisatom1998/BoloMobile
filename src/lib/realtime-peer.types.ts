@@ -1,7 +1,9 @@
 export type RealtimePeerSession = {
   close: () => void;
+  closeGracefully?: () => Promise<void>;
   send: (event: Record<string, unknown>) => void;
   setMicrophoneEnabled: (enabled: boolean) => void;
+  setPlaybackEnabled?: (enabled: boolean) => void;
 };
 
 export type RealtimePeerOptions = {

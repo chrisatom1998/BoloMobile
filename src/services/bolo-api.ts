@@ -2,7 +2,8 @@ import Constants from 'expo-constants';
 
 import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
-import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens } from '@/lib/contextual-word-definition';
+import type { AshaLiveSessionRequest, AshaLiveSessionResponse } from '@/lib/asha-live-session';
+import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { observe } from '@/lib/observability';
 
@@ -55,6 +56,7 @@ type MobileChatResponse = {
 type VoiceCoachResponse = {
   transcript: string;
   feedback: string;
+  understood?: boolean;
 };
 
 export type LiveCallInput = {
@@ -79,6 +81,8 @@ type SavedPhrasePreparationInput = {
   clientId: string;
   /** Original transcript text, when the learner selected Romanized display text. */
   sourceText?: string;
+  /** Keep an already-visible learner transliteration exactly as entered. */
+  preserveRomanizedText?: boolean;
   text: string;
 };
 
@@ -110,8 +114,18 @@ function isMobileChatResponse(value: unknown): value is MobileChatResponse {
 
 function isVoiceCoachResponse(value: unknown): value is VoiceCoachResponse {
   return isRecord(value)
-    && isBoundedText(value.transcript, MAX_TRANSCRIPT_CHARACTERS)
+    && isBoundedTextAllowingEmpty(value.transcript, MAX_TRANSCRIPT_CHARACTERS)
+    && (value.understood === undefined || typeof value.understood === 'boolean')
+    && (value.transcript.trim().length > 0 || value.understood === false)
     && isBoundedText(value.feedback, MAX_GENERATED_TEXT_CHARACTERS);
+}
+
+function isAshaLiveCallResponse(value: unknown): value is { answerSdp: string; sessionId: string } {
+  return isRecord(value)
+    && isBoundedText(value.answerSdp, 128_000)
+    && value.answerSdp.startsWith('v=0')
+    && /(?:^|\r?\n)m=audio /u.test(value.answerSdp)
+    && isBoundedText(value.sessionId, 256);
 }
 
 function isLiveCallResponse(value: unknown): value is LiveCallResponse {
@@ -217,9 +231,14 @@ export async function getContextualWordDefinition(input: {
   if (!phrase || !hindiWordTokens(phrase).includes(word)) {
     throw new BoloApiError('Choose a Hindi word from this phrase.');
   }
+  if (phrase.length > MAX_WORD_DEFINITION_SOURCE_CHARACTERS) throw new BoloApiError('Choose a shorter Hindi excerpt for word meanings.');
+  const sourceMessages: ChatMessage[] = [];
+  for (let start = 0; start < phrase.length; start += 600) {
+    sourceMessages.push({ id: `word-source-${start}`, role: 'you', text: phrase.slice(start, start + 600) });
+  }
   const result = await sendMobileChat({
     clientId: input.clientId,
-    messages: [],
+    messages: sourceMessages,
     text: buildContextualWordDefinitionPrompt({ phrase, word }),
   }, signal);
   const explanation = result.reply.trim();
@@ -265,6 +284,16 @@ async function englishMeaningForHindiPhrase(clientId: string, hindi: string, sig
 export async function prepareSavedPhraseFromText(input: SavedPhrasePreparationInput, signal?: AbortSignal): Promise<SavedPhrase> {
   const selectedText = input.text.trim().slice(0, 500);
   if (!selectedText) throw new BoloApiError('Select some transcript text first.');
+
+  if (input.preserveRomanizedText && !/[\u0900-\u097f]/u.test(selectedText)) {
+    const generated = await post('/api/prepare-saved-phrase', {
+      clientId: input.clientId,
+      text: selectedText,
+    }, (value): value is SavedPhrase => parsedSavedPhrase(value) !== null, signal);
+    const phrase = parsedSavedPhrase(generated);
+    if (!phrase) throw new BoloApiError('Bolo could not prepare that phrase. Please try again.');
+    return { ...phrase, latin: selectedText };
+  }
 
   // Chat is deliberately displayed in Romanized form, but the original
   // Devanagari transcript is retained for speech. Use that source directly
@@ -317,6 +346,20 @@ export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal)
   }, isLiveCallResponse, signal, getBoloLiveApiUrl());
 }
 
+/** Negotiates GPT-Live through Bolo's trusted server; no permanent key reaches iOS. */
+export async function createAshaLiveSession(input: AshaLiveSessionRequest, signal?: AbortSignal): Promise<AshaLiveSessionResponse> {
+  const result = await post('/api/live-call', {
+    clientId: input.clientId,
+    offerSdp: input.sdp,
+    mode: input.mode,
+    context: input.context,
+  }, isAshaLiveCallResponse, signal, getBoloLiveApiUrl());
+  return {
+    session: { id: result.sessionId },
+    transport: { type: 'webrtc', sdp: result.answerSdp },
+  };
+}
+
 export function requestAiVoiceAudio(text: string, signal?: AbortSignal, language?: AshaResponseLanguage) {
   const boundedText = text.trim().slice(0, AI_VOICE_TEXT_LIMIT);
   if (!boundedText) return Promise.reject(new BoloApiError('There is no text to read aloud.'));
@@ -326,14 +369,15 @@ export function requestAiVoiceAudio(text: string, signal?: AbortSignal, language
   }, isAiVoiceAudio, signal);
 }
 
-export function checkPronunciation(input: {
+export async function checkPronunciation(input: {
   audioBase64: string;
   clientId: string;
   mimeType: string;
   target: SavedPhrase;
   lessonTitle: string;
 }, signal?: AbortSignal) {
-  return post('/api/voice-coach', { ...input, includeAudio: false }, isVoiceCoachResponse, signal);
+  const result = await post('/api/voice-coach', { ...input, includeAudio: false }, isVoiceCoachResponse, signal);
+  return { ...result, outcome: result.transcript.trim() ? 'speech' as const : 'no-speech' as const };
 }
 
 export function reportGeneratedMessage(input: { clientId: string; message: string; reason: ReportReason }, signal?: AbortSignal) {

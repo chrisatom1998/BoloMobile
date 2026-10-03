@@ -1,3 +1,6 @@
+// Keep built-in journey fixtures independent of locally imported lessons.
+jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
+
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 
@@ -57,7 +60,7 @@ describe('lesson plan navigation', () => {
     mockPlanId = undefined;
     const view = await render(<LessonPlansScreen />);
 
-    expect(view.getByLabelText('Ten ordered lesson plans')).toBeTruthy();
+    expect(view.getByLabelText('10 ordered lesson plans')).toBeTruthy();
     expect(view.getByText('Plan 01 · Up next')).toBeTruthy();
     expect(view.getByText('Start plan →')).toBeTruthy();
     expect(view.getByTestId('lesson-plan-essentials').props.accessibilityState).toMatchObject({ selected: true });
