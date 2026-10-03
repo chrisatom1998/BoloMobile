@@ -72,12 +72,14 @@ describe('Expo app configuration', () => {
       publicSupportUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=support',
       publicTermsUrl: 'https://74e39779183cf78fed.v2.appdeploy.ai/?page=terms',
       boloApiUrl: 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed',
+      boloLiveApiUrl: undefined,
     });
   });
 
   it('rebuilds every public page URL from an overridden public site', () => {
     process.env.BOLO_PUBLIC_SITE_URL = 'https://pages.example.test/';
     process.env.BOLO_API_URL = 'https://api.example.test/app/bolo/';
+    process.env.BOLO_LIVE_API_URL = 'https://live.example.test/';
 
     const { extra } = appConfig({ config: fixture() });
 
@@ -86,6 +88,7 @@ describe('Expo app configuration', () => {
       publicSupportUrl: 'https://pages.example.test/?page=support',
       publicTermsUrl: 'https://pages.example.test/?page=terms',
       boloApiUrl: 'https://api.example.test/app/bolo',
+      boloLiveApiUrl: 'https://live.example.test',
     });
   });
 
@@ -96,6 +99,10 @@ describe('Expo app configuration', () => {
     delete process.env.BOLO_PUBLIC_SITE_URL;
     process.env.BOLO_API_URL = 'http://api.example.test';
     expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_API_URL must use https/u);
+
+    delete process.env.BOLO_API_URL;
+    process.env.BOLO_LIVE_API_URL = 'http://live.example.test';
+    expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_LIVE_API_URL must use https/u);
   });
 
   it('refuses a public site URL that is not an absolute URL', () => {

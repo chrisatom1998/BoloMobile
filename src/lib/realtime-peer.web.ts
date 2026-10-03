@@ -174,12 +174,26 @@ export async function createRealtimePeerSession({
     );
     return {
       close,
+      async closeGracefully() {
+        if (closed) return;
+        if (dataChannel.readyState === 'open') dataChannel.send(JSON.stringify({ type: 'session.close' }));
+        await new Promise<void>((resolve) => setTimeout(resolve, 400));
+        close();
+      },
       send(event) {
         if (closed || dataChannel.readyState !== 'open') throw new Error('The live voice session is not connected.');
         dataChannel.send(JSON.stringify(event));
       },
       setMicrophoneEnabled(enabled) {
         if (!closed) microphone.enabled = enabled;
+      },
+      setPlaybackEnabled(enabled) {
+        if (closed) return;
+        peer.getReceivers().forEach((receiver) => {
+          if (receiver.track?.kind === 'audio') receiver.track.enabled = enabled;
+        });
+        if (enabled) void audio.play().catch(() => undefined);
+        else audio.pause();
       },
     };
   } catch (cause) {

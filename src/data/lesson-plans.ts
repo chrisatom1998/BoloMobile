@@ -1,3 +1,4 @@
+import { creatorLessons } from './creator-lessons';
 import type { BeatMode, Choice, Scene, SceneCategory } from './scenes';
 import { buildLessonFeedback } from './lesson-feedback';
 import { trimTerminalPunctuation } from '../lib/text';
@@ -322,3 +323,14 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
     ],
   })),
 })));
+
+// Bolo Lesson Creator: local imported lessons.
+plannedLessons.push(...creatorLessons);
+if (creatorLessons.length) {
+  lessonPlans.push({
+    id: 'creator', category: 'Everyday', title: 'My created lessons',
+    subtitle: 'Practice made in Bolo Lesson Creator', level: 'Mixed', emoji: '✨', color: '#285b47',
+    place: 'Your lesson studio', words: ['हिंदी', 'बात', 'मदद'],
+    order: lessonPlans.length + 1, lessonIds: creatorLessons.map((lesson) => lesson.id),
+  });
+}

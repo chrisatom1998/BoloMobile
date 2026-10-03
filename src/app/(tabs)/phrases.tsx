@@ -13,6 +13,7 @@ import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
+import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
@@ -26,6 +27,8 @@ const replaySpeeds = [
   { label: '0.10×', rate: 0.1 },
   { label: '0.25×', rate: 0.25 },
   { label: '0.50×', rate: 0.5 },
+  { label: '0.75×', rate: 0.75 },
+  { label: 'Normal', rate: 1 },
 ] as const;
 
 const phraseCategories = new Map<string, SceneCategory>();
@@ -52,7 +55,7 @@ export default function PhrasesScreen() {
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
-  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, sceneProgress: savedSceneProgress } = useAppState();
+  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, updateLearnerProfile, sceneProgress: savedSceneProgress } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const [audioPhrase, setAudioPhrase] = useState('');
   const [query, setQuery] = useState('');
@@ -99,8 +102,9 @@ export default function PhrasesScreen() {
 
   useFocusEffect(useCallback(() => () => { void stopSpeaking(); }, []));
 
-  function playPhrase(text: string, playbackRate = 1) {
+  function playPhrase(text: string, playbackRate = profile.phrasePlaybackRate ?? 1) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
+    if (playbackRate !== (profile.phrasePlaybackRate ?? 1)) updateLearnerProfile({ phrasePlaybackRate: playbackRate });
     clearAudioError();
     setAudioPhrase(text);
     void speak(text, undefined, playbackRate);
@@ -210,7 +214,7 @@ export default function PhrasesScreen() {
             </View>
             <View style={styles.copy}>
               {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text style={styles.hindi}>{item.hi}</Text> : null}
-              <Text style={[styles.latin, category === 'Food' ? styles.latinBrand : styles.latinForest]}>{item.latin}</Text>
+              <Text style={[styles.latin, category === 'Food' ? styles.latinBrand : styles.latinForest]}>{learnerPhraseLatin(item.hi, item.latin)}</Text>
               <Text style={styles.english}>{item.en}</Text>
               <View style={styles.masteryRow}>
                 <MasteryMeter mastery={mastery} />
@@ -219,7 +223,7 @@ export default function PhrasesScreen() {
             </View>
             <View style={styles.actions}>
               {replaySpeeds.map(({ label, rate }) => (
-                <PressableFeedback key={rate} accessibilityLabel={`Replay ${item.latin} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
+                <PressableFeedback key={rate} accessibilityLabel={`Replay ${learnerPhraseLatin(item.hi, item.latin)} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen, selected: rate === (profile.phrasePlaybackRate ?? 1) }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedButtonSelected, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={styles.speedText}>{label}</Text></PressableFeedback>
               ))}
             </View>
             {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
@@ -289,8 +293,9 @@ const useStyles = makeStyles((c) => ({
   masteryMeter: { flexDirection: 'row', gap: 4 },
   mastery: { color: c.mutedSoft, fontSize: 11, lineHeight: 16, fontWeight: '800', textTransform: 'uppercase' },
   masteryDue: { color: c.brandText },
-  actions: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'nowrap', justifyContent: 'space-between', gap: spacing.xs, paddingTop: spacing.xs },
-  speedButton: { flex: 1, minWidth: 0, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  actions: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.xs, paddingTop: spacing.xs },
+  speedButton: { flexGrow: 1, minWidth: 56, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
+  speedButtonSelected: { borderColor: c.forest, borderWidth: 1, backgroundColor: c.forestSoft },
   speedButtonLarge: { minHeight: 44, paddingVertical: spacing.sm },
   speedText: { color: c.forestText, flexShrink: 1, fontSize: 11, fontWeight: '900' },
   disabled: { opacity: 0.4 },

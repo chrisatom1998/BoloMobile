@@ -39,7 +39,7 @@ jobs:
         - .maestro/flows/02-scene-resume-and-phrases.yaml
         - .maestro/flows/03-consent-and-live-lifecycle.yaml
         - .maestro/flows/04-data-deletion.yaml
-        - .maestro/flows/05-realtime-voice-turns.yaml
+        - .maestro/flows/06-simulator-voice-unsupported.yaml
       retries: 1
       retry_failed_only: true
       record_screen: true

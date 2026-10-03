@@ -37,6 +37,9 @@ function runValidator(
       BOLO_API_URL: undefined,
       BOLO_PUBLIC_SITE_URL: undefined,
       ...productionEnvironment,
+      BOLO_LIVE_API_URL: args.includes('--validate-staging-endpoints')
+        ? 'https://staging-live.example.test'
+        : productionEnvironment.BOLO_LIVE_API_URL,
       ...overrides,
     },
   });
@@ -228,6 +231,7 @@ describe('production configuration validator', () => {
       "import { validateStagingEndpointIsolation } from './scripts/validate-production-config.mjs';",
       `validateStagingEndpointIsolation(${JSON.stringify({
         configuredApiUrl: 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed',
+        configuredLiveApiUrl: 'https://staging-live.example.test/',
         configuredSiteUrl: 'https://staging-site.example.test/',
         productionApiUrl: 'https://API-V2.APPDEPLOY.AI:443/app/74e39779183cf78fed/',
         productionSiteUrl: 'https://74E39779183CF78FED.V2.APPDEPLOY.AI:443/',

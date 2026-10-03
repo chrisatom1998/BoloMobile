@@ -1,6 +1,6 @@
 import { Mic, MicOff, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -12,23 +12,30 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
+import { AshaLivePanel } from '@/components/asha-live-panel';
+import type { AshaMode, AshaSessionContext } from '@/lib/asha-live-session';
+import type { AshaNativeToolExecutor } from '@/lib/asha-native-tools';
 import { useRealtimeConversation, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 type Props = {
+  ashaContext?: AshaSessionContext;
+  ashaInitialMode?: AshaMode;
   clientId: string;
   history?: Pick<ChatMessage, 'role' | 'text'>[];
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
   enabled?: boolean;
+  executeAshaTool?: AshaNativeToolExecutor;
   motionMode?: EffectiveMotion;
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  onSavePhraseRequest?: (text: string) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
   onDisconnectReady?: (disconnect: (() => void) | null) => void;
   /** Shares this exact control's turn action with a companion UI surface. */
@@ -130,7 +137,14 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton(props: Props) {
+  if (Platform.OS === 'ios' && props.ashaContext) {
+    return <AshaLivePanel clientId={props.clientId} compact={props.compact} context={props.ashaContext} disabled={props.disabled} enabled={props.enabled} executeTool={props.executeAshaTool} initialMode={props.ashaInitialMode} onError={props.onError} onSavePhraseRequest={props.onSavePhraseRequest} onStatusChange={props.onStatusChange} onTranscriptChange={props.onTranscriptChange} onTurnActionReady={props.onTurnActionReady} onTurnComplete={props.onTurnComplete} responseLanguage={props.responseLanguage ?? 'en'} size={props.size} />;
+  }
+  return <LegacyRealtimeVoiceButton {...props} />;
+}
+
+function LegacyRealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, enabled, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting';

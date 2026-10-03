@@ -78,7 +78,7 @@
     "build:ios:production": "npm run release:preflight:ios:binary && node ./scripts/run-eas-from-app-root.mjs build --platform ios --profile production",
     "submit:android:internal": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs submit --platform android --latest --profile internal",
     "submit:android:production": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs submit --platform android --latest --profile production",
-    "submit:ios:production": "npm run release:preflight:ios:binary && node ./scripts/run-eas-from-app-root.mjs submit --platform ios --latest --profile production",
+    "submit:ios:production": "npm run release:preflight:ios:binary && node ./scripts/submit-inspected-ios.mjs",
     "metadata:push": "npm run release:validate && node ./scripts/run-eas-from-app-root.mjs metadata:push --profile production",
     "metadata:ios:push": "npm run release:preflight:ios && node ./scripts/run-eas-from-app-root.mjs metadata:push --profile production",
     "release:provenance": "node ./scripts/assert-release-provenance.mjs",

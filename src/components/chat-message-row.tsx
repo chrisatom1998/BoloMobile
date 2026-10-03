@@ -4,7 +4,7 @@ import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type Style
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
-import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
 import type { ChatMessage } from '@/state/app-state-types';
 import { useTheme } from '@/theme';
@@ -106,8 +106,10 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   styles: ReturnType<typeof createLiveStyles>;
 }) {
   const { colors } = useTheme();
-  const displayText = useMemo(() => romanizeDevanagari(message.text), [message.text]);
-  const sourcePhrase = useMemo(() => hindiSourcePhrase(message.text), [message.text]);
+  const normalizeKnown = message.role === 'asha' && message.language === 'hi';
+  const displayText = useMemo(() => displayHindiTranscript(message.text, normalizeKnown), [message.text, normalizeKnown]);
+  const selectionSource = useMemo(() => canonicalTranscriptSource(message.text, normalizeKnown), [message.text, normalizeKnown]);
+  const sourcePhrase = useMemo(() => hindiSourcePhrase(selectionSource) || (message.language === 'hi' ? message.text : ''), [message.language, message.text, selectionSource]);
   const excerpt = useMemo(() => messageActionExcerpt(displayText), [displayText]);
   const isYou = message.role === 'you';
 
@@ -121,7 +123,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const report = useCallback(() => onReport(message), [message, onReport]);
 
   return (
-    <View style={[styles.messageRow, isYou && styles.messageRowYou]}>
+    <View style={[styles.messageRow, isYou && styles.messageRowYou]} testID={!isWelcome && !isPending ? (isYou ? 'live-transcript-user' : 'live-transcript-assistant') : undefined}>
       <View style={[styles.message, isYou ? styles.userMessage : styles.ashaMessage]}>
         <View style={styles.messageIdentity}>
           <View style={[styles.messageAvatar, isYou && styles.messageAvatarYou]}>
@@ -134,7 +136,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
           onSelectionCollapsed={selectionCollapsed}
           onSelectedText={selectedText}
-          sourceText={message.text}
+          sourceText={selectionSource}
           style={[styles.messageText, isYou && styles.userText]}
           text={displayText}
         />

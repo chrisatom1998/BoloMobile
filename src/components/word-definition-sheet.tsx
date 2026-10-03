@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { hindiSourcePhrase, hindiWordTokens } from '@/lib/contextual-word-definition';
+import { useHindiWordSource } from '@/hooks/use-hindi-word-source';
+import { hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { alignedHindiWordLabels, displayHindiTranscript } from '@/lib/learner-phrase-display';
+import { EXACT_LEARNER_TEXT_INPUT_PROPS } from '@/lib/learner-text-input';
 import { getContextualWordDefinition } from '@/services/bolo-api';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { makeStyles, radius, spacing } from '@/theme';
@@ -33,7 +36,14 @@ export function WordDefinitionSheet({
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const sourcePhrase = useMemo(() => hindiSourcePhrase(phrase), [phrase]);
+  const [excerpt, setExcerpt] = useState({ original: '', draft: '', submitted: '' });
+  const currentExcerpt = excerpt.original === phrase ? excerpt : { original: phrase, draft: phrase, submitted: '' };
+  const resolutionPhrase = currentExcerpt.submitted || phrase;
+  const { source: sourcePhrase, error: sourceError, needsExcerpt, loading: sourceLoading, retry: retrySource } = useHindiWordSource(clientId, resolutionPhrase, visible);
+  const originalSource = hindiSourcePhrase(phrase);
+  const originalLimit = originalSource ? MAX_WORD_DEFINITION_SOURCE_CHARACTERS : 500;
+  const excerptLimit = hindiSourcePhrase(currentExcerpt.draft) ? MAX_WORD_DEFINITION_SOURCE_CHARACTERS : 500;
+  const showExcerptEditor = !sourcePhrase && (originalSource || phrase.trim()).length > originalLimit;
   const words = useMemo(() => hindiWordTokens(sourcePhrase), [sourcePhrase]);
   const requestRef = useRef<AbortController | null>(null);
   const requestWordRef = useRef<string | null>(null);
@@ -98,10 +108,11 @@ export function WordDefinitionSheet({
   }, [clientId, sourcePhrase]);
 
   const selectedDefinition = selectedWord ? definitions[selectedWord] : undefined;
-  const romanization = sourcePhrase ? romanizeDevanagari(sourcePhrase) : '';
+  const romanization = sourcePhrase ? (hindiSourcePhrase(resolutionPhrase) ? displayHindiTranscript(sourcePhrase) : displayHindiTranscript(resolutionPhrase)) : '';
+  const wordLabels = useMemo(() => alignedHindiWordLabels(sourcePhrase, romanization), [romanization, sourcePhrase]);
   const displaySource = scriptPreference === 'latin' ? romanization : sourcePhrase;
   const showRomanization = scriptPreference === 'both' && romanization;
-  const displayWord = useCallback((word: string) => scriptPreference === 'latin' ? romanizeDevanagari(word) : word, [scriptPreference]);
+  const displayWord = useCallback((word: string) => scriptPreference === 'latin' ? wordLabels.get(word) || romanizeDevanagari(word) : word, [scriptPreference, wordLabels]);
 
   useEffect(() => {
     if (!visible || !initialWord || !words.includes(initialWord)) return;
@@ -125,7 +136,17 @@ export function WordDefinitionSheet({
         <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingBottom: insets.bottom + spacing.xxl }]}>
           <View style={styles.sourceCard}>
             <Text style={styles.sourceLabel}>Source phrase</Text>
-            <Text selectable style={styles.sourcePhrase}>{displaySource || 'No Hindi words were found in this message.'}</Text>
+            <Text selectable style={styles.sourcePhrase}>{displaySource || (sourceLoading ? 'Preparing the Hindi words…' : sourceError ? 'Hindi words are not ready yet.' : 'No Hindi words were found in this message.')}</Text>
+            {sourceError ? <>
+              <Text accessibilityRole="alert" style={styles.error}>{sourceError}</Text>
+              {!needsExcerpt ? <Pressable accessibilityLabel="Retry preparing Hindi words" accessibilityRole="button" onPress={retrySource} style={styles.retryButton}><Text style={styles.retryText}>Try again</Text></Pressable> : null}
+            </> : null}
+            {showExcerptEditor ? <View style={styles.excerptEditor}>
+              <Text style={styles.sourceLabel}>Keep the words you want to explore</Text>
+              <TextInput {...EXACT_LEARNER_TEXT_INPUT_PROPS} accessibilityLabel="Hindi excerpt for word meanings" multiline onChangeText={(draft) => setExcerpt({ ...currentExcerpt, draft })} style={styles.excerptInput} value={currentExcerpt.draft} />
+              <Text style={styles.guidance}>{currentExcerpt.draft.length}/{excerptLimit} characters</Text>
+              <Pressable accessibilityLabel="Prepare words from excerpt" accessibilityRole="button" accessibilityState={{ disabled: sourceLoading || !currentExcerpt.draft.trim() || currentExcerpt.draft.length > excerptLimit }} disabled={sourceLoading || !currentExcerpt.draft.trim() || currentExcerpt.draft.length > excerptLimit} onPress={() => setExcerpt({ ...currentExcerpt, submitted: currentExcerpt.draft })} style={styles.retryButton}><Text style={styles.retryText}>Prepare words</Text></Pressable>
+            </View> : null}
             {showRomanization ? <Text selectable style={styles.romanization}>{romanization}</Text> : null}
           </View>
 
@@ -183,6 +204,8 @@ const useStyles = makeStyles((c) => ({
   closeText: { color: c.white, fontSize: 14, fontWeight: '900' },
   content: { gap: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xxl },
   sourceCard: { gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, padding: spacing.lg },
+  excerptEditor: { gap: spacing.sm },
+  excerptInput: { minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.line, borderRadius: radius.md, color: c.ink, padding: spacing.sm, fontSize: 16 },
   sourceLabel: { color: c.forestText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   sourcePhrase: { color: c.ink, fontSize: 24, lineHeight: 34, fontWeight: '800' },
   romanization: { color: c.muted, fontSize: 16, lineHeight: 23, fontWeight: '700' },
