@@ -284,7 +284,7 @@ export default function LiveScreen() {
     const now = Date.now();
     void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     const additions: ChatMessage[] = [];
-    if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
+    if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript });
     additions.push({ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language });
     appendChatMessages(additions);
     if (!practiced.current) {
@@ -295,7 +295,7 @@ export default function LiveScreen() {
 
   const recordRealtimeInputTranscript = useCallback((result: RealtimeInputTranscript) => {
     if (!mountedRef.current || !result.transcript.trim()) return;
-    appendChatMessages([{ id: `you-voice-${result.itemId}`, role: 'you', text: result.transcript.trim() }]);
+    appendChatMessages([{ id: `you-voice-${result.itemId}`, role: 'you', text: result.transcript }]);
     lastRecordedVoiceTranscriptRef.current = result.transcript.trim();
   }, [appendChatMessages]);
 
@@ -374,8 +374,8 @@ export default function LiveScreen() {
   }, [busy, chatHistory.length, clearSavedChat, realtimeLocked]);
 
   const sendText = useCallback(async (raw: string): Promise<boolean> => {
-    const text = raw.trim().slice(0, 500);
-    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return false;
+    const text = raw.slice(0, 500);
+    if (!aiConsent || !text.trim() || busy || realtimeLocked || requestRef.current) return false;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     scrollAfterContentChangeRef.current = true;
     setPendingUserMessage(userMessage);
@@ -448,9 +448,9 @@ export default function LiveScreen() {
     setError('');
     setLiveCaption(turn.reply.trim());
     liveAshaTranscriptRef.current = turn.reply.trim();
-    liveUserTranscriptRef.current = turn.transcript.trim();
+    liveUserTranscriptRef.current = turn.transcript;
     setLiveAshaTranscript(turn.reply.trim());
-    setLiveUserTranscript(turn.transcript.trim());
+    setLiveUserTranscript(turn.transcript);
     const transcript = turn.transcript.trim();
     if (transcript && lastRecordedVoiceTranscriptRef.current !== transcript) {
       recordTurn(turn);

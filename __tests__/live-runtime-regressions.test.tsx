@@ -1056,13 +1056,15 @@ describe('live coaching state', () => {
 
   it('preserves unknown Hindi spelling and proper names from native chat into the phrase picker', async () => {
     const latin = 'Kripayaa paanee dijiye.';
+    const learnerText = '  My friend Paanee is visiting -- X-12!  ';
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: latin, language: 'hi' });
     boloApi.prepareSavedPhraseFromText.mockResolvedValueOnce({ hi: 'कृपया पानी दीजिए।', latin, en: 'Please give me water.' });
     const view = await render(<LiveScreen />);
-    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'My friend Paanee is visiting.');
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), learnerText);
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
-    expect(view.getByLabelText('Selectable chat text: My friend Paanee is visiting.').props.value).toBe('My friend Paanee is visiting.');
+    expect(boloApi.sendMobileChat).toHaveBeenCalledWith(expect.objectContaining({ text: learnerText }), expect.any(AbortSignal));
+    expect(view.getByLabelText(`Selectable chat text: ${learnerText}`).props.value).toBe(learnerText);
     expect(view.getByLabelText(`Selectable chat text: ${latin}`).props.value).toBe(latin);
     await fireEvent.press(view.getByLabelText(`Save transcript phrase: ${latin}`));
     expect(view.getByLabelText('Selected transcript text').props.value).toBe(latin);
