@@ -1,7 +1,6 @@
 import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-peer.types';
 
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
-const PEER_CONFIGURATION: RTCConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 const DISCONNECTED_WATCHDOG_MS = 10_000;
 const NEGOTIATION_TIMEOUT_MS = 15_000;
 const ICE_GATHERING_TIMEOUT_MS = 10_000;
@@ -38,7 +37,9 @@ export async function createRealtimePeerSession({
   }
 
   microphone.enabled = false;
-  const peer = new RTCPeerConnection(PEER_CONFIGURATION);
+  // Match OpenAI's server-mediated WebRTC flow and avoid making session
+  // startup depend on a third-party public STUN host.
+  const peer = new RTCPeerConnection();
   peer.addTrack(microphone, stream);
   const dataChannel = peer.createDataChannel('oai-events');
   const audio = new Audio();

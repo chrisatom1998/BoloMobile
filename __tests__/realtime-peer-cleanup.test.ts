@@ -436,7 +436,7 @@ describe('Realtime peer setup cleanup', () => {
       onMessage: jest.fn(),
       signal: new AbortController().signal,
     });
-    expect(RTCPeerConnection).toHaveBeenCalledWith({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    expect(RTCPeerConnection).toHaveBeenCalledWith();
     peer.iceConnectionState = 'disconnected';
     peerHandlers.get('iceconnectionstatechange')?.();
     jest.advanceTimersByTime(9_999);
@@ -449,6 +449,55 @@ describe('Realtime peer setup cleanup', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('finishes native negotiation after local route gathering without a third-party STUN server', async () => {
+    const microphone = { enabled: true, stop: jest.fn() };
+    const stream = {
+      getAudioTracks: jest.fn(() => [microphone]),
+      getTracks: jest.fn(() => [microphone]),
+    };
+    const dataChannel = {
+      addEventListener: jest.fn(),
+      close: jest.fn(),
+      readyState: 'open',
+      send: jest.fn(),
+    };
+    const peer = {
+      addTrack: jest.fn(),
+      addEventListener: jest.fn(),
+      close: jest.fn(),
+      connectionState: 'connecting',
+      iceConnectionState: 'new',
+      iceGatheringState: 'gathering',
+      localDescription: { sdp: 'native-gathered-offer', type: 'offer' },
+      createDataChannel: jest.fn(() => dataChannel),
+      createOffer: jest.fn(async () => ({ sdp: 'native-initial-offer', type: 'offer' })),
+      setLocalDescription: jest.fn(async () => undefined),
+      setRemoteDescription: jest.fn(async () => undefined),
+    };
+    const negotiate = jest.fn(async () => ({ sdp: 'native-answer' }));
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockImplementation(() => peer);
+
+    const sessionPromise = createNativeSession({
+      negotiate,
+      onClose: jest.fn(),
+      onMessage: jest.fn(),
+      signal: new AbortController().signal,
+    });
+    await flushMicrotasks();
+
+    expect(RTCPeerConnection).toHaveBeenCalledWith();
+    expect(negotiate).not.toHaveBeenCalled();
+    peer.iceGatheringState = 'complete';
+    jest.advanceTimersByTime(50);
+    await flushMicrotasks();
+
+    const session = await sessionPromise;
+    expect(negotiate).toHaveBeenCalledWith('native-gathered-offer', expect.any(AbortSignal));
+    expect(peer.setRemoteDescription).toHaveBeenCalledWith({ type: 'answer', sdp: 'native-answer' });
+    session.close();
+  });
+
   it('closes a web peer that remains ICE-disconnected for ten seconds', async () => {
     const { audio, dataChannel, microphone, peer, peerHandlers } = mountWebPeer();
     const onClose = jest.fn();
@@ -459,7 +508,7 @@ describe('Realtime peer setup cleanup', () => {
       onMessage: jest.fn(),
       signal: new AbortController().signal,
     });
-    expect(globalThis.RTCPeerConnection).toHaveBeenCalledWith({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    expect(globalThis.RTCPeerConnection).toHaveBeenCalledWith();
     peer.iceConnectionState = 'disconnected';
     peerHandlers.get('iceconnectionstatechange')?.();
     jest.advanceTimersByTime(9_999);
