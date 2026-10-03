@@ -1,8 +1,10 @@
 import {
   ASHA_MODES,
   AshaTaskGate,
+  buildAshaGreetingInstruction,
   buildAshaRecentContext,
   buildAshaLiveSessionConfig,
+  buildAshaSpokenLanguageInstructions,
   preserveLearnerText,
 } from '../src/lib/asha-live-session';
 
@@ -70,6 +72,29 @@ describe('Asha GPT-Live session contract', () => {
 
     expect(save?.parameters.properties.confirmed).toEqual({ type: 'boolean', const: true });
     expect(progress?.parameters.properties.interactionCompleted).toEqual({ type: 'boolean', const: true });
+  });
+
+  it('keeps English framing around exact Hindi teaching targets and requests a natural Indian English voice', () => {
+    const policy = buildAshaSpokenLanguageInstructions('en');
+    const config = buildAshaLiveSessionConfig('hindi-english-help', {}, 'en');
+
+    expect(policy).toContain('Speak every explanation, transition, correction, acknowledgement, and question in English');
+    expect(policy).toContain('The way you say good morning is सुप्रभात');
+    expect(policy).toContain('natural Indian English pronunciation and rhythm');
+    expect(config.instructions).toContain('ENGLISH SPOKEN MODE is active');
+    expect(config.delegation.responses.instructions).toContain('English framing');
+    expect(buildAshaGreetingInstruction('en')).toContain('Greet the learner briefly in English');
+  });
+
+  it('keeps Hindi mode entirely in Hindi with native Hindi pronunciation', () => {
+    const policy = buildAshaSpokenLanguageInstructions('hi');
+    const config = buildAshaLiveSessionConfig('hindi-immersion', {}, 'hi');
+
+    expect(policy).toContain('Speak only Hindi');
+    expect(policy).toContain('Do not use English lead-ins');
+    expect(policy).toContain('natural contemporary Standard Hindi pronunciation');
+    expect(config.delegation.responses.instructions).toContain('entirely in Hindi');
+    expect(buildAshaGreetingInstruction('hi')).toContain('ask one natural question in Hindi');
   });
 
   it('preserves unknown Romanized Hindi exactly', () => {

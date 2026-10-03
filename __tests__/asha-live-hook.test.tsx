@@ -38,6 +38,7 @@ function options(overrides: Partial<Parameters<typeof useAshaLiveConversation>[0
     context: { learnerLevel: 'beginner' },
     executeTool: executeToolMock,
     mode: 'beginner' as const,
+    responseLanguage: 'hi' as const,
     onError: jest.fn(),
     ...overrides,
   };
@@ -55,6 +56,7 @@ describe('useAshaLiveConversation', () => {
   it('handles session.started arriving before the peer promise resolves', async () => {
     const peer = makePeer();
     peerMock.mockImplementation(async (peerOptions) => {
+      await peerOptions.exchangeSdp('offer', new AbortController().signal);
       peerOptions.onMessage(JSON.stringify({ type: 'session.started', session: { id: 'live_test' } }));
       return peer;
     });
@@ -64,7 +66,51 @@ describe('useAshaLiveConversation', () => {
 
     expect(result.current.status).toBe('listening');
     expect(peer.setMicrophoneEnabled).toHaveBeenCalledWith(true);
-    expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.instructions.append', event_id: 'bolo_greeting' }));
+    expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({ responseLanguage: 'hi' }), expect.any(AbortSignal));
+    expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'session.instructions.append',
+      event_id: 'bolo_greeting',
+      content: expect.stringContaining('question in Hindi'),
+    }));
+    await unmount();
+  });
+
+  it('applies a spoken-language switch to the next reply and suppresses stale previous-mode output', async () => {
+    const peer = makePeer();
+    let onMessage: (message: string) => void = () => undefined;
+    peerMock.mockImplementation(async (peerOptions) => {
+      onMessage = peerOptions.onMessage;
+      await peerOptions.exchangeSdp('offer', new AbortController().signal);
+      peerOptions.onMessage(JSON.stringify({ type: 'session.started', session: { id: 'live_test' } }));
+      return peer;
+    });
+    const onTranscript = jest.fn();
+    const { result, rerender, unmount } = await renderHook(
+      ({ language }: { language: 'en' | 'hi' }) => useAshaLiveConversation(options({ onTranscript, responseLanguage: language })),
+      { initialProps: { language: 'en' as const } },
+    );
+    await act(async () => { await result.current.connect(); });
+    expect(createSessionMock).toHaveBeenCalledWith(expect.objectContaining({ responseLanguage: 'en' }), expect.any(AbortSignal));
+    expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ event_id: 'bolo_greeting', content: expect.stringContaining('briefly in English') }));
+
+    await act(() => onMessage(JSON.stringify({ type: 'session.output_transcript.delta', event_id: 'old-start', delta: 'Old English answer' })));
+    onTranscript.mockClear();
+    await rerender({ language: 'hi' });
+
+    expect(peer.setPlaybackEnabled).toHaveBeenCalledWith(false);
+    expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'session.instructions.append',
+      content: expect.stringMatching(/Discard any unfinished reply[\s\S]*Speak only Hindi/u),
+    }));
+    await act(() => onMessage(JSON.stringify({ type: 'session.output_transcript.delta', event_id: 'old-tail', delta: ' stale tail' })));
+    expect(onTranscript).not.toHaveBeenCalled();
+
+    await act(() => onMessage(JSON.stringify({ type: 'session.input_transcript.delta', event_id: 'new-request', delta: 'अब हिंदी में।' })));
+    expect(peer.setPlaybackEnabled).toHaveBeenLastCalledWith(true);
+    onTranscript.mockClear();
+    await act(() => onMessage(JSON.stringify({ type: 'session.output_transcript.delta', event_id: 'new-answer', delta: 'ज़रूर।' })));
+    expect(onTranscript).toHaveBeenCalledWith(expect.objectContaining({ speaker: 'asha', text: 'ज़रूर।' }));
+    expect(peer.close).not.toHaveBeenCalled();
     await unmount();
   });
 

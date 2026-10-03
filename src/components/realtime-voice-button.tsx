@@ -139,7 +139,7 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
 
 export function RealtimeVoiceButton(props: Props) {
   if (Platform.OS === 'ios' && props.ashaContext) {
-    return <AshaLivePanel clientId={props.clientId} compact={props.compact} context={props.ashaContext} disabled={props.disabled} enabled={props.enabled} executeTool={props.executeAshaTool} initialMode={props.ashaInitialMode} onError={props.onError} onSavePhraseRequest={props.onSavePhraseRequest} onStatusChange={props.onStatusChange} onTranscriptChange={props.onTranscriptChange} onTurnActionReady={props.onTurnActionReady} onTurnComplete={props.onTurnComplete as ((turn: { transcript: string; reply: string; language: 'hi' }) => void) | undefined} size={props.size} />;
+    return <AshaLivePanel clientId={props.clientId} compact={props.compact} context={props.ashaContext} disabled={props.disabled} enabled={props.enabled} executeTool={props.executeAshaTool} initialMode={props.ashaInitialMode} onError={props.onError} onSavePhraseRequest={props.onSavePhraseRequest} onStatusChange={props.onStatusChange} onTranscriptChange={props.onTranscriptChange} onTurnActionReady={props.onTurnActionReady} onTurnComplete={props.onTurnComplete} responseLanguage={props.responseLanguage ?? 'en'} size={props.size} />;
   }
   return <LegacyRealtimeVoiceButton {...props} />;
 }

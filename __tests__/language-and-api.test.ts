@@ -392,7 +392,7 @@ describe('connected coaching contract', () => {
     } finally { globalThis.fetch = originalFetch; }
   });
 
-  it('uses the strict GPT-Live Asha contract without legacy language or history fields', async () => {
+  it('uses the strict GPT-Live Asha contract with explicit spoken language and no legacy history field', async () => {
     const originalFetch = globalThis.fetch;
     const offerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
     const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
@@ -403,6 +403,7 @@ describe('connected coaching contract', () => {
         clientId: 'client-12345678',
         context: { learnerLevel: 'beginner', lessonId: 'greetings', recentContext: ['you: Namaste'] },
         mode: 'lesson',
+        responseLanguage: 'en',
         sdp: offerSdp,
       })).resolves.toEqual({ session: { id: 'live-session-123' }, transport: { type: 'webrtc', sdp: answerSdp } });
       const [, init] = expectDefined(fetchMock.mock.calls[0]);
@@ -410,9 +411,9 @@ describe('connected coaching contract', () => {
         clientId: 'client-12345678',
         offerSdp,
         mode: 'lesson',
+        responseLanguage: 'en',
         context: { learnerLevel: 'beginner', lessonId: 'greetings', recentContext: ['you: Namaste'] },
       });
-      expect(String(init?.body)).not.toContain('responseLanguage');
       expect(String(init?.body)).not.toContain('history');
     } finally { globalThis.fetch = originalFetch; }
   });

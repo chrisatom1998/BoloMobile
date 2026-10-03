@@ -1037,7 +1037,7 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
-  it('selects English or Hindi for typed and realtime Asha responses and locks the choice during a live session', async () => {
+  it('selects English or Hindi for typed and realtime Asha responses and switches live language without remounting', async () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Dhanyavaad.', language: 'hi' });
     const view = await render(<LiveScreen />);
     const english = view.getByRole('tab', { name: 'Asha voice language: English' });
@@ -1066,10 +1066,11 @@ describe('live coaching state', () => {
     ]);
 
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByRole('tab', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(true);
-    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
+    expect(view.getByRole('tab', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(false);
+    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(false);
     await fireEvent.press(view.getByRole('tab', { name: 'Asha voice language: English' }));
-    expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
+    expect(view.getByTestId('mock-realtime-language').props.children).toBe('en');
+    expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
 
     await view.unmount();
     await flushMicrotasks();

@@ -161,7 +161,7 @@ export default function LiveScreen() {
     ? 'Mutes your microphone. Asha can continue speaking.'
     : 'Opens your microphone for continuous conversation. You can speak while Asha is speaking.';
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
-  const languageControlLocked = busy || realtimeOwnsAudio;
+  const languageControlLocked = busy || realtimeStatus === 'connecting';
   const voiceHeroTitle = {
     disconnected: 'Ready when you are',
     connecting: 'Connecting to Asha',
@@ -291,8 +291,6 @@ export default function LiveScreen() {
   const changeResponseLanguage = useCallback((nextLanguage: AshaResponseLanguage) => {
     if (languageControlLocked || nextLanguage === responseLanguage) return;
     void stopSpeaking();
-    setLiveUserTranscript('');
-    setLiveAshaTranscript('');
     setError('');
     clearAudioError();
     updateLearnerProfile({ responseLanguage: nextLanguage });
@@ -636,7 +634,7 @@ export default function LiveScreen() {
                   disabled={!aiConsent || languageControlLocked}
                   disabledHint={!aiConsent
                     ? 'Enable live practice above to choose Asha’s reply language.'
-                    : 'End the current request or live voice session to change Asha voice language.'}
+                    : 'Wait for the current text request or live connection to finish starting.'}
                   onValueChange={changeResponseLanguage}
                   options={[
                     { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
@@ -660,7 +658,7 @@ export default function LiveScreen() {
                     enabled={screenFocused && aiConsent}
                     executeAshaTool={ashaToolExecutor}
                     history={chatHistory}
-                    key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}-${responseLanguage}`}
+                    key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`}
                     motionMode={motionMode}
                     onError={showRealtimeError}
                     onSavePhraseRequest={requestSaveLivePhrase}

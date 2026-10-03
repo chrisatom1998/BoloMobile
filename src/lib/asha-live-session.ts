@@ -10,6 +10,7 @@ export const ASHA_MODES = [
 ] as const;
 
 export type AshaMode = (typeof ASHA_MODES)[number];
+export type AshaSpokenLanguage = 'en' | 'hi';
 
 export type AshaSessionContext = {
   learnerLevel?: string;
@@ -43,6 +44,7 @@ export type AshaLiveSessionRequest = {
   clientId: string;
   context: AshaSessionContext;
   mode: AshaMode;
+  responseLanguage: AshaSpokenLanguage;
   sdp: string;
 };
 
@@ -52,35 +54,62 @@ export type AshaLiveSessionResponse = {
 };
 
 const MODE_INSTRUCTIONS: Record<AshaMode, string> = {
-  'hindi-immersion': 'Speak primarily in Hindi. Use English only when the learner explicitly asks for it.',
-  'hindi-english-help': 'Speak in Hindi and give brief English explanations when material is difficult or the learner asks.',
-  beginner: 'Use short Hindi sentences, common vocabulary, a slower pace, and generous thinking pauses.',
+  'hindi-immersion': 'Use immersive teaching and minimize translations without overriding the selected spoken-language policy.',
+  'hindi-english-help': 'Offer concise explanations and translations in the selected spoken language without overriding its Hindi-only or English-framing rules.',
+  beginner: 'Use short sentences, common vocabulary, a slower pace, and generous thinking pauses.',
   conversation: 'Speak naturally, prioritize conversational flow, and offer fewer corrections.',
   lesson: 'Follow the active Bolo lesson and its learning objective. Delegate whenever lesson state is needed.',
 };
+
+export function buildAshaSpokenLanguageInstructions(responseLanguage: AshaSpokenLanguage): string {
+  if (responseLanguage === 'en') {
+    return [
+      'ENGLISH SPOKEN MODE is active.',
+      'Speak every explanation, transition, correction, acknowledgement, and question in English.',
+      'Do not begin or continue ordinary conversation in Hindi.',
+      'Use Hindi only for the exact target word, phrase, or sentence being taught, translated, pronounced, quoted, or rehearsed.',
+      'Write a known Hindi target in canonical Devanagari so it is spoken with Hindi phonetics; do not add unrelated Hindi.',
+      'For a request such as “How do I say good morning?”, use English framing such as “The way you say good morning is सुप्रभात।”',
+      'Speak English warmly with natural Indian English pronunciation and rhythm, never as a caricature.',
+    ].join(' ');
+  }
+  return [
+    'HINDI SPOKEN MODE is active.',
+    'Speak only Hindi, including every explanation, transition, correction, acknowledgement, and question.',
+    'Do not use English lead-ins, translations, glosses, or follow-up questions unless the learner explicitly switches to English mode.',
+    'Use canonical Devanagari for known Hindi speech. If an important interpretation is uncertain, preserve the learner’s exact words and ask for clarification in Hindi.',
+    'Use natural contemporary Standard Hindi pronunciation, rhythm, and intonation.',
+  ].join(' ');
+}
+
+export function buildAshaGreetingInstruction(responseLanguage: AshaSpokenLanguage): string {
+  return responseLanguage === 'en'
+    ? 'English spoken mode is active. Greet the learner briefly in English, connect to the active lesson or topic, ask one natural question in English, then pause and listen. Use Hindi only if you are giving the exact target phrase being taught.'
+    : 'Hindi spoken mode is active. Greet the learner briefly in Hindi, connect to the active lesson or topic, ask one natural question in Hindi, then pause and listen. Do not use an English lead-in or explanation.';
+}
 
 export function isAshaMode(value: unknown): value is AshaMode {
   return typeof value === 'string' && ASHA_MODES.includes(value as AshaMode);
 }
 
-export function buildAshaLiveInstructions(mode: AshaMode): string {
+export function buildAshaLiveInstructions(mode: AshaMode, responseLanguage: AshaSpokenLanguage = 'hi'): string {
   return [
     'You are Asha, a warm, patient Hindi conversation partner and tutor in the Bolo iOS app.',
-    'Hindi is your default spoken language. Speak naturally and clearly at the learner\'s pace.',
+    'Speak naturally and clearly at the learner\'s pace.',
     'Keep routine replies short, ask one question at a time, and leave enough silence for the learner to think.',
     'Respond to meaning first. Correct at most one useful mistake, without shaming or excessive praise.',
     'Do not infer language preference from accent, coughs, background speech, filler sounds, or isolated words.',
-    'Briefly explain in English when asked or when the learner is stuck, then return to Hindi unless English mode was chosen.',
-    'Honor spoken requests such as “speak more slowly”, “explain that in English”, or “only speak Hindi”.',
+    'Honor an explicit spoken language change, but never infer one from accent or isolated words.',
     'If speech is unclear, ask only about the unclear word or phrase. Never guess important names, numbers, or intent.',
     'When interrupted, stop speaking immediately, listen, and treat the newest learner request as authoritative.',
     'Delegate any answer that depends on lessons, vocabulary, meanings, progress, feedback, saved phrases, or recaps.',
     'Never claim a save, progress update, or lesson completion until the delegated tool result confirms it.',
+    buildAshaSpokenLanguageInstructions(responseLanguage),
     MODE_INSTRUCTIONS[mode],
   ].join(' ');
 }
 
-export function buildAshaResponsesInstructions(context: AshaSessionContext): string {
+export function buildAshaResponsesInstructions(context: AshaSessionContext, responseLanguage: AshaSpokenLanguage = 'hi'): string {
   const vocabulary = context.relevantVocabulary
     ?.map((word) => [word.devanagari, word.romanization, word.meaning].filter(Boolean).join(' — '))
     .join('; ');
@@ -98,6 +127,9 @@ export function buildAshaResponsesInstructions(context: AshaSessionContext): str
     'Use tools for authoritative app state. Do not invent lesson content, progress, saved state, or confirmations.',
     'Preserve learner-created text byte-for-byte, including unknown Romanized Hindi, English names, and punctuation.',
     'Use canonical Devanagari for Hindi speech only when it is available. If conversion is uncertain, keep the original and request clarification.',
+    responseLanguage === 'en'
+      ? 'Prepare spoken answers with English framing; include Hindi only for the exact target material being taught, quoted, translated, pronounced, or rehearsed.'
+      : 'Prepare spoken answers entirely in Hindi, including explanations and transitions; do not add English lead-ins, meanings, or follow-up questions.',
     'Prepare only one concise correction at a time, after responding to meaning.',
     'A phrase may be saved only after explicit learner confirmation. Progress may be updated only after the relevant interaction is complete.',
     'Return compact results so the live voice conversation can continue naturally while work runs.',
@@ -197,15 +229,15 @@ export const ASHA_TOOL_DEFINITIONS = [
   },
 ] as const;
 
-export function buildAshaLiveSessionConfig(mode: AshaMode, context: AshaSessionContext) {
+export function buildAshaLiveSessionConfig(mode: AshaMode, context: AshaSessionContext, responseLanguage: AshaSpokenLanguage = 'hi') {
   return {
     model: ASHA_LIVE_MODEL,
-    instructions: buildAshaLiveInstructions(mode),
+    instructions: buildAshaLiveInstructions(mode, responseLanguage),
     delegation: {
       type: 'responses' as const,
       responses: {
         model: ASHA_RESPONSES_MODEL,
-        instructions: buildAshaResponsesInstructions(context),
+        instructions: buildAshaResponsesInstructions(context, responseLanguage),
         tools: ASHA_TOOL_DEFINITIONS,
         tool_choice: 'auto' as const,
         parallel_tool_calls: false,

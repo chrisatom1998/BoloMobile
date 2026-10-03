@@ -10,7 +10,7 @@ const routes = createLiveRoutes({ allowMobileRequest, validClientId, openAI, jso
 
 Adapt the returned route handlers to your server framework. Include `clientId + '-live'` in mobile data deletion rate-event identifiers when integrating the rate limiter. `OPENAI_API_KEY` belongs in server secrets, never in the iOS bundle.
 
-- `POST /api/live-call` accepts `{ clientId, offerSdp, responseLanguage?: 'en' | 'hi', history?: { role: 'you' | 'asha', text: string }[] }`. It returns `{ answerSdp, sessionId }`.
+- `POST /api/live-call` accepts `{ clientId, offerSdp, responseLanguage?: 'en' | 'hi', history?: { role: 'you' | 'asha', text: string }[] }`. It returns `{ answerSdp, sessionId }`. English mode speaks English framing and reserves Hindi for exact teaching targets; Hindi mode speaks Hindi only. The supported `marin` voice receives best-effort natural Indian English or contemporary Standard Hindi pronunciation instructions rather than an unsupported accent parameter.
 - `GET /api/live-status` returns `{ configured, available, model: 'gpt-live-1', protocol: 'live' }`. `available` checks model retrieval using the server credential; it does not create a billable voice session or prove end-to-end microphone playback.
 - The server pins GPT-Live, the `marin` voice, Responses delegation to `gpt-5.6-terra`, `store: false`, and a coaching prompt. Delegation has no external tools. `store` belongs to the Live session; the managed Responses subset does not expose a separate storage flag.
 - Mobile history is reduced to the 12 most recent valid messages, 600 characters per message, 6,000 UTF-8 bytes total. Only learner and assistant roles are forwarded. History is never injected into developer instructions.

@@ -22,7 +22,7 @@ const mockVoice = {
   toggleMute: jest.fn(),
 };
 
-let mockHookOptions: { onTranscript: (fragment: { eventId: string; speaker: 'you' | 'asha'; text: string; startMs?: number; endMs?: number }) => void; mode: string } | undefined;
+let mockHookOptions: { onTranscript: (fragment: { eventId: string; speaker: 'you' | 'asha'; text: string; startMs?: number; endMs?: number }) => void; mode: string; responseLanguage: 'en' | 'hi' } | undefined;
 
 jest.mock('@/hooks/use-asha-live-conversation', () => ({
   useAshaLiveConversation: (options: typeof mockHookOptions) => {
@@ -36,7 +36,7 @@ import { AshaLivePanel } from '../src/components/asha-live-panel';
 const context = { learnerLevel: 'beginner', lessonId: 'lesson-greetings', lessonTitle: 'Greetings', learningObjective: 'Introduce yourself' };
 
 function props(overrides: Partial<React.ComponentProps<typeof AshaLivePanel>> = {}) {
-  return { clientId: 'client-12345678', context, onError: jest.fn(), ...overrides };
+  return { clientId: 'client-12345678', context, onError: jest.fn(), responseLanguage: 'hi' as const, ...overrides };
 }
 
 describe('AshaLivePanel compact progressive disclosure', () => {

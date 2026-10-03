@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAshaLiveConversation, type AshaLiveStatus, type AshaTranscriptFragment } from '@/hooks/use-asha-live-conversation';
-import type { AshaMode, AshaSessionContext } from '@/lib/asha-live-session';
+import type { AshaMode, AshaSessionContext, AshaSpokenLanguage } from '@/lib/asha-live-session';
 import { ASHA_MODES } from '@/lib/asha-live-session';
 import type { AshaNativeToolExecutor } from '@/lib/asha-native-tools';
 import { hapticSelect, hapticTap } from '@/lib/haptics';
@@ -24,7 +24,8 @@ type Props = {
   onStatusChange?: (status: LegacyStatus) => void;
   onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
   onTurnActionReady?: (action: (() => void) | null) => void;
-  onTurnComplete?: (turn: { transcript: string; reply: string; language: 'hi' }) => void;
+  onTurnComplete?: (turn: { transcript: string; reply: string; language: AshaSpokenLanguage }) => void;
+  responseLanguage: AshaSpokenLanguage;
   size?: 'regular' | 'minimal';
 };
 
@@ -64,7 +65,7 @@ function groupedRows(fragments: AshaTranscriptFragment[]) {
   }, []);
 }
 
-export function AshaLivePanel({ clientId, compact = false, context, disabled = false, enabled = true, executeTool, initialMode = 'hindi-english-help', onError, onSavePhraseRequest, onStatusChange, onTranscriptChange, onTurnActionReady, onTurnComplete, size = 'regular' }: Props) {
+export function AshaLivePanel({ clientId, compact = false, context, disabled = false, enabled = true, executeTool, initialMode = 'hindi-english-help', onError, onSavePhraseRequest, onStatusChange, onTranscriptChange, onTurnActionReady, onTurnComplete, responseLanguage, size = 'regular' }: Props) {
   const [mode, setMode] = useState<AshaMode>(initialMode);
   const [fragments, setFragments] = useState<AshaTranscriptFragment[]>([]);
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -81,7 +82,7 @@ export function AshaLivePanel({ clientId, compact = false, context, disabled = f
     if (latest) onTranscriptChange?.({ speaker: fragment.speaker, text: latest.text });
   }, [onTranscriptChange]);
 
-  const voice = useAshaLiveConversation({ clientId, context, executeTool, mode, onError, onTranscript: recordFragment });
+  const voice = useAshaLiveConversation({ clientId, context, executeTool, mode, onError, onTranscript: recordFragment, responseLanguage });
   const disconnectVoice = voice.disconnect;
   const voiceStatus = voice.status;
   const status = legacyStatus(voice.status);
@@ -95,7 +96,6 @@ export function AshaLivePanel({ clientId, compact = false, context, disabled = f
   useEffect(() => {
     if (!enabled && voiceStatus !== 'disconnected') void disconnectVoice();
   }, [disconnectVoice, enabled, voiceStatus]);
-
   const start = useCallback(async () => {
     fragmentsRef.current = [];
     setFragments([]);
@@ -138,8 +138,8 @@ export function AshaLivePanel({ clientId, compact = false, context, disabled = f
     } else if (learnerText || ashaText) {
       setRecap(`Practiced: ${learnerText || 'No phrase recorded'}\nOnly backend-confirmed progress was kept.`);
     }
-    if (learnerText && ashaText) onTurnComplete?.({ transcript: learnerText, reply: ashaText, language: 'hi' });
-  }, [onTurnComplete, voice]);
+    if (learnerText && ashaText) onTurnComplete?.({ transcript: learnerText, reply: ashaText, language: responseLanguage });
+  }, [onTurnComplete, responseLanguage, voice]);
 
   const latestAsha = [...rows].reverse().find((row) => row.speaker === 'asha')?.text;
   const compactStatus = voice.backendLoading
@@ -184,9 +184,9 @@ export function AshaLivePanel({ clientId, compact = false, context, disabled = f
         {connected ? <View style={styles.actionRow}>
           <Action icon={<CircleStop color={colors.gold} size={17} />} label="Interrupt" onPress={voice.interrupt} />
           <Action icon={<Save color={colors.muted} size={17} />} label="Save phrase" onPress={() => latestAsha ? onSavePhraseRequest?.(latestAsha) : onError('Wait for an Asha phrase before saving.')} />
-          <Action icon={<RotateCcw color={colors.muted} size={17} />} label="Hear again" onPress={() => voice.sendGuidance('Repeat your latest Hindi reply once, clearly.')} />
+          <Action icon={<RotateCcw color={colors.muted} size={17} />} label="Hear again" onPress={() => voice.sendGuidance(`Repeat your latest reply once, clearly, following ${responseLanguage === 'hi' ? 'Hindi-only mode' : 'English spoken mode with Hindi limited to exact target material'}.`)} />
           <Action icon={<Gauge color={colors.muted} size={17} />} label="Speak slower" onPress={() => voice.sendGuidance('Speak more slowly from now on, using short sentences and generous thinking pauses.')} />
-          <Action icon={<Languages color={colors.muted} size={17} />} label="Explain" onPress={() => voice.sendGuidance('Briefly explain the difficult part in English, then return to Hindi.')} />
+          <Action icon={<Languages color={colors.muted} size={17} />} label="Explain" onPress={() => voice.sendGuidance(responseLanguage === 'hi' ? 'Briefly explain the difficult part in Hindi only, with no English lead-in or gloss.' : 'Briefly explain the difficult part in English. Use Hindi only for the exact target material being taught.')} />
         </View> : <Text style={styles.optionsHint}>Choose a mode before starting. You can also ask Asha naturally while speaking.</Text>}
       </View> : null}
 

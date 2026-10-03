@@ -352,6 +352,7 @@ export async function createAshaLiveSession(input: AshaLiveSessionRequest, signa
     clientId: input.clientId,
     offerSdp: input.sdp,
     mode: input.mode,
+    responseLanguage: input.responseLanguage,
     context: input.context,
   }, isAshaLiveCallResponse, signal, getBoloLiveApiUrl());
   return {
