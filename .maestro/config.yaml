@@ -1,3 +1,8 @@
+# Real iPhone voice acceptance is a separate manual signoff gate.
+# Flow 06 checks only the expected iOS Simulator limitation.
 flows:
-  - "flows/*.yaml"
-
+  - "flows/00-ci-smoke.yaml"
+  - "flows/02-scene-resume-and-phrases.yaml"
+  - "flows/03-consent-and-live-lifecycle.yaml"
+  - "flows/04-data-deletion.yaml"
+  - "flows/06-simulator-voice-unsupported.yaml"

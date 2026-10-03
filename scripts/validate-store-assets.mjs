@@ -78,8 +78,8 @@ if (Buffer.byteLength(listings.apple.keywords, 'utf8') > 100) {
 }
 
 const curriculumClaims = [
-  ['10 guided plans', /\b10 guided plans\b/iu],
-  ['100 short lessons', /\b100 short(?: Hindi)? lessons\b/iu],
+  ['11 guided plans', /\b11 guided plans\b/iu],
+  ['102 short lessons', /\b102 short(?: Hindi)? lessons\b/iu],
   ['30 standalone scenes', /\b30 standalone(?: real-life)? scenes\b/iu],
 ];
 const primaryAppleCurriculumCopy = [
@@ -100,8 +100,8 @@ for (const [label, copy] of [
   ['Apple listing review notes', listings.apple.reviewNotes],
   ['Apple metadata review notes', metadata.apple?.review?.notes],
 ]) {
-  if (typeof copy !== 'string' || !/\b100 short(?: Hindi)? lessons\b/iu.test(copy) || !/\b30 standalone(?: real-life)? scenes\b/iu.test(copy)) {
-    throw new Error(`${label} must distinguish the 100 short lessons from the 30 standalone scenes.`);
+  if (typeof copy !== 'string' || !/\b102 short(?: Hindi)? lessons\b/iu.test(copy) || !/\b30 standalone(?: real-life)? scenes\b/iu.test(copy)) {
+    throw new Error(`${label} must distinguish the 102 short lessons from the 30 standalone scenes.`);
   }
 }
 const appleCopySurface = JSON.stringify({ listing: listings.apple, metadata: metadata.apple });
@@ -141,7 +141,7 @@ for (const screenshot of [...storeAssets.screenshots.recommendedOrder, ...appleS
 if (storeAssets.screenshots.apple.ipadSupportAtAudit !== false) throw new Error('Store assets must reflect the phone-only iOS v1 scope.');
 
 const resolvedExtra = require(resolve(root, 'app.config.js'))({ config: appConfig }).extra || {};
-for (const key of ['publicPrivacyUrl', 'publicSupportUrl', 'publicTermsUrl', 'boloApiUrl']) {
+for (const key of ['publicPrivacyUrl', 'publicSupportUrl', 'publicTermsUrl', 'boloApiUrl', 'boloLiveApiUrl']) {
   const url = new URL(resolvedExtra[key]);
   if (url.protocol !== 'https:' || url.hostname === 'example.com') throw new Error(`The resolved ${key} must be a production HTTPS URL.`);
 }

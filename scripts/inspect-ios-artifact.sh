@@ -103,6 +103,7 @@ expected_app_id = required_text("EXPECTED_APP_IDENTIFIER")
 expected_widget_id = os.environ.get("EXPECTED_WIDGET_IDENTIFIER", f"{expected_app_id}.widgets").strip()
 expected_group_id = os.environ.get("EXPECTED_APP_GROUP", f"group.{expected_app_id}").strip()
 expected_api_url = required_text("EXPECTED_API_URL").rstrip("/")
+expected_live_api_url = required_text("EXPECTED_LIVE_API_URL").rstrip("/")
 expected_site_url = required_text("EXPECTED_PUBLIC_SITE_URL").rstrip("/")
 forbidden_urls = [value.strip().rstrip("/") for value in required_text("FORBIDDEN_RELEASE_URLS").split(",") if value.strip()]
 if not forbidden_urls:
@@ -258,11 +259,11 @@ with tempfile.TemporaryDirectory(prefix="bolo-ipa-") as temp_directory:
         if "NSPrivacyAccessedAPITypes" in value and not isinstance(value["NSPrivacyAccessedAPITypes"], list):
             fail(f"{manifest.relative_to(app)} has invalid NSPrivacyAccessedAPITypes")
 
-    for expected_url in (expected_api_url, expected_site_url):
+    for expected_url in (expected_api_url, expected_live_api_url, expected_site_url):
         if not contains_bytes(app, expected_url.encode("utf-8")):
             fail(f"built application does not contain expected endpoint {expected_url}")
     for forbidden_url in forbidden_urls:
-        if forbidden_url in {expected_api_url, expected_site_url}:
+        if forbidden_url in {expected_api_url, expected_live_api_url, expected_site_url}:
             fail("a forbidden staging URL equals an expected production URL")
         if contains_bytes(app, forbidden_url.encode("utf-8")):
             fail("built application contains a forbidden staging endpoint")

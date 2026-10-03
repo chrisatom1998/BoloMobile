@@ -1,0 +1,35 @@
+appId: com.bolo.hindi
+name: Simulator explains unsupported live voice without opening a session
+tags:
+  - ios
+  - simulator
+  - unsupported-voice
+---
+- launchApp:
+    clearState: true
+    permissions:
+      microphone: allow
+- runFlow: ../subflows/enter-development-build.yaml
+- runFlow: ../subflows/complete-onboarding.yaml
+- tapOn: "Asha"
+- scrollUntilVisible:
+    element:
+      text: "Enable live practice"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Enable live practice"
+- tapOn:
+    id: "realtime-voice-orb"
+- extendedWaitUntil:
+    visible: "Live voice requires a physical iPhone.*"
+    timeout: 30000
+- assertVisible:
+    id: "realtime-voice-orb"
+    text: "Start a voice conversation"
+    enabled: true
+- assertNotVisible:
+    id: "realtime-voice-end"
+- assertNotVisible:
+    id: "live-transcript-user"
+- assertNotVisible:
+    id: "live-transcript-assistant"

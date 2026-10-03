@@ -12,11 +12,11 @@ const combined = (await Promise.all(files.map((file) => readFile(path.join(flowD
 const requiredCoverage = {
   'first launch': 'clearState: true',
   hydration: 'stopApp',
-  'scene completion': 'Scene complete',
-  'scene resume': 'Turn 2 of 2',
+  'scene completion': 'scene-completion-title',
+  'scene resume': 'Turn 2 of [0-9]+',
   consent: 'Enable live practice',
   'microphone denial': 'microphone: deny',
-  'live background cleanup': 'pressKey: Home',
+  'background persistence': 'pressKey: Home',
   'saved phrase persistence': 'चीनी कम, कृपया।',
   'data deletion': 'Delete my Bolo data',
   'offline startup': 'setAirplaneMode: enabled',
@@ -44,4 +44,18 @@ for (const { file, directory, label } of structuralTargets) {
   if (!source.includes('\n---\n')) throw new Error(`${label} is missing a Maestro flow document separator.`);
 }
 
-console.log(`Validated ${files.length} Maestro device flows and ${subflowFiles.length} subflows across all critical native journeys.`);
+const unsupported = await readFile(path.join(flowDirectory, '06-simulator-voice-unsupported.yaml'), 'utf8');
+const nightly = await readFile('.eas/workflows/nightly-maestro.yml', 'utf8');
+if (unsupported.includes('when:')) throw new Error('Simulator limitation assertions must not be conditional.');
+if (!unsupported.includes('visible: "Live voice requires a physical iPhone.*"')) throw new Error('Simulator limitation must have its own required assertion.');
+if (files.includes('05-realtime-voice-turns.yaml') || nightly.includes('05-realtime-voice-turns.yaml') || !nightly.includes('06-simulator-voice-unsupported.yaml')) {
+  throw new Error('iOS Simulator must run the unsupported-device check. Real iPhone voice requires the manual signoff gate.');
+}
+const signoff = await readFile('.github/workflows/record-ios-physical-signoff.yml', 'utf8');
+for (const marker of ['voice_checks_completed:', 'voice_evidence:', 'test "$VOICE_CHECKS_COMPLETED" = "true"', 'test -n "${VOICE_EVIDENCE//[[:space:]]/}"']) {
+  if (!signoff.includes(marker)) throw new Error(`Physical iPhone voice signoff is missing ${marker}.`);
+}
+const iosSource = (await Promise.all(files.filter(file => file !== '01-first-launch-offline.yaml').map(file => readFile(path.join(flowDirectory, file), 'utf8')))).join('\n');
+if (/Tap to connect|plan 1 of 10|Turn [0-9]+ of [0-9]+/u.test(iosSource)) throw new Error('iOS flows contain obsolete copy or a hardcoded lesson count.');
+
+console.log(`Validated ${files.length} Maestro device-flow definitions and ${subflowFiles.length} subflows. Device execution and physical voice acceptance are separate gates.`);

@@ -49,28 +49,35 @@ export function canonicalHttpsEndpointIdentity(name, value) {
 
 export function validateStagingEndpointIsolation({
   configuredApiUrl = process.env.BOLO_API_URL,
+  configuredLiveApiUrl = process.env.BOLO_LIVE_API_URL,
   configuredSiteUrl = process.env.BOLO_PUBLIC_SITE_URL,
   productionApiUrl = PRODUCTION_API_URL,
+  productionLiveApiUrl = process.env.PRODUCTION_LIVE_API_URL,
   productionSiteUrl = PRODUCTION_SITE_URL,
 } = {}) {
-  if (!configuredApiUrl?.trim() || !configuredSiteUrl?.trim()) {
-    throw new Error('EAS preview must define BOLO_API_URL and BOLO_PUBLIC_SITE_URL.');
+  if (!configuredApiUrl?.trim() || !configuredLiveApiUrl?.trim() || !configuredSiteUrl?.trim()) {
+    throw new Error('EAS preview must define BOLO_API_URL, BOLO_LIVE_API_URL, and BOLO_PUBLIC_SITE_URL.');
   }
 
   const stagingApiIdentity = canonicalHttpsEndpointIdentity('BOLO_API_URL', configuredApiUrl);
+  const stagingLiveApiIdentity = canonicalHttpsEndpointIdentity('BOLO_LIVE_API_URL', configuredLiveApiUrl);
   const stagingSiteIdentity = canonicalHttpsEndpointIdentity('BOLO_PUBLIC_SITE_URL', configuredSiteUrl);
   const productionApiIdentity = canonicalHttpsEndpointIdentity('production API URL', productionApiUrl);
   const productionSiteIdentity = canonicalHttpsEndpointIdentity('production public-site URL', productionSiteUrl);
 
   const productionIdentities = new Set([productionApiIdentity, productionSiteIdentity]);
+  if (productionLiveApiUrl?.trim()) {
+    productionIdentities.add(canonicalHttpsEndpointIdentity('production Live API URL', productionLiveApiUrl));
+  }
   if (
     productionIdentities.has(stagingApiIdentity)
+    || productionIdentities.has(stagingLiveApiIdentity)
     || productionIdentities.has(stagingSiteIdentity)
   ) {
     throw new Error('Nightly acceptance refuses to run against a production endpoint.');
   }
 
-  return { stagingApiIdentity, stagingSiteIdentity };
+  return { stagingApiIdentity, stagingLiveApiIdentity, stagingSiteIdentity };
 }
 
 export function validateProductionPublicPages(extra = {}) {
@@ -144,6 +151,7 @@ export function validateProductionConfig(root = defaultRoot) {
   const fallbackMatch = apiSource.match(/\bFALLBACK_API_URL\s*=\s*(['"])(https:[^'"]+)\1/u);
   const runtimeApiUrl = fallbackMatch?.[2];
   const releaseApiUrl = resolvedConfig.extra?.boloApiUrl;
+  const releaseLiveApiUrl = resolvedConfig.extra?.boloLiveApiUrl;
   const releasePublicSiteUrl = resolvedConfig.extra?.publicPrivacyUrl;
 
   if (
@@ -152,6 +160,7 @@ export function validateProductionConfig(root = defaultRoot) {
   ) {
     throw new Error('BOLO_API_URL must resolve to the permanent production API identity.');
   }
+  canonicalHttpsEndpointIdentity('BOLO_LIVE_API_URL', releaseLiveApiUrl);
   if (
     canonicalHttpsEndpointIdentity('BOLO_PUBLIC_SITE_URL', releasePublicSiteUrl)
     !== canonicalHttpsEndpointIdentity('production public-site URL', PRODUCTION_SITE_URL)
@@ -163,8 +172,8 @@ export function validateProductionConfig(root = defaultRoot) {
   if (typeof runtimeApiUrl !== 'string' || runtimeApiUrl !== releaseApiUrl) {
     throw new Error('The runtime API URL must exactly equal the release-validated production API URL.');
   }
-  if (apiSource.includes('EXPO_PUBLIC_BOLO_API_URL')) {
-    throw new Error('Runtime API selection must not accept EXPO_PUBLIC_BOLO_API_URL overrides.');
+  if (apiSource.includes('EXPO_PUBLIC_BOLO_API_URL') || apiSource.includes('EXPO_PUBLIC_BOLO_LIVE_API_URL')) {
+    throw new Error('Runtime API selection must not accept EXPO_PUBLIC endpoint overrides.');
   }
 
   const configuredIdentifier = process.env.BOLO_APP_IDENTIFIER;

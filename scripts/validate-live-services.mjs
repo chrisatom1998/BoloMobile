@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const DEFAULT_PUBLIC_SITE_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai';
 const API_URL = (process.env.BOLO_API_URL || DEFAULT_API_URL).trim().replace(/\/+$/u, '');
+const LIVE_API_URL = (process.env.BOLO_LIVE_API_URL || API_URL).trim().replace(/\/+$/u, '');
 const PUBLIC_URL = `${(process.env.BOLO_PUBLIC_SITE_URL || DEFAULT_PUBLIC_SITE_URL).trim().replace(/\/+$/u, '')}/`;
 const PASSES = 3;
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -102,6 +103,49 @@ async function postJson(label, path, body) {
   return { elapsedMs: Math.round(performance.now() - startedAt), payload: objectValue(payload, label) };
 }
 
+async function getJson(label, path, baseUrl = API_URL) {
+  const startedAt = performance.now();
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'BoloLiveAcceptance/1.0' },
+    signal: requestSignal(label),
+  });
+  const raw = await readBoundedText(response, label, MAX_JSON_BYTES);
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    fail(label, `HTTP ${response.status} did not return JSON`);
+  }
+  assert(response.ok, label, `HTTP ${response.status}`);
+  return { elapsedMs: Math.round(performance.now() - startedAt), payload: objectValue(payload, label) };
+}
+
+async function expectPostStatus(label, path, body, expectedStatus, baseUrl = API_URL) {
+  const startedAt = performance.now();
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'BoloLiveAcceptance/1.0',
+    },
+    body: JSON.stringify(body),
+    signal: requestSignal(label),
+  });
+  const raw = await readBoundedText(response, label, MAX_JSON_BYTES);
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    fail(label, `HTTP ${response.status} did not return JSON`);
+  }
+  assert(response.status === expectedStatus, label, `expected HTTP ${expectedStatus}, received ${response.status}`);
+  const safePayload = objectValue(payload, label);
+  assert(typeof safePayload.error === 'string' && safePayload.error.length <= 300, label, 'missing bounded public error');
+  assert(!/sk-|OPENAI_API_KEY|Bearer\s/iu.test(JSON.stringify(safePayload)), label, 'error leaked credential material');
+  return { elapsedMs: Math.round(performance.now() - startedAt), status: response.status };
+}
+
 function decodeMp3(payload, label) {
   assert(payload.mimeType === 'audio/mpeg', label, 'expected mimeType audio/mpeg');
   assert(typeof payload.audioBase64 === 'string', label, 'expected base64 audio');
@@ -150,6 +194,34 @@ async function runServicePass(pass) {
 
   console.log(`\nService pass ${pass}/${PASSES}`);
   try {
+    await check(`Asha live status #${pass}`, async () => {
+      const result = await getJson(`Asha live status #${pass}`, '/api/live-status', LIVE_API_URL);
+      assert(typeof result.payload.configured === 'boolean', `Asha live status #${pass}`, 'configured was not boolean');
+      assert(result.payload.availability === 'requires-valid-session-acceptance', `Asha live status #${pass}`, 'availability overstated provider access');
+      assert(result.payload.providerAccessVerified === false, `Asha live status #${pass}`, 'status must not claim provider verification');
+      assert(result.payload.model === 'gpt-live-1', `Asha live status #${pass}`, 'model was not gpt-live-1');
+      assert(result.payload.protocol === 'live', `Asha live status #${pass}`, 'protocol was not live');
+      assert(result.payload.configured, `Asha live status #${pass}`, 'Live service is not configured');
+      return { elapsedMs: result.elapsedMs };
+    }, (result) => `${result.elapsedMs} ms; configured contract only; provider access requires a valid session test`);
+
+    await check(`Asha live validation #${pass}`, async () => {
+      await expectPostStatus(`Asha empty offer #${pass}`, '/api/live-call', {}, 400, LIVE_API_URL);
+      await expectPostStatus(`Asha invalid mode #${pass}`, '/api/live-call', {
+        clientId,
+        context: {},
+        mode: 'invalid',
+        offerSdp: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n',
+      }, 400, LIVE_API_URL);
+      await expectPostStatus(`Asha oversized context #${pass}`, '/api/live-call', {
+        clientId,
+        context: { recentContext: ['x'.repeat(25_000)] },
+        mode: 'lesson',
+        offerSdp: 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n',
+      }, 413, LIVE_API_URL);
+      return { checks: 3 };
+    }, (result) => `${result.checks} safe rejection contracts; no provider session opened`);
+
     await check(`mobile-chat English #${pass}`, async () => {
       const result = await postJson(`mobile-chat English #${pass}`, '/api/mobile-chat', {
         text: 'Please correct this sentence in English: I needs water.',
@@ -295,7 +367,8 @@ async function checkPublicPage(page, pass) {
 
 async function main() {
   console.log('Bolo live-service acceptance: 3 bounded passes with ephemeral client data.');
-  console.log('Cost note: this intentionally invokes GPT chat, transcription, TTS, coaching, and Realtime token APIs; no session is opened and no token or audio payload is printed.');
+  console.log('Cost note: this intentionally invokes GPT chat, transcription, TTS, coaching, model readiness, and legacy Realtime token APIs. GPT-Live validation uses rejected offers, so no Live session is opened and no token, SDP, transcript, or audio payload is printed.');
+  console.log('Physical gate: this runner does not prove microphone, speaker, Bluetooth, call interruption, reconnection, or teardown; record those checks against the exact signed iPhone build before TestFlight approval.');
 
   for (let pass = 1; pass <= PASSES; pass += 1) {
     await runServicePass(pass);
