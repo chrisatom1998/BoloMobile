@@ -171,6 +171,16 @@ it('lets a learner trim an oversized Romanized reply directly in the native word
   expect(mockPreparePhrase).toHaveBeenCalledWith({ clientId: 'client-12345678', text: 'Namaste' }, expect.any(AbortSignal));
 });
 
+it('preserves the learner excerpt exactly when preparing unknown Romanized Hindi', async () => {
+  jest.resetAllMocks();
+  mockPreparePhrase.mockResolvedValue({ hi: 'मेरा नाम X-12 है।', latin: 'Mera naaam? X-12 -- bilkul!', en: 'My name is X-12.' });
+  const exact = '  Mera naaam? X-12 -- bilkul!  ';
+  const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase={'Namaste! '.repeat(70)} visible />);
+  await fireEvent.changeText(view.getByLabelText('Hindi excerpt for word meanings'), exact);
+  await fireEvent.press(view.getByRole('button', { name: 'Prepare words from excerpt' }));
+  await waitFor(() => expect(mockPreparePhrase).toHaveBeenCalledWith({ clientId: 'client-12345678', text: exact }, expect.any(AbortSignal)));
+});
+
 
 it('lets a learner recover from oversized canonical Hindi without translating or losing the chosen excerpt', async () => {
   jest.resetAllMocks();

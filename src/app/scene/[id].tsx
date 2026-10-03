@@ -19,6 +19,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { lessonHindiLabel } from '@/lib/lesson-display';
+import { EXACT_LEARNER_TEXT_INPUT_PROPS } from '@/lib/learner-text-input';
 import type { SceneAttempt } from '@/state/app-state-types';
 import { observe } from '@/lib/observability';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -483,7 +484,7 @@ function SceneScreen() {
 
       {currentUsesName ? <View style={styles.hint}>
         <Text style={styles.hintTitle}>Practice with your name</Text>
-        <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
+        <TextInput {...EXACT_LEARNER_TEXT_INPUT_PROPS} accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
         <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
       </View> : null}
       <View style={styles.answerHeader}>

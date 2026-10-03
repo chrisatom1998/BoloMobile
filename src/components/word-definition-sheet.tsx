@@ -6,6 +6,7 @@ import { useHindiWordSource } from '@/hooks/use-hindi-word-source';
 import { hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { alignedHindiWordLabels, displayHindiTranscript } from '@/lib/learner-phrase-display';
+import { EXACT_LEARNER_TEXT_INPUT_PROPS } from '@/lib/learner-text-input';
 import { getContextualWordDefinition } from '@/services/bolo-api';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { makeStyles, radius, spacing } from '@/theme';
@@ -142,9 +143,9 @@ export function WordDefinitionSheet({
             </> : null}
             {showExcerptEditor ? <View style={styles.excerptEditor}>
               <Text style={styles.sourceLabel}>Keep the words you want to explore</Text>
-              <TextInput accessibilityLabel="Hindi excerpt for word meanings" multiline onChangeText={(draft) => setExcerpt({ ...currentExcerpt, draft })} style={styles.excerptInput} value={currentExcerpt.draft} />
-              <Text style={styles.guidance}>{currentExcerpt.draft.trim().length}/{excerptLimit} characters</Text>
-              <Pressable accessibilityLabel="Prepare words from excerpt" accessibilityRole="button" accessibilityState={{ disabled: sourceLoading || !currentExcerpt.draft.trim() || currentExcerpt.draft.trim().length > excerptLimit }} disabled={sourceLoading || !currentExcerpt.draft.trim() || currentExcerpt.draft.trim().length > excerptLimit} onPress={() => setExcerpt({ ...currentExcerpt, submitted: currentExcerpt.draft.trim() })} style={styles.retryButton}><Text style={styles.retryText}>Prepare words</Text></Pressable>
+              <TextInput {...EXACT_LEARNER_TEXT_INPUT_PROPS} accessibilityLabel="Hindi excerpt for word meanings" multiline onChangeText={(draft) => setExcerpt({ ...currentExcerpt, draft })} style={styles.excerptInput} value={currentExcerpt.draft} />
+              <Text style={styles.guidance}>{currentExcerpt.draft.length}/{excerptLimit} characters</Text>
+              <Pressable accessibilityLabel="Prepare words from excerpt" accessibilityRole="button" accessibilityState={{ disabled: sourceLoading || !currentExcerpt.draft.trim() || currentExcerpt.draft.length > excerptLimit }} disabled={sourceLoading || !currentExcerpt.draft.trim() || currentExcerpt.draft.length > excerptLimit} onPress={() => setExcerpt({ ...currentExcerpt, submitted: currentExcerpt.draft })} style={styles.retryButton}><Text style={styles.retryText}>Prepare words</Text></Pressable>
             </View> : null}
             {showRomanization ? <Text selectable style={styles.romanization}>{romanization}</Text> : null}
           </View>

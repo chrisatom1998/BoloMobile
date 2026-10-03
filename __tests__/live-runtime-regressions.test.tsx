@@ -407,6 +407,9 @@ describe('live theme styles', () => {
     expect(styles.captionLabel.letterSpacing).toBeLessThanOrEqual(0.25);
     expect('textTransform' in styles.captionLabel).toBe(false);
     expect(styles.examples.paddingRight).toBe(spacing.xl);
+    expect(styles.example.paddingVertical).toBeGreaterThanOrEqual(spacing.sm);
+    expect(styles.exampleText.lineHeight).toBeGreaterThan(styles.exampleText.fontSize);
+    expect(styles.input.lineHeight).toBeGreaterThan(styles.input.fontSize);
   });
 });
 
@@ -424,8 +427,8 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
     expect(view.getByText('Ready when you are')).toBeTruthy();
-    expect(view.getByText('Tap the orb to begin a Hindi voice turn.')).toBeTruthy();
-    expect(view.getAllByText(/Tap the orb/u)).toHaveLength(1);
+    expect(view.getByText('Use the voice control to begin a Hindi voice turn.')).toBeTruthy();
+    expect(view.queryByText(/Tap the orb/u)).toBeNull();
     const captionBadge = view.getByTestId('live-caption-label-badge');
     expect(within(captionBadge).getByText('Live')).toBeTruthy();
     expect(view.queryByText('LIVE')).toBeNull();
@@ -631,6 +634,67 @@ describe('immersive live conversation design', () => {
       await view.unmount();
       await flushMicrotasks();
     } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
+  it('keeps the full Asha voice surface visible on a compact iPhone at largest Dynamic Type', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largestTextSize = { fontScale: 2, height: 568, scale: 2, width: 320 };
+    await act(async () => {
+      Dimensions.set({ screen: largestTextSize, window: largestTextSize });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      const heroStyle = StyleSheet.flatten(view.getByTestId('voice-conversation-hero').props.style);
+      const topbarStyle = StyleSheet.flatten(view.getByTestId('asha-header-topbar').props.style);
+      const voiceStageStyle = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
+
+      expect(heroStyle.minHeight).toBe(0);
+      expect(heroStyle.overflow).toBe('visible');
+      expect(topbarStyle.flexDirection).toBe('column');
+      expect(topbarStyle.minHeight).toBe(0);
+      expect(voiceStageStyle.minHeight).toBe(0);
+      expect(voiceStageStyle.overflow).toBe('visible');
+      expect(view.getByText('Order tea')).toBeTruthy();
+      expect(view.getByText('Correct my Hindi')).toBeTruthy();
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
+  it('remeasures an in-session Dynamic Type change and keeps voice errors above the composer input', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largestTextSize = { fontScale: 2, height: 568, scale: 2, width: 320 };
+    const view = await render(<LiveScreen />);
+    try {
+      await fireEvent.press(view.getByLabelText('Mock realtime error'));
+      await act(async () => {
+        Dimensions.set({ screen: largestTextSize, window: largestTextSize });
+        await Promise.resolve();
+      });
+
+      const feedbackStyle = StyleSheet.flatten(view.getByTestId('composer-feedback').props.style);
+      const inputStyle = StyleSheet.flatten(view.getByLabelText('Message Asha').props.style);
+      expect(feedbackStyle.flexGrow).toBe(0);
+      expect(feedbackStyle.maxHeight).toBeLessThanOrEqual(160);
+      expect(feedbackStyle.maxHeight).toBeGreaterThanOrEqual(88);
+      expect(inputStyle.minHeight).toBeGreaterThanOrEqual(60);
+      expect(view.getByLabelText('Message Asha')).toBeTruthy();
+    } finally {
+      await view.unmount();
+      await flushMicrotasks();
       await act(async () => {
         Dimensions.set({ screen: originalScreen, window: originalWindow });
         await Promise.resolve();

@@ -189,10 +189,10 @@ export default function LiveScreen() {
     responding: 'Asha is responding',
   }[realtimeStatus];
   const voiceHeroBody = {
-    disconnected: 'Tap the orb to begin a Hindi voice turn.',
+    disconnected: 'Use the voice control to begin a Hindi voice turn.',
     connecting: 'Opening a private live voice session…',
-    ready: 'Tap the orb, then speak your Hindi naturally.',
-    recording: 'Tap the orb again when you finish your turn.',
+    ready: 'Use the voice control, then speak your Hindi naturally.',
+    recording: 'Use the voice control again when you finish your turn.',
     responding: `Your ${responseLanguageName} reply is on the way.`,
   }[realtimeStatus];
   const liveCaptionText = realtimeStatus === 'connecting'
@@ -645,7 +645,7 @@ export default function LiveScreen() {
         ListHeaderComponent={(
           <View>
             <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, largeTextLayout && styles.voiceHeroLarge, !aiConsent && styles.voiceHeroConsent, { paddingTop: insets.top + spacing.sm }]} testID="voice-conversation-hero">
-              <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, largeTextLayout && { minHeight: Math.ceil(260 * fontScale) }, { width: heroContentWidth }]} testID="asha-header-topbar">
+              <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
                 <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
                   <Image
                     accessible={false}
@@ -695,7 +695,16 @@ export default function LiveScreen() {
                   style={[styles.languageSelector, { width: heroContentWidth }]}
                   value={responseLanguage}
                 />
-                <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}>
+                <View
+                  style={[
+                    styles.voiceStage,
+                    compactVoiceLayout && styles.voiceStageCompact,
+                    Platform.OS === 'ios' && styles.voiceStageAsha,
+                    largeTextLayout && styles.voiceStageLargeText,
+                    { width: heroContentWidth },
+                  ]}
+                  testID="realtime-voice-stage"
+                >
                   <View style={styles.liveVoiceBadge}>
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
@@ -790,9 +799,22 @@ export default function LiveScreen() {
       />
 
       {aiConsent ? <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + 52) }]}>
-        {busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Asha is thinking\u2026'}</Text> : null}
-        {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-        {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
+        {busy || error || audioError ? (
+          <ScrollView
+            contentContainerStyle={styles.composerFeedbackContent}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            style={[
+              styles.composerFeedback,
+              largeTextLayout && { maxHeight: Math.max(88, Math.min(160, windowHeight * 0.22)) },
+            ]}
+            testID="composer-feedback"
+          >
+            {busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Asha is thinking\u2026'}</Text> : null}
+            {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+            {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
+          </ScrollView>
+        ) : null}
         <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
           {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
             <PressableFeedback
@@ -853,6 +875,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   liveControls: { alignSelf: 'center', alignItems: 'center', gap: spacing.md },
   voiceStage: { alignSelf: 'center', minHeight: 178, borderRadius: 28, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs, padding: spacing.md, overflow: 'hidden', boxShadow: '0 8px 18px rgba(35, 39, 35, 0.07)' },
   voiceStageCompact: { minHeight: 160, paddingVertical: spacing.sm },
+  voiceStageAsha: { minHeight: 0, justifyContent: 'flex-start', overflow: 'visible' },
+  voiceStageLargeText: { paddingHorizontal: spacing.sm },
   liveVoiceBadge: { minHeight: 27, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm },
   liveVoiceDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
   liveVoiceText: { color: c.forestText, fontSize: 10, lineHeight: 14, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
@@ -907,11 +931,13 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   transcriptTurnButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   transcriptTurnButtonText: { color: c.white, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   composer: { backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
-  examples: { justifyContent: 'center', gap: spacing.sm, paddingRight: spacing.xl },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 11 },
-  exampleText: { color: c.ink, fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  composerFeedback: { flexGrow: 0 },
+  composerFeedbackContent: { gap: spacing.xs, paddingRight: spacing.xs },
+  examples: { justifyContent: 'center', gap: spacing.sm, paddingRight: spacing.xl, paddingVertical: 2 },
+  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 11, paddingVertical: spacing.sm },
+  exampleText: { color: c.ink, fontSize: 12, lineHeight: 18, fontWeight: '800', textAlign: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15 },
+  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15, lineHeight: 22 },
   inputDisabled: { backgroundColor: c.line, color: c.mutedSoft, opacity: 0.65 },
   sendButton: { width: 48, height: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },

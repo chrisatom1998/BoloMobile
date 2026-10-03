@@ -1,4 +1,5 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 jest.mock('lucide-react-native', () => ({
   CircleStop: () => null,
@@ -136,6 +137,32 @@ describe('AshaLivePanel', () => {
     expect(view.queryByText('Mera naaam?')).toBeNull();
     expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'you', text: '' });
     expect(onTranscriptChange).toHaveBeenCalledWith({ speaker: 'asha', text: '' });
+  });
+
+  it('stacks session controls at large Dynamic Type without clipping labels', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largestTextSize = { fontScale: 2, height: 568, scale: 2, width: 320 };
+    await act(async () => {
+      Dimensions.set({ screen: largestTextSize, window: largestTextSize });
+      await Promise.resolve();
+    });
+    try {
+      mockVoice.status = 'listening';
+      const view = await render(<AshaLivePanel {...props()} />);
+      const controls = StyleSheet.flatten(view.getByTestId('asha-session-controls').props.style);
+
+      expect(controls.flexDirection).toBe('column');
+      expect(StyleSheet.flatten(view.getByTestId('asha-mute').props.style).width).toBe('100%');
+      expect(view.getByText('Interrupt').props.numberOfLines).toBeUndefined();
+      expect(view.getByText('End Chat').props.numberOfLines).toBeUndefined();
+      await view.unmount();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
   });
 
   it('gracefully ends, retains confirmed recap data, and completes the turn', async () => {

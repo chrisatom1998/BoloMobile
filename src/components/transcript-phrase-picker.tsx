@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { displayHindiTranscript } from '@/lib/learner-phrase-display';
+import { EXACT_LEARNER_TEXT_INPUT_PROPS } from '@/lib/learner-text-input';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
@@ -23,9 +24,10 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const initialText = highlightedText?.trim() || displayHindiTranscript(message.text.trim(), message.role === 'asha' && message.language === 'hi');
+  const hasHighlightedText = !!highlightedText?.trim();
+  const initialText = hasHighlightedText ? highlightedText! : displayHindiTranscript(message.text, message.role === 'asha' && message.language === 'hi');
   const [selectedText, setSelectedText] = useState(initialText);
-  const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
+  const [sourceText, setSourceText] = useState(initialSourceText?.trim() ? initialSourceText : '');
   const [hindi, setHindi] = useState('');
   const [latin, setLatin] = useState('');
   const [english, setEnglish] = useState('');
@@ -45,8 +47,8 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   }, []);
 
   async function preparePhrase() {
-    const text = selectedText.trim();
-    if (!aiConsent || !text || busy || requestRef.current) return;
+    const text = selectedText;
+    if (!aiConsent || !text.trim() || busy || requestRef.current) return;
     setBusy(true);
     setError('');
     const controller = new AbortController();
@@ -83,11 +85,8 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   }
 
   function save() {
-    const normalizedLatin = latin.trim();
-    const normalizedEnglish = english.trim();
-    const normalizedHindi = hindi.trim();
-    if (!normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
-    onSave({ hi: normalizedHindi, latin: normalizedLatin, en: normalizedEnglish });
+    if (!hindi.trim() || !latin.trim() || !english.trim() || busy) return;
+    onSave({ hi: hindi, latin, en: english });
   }
 
   const canPrepare = aiConsent && selectedText.trim().length > 0 && !busy;
@@ -113,6 +112,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Selected transcript text</Text>
             <TextInput
+              {...EXACT_LEARNER_TEXT_INPUT_PROPS}
               accessibilityLabel="Selected transcript text"
               maxLength={500}
               multiline
@@ -140,15 +140,15 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
 
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Hindi</Text>
-            <TextInput accessibilityLabel="Hindi phrase" maxLength={500} onChangeText={setHindi} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="उदाहरण: आप कैसे हैं?" placeholderTextColor={colors.muted} style={styles.input} value={hindi} />
+            <TextInput {...EXACT_LEARNER_TEXT_INPUT_PROPS} accessibilityLabel="Hindi phrase" maxLength={500} onChangeText={setHindi} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="उदाहरण: आप कैसे हैं?" placeholderTextColor={colors.muted} style={styles.input} value={hindi} />
           </View>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Romanized Hindi</Text>
-            <TextInput accessibilityLabel="Romanized Hindi phrase" maxLength={500} onChangeText={setLatin} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="Example: Aap kaise hain?" placeholderTextColor={colors.muted} style={styles.input} value={latin} />
+            <TextInput {...EXACT_LEARNER_TEXT_INPUT_PROPS} accessibilityLabel="Romanized Hindi phrase" maxLength={500} onChangeText={setLatin} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="Example: Aap kaise hain?" placeholderTextColor={colors.muted} style={styles.input} value={latin} />
           </View>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>English meaning</Text>
-            <TextInput accessibilityLabel="English phrase meaning" maxLength={500} onChangeText={setEnglish} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="Example: How are you?" placeholderTextColor={colors.muted} style={styles.input} value={english} />
+            <TextInput {...EXACT_LEARNER_TEXT_INPUT_PROPS} accessibilityLabel="English phrase meaning" maxLength={500} onChangeText={setEnglish} onFocus={() => scrollRef.current?.scrollToEnd({ animated: true })} placeholder="Example: How are you?" placeholderTextColor={colors.muted} style={styles.input} value={english} />
           </View>
 
         </ScrollView>

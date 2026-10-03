@@ -1,6 +1,6 @@
 import { CircleStop, Gauge, Languages, Mic, MicOff, RotateCcw, Save } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { useAshaLiveConversation, type AshaTranscriptFragment } from '@/hooks/use-asha-live-conversation';
 import type { AshaMode, AshaSessionContext } from '@/lib/asha-live-session';
@@ -67,6 +67,8 @@ export function AshaLivePanel({
   const fragmentsRef = useRef<AshaTranscriptFragment[]>([]);
   const styles = useStyles();
   const { colors } = useTheme();
+  const { fontScale, width } = useWindowDimensions();
+  const reflowSessionControls = fontScale >= 1.2 || width <= 350;
 
   const recordFragment = useCallback((fragment: AshaTranscriptFragment) => {
     const next = [...fragmentsRef.current, fragment];
@@ -185,16 +187,16 @@ export function AshaLivePanel({
           <Text style={styles.primaryButtonText}>Start Conversation</Text>
         </Pressable>
       ) : (
-        <View style={styles.controlRow}>
-          <Pressable accessibilityLabel={voice.muted ? 'Unmute microphone' : 'Mute microphone'} accessibilityRole="button" onPress={voice.toggleMute} style={styles.controlButton} testID="asha-mute">
+        <View style={[styles.controlRow, reflowSessionControls && styles.controlRowReflow]} testID="asha-session-controls">
+          <Pressable accessibilityLabel={voice.muted ? 'Unmute microphone' : 'Mute microphone'} accessibilityRole="button" onPress={voice.toggleMute} style={[styles.controlButton, reflowSessionControls && styles.controlButtonReflow]} testID="asha-mute">
             {voice.muted ? <MicOff color={colors.ink} size={19} /> : <Mic color={colors.ink} size={19} />}
             <Text style={styles.controlText}>{voice.muted ? 'Unmute' : 'Mute'}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={voice.interrupt} style={styles.controlButton} testID="asha-interrupt">
+          <Pressable accessibilityRole="button" onPress={voice.interrupt} style={[styles.controlButton, reflowSessionControls && styles.controlButtonReflow]} testID="asha-interrupt">
             <CircleStop color={colors.gold} size={19} />
             <Text style={styles.controlText}>Interrupt</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => void end()} style={[styles.controlButton, styles.endButton]} testID="asha-end-chat">
+          <Pressable accessibilityRole="button" onPress={() => void end()} style={[styles.controlButton, reflowSessionControls && styles.controlButtonReflow, styles.endButton]} testID="asha-end-chat">
             <CircleStop color={colors.danger} size={19} />
             <Text style={styles.controlText}>End Chat</Text>
           </Pressable>
@@ -257,7 +259,9 @@ const useStyles = makeStyles((c) => ({
   primaryButton: { minHeight: 48, borderRadius: radius.lg, backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   primaryButtonText: { color: c.white, fontWeight: '800' },
   controlRow: { flexDirection: 'row', gap: spacing.sm },
+  controlRowReflow: { alignItems: 'stretch', flexDirection: 'column' },
   controlButton: { flex: 1, minHeight: 48, borderRadius: radius.lg, backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.xs },
+  controlButtonReflow: { flex: 0, width: '100%' },
   endButton: { borderColor: c.dangerLine, backgroundColor: c.dangerSoft },
   controlText: { color: c.ink, fontWeight: '700', fontSize: 12 },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },

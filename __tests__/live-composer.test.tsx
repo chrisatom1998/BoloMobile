@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 import type { createLiveStyles } from '../src/app/(tabs)/live';
 import { LiveComposer } from '../src/components/live-composer';
@@ -19,6 +20,45 @@ function deferred() {
 }
 
 describe('typed message draft acknowledgement', () => {
+  it('disables iOS substitutions and preserves the exact Romanized Hindi draft', async () => {
+    const view = await render(<LiveComposer disabled={false} onSend={jest.fn()} styles={styles} />);
+    const input = view.getByLabelText('Message Asha');
+    expect(input.props).toMatchObject({
+      autoCapitalize: 'none',
+      autoComplete: 'off',
+      autoCorrect: false,
+      spellCheck: false,
+      smartDashesType: 'no',
+      smartInsertDelete: false,
+      smartQuotesType: 'no',
+    });
+    const original = 'Mera naaam? X-12 -- bilkul!';
+    await fireEvent.changeText(input, original);
+    expect(view.getByLabelText('Message Asha').props.value).toBe(original);
+  });
+
+  it('expands the input for a single-line placeholder at largest Dynamic Type', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largestTextSize = { fontScale: 2, height: 932, scale: 3, width: 430 };
+    await act(async () => {
+      Dimensions.set({ screen: largestTextSize, window: largestTextSize });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveComposer disabled={false} onSend={jest.fn()} styles={styles} />);
+      const inputStyle = StyleSheet.flatten(view.getByLabelText('Message Asha').props.style);
+      expect(inputStyle.minHeight).toBeGreaterThanOrEqual(60);
+      expect(inputStyle.maxHeight).toBeGreaterThan(inputStyle.minHeight);
+      expect(view.getByLabelText('Message Asha').props.placeholder).toBe('Ask in English or Hindi…');
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
   it.each(['declined', 'rejected'] as const)('retains the exact draft after a %s send and allows retry', async (outcome) => {
     const request = deferred();
     const onSend = jest.fn().mockReturnValueOnce(request.promise).mockResolvedValueOnce(true);
@@ -38,7 +78,7 @@ describe('typed message draft acknowledgement', () => {
 
     await fireEvent.press(view.getByLabelText('Send message'));
     expect(onSend).toHaveBeenCalledTimes(2);
-    expect(onSend).toHaveBeenLastCalledWith('Please keep my words.');
+    expect(onSend).toHaveBeenLastCalledWith('  Please keep my words.  ');
     expect(view.getByLabelText('Message Asha').props.value).toBe('');
   });
 

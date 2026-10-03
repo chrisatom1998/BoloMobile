@@ -319,7 +319,7 @@ describe('Realtime connection lifecycle', () => {
         await Promise.resolve();
       });
 
-      expect(onError).toHaveBeenCalledWith('I didn’t receive enough audio. Speak for at least a second, then tap the orb again to send.');
+      expect(onError).toHaveBeenCalledWith('I didn’t receive enough audio. Speak for at least a second, then use the voice control again to send.');
       expect(peer.send).toHaveBeenCalledWith({ type: 'input_audio_buffer.clear' });
       expect(result.current.status).toBe('ready');
     } finally {

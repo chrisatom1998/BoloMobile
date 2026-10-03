@@ -766,7 +766,7 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
           } catch {
             // The session can still be reused when clearing an already-empty buffer fails.
           }
-          callbacksRef.current.onError('I didn’t receive enough audio. Speak for at least a second, then tap the orb again to send.');
+          callbacksRef.current.onError('I didn’t receive enough audio. Speak for at least a second, then use the voice control again to send.');
           updateStatus('ready');
           break;
         }

@@ -1,8 +1,9 @@
 import { Send } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
+import { EXACT_LEARNER_TEXT_INPUT_PROPS } from '@/lib/learner-text-input';
 import { useTheme } from '@/theme';
 
 type Props = {
@@ -20,6 +21,7 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
   const { colors } = useTheme();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  const { fontScale } = useWindowDimensions();
   const sendingRef = useRef(false);
   const draftRevisionRef = useRef(0);
   const mountedRef = useRef(true);
@@ -37,8 +39,8 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
   }, []);
 
   const send = useCallback(async () => {
-    const text = input.trim();
-    if (disabled || sendingRef.current || !text) return;
+    const text = input;
+    if (disabled || sendingRef.current || !text.trim()) return;
     sendingRef.current = true;
     setSending(true);
     const revision = draftRevisionRef.current;
@@ -59,6 +61,7 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
   return (
     <View style={styles.inputRow}>
       <TextInput
+        {...EXACT_LEARNER_TEXT_INPUT_PROPS}
         accessibilityLabel="Message Asha"
         testID="message-asha-input"
         editable={!locked}
@@ -68,7 +71,14 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
         onSubmitEditing={submit}
         placeholder="Ask in English or Hindi…"
         placeholderTextColor={colors.muted}
-        style={[styles.input, locked && styles.inputDisabled]}
+        style={[
+          styles.input,
+          fontScale >= 1.4 && {
+            minHeight: Math.ceil(22 * fontScale + 16),
+            maxHeight: Math.ceil(22 * fontScale * 3 + 16),
+          },
+          locked && styles.inputDisabled,
+        ]}
         value={input}
       />
       <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={submit} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
