@@ -91,7 +91,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
               pendingReport?.abort();
               if (reportRef.current === pendingReport) reportRef.current = null;
               setReporting(false);
-              hapticSuccess();
+              if (result.outcome !== 'no-speech' && result.understood !== false) hapticSuccess();
               setFeedback(result.feedback);
               setReported(false);
               // Feedback is ready as soon as the card appears. Playback should

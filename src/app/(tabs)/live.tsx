@@ -15,13 +15,17 @@ import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
+import { lessonPlans } from '@/data/lesson-plans';
+import { getScene } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { type EffectiveMotion, useMotionPreference } from '@/hooks/use-motion-preference';
 import type { RealtimeInputTranscript, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
-import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { buildAshaRecentContext } from '@/lib/asha-live-session';
+import { createAshaNativeToolExecutor, type AshaNativeToolExecutor } from '@/lib/asha-native-tools';
+import { displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
@@ -77,7 +81,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth <= 430;
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], sceneProgress = {}, togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
@@ -92,7 +96,11 @@ export default function LiveScreen() {
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
+  const [ashaToolExecutor, setAshaToolExecutor] = useState<AshaNativeToolExecutor>();
   const practiced = useRef(false);
+  const liveAshaTranscriptRef = useRef('');
+  const liveUserTranscriptRef = useRef('');
+  const pendingAshaSaveRef = useRef<{ finish: (result: unknown) => void } | null>(null);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
   const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
@@ -107,6 +115,40 @@ export default function LiveScreen() {
     () => pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, pendingUserMessage],
   );
+  const activeAshaLesson = useMemo(() => {
+    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
+    const resumed = catalog
+      .filter(({ lessonId }) => {
+        const progress = sceneProgress[lessonId];
+        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
+      })
+      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
+        if (!selected) return candidate;
+        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
+        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
+        return (Number.isNaN(candidateTime) ? 0 : candidateTime) > (Number.isNaN(selectedTime) ? 0 : selectedTime)
+          ? candidate
+          : selected;
+      }, undefined);
+    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
+    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
+    const lessonId = resumed?.lessonId
+      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
+      ?? plan.lessonIds[0]!;
+    return getScene(lessonId);
+  }, [sceneProgress]);
+  const ashaSessionContext = useMemo(() => ({
+    learnerLevel: learnerProfile.level,
+    lessonId: activeAshaLesson?.id,
+    lessonTitle: activeAshaLesson?.title,
+    learningObjective: activeAshaLesson?.subtitle,
+    recentContext: buildAshaRecentContext(chatHistory),
+    relevantVocabulary: (activeAshaLesson?.words ?? []).map((devanagari) => ({ devanagari })),
+  }), [activeAshaLesson, chatHistory, learnerProfile.level]);
+  const ashaToolStateRef = useRef({ ashaSessionContext, learnerProfile });
+  useEffect(() => {
+    ashaToolStateRef.current = { ashaSessionContext, learnerProfile };
+  }, [ashaSessionContext, learnerProfile]);
   const realtimeLocked = realtimeStatus === 'connecting' || realtimeStatus === 'recording' || realtimeStatus === 'responding';
   const realtimeOwnsAudio = realtimeStatus !== 'disconnected';
   // A connected-but-ready WebRTC session can safely replay an earlier response:
@@ -160,7 +202,7 @@ export default function LiveScreen() {
       : realtimeStatus === 'responding'
         ? liveAshaTranscript || liveUserTranscript || `Asha is preparing your ${responseLanguageName} reply…`
         : liveCaption || (realtimeStatus === 'ready' ? 'Captions appear after your first turn.' : '');
-  const visibleLiveCaptionText = romanizeDevanagari(liveCaptionText);
+  const visibleLiveCaptionText = displayHindiTranscript(liveCaptionText, realtimeStatus !== 'recording' && responseLanguage === 'hi' && !!liveAshaTranscript);
   const hasLiveCaption = realtimeOwnsAudio || liveCaptionText !== '';
   const liveCaptionLabel = !hasLiveCaption
     ? 'Live'
@@ -229,6 +271,8 @@ export default function LiveScreen() {
       reportControllers.clear();
       selectionClearTimers.forEach(clearTimeout);
       selectionClearTimers.clear();
+      pendingAshaSaveRef.current?.finish({ saved: false, cancelled: true, reason: 'The live screen closed.' });
+      pendingAshaSaveRef.current = null;
       void stopSpeaking();
     };
   }, []);
@@ -327,9 +371,9 @@ export default function LiveScreen() {
     );
   }, [busy, chatHistory.length, clearSavedChat, realtimeLocked]);
 
-  const sendText = useCallback(async (raw: string) => {
+  const sendText = useCallback(async (raw: string): Promise<boolean> => {
     const text = raw.trim().slice(0, 500);
-    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return;
+    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return false;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     scrollAfterContentChangeRef.current = true;
     setPendingUserMessage(userMessage);
@@ -341,7 +385,7 @@ export default function LiveScreen() {
       const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) {
         if (mountedRef.current) clearPendingUserMessage(userMessage.id);
-        return;
+        return false;
       }
       clearPendingUserMessage(userMessage.id);
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
@@ -356,11 +400,13 @@ export default function LiveScreen() {
           }
         }
       }
+      return true;
     } catch (cause) {
       if (mountedRef.current) clearPendingUserMessage(userMessage.id);
       if (mountedRef.current && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
       }
+      return false;
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -368,10 +414,6 @@ export default function LiveScreen() {
       }
     }
   }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
-
-  const submitMessage = useCallback((text: string) => {
-    void sendText(text);
-  }, [sendText]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     const previous = realtimeStatusRef.current;
@@ -392,16 +434,66 @@ export default function LiveScreen() {
     setError(message);
   }, []);
   const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {
-    if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
-    else setLiveUserTranscript(update.text);
+    if (update.speaker === 'asha') {
+      liveAshaTranscriptRef.current = update.text;
+      setLiveAshaTranscript(update.text);
+    } else {
+      liveUserTranscriptRef.current = update.text;
+      setLiveUserTranscript(update.text);
+    }
   }, []);
   const completeRealtimeTurn = useCallback((turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
     setError('');
     setLiveCaption(turn.reply.trim());
+    liveAshaTranscriptRef.current = turn.reply.trim();
+    liveUserTranscriptRef.current = turn.transcript.trim();
     setLiveAshaTranscript(turn.reply.trim());
     setLiveUserTranscript(turn.transcript.trim());
     recordRealtimeReply(turn);
   }, [recordRealtimeReply]);
+  const requestSaveLivePhrase = useCallback((text: string) => {
+    const original = text;
+    setPhraseMessage({
+      message: { id: `asha-live-${Date.now()}`, role: 'asha', text: original, language: 'hi' },
+      selectedText: original,
+      sourceText: original,
+    });
+  }, []);
+
+  const confirmAndSaveAshaPhrase = useCallback((input: { devanagari?: string; originalText: string }, signal: AbortSignal) => {
+    if (pendingAshaSaveRef.current) {
+      return Promise.resolve({ saved: false, reason: 'Another phrase confirmation is already open.' });
+    }
+    return new Promise<unknown>((resolve) => {
+      let finished = false;
+      const onAbort = () => {
+        if (pendingAshaSaveRef.current?.finish === finish) setPhraseMessage(null);
+        finish({ saved: false, cancelled: true, reason: 'The learner changed the request.' });
+      };
+      const finish = (result: unknown) => {
+        if (finished) return;
+        finished = true;
+        signal.removeEventListener('abort', onAbort);
+        if (pendingAshaSaveRef.current?.finish === finish) pendingAshaSaveRef.current = null;
+        resolve(result);
+      };
+      pendingAshaSaveRef.current = { finish };
+      signal.addEventListener('abort', onAbort, { once: true });
+      const original = input.originalText;
+      setPhraseMessage({
+        message: { id: `asha-tool-save-${Date.now()}`, role: 'asha', text: input.devanagari || original, language: 'hi' },
+        selectedText: original,
+        sourceText: input.devanagari || original,
+      });
+      if (signal.aborted) onAbort();
+    });
+  }, []);
+
+  const closePhrasePicker = useCallback(() => {
+    pendingAshaSaveRef.current?.finish({ saved: false, reason: 'The learner did not confirm the save.' });
+    pendingAshaSaveRef.current = null;
+    setPhraseMessage(null);
+  }, []);
 
   const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
@@ -440,9 +532,69 @@ export default function LiveScreen() {
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
     if (!alreadySaved) togglePhrase(phrase);
+    // The phrase itself is already present in the live conversation. Return
+    // only the minimum confirmation needed by Asha, not the local phrase row.
+    pendingAshaSaveRef.current?.finish({ saved: true, alreadySaved });
+    pendingAshaSaveRef.current = null;
     setPhraseMessage(null);
     setTimeout(() => showAppAlert(alreadySaved ? 'Phrase already saved' : 'Phrase saved', `${phrase.latin} — ${phrase.en}`), 0);
   }, [phrases, togglePhrase]);
+
+  useEffect(() => {
+    const executor = createAshaNativeToolExecutor({
+      confirmAndSavePhrase: confirmAndSaveAshaPhrase,
+      createRecap: async (signal) => {
+        if (signal.aborted) return { cancelled: true };
+        const learnerText = liveUserTranscriptRef.current.trim();
+        return {
+          practicedPhrases: learnerText ? [learnerText] : [],
+          corrections: [],
+          progress: practiced.current ? 'Completed live practice was recorded on this device.' : 'No progress update was confirmed.',
+        };
+      },
+      getContext: () => ashaToolStateRef.current.ashaSessionContext,
+      getProgress: () => {
+        const state = ashaToolStateRef.current;
+        return {
+          difficulty: state.learnerProfile.level,
+        };
+      },
+      lookupMeaning: async ({ context, text }, signal) => {
+        const result = await sendMobileChat({
+          clientId,
+          messages: [],
+          responseLanguage: 'en',
+          text: `Explain the contextual meaning of “${text}”${context ? ` in “${context}”` : ''}. Give one short Hindi example, Romanization, and English meaning.`,
+        }, signal);
+        return { explanation: result.reply };
+      },
+      prepareFeedback: async ({ feedbackType, learnerText }, signal) => {
+        if (feedbackType === 'pronunciation') {
+          return { available: false, reason: 'A transcript alone cannot support reliable pronunciation feedback.' };
+        }
+        const result = await sendMobileChat({
+          clientId,
+          messages: [],
+          responseLanguage: 'en',
+          text: `Respond to the meaning of this learner Hindi first, then give at most one concise grammar correction: ${learnerText}`,
+        }, signal);
+        return { feedback: result.reply };
+      },
+      updateCompletedProgress: async ({ lessonId, outcome }, signal) => {
+        if (signal.aborted) return { updated: false, cancelled: true };
+        if (!liveUserTranscriptRef.current.trim() || !liveAshaTranscriptRef.current.trim()) {
+          return { updated: false, reason: 'A completed learner-and-Asha interaction is required.' };
+        }
+        const alreadyRecorded = practiced.current;
+        if (!alreadyRecorded) {
+          practiced.current = true;
+          markLiveTurn();
+        }
+        return { updated: true, alreadyRecorded, scope: 'live-practice' };
+      },
+    });
+    setAshaToolExecutor(() => executor);
+  }, [clientId, confirmAndSaveAshaPhrase, markLiveTurn]);
 
   const featuredPhrase = realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
     <View style={styles.featuredPhraseSection} testID="featured-phrase-section">
@@ -548,7 +700,7 @@ export default function LiveScreen() {
                     <View style={styles.liveVoiceDot} />
                     <Text style={styles.liveVoiceText}>Live voice</Text>
                   </View>
-                  <RealtimeVoiceButton clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy} motionMode={motionMode} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} size="minimal" />
+                  <RealtimeVoiceButton ashaContext={ashaSessionContext} ashaInitialMode={responseLanguage === 'hi' ? 'hindi-immersion' : 'hindi-english-help'} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy} executeAshaTool={ashaToolExecutor} motionMode={motionMode} onError={showRealtimeError} onInputTranscriptComplete={recordRealtimeInputTranscript} onSavePhraseRequest={requestSaveLivePhrase} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} onTurnComplete={completeRealtimeTurn} responseLanguage={responseLanguage} size="minimal" />
                   <View style={styles.heroCopy}>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
@@ -648,17 +800,17 @@ export default function LiveScreen() {
               accessibilityState={{ disabled: busy || realtimeLocked }}
               isDisabled={busy || realtimeLocked}
               key={example}
-              onPress={() => submitMessage(example)}
+              onPress={() => { void sendText(example); }}
               style={[styles.example, (busy || realtimeLocked) && styles.disabled]}
             >
               <Text style={styles.exampleText}>{example}</Text>
             </PressableFeedback>
           ))}
         </ScrollView>
-        <LiveComposer disabled={busy || realtimeLocked} onSend={submitMessage} styles={styles} />
+        <LiveComposer disabled={busy || realtimeLocked} onSend={sendText} styles={styles} />
       </View> : null}
-      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
-      {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible /> : null}
+      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhrasePicker} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
+      {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={!!wordDefinitionPhrase} /> : null}
     </KeyboardAvoidingView>
   );
 }

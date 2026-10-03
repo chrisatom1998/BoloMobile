@@ -150,6 +150,26 @@ describe('previously uncovered audit screens', () => {
     );
   });
 
+  it('ignores an old preparation result after the selected text is edited', async () => {
+    let finishOldRequest: ((value: typeof phrase) => void) | undefined;
+    boloApi.prepareSavedPhraseFromText.mockImplementationOnce(() => new Promise((resolve) => { finishOldRequest = resolve; }));
+    const view = await render(<TranscriptPhrasePicker aiConsent clientId="client-12345678"
+      message={{ id: 'message-1', role: 'asha', text: 'Old selection' }} onClose={jest.fn()} onSave={jest.fn()} />);
+    await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
+    const oldSignal = boloApi.prepareSavedPhraseFromText.mock.calls[0]?.[1] as AbortSignal;
+    await fireEvent.changeText(view.getByLabelText('Selected transcript text'), 'New selection');
+    expect(oldSignal.aborted).toBe(true);
+    expect(view.getByRole('button', { name: 'Add Romanized + English' }).props.accessibilityState.disabled).toBe(false);
+    await act(async () => { finishOldRequest?.(phrase); });
+    expect(view.getByLabelText('Hindi phrase').props.value).toBe('');
+    expect(view.getByLabelText('Romanized Hindi phrase').props.value).toBe('');
+    expect(view.getByLabelText('English phrase meaning').props.value).toBe('');
+    await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
+    await waitFor(() => expect(view.getByLabelText('Hindi phrase').props.value).toBe(phrase.hi));
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenLastCalledWith(
+      { clientId: 'client-12345678', text: 'New selection' }, expect.any(AbortSignal));
+  });
+
   it('still saves the highlighted excerpt when automatic phrase preparation is unavailable', async () => {
     const onSave = jest.fn();
     boloApi.prepareSavedPhraseFromText.mockRejectedValueOnce(new Error('Could not connect to the server.'));

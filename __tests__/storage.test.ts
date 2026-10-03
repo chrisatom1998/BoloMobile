@@ -10,6 +10,7 @@ import {
   dateKey,
   emptyPractice,
   previousDate,
+  sanitizeLearnerProfile,
   sanitizeClientId,
   sanitizeGoal,
   sanitizeMotionPreference,
@@ -177,7 +178,7 @@ describe('local progress storage', () => {
   it('requires the current versioned AI consent record', () => {
     const current = createAiConsentRecord(new Date('2026-07-13T20:00:00.000Z'));
 
-    expect(AI_CONSENT_VERSION).toBe(8);
+    expect(AI_CONSENT_VERSION).toBe(9);
     expect(current).toEqual({ version: AI_CONSENT_VERSION, acceptedAt: '2026-07-13T20:00:00.000Z' });
     expect(sanitizeAiConsent(JSON.stringify(current))).toEqual(current);
     expect(sanitizeAiConsent('true')).toBeNull();
@@ -398,4 +399,33 @@ describe('movement preference storage', () => {
   it.each([null, '', 'fast', '{"value":"lively"}'])('falls back to gentle for %p', (value) => {
     expect(sanitizeMotionPreference(value)).toBe(DEFAULT_MOTION_PREFERENCE);
   });
+});
+
+it('sanitizes unfinished lesson counters and keeps legacy checkpoints readable', () => {
+  const progress = sanitizeSceneProgress(JSON.stringify({
+    chai: { lastBeatIndex: 1, attempt: { id: 'attempt-one', score: 50, correct: 500, total: 1, seconds: -10, weakPhrases: ['पानी', null], answeredBeatIndex: 0 } },
+    older: { lastBeatIndex: 3, totalAnswers: 10 },
+  }));
+  expect(progress.chai?.attempt).toEqual({ id: 'attempt-one', score: 50, correct: 1, total: 1, seconds: 0, weakPhrases: ['पानी'], answeredBeatIndex: 0 });
+  expect(progress.older?.lastBeatIndex).toBe(3);
+  expect(progress.older?.attempt).toBeUndefined();
+});
+
+
+it.each([0.1, 0.25, 0.5, 0.75, 1])('retains supported saved-phrase speed %s and the learner name', (rate) => {
+  expect(sanitizeLearnerProfile(JSON.stringify({ phrasePlaybackRate: rate, displayName: ' Chris ' }))).toMatchObject({ phrasePlaybackRate: rate, displayName: 'Chris' });
+});
+
+it('falls back to normal phrase speed for invalid saved preferences', () => {
+  expect(sanitizeLearnerProfile(JSON.stringify({ phrasePlaybackRate: 90 })).phrasePlaybackRate).toBe(1);
+});
+
+
+it('drops attempt totals when the persisted checkpoint position is invalid', () => {
+  const attempt = { id: 'invalid-position', score: 50, correct: 1, total: 1, seconds: 40, weakPhrases: [], answeredBeatIndex: 0 };
+  for (const lastBeatIndex of [-1, 0.5, null]) {
+    const progress = sanitizeSceneProgress(JSON.stringify({ chai: { lastBeatIndex, attempt } }));
+    expect(progress.chai?.lastBeatIndex).toBe(0);
+    expect(progress.chai?.attempt).toBeUndefined();
+  }
 });

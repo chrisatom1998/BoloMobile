@@ -200,3 +200,17 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 0.72);
   });
 });
+
+
+it('keeps unknown saved spelling on review and speaks its canonical Hindi', async () => {
+  jest.clearAllMocks();
+  asyncStorage.__store.clear();
+  const phrase = { hi: 'कृपया पानी दीजिए।', latin: 'Kripayaa paanee dijiye.', en: 'Please give me water.' };
+  asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([phrase]));
+  const view = await render(<AppStateProvider><ReviewScreen /></AppStateProvider>);
+  await waitFor(() => expect(view.getByText(phrase.en)).toBeTruthy());
+  await fireEvent.press(view.getByText('Reveal answer'));
+  expect(view.getByText(phrase.latin)).toBeTruthy();
+  await fireEvent.press(view.getByLabelText(`Hear ${phrase.hi}`));
+  expect(speakTextMock).toHaveBeenLastCalledWith(phrase.hi, undefined, 1);
+});

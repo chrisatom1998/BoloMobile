@@ -1,11 +1,13 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
-import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
+import { displayHindiTranscript } from '../src/lib/learner-phrase-display';
 
 const mockContextualDefinition = jest.fn();
+const mockPreparePhrase = jest.fn();
 
 jest.mock('@/services/bolo-api', () => ({
+  prepareSavedPhraseFromText: (...args: unknown[]) => mockPreparePhrase(...args),
   getContextualWordDefinition: (...args: unknown[]) => mockContextualDefinition(...args),
 }));
 
@@ -27,7 +29,7 @@ describe('WordDefinitionSheet', () => {
     );
 
     expect(view.getByText('एक चाय दीजिए।')).toBeTruthy();
-    expect(view.getByText(romanizeDevanagari('एक चाय दीजिए।'))).toBeTruthy();
+    expect(view.getByText(displayHindiTranscript('एक चाय दीजिए।'))).toBeTruthy();
     expect(view.queryByRole('button', { name: 'You' })).toBeNull();
     const token = view.getByRole('button', { name: 'Explain एक' });
     expect(StyleSheet.flatten(token.props.style).minHeight).toBeGreaterThanOrEqual(44);
@@ -100,12 +102,102 @@ describe('WordDefinitionSheet', () => {
     );
 
     expect(view.queryByText('एक चाय दीजिए।')).toBeNull();
-    expect(view.getByText(romanizeDevanagari('एक चाय दीजिए।'))).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: `Explain ${romanizeDevanagari('चाय')}` }));
+    expect(view.getByText(displayHindiTranscript('एक चाय दीजिए।'))).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Explain chai' }));
     await waitFor(() => expect(mockContextualDefinition).toHaveBeenCalledWith({
       clientId: 'client-12345678',
       phrase: 'एक चाय दीजिए।',
       word: 'चाय',
     }, expect.any(AbortSignal)));
   });
+});
+
+
+describe('Romanized Hindi word source', () => {
+  beforeEach(() => { jest.resetAllMocks(); });
+
+  it('resolves a source-less Hindi reply once and reuses its canonical words after reopening', async () => {
+    mockPreparePhrase.mockResolvedValue({ hi: 'पानी दीजिए।', latin: 'Paani deejiye.', en: 'Please give water.' });
+    mockContextualDefinition.mockResolvedValue('Water is the thing being requested.');
+    const props = { clientId: 'client-12345678', onClose: jest.fn(), phrase: 'Paani deejiye.', scriptPreference: 'latin' as const };
+    const view = await render(<WordDefinitionSheet {...props} visible />);
+    await waitFor(() => expect(view.getByRole('button', { name: 'Explain Paani' })).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Explain Paani' }));
+    await waitFor(() => expect(mockContextualDefinition).toHaveBeenCalledWith({ clientId: props.clientId, phrase: 'पानी दीजिए।', word: 'पानी' }, expect.any(AbortSignal)));
+    await view.rerender(<WordDefinitionSheet {...props} visible={false} />);
+    await view.rerender(<WordDefinitionSheet {...props} visible />);
+    expect(mockPreparePhrase).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resolve surrounding English when canonical Hindi is already retained', async () => {
+    const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase="You can say पानी दीजिए। It is polite." visible />);
+    expect(view.getByRole('button', { name: 'Explain पानी' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Explain You' })).toBeNull();
+    expect(mockPreparePhrase).not.toHaveBeenCalled();
+  });
+
+  it('offers an explicit retry when Hindi source resolution fails', async () => {
+    mockPreparePhrase.mockRejectedValueOnce(new Error('Connection lost.')).mockResolvedValueOnce({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' });
+    const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase="Namaste" visible />);
+    await waitFor(() => expect(view.getByText('Connection lost.')).toBeTruthy());
+    expect(mockPreparePhrase).toHaveBeenCalledTimes(1);
+    await fireEvent.press(view.getByRole('button', { name: 'Retry preparing Hindi words' }));
+    await waitFor(() => expect(view.getByRole('button', { name: 'Explain नमस्ते' })).toBeTruthy());
+  });
+
+  it('aborts a stale resolution and never replaces a newer source', async () => {
+    let finish!: (value: unknown) => void;
+    mockPreparePhrase.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase="Paani deejiye" visible />);
+    const signal = mockPreparePhrase.mock.calls[0][1] as AbortSignal;
+    await view.rerender(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase="नमस्ते" visible />);
+    expect(signal.aborted).toBe(true);
+    await act(async () => { finish({ hi: 'पानी दीजिए', latin: 'Paani deejiye', en: 'Give water' }); });
+    expect(view.getByRole('button', { name: 'Explain नमस्ते' })).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Explain पानी' })).toBeNull();
+  });
+});
+
+it('lets a learner trim an oversized Romanized reply directly in the native word tray', async () => {
+  jest.resetAllMocks();
+  mockPreparePhrase.mockResolvedValue({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' });
+  const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase={'Namaste! '.repeat(70)} visible />);
+  expect(mockPreparePhrase).not.toHaveBeenCalled();
+  expect(view.getByRole('button', { name: 'Prepare words from excerpt' }).props.accessibilityState.disabled).toBe(true);
+  expect(view.queryByRole('button', { name: 'Retry preparing Hindi words' })).toBeNull();
+  await fireEvent.changeText(view.getByLabelText('Hindi excerpt for word meanings'), 'Namaste');
+  await fireEvent.press(view.getByRole('button', { name: 'Prepare words from excerpt' }));
+  await waitFor(() => expect(view.getByRole('button', { name: 'Explain नमस्ते' })).toBeTruthy());
+  expect(mockPreparePhrase).toHaveBeenCalledWith({ clientId: 'client-12345678', text: 'Namaste' }, expect.any(AbortSignal));
+});
+
+
+it('lets a learner recover from oversized canonical Hindi without translating or losing the chosen excerpt', async () => {
+  jest.resetAllMocks();
+  mockContextualDefinition.mockResolvedValue('An expression of thanks.');
+  const phrase = `${'नमस्ते! '.repeat(900)}धन्यवाद।`;
+  const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase={phrase} visible />);
+  expect(view.getByText(/6000 characters or fewer/u)).toBeTruthy();
+  expect(view.getByLabelText('Hindi excerpt for word meanings').props.value).toBe(phrase);
+  expect(view.getByRole('button', { name: 'Prepare words from excerpt' }).props.accessibilityState.disabled).toBe(true);
+  expect(view.queryByRole('button', { name: 'Retry preparing Hindi words' })).toBeNull();
+  expect(mockPreparePhrase).not.toHaveBeenCalled();
+  expect(mockContextualDefinition).not.toHaveBeenCalled();
+  const selected = 'नमस्ते! मैं ठीक हूँ। धन्यवाद।';
+  await fireEvent.changeText(view.getByLabelText('Hindi excerpt for word meanings'), selected);
+  await fireEvent.press(view.getByRole('button', { name: 'Prepare words from excerpt' }));
+  await fireEvent.press(view.getByRole('button', { name: 'Explain धन्यवाद' }));
+  await waitFor(() => expect(mockContextualDefinition).toHaveBeenCalledWith({ clientId: 'client-12345678', phrase: selected, word: 'धन्यवाद' }, expect.any(AbortSignal)));
+  expect(mockPreparePhrase).not.toHaveBeenCalled();
+});
+
+
+it('keeps unknown Romanized spellings on word labels while looking up canonical Hindi', async () => {
+  jest.resetAllMocks();
+  mockPreparePhrase.mockResolvedValue({ hi: 'कृपया पानी दीजिए।', latin: 'Kripya paani dijiye.', en: 'Please give me water.' });
+  mockContextualDefinition.mockResolvedValue('Water is the requested object.');
+  const view = await render(<WordDefinitionSheet clientId="client-12345678" onClose={jest.fn()} phrase="Kripayaa paanee dijiye." scriptPreference="latin" visible />);
+  await waitFor(() => expect(view.getByText('Kripayaa paanee dijiye.')).toBeTruthy());
+  await fireEvent.press(view.getByRole('button', { name: 'Explain paanee' }));
+  expect(mockContextualDefinition).toHaveBeenCalledWith({ clientId: 'client-12345678', phrase: 'कृपया पानी दीजिए।', word: 'पानी' }, expect.any(AbortSignal));
 });

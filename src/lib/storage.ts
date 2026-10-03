@@ -28,7 +28,7 @@ export const storageKeys = {
   motionPreference: 'bolo-motion-preference',
 } as const;
 
-export const AI_CONSENT_VERSION = 8 as const;
+export const AI_CONSENT_VERSION = 9 as const;
 export const MAX_CHAT_HISTORY_MESSAGES = 100;
 export const MAX_CHAT_MESSAGE_CHARACTERS = 2_400;
 export const MAX_DAILY_PRACTICE_SECONDS = 24 * 60 * 60;
@@ -246,6 +246,8 @@ export function sanitizeLearnerProfile(value: string | null): LearnerProfile {
   if (!parsed || typeof parsed !== 'object') return defaultLearnerProfile();
   const profile = parsed as Partial<LearnerProfile>;
   return {
+    ...(typeof profile.displayName === 'string' && profile.displayName.trim() ? { displayName: profile.displayName.trim().slice(0, 40) } : {}),
+    phrasePlaybackRate: [0.1, 0.25, 0.5, 0.75, 1].includes(profile.phrasePlaybackRate ?? 1) ? profile.phrasePlaybackRate ?? 1 : 1,
     completed: profile.completed === true,
     level: profile.level === 'beginner' || profile.level === 'intermediate' ? profile.level : 'new',
     scriptPreference: profile.scriptPreference === 'devanagari' || profile.scriptPreference === 'latin' ? profile.scriptPreference : 'both',
@@ -260,6 +262,18 @@ function sanitizeSceneProgressEntry(value: unknown): SceneProgress | null {
   const progress = value as Partial<SceneProgress>;
   const integer = (input: unknown, maximum: number) => Number.isInteger(input) ? Math.min(maximum, Math.max(0, input as number)) : 0;
   return {
+    ...(progress.attempt && Number.isInteger(progress.lastBeatIndex) && (progress.lastBeatIndex ?? -1) >= 0 && typeof progress.attempt.id === 'string' && progress.attempt.id.length > 0 && progress.attempt.id.length <= 100 ? {
+      attempt: {
+        id: progress.attempt.id,
+        score: integer(progress.attempt.score, 100_000),
+        correct: Math.min(integer(progress.attempt.correct, 100), integer(progress.attempt.total, 100)),
+        total: integer(progress.attempt.total, 100),
+        seconds: integer(progress.attempt.seconds, 86_400),
+        answeredBeatIndex: Number.isInteger(progress.attempt.answeredBeatIndex) ? integer(progress.attempt.answeredBeatIndex, 100) : null,
+        weakPhrases: Array.isArray(progress.attempt.weakPhrases) ? progress.attempt.weakPhrases.filter((phrase): phrase is string => typeof phrase === 'string' && phrase.length > 0).slice(0, 50) : [],
+      },
+    } : {}),
+    ...(typeof progress.lastCompletedAttemptId === 'string' ? { lastCompletedAttemptId: progress.lastCompletedAttemptId.slice(0, 100) } : {}),
     completions: integer(progress.completions, 10_000),
     bestScore: integer(progress.bestScore, 100_000),
     bestAccuracy: integer(progress.bestAccuracy, 100),

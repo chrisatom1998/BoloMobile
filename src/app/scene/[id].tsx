@@ -1,7 +1,8 @@
+import { randomUUID } from 'expo-crypto';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { MotionProgress, MotionReveal } from '@/components/motion';
@@ -17,6 +18,8 @@ import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { useSpeakText } from '@/hooks/use-speak-text';
+import { lessonHindiLabel } from '@/lib/lesson-display';
+import type { SceneAttempt } from '@/state/app-state-types';
 import { observe } from '@/lib/observability';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiWordTokens } from '@/lib/contextual-word-definition';
@@ -33,7 +36,12 @@ const ALTERNATE_INCORRECT_COACH = {
   latin: 'Karib hai—phir se koshish kijiye.',
 };
 
-export default function SceneScreen() {
+export default function SceneRoute() {
+  const { id } = useLocalSearchParams<{ id: string | string[] }>();
+  return <SceneScreen key={Array.isArray(id) ? id[0] : id} />;
+}
+
+function SceneScreen() {
   const { id } = useLocalSearchParams<{ id: string | string[] }>();
   const router = useRouter();
   const { colors } = useTheme();
@@ -41,7 +49,23 @@ export default function SceneScreen() {
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
   const sceneId = Array.isArray(id) ? id[0] : id;
-  const scene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
+  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, sceneProgress, togglePhrase } = useAppState();
+  const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
+  const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
+  const sourceScene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
+  const usesName = sourceScene?.beats.some((beat) => beat.choices.some((choice) => choice.correct && /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi))) ?? false;
+  const scene = useMemo(() => {
+    if (!sourceScene || !usesName || !practiceName.trim()) return sourceScene;
+    // Proper names are kept exactly as entered, never guessed by transliteration.
+    const personalize = (text: string) => text.replace(/\.\.\.|…/gu, practiceName.trim());
+    return { ...sourceScene, beats: sourceScene.beats.map((beat) => ({ ...beat,
+      prompt: personalize(beat.prompt), tip: personalize(beat.tip),
+      choices: beat.choices.map((choice) => /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi)
+        ? { ...choice, hi: personalize(choice.hi), latin: personalize(choice.latin), en: personalize(choice.en) } : choice),
+    })) };
+  }, [practiceName, sourceScene, usesName]);
+  const [offlineSelected, setOfflineSelected] = useState(false);
+  const [showAiDetails, setShowAiDetails] = useState(false);
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
     const plan = lessonPlans.find((candidate) => candidate.lessonIds.includes(scene.id));
@@ -52,26 +76,40 @@ export default function SceneScreen() {
       planId: plan.id,
     };
   }, [scene]);
-  const { aiConsent, checkpointScene, clientId, learnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, sceneProgress, togglePhrase } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
   const { audioError, clearAudioError, speak } = useSpeakText();
-  const savedBeatIndex = scene ? sceneProgress?.[scene.id]?.lastBeatIndex ?? 0 : 0;
-  // Snapshot where this run started: score/correct only count beats answered after
-  // the checkpoint, so completion totals must exclude the beats skipped by resume.
-  const [initialBeatIndex, setInitialBeatIndex] = useState(() => scene && savedBeatIndex < scene.beats.length ? savedBeatIndex : 0);
+  const savedProgress = scene ? sceneProgress?.[scene.id] : undefined;
+  const [legacyCheckpoint] = useState(() => !savedProgress?.attempt && (savedProgress?.lastBeatIndex ?? 0) > 0);
+  const savedPosition = savedProgress?.lastBeatIndex ?? 0;
+  const checkpointMatchesLesson = Boolean(scene && savedProgress?.attempt
+    && Number.isInteger(savedPosition) && savedPosition >= 0 && savedPosition < scene.beats.length
+    && Number.isInteger(savedProgress.attempt.total)
+    && savedProgress.attempt.total >= savedPosition && savedProgress.attempt.total <= savedPosition + 1);
+  const [incompatibleCheckpoint] = useState(() => Boolean(savedProgress?.attempt) && !checkpointMatchesLesson);
+  const [initialAttempt] = useState(() => checkpointMatchesLesson ? savedProgress?.attempt : undefined);
+  const [initialBeatIndex, setInitialBeatIndex] = useState(() => scene && initialAttempt && (savedProgress?.lastBeatIndex ?? 0) < scene.beats.length ? savedProgress?.lastBeatIndex ?? 0 : 0);
   const [beatIndex, setBeatIndex] = useState(initialBeatIndex);
+  const currentUsesName = sourceScene?.beats[beatIndex]?.choices.some((choice) => choice.correct && /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi)) ?? false;
+  const needsName = currentUsesName && !practiceName.trim();
+  const [attemptId] = useState(() => randomUUID());
+  const attemptRef = useRef<SceneAttempt>(initialAttempt ?? { id: attemptId, score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null });
+  const elapsedBeforeResumeRef = useRef(initialAttempt?.seconds ?? 0);
+  const progressBeatRef = useRef(initialBeatIndex);
+  const completedRef = useRef(false);
   const [picked, setPicked] = useState<number | null>(null);
   const [resolution, setResolution] = useState<null | 'correct' | 'incorrect'>(null);
   const [choiceNonce, setChoiceNonce] = useState(0);
   const [wordOrderRetryNonce, setWordOrderRetryNonce] = useState(0);
-  const [score, setScore] = useState(0);
-  const [correctCount, setCorrectCount] = useState(0);
+  const [score, setScore] = useState(initialAttempt?.score ?? 0);
+  const [correctCount, setCorrectCount] = useState(initialAttempt?.correct ?? 0);
+  const [answerCount, setAnswerCount] = useState(initialAttempt?.total ?? 0);
+  const [answeredBeatIndex, setAnsweredBeatIndex] = useState(initialAttempt?.answeredBeatIndex ?? null);
   const [done, setDone] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
-  const [weakPhrases, setWeakPhrases] = useState<string[]>([]);
+
   const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
   const sceneScrollRef = useRef<ScrollView>(null);
   const sceneViewportHeightRef = useRef(0);
@@ -85,6 +123,17 @@ export default function SceneScreen() {
     observe('scene_started');
     return () => { void stopSpeaking(); };
   }, []);
+
+  useEffect(() => {
+    if (!sceneId || !sourceScene) return;
+    const save = () => {
+      if (completedRef.current) return;
+      checkpointScene?.(sceneId, progressBeatRef.current, { ...attemptRef.current, seconds: elapsedBeforeResumeRef.current + elapsedSeconds() });
+    };
+    const interval = setInterval(save, 5000);
+    const subscription = AppState.addEventListener('change', (state) => { if (state !== 'active') save(); });
+    return () => { clearInterval(interval); subscription.remove(); save(); };
+  }, [checkpointScene, elapsedSeconds, sceneId, sourceScene]);
 
   const currentBeat = scene?.beats[beatIndex];
   const currentTarget = currentBeat?.choices.find((choice) => choice.correct);
@@ -159,43 +208,50 @@ export default function SceneScreen() {
     void speak(text);
   }
 
+  function recordAnswer(isCorrect: boolean) {
+    if (attemptRef.current.answeredBeatIndex === beatIndex) return;
+    if (currentUsesName) updateLearnerProfile?.({ displayName: practiceName.trim() });
+    const previous = attemptRef.current;
+    const attempt = { ...previous, score: previous.score + (isCorrect ? 50 : 0), correct: previous.correct + Number(isCorrect), total: previous.total + 1,
+      weakPhrases: isCorrect ? previous.weakPhrases : [...new Set([...previous.weakPhrases, target.hi])],
+      seconds: elapsedBeforeResumeRef.current + elapsedSeconds(), answeredBeatIndex: beatIndex };
+    attemptRef.current = attempt;
+    setScore(attempt.score);
+    setCorrectCount(attempt.correct);
+    setAnswerCount(attempt.total);
+    setAnsweredBeatIndex(beatIndex);
+    checkpointScene?.(activeScene.id, beatIndex, attempt);
+  }
+
   function choose(index: number) {
-    if (pickedRef.current !== null || pronunciationBusy) return;
+    if (pickedRef.current !== null || pronunciationBusy || needsName) return;
     const choice = beat.choices[index];
     if (choice === undefined) return;
     pendingResolutionScrollRef.current = true;
     pickedRef.current = index;
     setPicked(index);
+    recordAnswer(choice.correct);
     if (choice.correct) {
       hapticSuccess();
-      if (!alreadyResolvedIncorrect) {
-        setScore((value) => value + 50);
-        setCorrectCount((value) => value + 1);
-      }
       setResolution('correct');
     }
     else {
       hapticWarning();
-      setWeakPhrases((current) => [...new Set([...current, target.hi])]);
       setResolution('incorrect');
     }
     play(choice.reply);
   }
 
   function handleAlternateResult(result: 'correct' | 'incorrect') {
-    if (pickedRef.current !== null || pronunciationBusy) return;
+    if (pickedRef.current !== null || pronunciationBusy || needsName) return;
     pendingResolutionScrollRef.current = true;
     pickedRef.current = result === 'correct' ? 0 : -1;
+    recordAnswer(result === 'correct');
     if (result === 'correct') {
-      if (!alreadyResolvedIncorrect) {
-        setScore((value) => value + 50);
-        setCorrectCount((value) => value + 1);
-      }
       setResolution('correct');
       play('बहुत अच्छा।');
       return;
     }
-    setWeakPhrases((current) => [...new Set([...current, target.hi])]);
     setResolution('incorrect');
     play(ALTERNATE_INCORRECT_COACH.hi);
   }
@@ -219,18 +275,21 @@ export default function SceneScreen() {
     void stopSpeaking();
     clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
-      markSceneComplete(activeScene.id, elapsedSeconds(), {
-        score,
-        correct: correctCount,
-        total: activeScene.beats.length - initialBeatIndex,
-        weakPhrases,
+      completedRef.current = true;
+      markSceneComplete(activeScene.id, elapsedBeforeResumeRef.current + elapsedSeconds(), {
+        attemptId: attemptRef.current.id,
+        score: attemptRef.current.score,
+        correct: attemptRef.current.correct,
+        total: attemptRef.current.total,
+        weakPhrases: attemptRef.current.weakPhrases,
       });
       observe('scene_completed');
       setDone(true);
       return;
     }
     hapticSelect();
-    checkpointScene?.(activeScene.id, beatIndex + 1);
+    progressBeatRef.current = beatIndex + 1;
+    checkpointScene?.(activeScene.id, beatIndex + 1, { ...attemptRef.current, seconds: elapsedBeforeResumeRef.current + elapsedSeconds() });
     setBeatIndex((value) => value + 1);
     pickedRef.current = null;
     setPicked(null);
@@ -256,7 +315,13 @@ export default function SceneScreen() {
     setWordDefinitionWord(null);
     setScore(0);
     setCorrectCount(0);
-    setWeakPhrases([]);
+    setAnswerCount(0);
+    setAnsweredBeatIndex(null);
+    attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
+    elapsedBeforeResumeRef.current = 0;
+    progressBeatRef.current = 0;
+    completedRef.current = false;
+    checkpointScene?.(activeScene.id, 0, attemptRef.current);
     advancedBeatRef.current = null;
     pendingResolutionScrollRef.current = false;
     setDone(false);
@@ -289,16 +354,16 @@ export default function SceneScreen() {
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
           <Text style={sharedStyles.eyebrow}>Scene complete</Text>
           <View style={styles.finishHeading}>
-            <Text accessibilityLanguage="hi-IN" style={styles.finishHindi} testID="scene-completion-headline">आपने कर दिखाया!</Text>
-            <Text style={styles.finishGloss} testID="scene-completion-gloss">Aapne kar dikhaya! · You did it!</Text>
+            <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : "hi-IN"} style={styles.finishHindi} testID="scene-completion-headline">{lessonHindiLabel('आपने कर दिखाया!', scriptPreference, 'Aapne kar dikhaya!')}</Text>
+            <Text style={styles.finishGloss} testID="scene-completion-gloss">You did it!</Text>
           </View>
           <Text style={styles.finishTitle} testID="scene-completion-title">You navigated {activeScene.title} in Hindi.</Text>
           <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>
         </MotionReveal>
         <View style={styles.finishStats}>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>scene score</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{activeScene.beats.length - initialBeatIndex}</Text><Text style={styles.finishLabel}>correct this run</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{activeScene.beats.length - initialBeatIndex}</Text><Text style={styles.finishLabel}>turns this run</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>points</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{answerCount}</Text><Text style={styles.finishLabel}>correct first try</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{answerCount}</Text><Text style={styles.finishLabel}>lesson turns</Text></View>
         </View>
         <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
         <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Replay scene</Text></Pressable>
@@ -374,9 +439,20 @@ export default function SceneScreen() {
       </View>
       <View style={styles.track}><MotionProgress color={activeScene.color} mode={motionMode} percent={(beatIndex + Number(resolution !== null || alreadyResolvedIncorrect)) / activeScene.beats.length * 100} style={styles.trackFill} testID="scene-progress-motion" /></View>
 
+      {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
+      {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
       {initialBeatIndex > 0 ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Continuing at turn {initialBeatIndex + 1}.</Text> : null}
 
-      {!aiConsent ? <AiConsentGate /> : null}
+      {!aiConsent ? (
+        <View style={styles.hint}>
+          {!offlineSelected ? <>
+            <Text style={styles.hintBody}>This lesson works offline. Connected coaching is optional.</Text>
+            <Pressable accessibilityRole="button" onPress={() => setOfflineSelected(true)} style={sharedStyles.primaryButton} testID="scene-offline-continue"><Text style={sharedStyles.primaryButtonText}>Continue with offline lesson</Text></Pressable>
+          </> : <Text style={styles.hintBody}>Offline lesson ready — no AI consent needed.</Text>}
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAiDetails }} onPress={() => setShowAiDetails((shown) => !shown)} style={styles.tertiaryButton} testID="scene-ai-details"><Text style={styles.tertiaryText}>{showAiDetails ? 'Hide connected coaching details' : 'About optional connected coaching'}</Text></Pressable>
+          {showAiDetails ? <AiConsentGate /> : null}
+        </View>
+      ) : null}
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
       <View style={[styles.world, { borderColor: activeScene.color }]}> 
@@ -399,12 +475,17 @@ export default function SceneScreen() {
               onPress={() => play(situationPromptSpeech ?? beat.npc)}
               style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
             ><Volume2 color={colors.ink} size={18} /></Pressable>
-            <Text style={[styles.npc, largeTextLayout && styles.npcLarge]}>{beat.npc}</Text>
+            <Text style={[styles.npc, largeTextLayout && styles.npcLarge]}>{lessonHindiLabel(beat.npc, scriptPreference)}</Text>
             <Text style={styles.translation}>{beat.translation}</Text>
           </View>
         </View>
       </View>
 
+      {currentUsesName ? <View style={styles.hint}>
+        <Text style={styles.hintTitle}>Practice with your name</Text>
+        <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
+        <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
+      </View> : null}
       <View style={styles.answerHeader}>
         <View>
           <Text style={sharedStyles.eyebrow}>Your response</Text>
@@ -418,22 +499,23 @@ export default function SceneScreen() {
             const revealed = picked !== null && choice.correct;
             const answered = picked !== null;
             const accessibilityLabel = answered
-              ? `${choice.hi} ${choice.latin} ${choice.en}`
-              : `${choice.hi} ${choice.latin}`;
+              ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}`
+              : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
             return (
               <Pressable
                 key={choice.hi}
+                testID={`scene-choice-${sourceIndex}`}
                 accessibilityLabel={accessibilityLabel}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: picked !== null || pronunciationBusy, selected }}
-                disabled={picked !== null || pronunciationBusy}
+                accessibilityState={{ disabled: picked !== null || pronunciationBusy || needsName, selected }}
+                disabled={picked !== null || pronunciationBusy || needsName}
                 onPress={() => choose(sourceIndex)}
                 style={[styles.choice, largeTextLayout && styles.choiceLarge, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
               >
                 <View style={styles.choiceNumber}><Text style={styles.choiceNumberText}>{displayIndex + 1}</Text></View>
                 <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]} testID="scene-choice-copy">
-                  <Text style={styles.choiceHindi}>{choice.hi}</Text>
-                  <Text style={styles.choiceRomanized}>{choice.latin}</Text>
+                  {scriptPreference !== 'latin' ? <Text style={styles.choiceHindi}>{choice.hi}</Text> : null}
+                  {scriptPreference !== 'devanagari' ? <Text style={styles.choiceRomanized}>{choice.latin}</Text> : null}
                   {answered ? <Text style={styles.choiceMeaning}>{choice.en}</Text> : null}
                 </View>
                 {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
@@ -443,7 +525,8 @@ export default function SceneScreen() {
         </View>
       ) : effectiveMode === 'wordOrder' ? (
         <WordOrderPractice
-          disabled={pronunciationBusy || resolution !== null}
+          scriptPreference={scriptPreference}
+          disabled={pronunciationBusy || resolution !== null || needsName}
           key={`word-order-${activeScene.id}-${beatIndex}-${target.hi}-${wordOrderRetryNonce}`}
           onResolve={handleAlternateResult}
           showInstructions={false}
@@ -452,7 +535,8 @@ export default function SceneScreen() {
         />
       ) : (
         <RecallRevealPractice
-          disabled={pronunciationBusy || resolution !== null}
+          scriptPreference={scriptPreference}
+          disabled={pronunciationBusy || resolution !== null || needsName}
           key={`recall-reveal-${activeScene.id}-${beatIndex}-${target.hi}`}
           onResolve={handleAlternateResult}
           targetEn={target.en}
@@ -488,18 +572,18 @@ export default function SceneScreen() {
               {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
                 <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
                   <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
-                  <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text>
-                  <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text>
+                  {scriptPreference !== 'latin' ? <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
+                  {scriptPreference !== 'devanagari' ? <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text> : null}
                 </View>
               ) : null}
               {picked === null && resolution === 'incorrect' ? (
                 <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
                   <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
-                  <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text>
-                  <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text>
+                  {scriptPreference !== 'latin' ? <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
+                  {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
                   <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
                 </View>
-              ) : feedbackReply ? <Text style={styles.resultHindi}>{feedbackReply}</Text> : null}
+              ) : feedbackReply ? <Text style={styles.resultHindi}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
             </View>
           </MotionReveal>
         </View>
@@ -526,14 +610,14 @@ export default function SceneScreen() {
                 return (
                   <Pressable
                     accessibilityHint={aiConsent ? 'Opens a contextual English explanation.' : 'Agree to connected AI processing to unpack this word.'}
-                    accessibilityLabel={`Explain ${romanizedWord} in the answer`}
+                    accessibilityLabel={`Explain ${lessonHindiLabel(word, scriptPreference, romanizedWord)} in the answer`}
                     accessibilityRole="button"
                     accessibilityState={{ disabled: !aiConsent }}
                     disabled={!aiConsent}
                     key={word}
                     onPress={() => setWordDefinitionWord(word)}
                     style={[styles.wordToken, !aiConsent && styles.disabled]}
-                  ><Text style={styles.wordTokenText}>{romanizedWord}</Text></Pressable>
+                  ><Text style={styles.wordTokenText}>{lessonHindiLabel(word, scriptPreference, romanizedWord)}</Text></Pressable>
                 );
               })}
             </View>
@@ -541,7 +625,7 @@ export default function SceneScreen() {
         </>
       ) : null}
 
-      {aiConsent ? (
+      {aiConsent && !needsName ? (
         <View testID="scene-pronunciation">
           <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
         </View>

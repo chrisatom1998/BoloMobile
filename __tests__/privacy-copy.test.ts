@@ -8,8 +8,8 @@ function read(path: string) {
 
 const lifecycleFacts = [
   /requests? microphone (?:access|permission)/iu,
-  /opens? (?:a )?(?:peer |WebRTC )?media stream/iu,
-  /disabled (?:track )?between turns|disabled between turns/iu,
+  /opens? (?:a )?(?:full-duplex )?(?:peer |WebRTC )?media stream/iu,
+  /microphone track stays enabled[\s\S]{0,160}Mute disables/iu,
   /(?:stream(?: and its tracks)? (?:is|are) released|stream release)[\s\S]{0,160}End[\s\S]{0,100}leav/iu,
   /(?:stream(?: and its tracks)? (?:is|are) released|stream release)[\s\S]{0,240}(?:foreground|background)/iu,
   /does not create a recording file/iu,
@@ -66,5 +66,39 @@ describe('live voice privacy copy', () => {
     expect(releaseValidation).toMatch(/up to 100 recent typed and transcribed Asha chat messages/iu);
     expect(releaseValidation).toMatch(/unencrypted storage on this device/iu);
     expect(releaseValidation).toMatch(/Clear chat[\s\S]{0,80}does not delete reports/iu);
+  });
+
+  it('discloses the minimized GPT-Live context and tool-result flow before consent', () => {
+    const consent = read('src/components/ai-consent-gate.tsx');
+    const inAppPolicy = read('src/app/privacy.tsx');
+    const declarations = read('store/privacy-declarations.md');
+
+    for (const disclosure of [consent, inAppPolicy, declarations]) {
+      expect(disclosure).toMatch(/selected mode/iu);
+      expect(disclosure).toMatch(/lesson ID[\s\S]{0,80}(?:title|objective)/iu);
+      expect(disclosure).toMatch(/selected learner level/iu);
+      expect(disclosure).toMatch(/active-lesson vocabulary/iu);
+      expect(disclosure).toMatch(/up to eight recent Asha/iu);
+      expect(disclosure).toMatch(/saved-phrase (?:list|lists) or counts|saved-phrase lists\/counts/iu);
+      expect(disclosure).toMatch(/minimal tool results|minimum current-request result/iu);
+    }
+  });
+
+  it('keeps the deployed-policy gate aligned with Asha GPT-Live instead of the retired Realtime flow', () => {
+    const validator = read('scripts/validate-release-live.mjs');
+    const draft = read('docs/public-privacy-policy-draft.md');
+
+    expect(validator).toMatch(/Asha GPT-Live/iu);
+    expect(validator).toMatch(/Responses delegation/iu);
+    expect(validator).toMatch(/up to eight recent Asha chat messages/iu);
+    expect(validator).not.toMatch(/short-lived OpenAI Realtime credential/iu);
+    expect(validator).not.toMatch(/Send turn/iu);
+    expect(validator).toMatch(/data-bolo-policy-page/iu);
+    expect(validator).toMatch(/Bundle strings cannot satisfy the release gate/iu);
+    expect(validator).not.toMatch(/publicBundle/iu);
+    expect(validator).not.toMatch(/bundleResponse/iu);
+    expect(draft).toMatch(/It is not deployed/iu);
+    expect(draft).toMatch(/does not send your saved-phrase list or counts/iu);
+    expect(draft).toMatch(/minimal tool results/iu);
   });
 });

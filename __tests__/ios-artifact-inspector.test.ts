@@ -67,6 +67,7 @@ function inspect(ipa: string, temporaryDirectory?: string) {
       ...(temporaryDirectory ? { TMPDIR: temporaryDirectory, TEMP: temporaryDirectory, TMP: temporaryDirectory } : {}),
       BASELINE_IPA_BYTES: '500000',
       EXPECTED_API_URL: 'https://api.example.test',
+      EXPECTED_LIVE_API_URL: 'https://live.example.test',
       EXPECTED_APP_IDENTIFIER: 'com.bolo.hindi',
       EXPECTED_PUBLIC_SITE_URL: 'https://site.example.test',
       FORBIDDEN_RELEASE_URLS: 'https://staging.example.test',

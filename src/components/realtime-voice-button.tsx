@@ -1,6 +1,6 @@
 import { Mic, Send, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -12,20 +12,27 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
+import { AshaLivePanel } from '@/components/asha-live-panel';
+import type { AshaMode, AshaSessionContext } from '@/lib/asha-live-session';
+import type { AshaNativeToolExecutor } from '@/lib/asha-native-tools';
 import { useRealtimeConversation, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
 
 type Props = {
+  ashaContext?: AshaSessionContext;
+  ashaInitialMode?: AshaMode;
   clientId: string;
   compact?: boolean;
   disabled?: boolean;
+  executeAshaTool?: AshaNativeToolExecutor;
   motionMode?: EffectiveMotion;
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  onSavePhraseRequest?: (text: string) => void;
   /** Shares this exact control's turn action with a companion UI surface. */
   onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
@@ -125,7 +132,27 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton(props: Props) {
+  if (Platform.OS === 'ios' && props.ashaContext) {
+    return (
+      <AshaLivePanel
+        clientId={props.clientId}
+        context={props.ashaContext}
+        disabled={props.disabled}
+        executeTool={props.executeAshaTool}
+        initialMode={props.ashaInitialMode}
+        onError={props.onError}
+        onSavePhraseRequest={props.onSavePhraseRequest}
+        onStatusChange={props.onStatusChange}
+        onTranscriptChange={props.onTranscriptChange}
+        onTurnComplete={props.onTurnComplete}
+      />
+    );
+  }
+  return <LegacyRealtimeVoiceButton {...props} />;
+}
+
+function LegacyRealtimeVoiceButton({ clientId, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting' || voice.status === 'responding';
@@ -198,7 +225,7 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
         </Pressable>
       </Animated.View>
       {connected ? (
-        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
+        <Pressable testID="realtime-voice-end" accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
           <X color={colors.danger} size={18} />
         </Pressable>
       ) : null}

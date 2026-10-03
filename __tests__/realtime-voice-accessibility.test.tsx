@@ -28,6 +28,9 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
   }),
 }));
 
+jest.mock('expo-audio', () => ({ requestRecordingPermissionsAsync: jest.fn() }));
+jest.mock('@/lib/realtime-peer', () => ({ createRealtimePeerSession: jest.fn() }));
+
 import { RealtimeVoiceButton } from '../src/components/realtime-voice-button';
 
 const haptics = jest.requireMock('@/lib/haptics') as {

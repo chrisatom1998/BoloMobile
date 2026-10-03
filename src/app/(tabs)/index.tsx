@@ -290,8 +290,8 @@ export default function HomeScreen() {
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
-      <PressableFeedback accessibilityLabel="Browse all 10 plans" accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.lessonPlansLink} testID="today-plan-catalog">
-        <Text style={styles.lessonPlansTitle}>Browse all 10 plans</Text>
+      <PressableFeedback accessibilityLabel={`Browse all ${lessonPlans.length} plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.lessonPlansLink} testID="today-plan-catalog">
+        <Text style={styles.lessonPlansTitle}>{`Browse all ${lessonPlans.length} plans`}</Text>
         <Text style={styles.lessonPlansArrow}>→</Text>
       </PressableFeedback>
       {goalFooter}

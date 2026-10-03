@@ -25,3 +25,15 @@ describe('contextual word definitions', () => {
     expect(prompt.length).toBeLessThanOrEqual(1_200);
   });
 });
+
+it('preserves every pure Hindi sentence and its punctuation, including text beyond 500 characters', () => {
+  const phrase = `नमस्ते! मैं ठीक हूँ। आप कैसे हैं? ${'आज हम अभ्यास करेंगे। '.repeat(30)}धन्यवाद!`;
+  expect(hindiSourcePhrase(phrase)).toBe(phrase);
+  expect(hindiWordTokens(hindiSourcePhrase(phrase))).toContain('धन्यवाद');
+});
+
+it('keeps the selected word in the instruction within the service input limit', () => {
+  const prompt = buildContextualWordDefinitionPrompt({ phrase: 'बहुत '.repeat(300), word: 'धन्यवाद' });
+  expect(prompt.length).toBeLessThanOrEqual(500);
+  expect(prompt).toContain('Selected Hindi word: "धन्यवाद"');
+});

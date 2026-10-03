@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
-import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
@@ -23,7 +23,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const initialText = highlightedText?.trim() || romanizeDevanagari(message.text.trim());
+  const initialText = highlightedText?.trim() || displayHindiTranscript(message.text.trim(), message.role === 'asha' && message.language === 'hi');
   const [selectedText, setSelectedText] = useState(initialText);
   const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
   const [hindi, setHindi] = useState('');
@@ -56,6 +56,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
         clientId,
         text,
         ...(sourceText ? { sourceText } : {}),
+        ...(message.language === 'hi' && text === initialText && !/[\u0900-\u097f]/u.test(text) && !/[\u0900-\u097f]/u.test(sourceText) ? { preserveRomanizedText: true } : {}),
       }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) return;
       setLatin(phrase.latin);
@@ -116,6 +117,9 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
               maxLength={500}
               multiline
               onChangeText={(value) => {
+                requestRef.current?.abort();
+                requestRef.current = null;
+                setBusy(false);
                 setSelectedText(value);
                 setSourceText('');
                 setHindi('');

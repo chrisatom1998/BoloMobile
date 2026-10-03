@@ -36,11 +36,12 @@ import {
   storageKeys,
   type PersistedState,
 } from '@/lib/storage';
-import type { ChatMessage, LearnerProfile, MotionPreference, ReminderSettings, SavedPhrase } from '@/state/app-state-types';
+import type { ChatMessage, LearnerProfile, MotionPreference, ReminderSettings, SavedPhrase, SceneAttempt } from '@/state/app-state-types';
 
 type PersistedKey = keyof typeof storageKeys;
 
 type SceneCompletion = {
+  attemptId?: string;
   score: number;
   correct: number;
   total: number;
@@ -62,7 +63,7 @@ type AppActions = {
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
   togglePhrase: (phrase: SavedPhrase) => void;
   removePhrase: (hi: string) => void;
-  checkpointScene: (sceneId: string, nextBeatIndex: number) => void;
+  checkpointScene: (sceneId: string, nextBeatIndex: number, attempt?: SceneAttempt) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
   reviewPhrase: (hi: string, remembered: boolean) => void;
   markLiveTurn: (seconds?: number) => void;
@@ -331,14 +332,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, ['phrases', 'phraseReviews']);
   }, [commit]);
 
-  const checkpointScene = useCallback((sceneId: string, nextBeatIndex: number) => {
+  const checkpointScene = useCallback((sceneId: string, nextBeatIndex: number, attempt?: SceneAttempt) => {
     commit((current) => {
       const previous = current.sceneProgress[sceneId] ?? defaultSceneProgress();
+      if (attempt && previous.lastCompletedAttemptId === attempt.id) return current;
       return {
         ...current,
         sceneProgress: {
           ...current.sceneProgress,
-          [sceneId]: { ...previous, lastBeatIndex: Math.max(0, Math.round(nextBeatIndex)), lastPracticedAt: new Date().toISOString() },
+          [sceneId]: { ...previous, ...(attempt ? { attempt } : {}), lastBeatIndex: Math.max(0, Math.round(nextBeatIndex)), lastPracticedAt: new Date().toISOString() },
         },
       };
     }, ['sceneProgress']);
@@ -346,6 +348,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const markSceneComplete = useCallback((sceneId: string, seconds: number, result?: SceneCompletion) => {
     commit((current) => {
+      const previous = current.sceneProgress[sceneId] ?? defaultSceneProgress();
+      if (result?.attemptId && previous.lastCompletedAttemptId === result.attemptId) return current;
       const requestedSeconds = Number.isFinite(seconds) ? Math.max(1, Math.round(seconds)) : 1;
       const elapsed = cappedPracticeSeconds(current.practice.seconds, requestedSeconds);
       const practice = {
@@ -353,13 +357,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         chaiDone: current.practice.chaiDone || sceneId === 'chai',
         seconds: elapsed.total,
       };
-      const previous = current.sceneProgress[sceneId] ?? defaultSceneProgress();
       const correct = Math.max(0, Math.round(result?.correct ?? 0));
       const total = Math.max(correct, Math.round(result?.total ?? 0));
       const accuracy = total > 0 ? Math.round(correct / total * 100) : 0;
       const sceneProgress = {
         ...current.sceneProgress,
         [sceneId]: {
+          ...(result?.attemptId ? { lastCompletedAttemptId: result.attemptId } : {}),
           completions: previous.completions + 1,
           bestScore: Math.max(previous.bestScore, Math.max(0, Math.round(result?.score ?? 0))),
           bestAccuracy: Math.max(previous.bestAccuracy, accuracy),

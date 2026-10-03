@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { deterministicallyShuffle, wordOrderTokens } from '@/components/practice-mode';
+import { lessonHindiLabel } from '@/lib/lesson-display';
+import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
@@ -10,6 +12,7 @@ type PracticeResult = 'correct' | 'incorrect';
 
 type Props = {
   disabled?: boolean;
+  scriptPreference?: ScriptPreference;
   /**
    * When false the component omits its own instruction line. The scene runtime
    * sets this so the lesson screen shows exactly one task instruction; any other
@@ -37,7 +40,7 @@ type Props = {
  * There is no reset effect here: the scene runtime remounts this component with
  * a per-beat `key`, so every new beat starts from a genuinely fresh tray.
  */
-export function WordOrderPractice({ disabled = false, showInstructions = true, targetHi, targetLatin, onResolve }: Props) {
+export function WordOrderPractice({ disabled = false, scriptPreference = 'devanagari', showInstructions = true, targetHi, targetLatin, onResolve }: Props) {
   const { colors } = useTheme();
   const styles = useStyles();
   const solution = useMemo(() => wordOrderTokens(targetHi), [targetHi]);
@@ -48,7 +51,9 @@ export function WordOrderPractice({ disabled = false, showInstructions = true, t
   const [placedIndexes, setPlacedIndexes] = useState<number[]>([]);
   const [status, setStatus] = useState<'building' | PracticeResult>('building');
 
-  const placedTokens = placedIndexes.map((index) => solution[index] ?? '');
+  const latinTokens = wordOrderTokens(targetLatin);
+  const label = (index: number) => lessonHindiLabel(solution[index] ?? '', scriptPreference, latinTokens.length === solution.length ? latinTokens[index] : undefined);
+  const placedTokens = placedIndexes.map(label);
   const ready = placedIndexes.length === solution.length;
   const locked = disabled || status !== 'building';
 
@@ -109,7 +114,7 @@ export function WordOrderPractice({ disabled = false, showInstructions = true, t
           return (
             <Pressable
               accessibilityHint="Adds this word to the end of your sentence."
-              accessibilityLabel={`Add word ${tile.word}`}
+              accessibilityLabel={`Add word ${label(tile.index)}`}
               accessibilityRole="button"
               accessibilityState={{ disabled: used || locked, selected: used }}
               disabled={used || locked}
@@ -118,7 +123,7 @@ export function WordOrderPractice({ disabled = false, showInstructions = true, t
               style={[styles.tile, used && styles.tileUsed, locked && styles.tileLocked]}
               testID={`scene-word-order-tile-${tile.index}`}
             >
-              <Text style={[styles.tileText, used && styles.tileUsedText]}>{tile.word}</Text>
+              <Text style={[styles.tileText, used && styles.tileUsedText]}>{label(tile.index)}</Text>
             </Pressable>
           );
         })}
@@ -159,7 +164,9 @@ export function WordOrderPractice({ disabled = false, showInstructions = true, t
           <Text style={styles.primaryText}>Check</Text>
         </Pressable>
       </View>
-      <Text style={styles.hint}>{`Say it evenly: ${targetLatin}`}</Text>
+      {status !== 'building' ? (
+        <Text style={styles.hint} testID="scene-word-order-answer">{`Say it evenly: ${lessonHindiLabel(targetHi, scriptPreference, targetLatin)}`}</Text>
+      ) : null}
     </View>
   );
 }
