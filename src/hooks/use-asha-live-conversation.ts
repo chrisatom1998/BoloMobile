@@ -366,6 +366,7 @@ export function useAshaLiveConversation({
       type: nextMuted ? 'session.input_audio.mute' : 'session.input_audio.unmute',
       event_id: `bolo_${nextMuted ? 'mute' : 'unmute'}_${Date.now()}`,
     });
+    setMuted(nextMuted);
   }, [muted]);
 
   const interrupt = useCallback(() => {
@@ -382,6 +383,7 @@ export function useAshaLiveConversation({
     if (muted) {
       peer.setMicrophoneEnabled(true);
       peer.send({ type: 'session.input_audio.unmute', event_id: `bolo_interrupt_unmute_${Date.now()}` });
+      setMuted(false);
     }
     setStatus('listening');
   }, [cancelObsoleteBackendWork, muted]);
