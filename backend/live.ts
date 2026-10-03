@@ -85,7 +85,7 @@ function createSession(offerSdp: string, language: 'en' | 'hi', history: unknown
       instructions: liveInstructions(language),
       input: sanitizeLiveHistory(history),
       // Keep model selection and delegation configuration on the trusted backend.
-      client: { data_channel: { allowed_client_events: ['session.close', 'session.input_audio.mute', 'session.input_audio.unmute'] } },
+      client: { data_channel: { allowed_client_events: ['session.close', 'session.input_audio.mute', 'session.input_audio.unmute', 'session.instructions.append'] } },
       delegation: {
         type: 'responses',
         responses: {
@@ -157,7 +157,8 @@ export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TE
         }
         const key = await deps.secrets.readSecret('OPENAI_API_KEY');
         if (!key?.trim()) return deps.error('Live practice is temporarily unavailable.', 503);
-        const request = createSession(body.offerSdp, body.responseLanguage === 'hi' ? 'hi' : 'en', body.history);
+        const language = body.responseLanguage === 'hi' || (body.responseLanguage === undefined && body.mode === 'hindi-immersion') ? 'hi' : 'en';
+        const request = createSession(body.offerSdp, language, body.history);
         const timeout = new Promise<never>((_, reject) => {
           timer = setTimeout(() => { controller.abort(); reject(new Error('live_request_timeout')); }, LIVE_REQUEST_TIMEOUT_MS);
         });

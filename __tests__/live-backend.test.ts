@@ -32,7 +32,7 @@ describe('GPT-Live backend', () => {
     const request = JSON.parse(init.body as string);
     expect(request.transport).toEqual({ type: 'webrtc', sdp });
     expect(request.session).toMatchObject({ model: 'gpt-live-1', store: false, audio: { output: { voice: 'marin' } }, delegation: { type: 'responses', responses: { model: 'gpt-5.6-terra', tool_choice: 'none' } } });
-    expect(request.session.client.data_channel.allowed_client_events).toEqual(['session.close', 'session.input_audio.mute', 'session.input_audio.unmute']);
+    expect(request.session.client.data_channel.allowed_client_events).toEqual(['session.close', 'session.input_audio.mute', 'session.input_audio.unmute', 'session.instructions.append']);
     expect(request.session.instructions).toContain('Asha');
     expect(request.session.instructions).not.toContain('override');
     expect(request.session.input).toEqual([{ role: 'user', content: [{ type: 'input_text', text: 'Namaste' }] }, { role: 'assistant', content: [{ type: 'output_text', text: 'Hello' }] }]);
@@ -73,6 +73,14 @@ describe('GPT-Live backend', () => {
     expect(english.instructions).toContain('The way you say good morning is सुप्रभात');
     expect(english.instructions).toContain('natural Indian English pronunciation and rhythm');
     expect(english.delegation.responses.instructions).toContain('English framing');
+  });
+
+  it('keeps the prior signed client compatible by deriving language from its teaching mode', async () => {
+    const { deps, call } = setup();
+    await call({ body: { clientId: validBody.clientId, offerSdp: sdp, mode: 'hindi-immersion' } });
+    expect(JSON.parse(deps.openAI.mock.calls[0]![2].body as string).session.instructions).toContain('Speak only Hindi');
+    await call({ body: { clientId: validBody.clientId, offerSdp: sdp, mode: 'hindi-english-help' } });
+    expect(JSON.parse(deps.openAI.mock.calls[1]![2].body as string).session.instructions).toContain('ENGLISH SPOKEN MODE');
   });
 
   it('enforces the existing rate limit before reading credentials', async () => {
