@@ -253,92 +253,173 @@ describe('connected coaching contract', () => {
     }
   });
 
-  it('prepares a complete Romanized saved phrase from selected transcript text', async () => {
+  it('uses the dedicated structured endpoint for arbitrary Romanized and mixed text', async () => {
     const originalFetch = globalThis.fetch;
-    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        transcript: '',
-        reply: '```json\n{"hi":"आप कैसे हैं?","latin":"Aap kaise hain?","en":"How are you?"}\n```',
-        language: 'en',
-      }),
-    }));
+    const phrase = { hi: 'कृपया बताइए, क्या कर रहे हो?', latin: 'Kripya bataaiye, kya kar rahe ho?', en: 'Please tell me, what are you doing?' };
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, json: async () => phrase }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
     try {
-      await expect(prepareSavedPhraseFromText({
-        clientId: 'client-12345678',
-        text: 'How are you?',
-      })).resolves.toEqual({
-        hi: 'आप कैसे हैं?',
-        latin: 'Aap kaise hain?',
-        en: 'How are you?',
-      });
-      const [, init] = expectDefined(fetchMock.mock.calls[0]);
-      const payload = JSON.parse(String(init?.body)) as { messages: unknown[]; text: string };
-      expect(payload.messages).toEqual([]);
-      expect(payload.text).not.toContain('Never use Devanagari.');
-      expect(payload.text).toContain('Use Devanagari only in "hi"');
-      expect(payload.text).toContain('How are you?');
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      for (const text of ['Kya kar rahe ho?', 'Kya kar rahe ho please', 'Could you reboot my router?']) {
+        await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text })).resolves.toEqual(phrase);
+      }
+      expect(fetchMock.mock.calls.map(([url, init]) => ({ url, body: JSON.parse(String(init?.body)) }))).toEqual(
+        ['Kya kar rahe ho?', 'Kya kar rahe ho please', 'Could you reboot my router?'].map((text) => ({
+          url: `${getBoloApiUrl()}/api/prepare-saved-phrase`, body: { clientId: 'client-12345678', text },
+        })),
+      );
+    } finally { globalThis.fetch = originalFetch; }
   });
 
-  it('prepares a Romanized selection from its retained Devanagari source instead of requiring JSON from the chat service', async () => {
+  it('sends the whole audit excerpt in one request without ambiguous word reconstruction', async () => {
     const originalFetch = globalThis.fetch;
+    const text = 'Namaste! Main theek hoon, dhanyavaad. Aap kaise hain? Aaj hum Hindi mein baatcheet karne ki practice karenge.';
+    const phrases = [
+      { hi: 'नमस्ते!', latin: 'Namaste!', en: 'Hello!' },
+      { hi: 'मैं ठीक हूँ, धन्यवाद।', latin: 'Main theek hoon, dhanyavaad.', en: 'I am fine, thank you.' },
+      { hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?', en: 'How are you?' },
+      { hi: 'आज हम हिंदी में बातचीत करने की प्रैक्टिस करेंगे।', latin: 'Aaj hum Hindi mein baatcheet karne ki practice karenge.', en: 'Today we will practice conversing in Hindi.' },
+    ];
     const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        transcript: '',
-        reply: 'I am shopping for clothes.',
-        language: 'en',
+      ok: true, status: 200, json: async () => ({
+        hi: phrases.map(({ hi }) => hi).join(' '), latin: text, en: phrases.map(({ en }) => en).join(' '),
       }),
     }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
-
     try {
-      await expect(prepareSavedPhraseFromText({
-        clientId: 'client-12345678',
-        sourceText: 'मैं कपड़ों की खरीदारी कर रहा हूँ',
-        text: 'Main kapadon kee khareedaaree kar rahaa hoon',
-      })).resolves.toEqual({
-        hi: 'मैं कपड़ों की खरीदारी कर रहा हूँ',
-        latin: 'Main kapadon kee khareedaaree kar rahaa hoon',
-        en: 'I am shopping for clothes.',
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text })).resolves.toEqual({
+        hi: phrases.map(({ hi }) => hi).join(' '), latin: text, en: phrases.map(({ en }) => en).join(' '),
       });
+      expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).text).join(' ')).toBe(text);
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [, init] = expectDefined(fetchMock.mock.calls[0]);
-      const payload = JSON.parse(String(init?.body)) as { responseLanguage?: string; text: string };
-      expect(payload.responseLanguage).toBeUndefined();
-      expect(payload.text).toContain('Phrase: "मैं कपड़ों की खरीदारी कर रहा हूँ"');
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+    } finally { globalThis.fetch = originalFetch; }
   });
 
-  it('rejects prepared phrases containing non-Romanized script', async () => {
+  it('sends the full 500-character excerpt and rejects oversized text without clipping', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true, status: 200, json: async () => ({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' }),
+    }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const text = '"'.repeat(500);
+      await prepareSavedPhraseFromText({ clientId: 'client-12345678', text });
+      expect(JSON.parse(String(expectDefined(fetchMock.mock.calls[0])[1]?.body)).text).toBe(text);
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'x'.repeat(501) })).rejects.toThrow('shorter excerpt');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('preserves the whole retained Hindi source and punctuation while requesting its complete meaning', async () => {
+    const originalFetch = globalThis.fetch;
+    const sourceText = 'मैं कपड़ों की खरीदारी कर रहा हूँ। आप कहाँ जा रहे हैं?';
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true, status: 200, json: async () => ({
+        hi: 'नमस्ते', latin: 'Namaste',
+        en: 'I am shopping for clothes. Where are you going?',
+      }),
+    }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const result = await prepareSavedPhraseFromText({
+        clientId: 'client-12345678', sourceText, text: 'Main kapadon kee khareedaaree kar rahaa hoon. Aap kahaan jaa rahe hain?',
+      });
+      expect(result.hi).toBe(sourceText);
+      expect(result.latin).toContain('Main kapadon kee khareedaaree kar rahaa hoon');
+      expect(result.en).toBe('I am shopping for clothes. Where are you going?');
+      expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).text).join(' ')).toBe(sourceText);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('sends long retained Hindi without a chat prompt reducing its request budget', async () => {
+    const originalFetch = globalThis.fetch;
+    const sourceText = 'मैं '.repeat(125).trim();
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true, status: 200, json: async () => ({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' }),
+    }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      // Romanization expands this excerpt beyond a saved field's 500-character
+      // limit. Fail explicitly rather than silently save a clipped selection.
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'Original selection', sourceText })).rejects.toThrow('shorter excerpt');
+      expect(JSON.parse(String(expectDefined(fetchMock.mock.calls[0])[1]?.body)).text).toBe(sourceText);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('never substitutes a longest Hindi fragment for a mixed-language selection', async () => {
+    const originalFetch = globalThis.fetch;
+    const phrase = { hi: 'कृपया पानी दीजिए', latin: 'Kripya paani deejiye', en: 'Please give me water' };
+    const fetchMock = jest.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, json: async () => phrase }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'Please paani deejiye', sourceText: 'Please पानी दीजिए' })).resolves.toEqual(phrase);
+      expect(JSON.parse(String(expectDefined(fetchMock.mock.calls[0])[1]?.body)).text).toBe('Please paani deejiye');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('keeps known complete lesson phrases available without a network request', async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn();
+    globalThis.fetch = fetchMock;
+    try {
+      const result = await prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'How are you?' });
+      expect(result.hi).toBe('आप कैसे हैं?');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it.each([
+    null,
+    { hi: 'Namaste', latin: 'Namaste', en: 'Hello' },
+    { hi: 'नमस्ते', latin: 'नमस्ते', en: 'Hello' },
+    { hi: 'नमस्ते', latin: 'مرحبا', en: 'Hello' },
+    { hi: 'नमस्ते', latin: 'Namaste', en: 'नमस्ते' },
+    { hi: 'नमस्ते', latin: 'Namaste', en: '' },
+    { hi: 'नमस्ते', latin: 'Namaste', en: 'x'.repeat(501) },
+    { transcript: '', reply: '{"hi":"नमस्ते","latin":"Namaste","en":"Hello"}', language: 'en' },
+  ])('rejects malformed or incorrectly scripted phrase responses: %j', async (payload) => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => ({ ok: true, status: 200, json: async () => payload })) as unknown as typeof fetch;
+    try {
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'A friendly greeting' })).rejects.toThrow('invalid response');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('surfaces a failed request instead of returning a partial phrase', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async (_url: string, init?: RequestInit) => {
+      const failed = JSON.parse(String(init?.body)).text === 'Namaste! Main theek hoon.';
+      return { ok: !failed, status: failed ? 500 : 200, json: async () => failed
+        ? { error: 'Could not prepare phrase.' } : { hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' } };
+    }) as unknown as typeof fetch;
+    try {
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'Namaste! Main theek hoon.' })).rejects.toThrow('Could not prepare phrase.');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('surfaces the server size error so the learner can shorten the excerpt', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = jest.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        transcript: '',
-        reply: '{"hi":"नमस्ते","latin":"नमस्ते","en":"Hello"}',
-        language: 'en',
-      }),
+      ok: false, status: 422,
+      json: async () => ({ error: 'The complete phrase details are too long. Please select a shorter excerpt.' }),
     })) as unknown as typeof fetch;
-
     try {
-      await expect(prepareSavedPhraseFromText({
-        clientId: 'client-12345678',
-        text: 'Hello',
-      })).rejects.toThrow('Bolo could not prepare that phrase.');
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'A lengthy selected excerpt' })).rejects.toThrow('Please select a shorter excerpt.');
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('cancels preparation before a request and after an in-flight response', async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    const fetchMock = jest.fn(async () => {
+      controller.abort();
+      return { ok: true, status: 200, json: async () => ({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' }) };
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'A friendly greeting' }, controller.signal)).rejects.toThrow('canceled');
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'A friendly greeting' }, controller.signal)).rejects.toThrow('canceled');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally { globalThis.fetch = originalFetch; }
   });
 
   it('rejects blank or oversized generated text before it reaches the UI or TTS', async () => {

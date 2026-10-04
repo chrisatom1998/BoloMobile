@@ -1,4 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react-native';
+import { useEffect } from 'react';
 import { AppState, type AppStateStatus, Text, View } from 'react-native';
 
 jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
@@ -28,7 +29,7 @@ jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () =
 import { showAppAlert } from '../src/lib/app-alert';
 import { observe } from '../src/lib/observability';
 import { AI_CONSENT_VERSION, createAiConsentRecord, dateKey, storageKeys } from '../src/lib/storage';
-import { AppStateProvider, useAppStateValue } from '../src/state/app-state';
+import { AppStateProvider, useAppState, useAppStateValue } from '../src/state/app-state';
 
 const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default as {
   __store: Map<string, string>;
@@ -39,8 +40,12 @@ const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 const observeMock = observe as jest.MockedFunction<typeof observe>;
 
+let latestState: ReturnType<typeof useAppState>;
+
 function StateProbe() {
   const state = useAppStateValue();
+  const fullState = useAppState();
+  useEffect(() => { latestState = fullState; }, [fullState]);
   if (!state.hydrated) return <Text testID="status">Hydrating</Text>;
   return (
     <View>
@@ -199,5 +204,42 @@ describe('AppStateProvider day rollover', () => {
     expect(readSnapshot(view).practice).toEqual({ date: '2026-07-20', chaiDone: true, liveDone: true, seconds: 420 });
     expect(asyncStorage.multiSet).not.toHaveBeenCalled();
     await view.unmount();
+  });
+});
+
+
+describe('unfinished lesson persistence', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    asyncStorage.__store.clear();
+  });
+
+  it('rehydrates the whole attempt, completes it once and ignores a late checkpoint or repeated completion', async () => {
+    const attempt = { id: 'attempt-one', score: 50, correct: 1, total: 2, seconds: 27, weakPhrases: ['एक चाय दीजिए।'], answeredBeatIndex: 1 };
+    const first = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(latestState.hydrated).toBe(true));
+    await act(async () => latestState.checkpointScene('chai', 1, attempt));
+    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.sceneProgress)!).chai.attempt).toEqual(attempt));
+    await first.unmount();
+    const resumed = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(latestState.hydrated).toBe(true));
+    expect(latestState.sceneProgress.chai?.attempt).toEqual(attempt);
+    const completion = { attemptId: attempt.id, correct: attempt.correct, score: attempt.score, total: attempt.total, weakPhrases: attempt.weakPhrases };
+    await act(async () => {
+      latestState.markSceneComplete('chai', attempt.seconds, completion);
+      latestState.markSceneComplete('chai', attempt.seconds, completion);
+      latestState.checkpointScene('chai', 1, attempt);
+    });
+    expect(latestState.sceneProgress.chai).toMatchObject({ completions: 1, totalAnswers: 2, totalCorrect: 1, bestAccuracy: 50, lastBeatIndex: 0, lastCompletedAttemptId: 'attempt-one' });
+    expect(latestState.sceneProgress.chai?.attempt).toBeUndefined();
+    expect(latestState.practice.seconds).toBe(27);
+    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.sceneProgress)!).chai.completions).toBe(1));
+    await resumed.unmount();
+    const completed = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(latestState.hydrated).toBe(true));
+    await act(async () => latestState.markSceneComplete('chai', attempt.seconds, completion));
+    expect(latestState.sceneProgress.chai?.completions).toBe(1);
+    expect(latestState.practice.seconds).toBe(27);
+    await completed.unmount();
   });
 });

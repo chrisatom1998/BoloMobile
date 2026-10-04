@@ -150,7 +150,7 @@ export default function SettingsScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]} testID="settings-learning-row">
-          <View style={styles.icon}><Languages color={colors.white} size={20} /></View>
+          <View style={styles.icon}><Languages color={colors.ink} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]} testID="settings-learning-copy"><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Hindi display</Text>
@@ -181,7 +181,7 @@ export default function SettingsScreen() {
 
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-          <View style={[styles.icon, { backgroundColor: colors.forest }]}><Sparkles color={colors.white} size={20} /></View>
+          <View style={styles.icon}><Sparkles color={colors.forest} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Animation style</Text>
@@ -207,7 +207,7 @@ export default function SettingsScreen() {
 
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-        <View style={[styles.icon, { backgroundColor: colors.brand }]}><Bell color={colors.white} size={20} /></View>
+        <View style={styles.icon}><Bell color={colors.brand} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
         </View>
         <SegmentedControl
@@ -232,7 +232,7 @@ export default function SettingsScreen() {
       {aiConsent ? (
         <View style={styles.card}>
           <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-            <View style={[styles.icon, { backgroundColor: colors.forest }]}><ShieldCheck color={colors.white} size={21} /></View>
+            <View style={styles.icon}><ShieldCheck color={colors.forest} size={22} /></View>
             <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
           </View>
           <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, or coaching.</Text>
@@ -243,38 +243,38 @@ export default function SettingsScreen() {
       )}
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]} testID="settings-privacy-link">
-        <View style={styles.icon}><LockKeyhole color={colors.white} size={20} /></View>
+        <View style={styles.icon}><LockKeyhole color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><Activity color={colors.white} size={20} /></View>
+        <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Private diagnostics</Text><Text style={styles.body}>View content-free reliability counters stored on this device</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
       <Pressable accessibilityRole="link" onPress={() => openPage('privacy', 'Privacy Policy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><ExternalLink color={colors.white} size={20} /></View>
+        <View style={styles.icon}><ExternalLink color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Public Privacy Policy</Text><Text style={styles.body}>Open the current policy on the web</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
       <Pressable accessibilityRole="link" onPress={() => openPage('support', 'Support')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><LifeBuoy color={colors.white} size={20} /></View>
+        <View style={styles.icon}><LifeBuoy color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Support</Text><Text style={styles.body}>Get help or make a privacy request</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
       <Pressable accessibilityRole="link" onPress={() => openPage('terms', 'Terms of Use')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><FileText color={colors.white} size={20} /></View>
+        <View style={styles.icon}><FileText color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Terms of Use</Text><Text style={styles.body}>Read Bolo&apos;s public terms</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-          <View style={[styles.icon, { backgroundColor: colors.danger }]}><DatabaseBackup color={colors.white} size={20} /></View>
+          <View style={styles.icon}><DatabaseBackup color={colors.danger} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
         </View>
         <Text style={styles.detail}>Bolo first deletes reports associated with your random app identifier. It then clears local data and rotates that identifier. If the request fails, the identifier is kept so you can retry.</Text>
@@ -298,7 +298,7 @@ const useStyles = makeStyles((c) => ({
   linkCardLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  icon: { width: 44, height: 44, borderRadius: 15, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
   copy: { flex: 1, gap: 3 },
   copyLarge: { flex: 0, width: '100%' },
   title: { color: c.ink, fontSize: 16, fontWeight: '900' },

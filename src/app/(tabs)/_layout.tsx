@@ -25,7 +25,7 @@ export default function PrimaryTabsLayout() {
         <NativeTabs.Trigger.Label>Today</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="live">
-        <NativeTabs.Trigger.Icon md="graphic_eq" sf={{ default: 'waveform', selected: 'waveform.circle.fill' }} />
+        <NativeTabs.Trigger.Icon md="graphic_eq" sf="waveform" />
         <NativeTabs.Trigger.Label>Asha</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="phrases">

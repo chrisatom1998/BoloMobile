@@ -304,9 +304,9 @@ export default function LiveScreen() {
     );
   }, [busy, chatHistory.length, clearSavedChat, realtimeLocked]);
 
-  const sendText = useCallback(async (raw: string) => {
+  const sendText = useCallback(async (raw: string): Promise<boolean> => {
     const text = raw.trim().slice(0, 500);
-    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return;
+    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return false;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     scrollAfterContentChangeRef.current = true;
     setPendingUserMessage(userMessage);
@@ -318,7 +318,7 @@ export default function LiveScreen() {
       const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) {
         if (mountedRef.current) clearPendingUserMessage(userMessage.id);
-        return;
+        return false;
       }
       clearPendingUserMessage(userMessage.id);
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
@@ -333,11 +333,13 @@ export default function LiveScreen() {
           }
         }
       }
+      return true;
     } catch (cause) {
       if (mountedRef.current) clearPendingUserMessage(userMessage.id);
       if (mountedRef.current && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
       }
+      return false;
     } finally {
       if (requestRef.current === controller) {
         requestRef.current = null;
@@ -345,10 +347,6 @@ export default function LiveScreen() {
       }
     }
   }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
-
-  const submitMessage = useCallback((text: string) => {
-    void sendText(text);
-  }, [sendText]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     const previous = realtimeStatusRef.current;
@@ -622,17 +620,17 @@ export default function LiveScreen() {
               accessibilityState={{ disabled: busy || realtimeLocked }}
               isDisabled={busy || realtimeLocked}
               key={example}
-              onPress={() => submitMessage(example)}
+              onPress={() => { void sendText(example); }}
               style={[styles.example, (busy || realtimeLocked) && styles.disabled]}
             >
               <Text style={styles.exampleText}>{example}</Text>
             </PressableFeedback>
           ))}
         </ScrollView>
-        <LiveComposer disabled={busy || realtimeLocked} onSend={submitMessage} styles={styles} />
+        <LiveComposer disabled={busy || realtimeLocked} onSend={sendText} styles={styles} />
       </View> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
-      {wordDefinitionPhrase ? <WordDefinitionSheet clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible /> : null}
+      {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={!!wordDefinitionPhrase} /> : null}
     </KeyboardAvoidingView>
   );
 }
@@ -673,7 +671,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   languageSelector: { alignSelf: 'center' },
   heroConsent: { alignSelf: 'center' },
   liveControls: { alignSelf: 'center', alignItems: 'center', gap: spacing.md },
-  voiceStage: { alignSelf: 'center', minHeight: 178, borderRadius: 28, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs, padding: spacing.md, overflow: 'hidden', boxShadow: '0 8px 18px rgba(35, 39, 35, 0.07)' },
+  voiceStage: { alignSelf: 'center', minHeight: 178, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs, padding: spacing.md, overflow: 'hidden' },
   voiceStageCompact: { minHeight: 160, paddingVertical: spacing.sm },
   liveVoiceBadge: { minHeight: 27, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm },
   liveVoiceDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
@@ -689,7 +687,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioPhraseHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   studioPhraseEyebrow: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
   studioPhraseEnglish: { color: c.ink, fontFamily: 'Georgia', fontSize: 20, lineHeight: 26, fontWeight: '700' },
-  studioListenIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
+  studioListenIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   studioPhraseLine: { height: 1, backgroundColor: c.line },
   studioPhraseHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 24, lineHeight: 32, fontWeight: '700' },
   studioPhraseLatin: { color: c.brandText, fontSize: 14, fontWeight: '900' },
@@ -713,10 +711,6 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   ashaMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
   userMessage: { backgroundColor: c.night },
   messageIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  messageAvatar: { width: 23, height: 23, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
-  messageAvatarYou: { backgroundColor: 'rgba(255,255,255,0.16)' },
-  messageAvatarText: { color: c.brandText, fontSize: 12, lineHeight: 15, fontWeight: '900' },
-  messageAvatarTextYou: { color: c.white, fontSize: 10 },
   messageLabel: { color: c.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   messageText: { alignSelf: 'stretch', color: c.ink, fontSize: 16, lineHeight: 23, margin: 0, padding: 0 },
   userText: { color: c.white },

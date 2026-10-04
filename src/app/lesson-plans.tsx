@@ -2,7 +2,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ScrollView, Text, View } from 'react-native';
 
-import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
@@ -46,13 +46,12 @@ export default function LessonPlansScreen() {
       <View style={[styles.heading, largeTextLayout && styles.headingLarge]} testID="lesson-plans-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>Guided curriculum</JournalKicker>
-          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>One path, 100 small wins.</JournalDisplay>
-          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Each plan has ten focused lessons, with ten practice turns in each lesson.</Text>
+          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>{`One path, ${lessonPlans.reduce((total, plan) => total + plan.lessonIds.length, 0)} small wins.`}</JournalDisplay>
+          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Explore the guided plans or practice your own created lessons.</Text>
         </View>
-        <JournalMotif accessibilityLabel="Lesson plans journal motif" size="tile" style={largeTextLayout ? styles.headingMotifLarge : undefined} />
       </View>
 
-      <View accessibilityLabel="Ten ordered lesson plans" style={styles.plans}>
+      <View accessibilityLabel={`${lessonPlans.length} ordered lesson plans`} style={styles.plans}>
         {lessonPlans.map((plan) => {
           const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
           const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
@@ -166,7 +165,6 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
           <JournalDisplay style={[styles.detailTitle, largeTextLayout && styles.detailTitleLarge]}>{plan.title}</JournalDisplay>
           <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>{plan.subtitle}</Text>
         </View>
-        <JournalMotif accessibilityLabel="Lesson plan journal motif" size="tile" style={largeTextLayout ? styles.headingMotifLarge : undefined} />
       </View>
       <View style={styles.detailSummary}>
         <View style={styles.detailSummaryTopline}>
@@ -178,7 +176,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
         </View>
         <Text style={styles.detailCue}>
           {nextLessonIndex < 0
-            ? `All ten lessons are complete. Review ${currentLesson?.title ?? 'the final lesson'} to keep it warm.`
+            ? `${plan.lessonIds.length === 1 ? 'Your lesson is complete.' : `All ${plan.lessonIds.length} lessons are complete.`} Review ${currentLesson?.title ?? 'the final lesson'} to keep it warm.`
             : inProgressLessonId
               ? `Continue: lesson ${currentIndex + 1} · ${currentLesson?.title ?? 'ten practice turns'}`
               : `Next: lesson ${currentIndex + 1} · ${currentLesson?.title ?? 'ten practice turns'}`}
@@ -197,14 +195,13 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
               accessibilityLabel={`${lesson.title}, lesson ${index + 1} of ${plan.lessonIds.length}, ${status}`}
               accessibilityRole="button"
               key={lesson.id}
+              testID={`lesson-${lesson.id}`}
               onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lesson.id } })}
               style={[styles.lessonCard, isCurrent && styles.lessonCardCurrent, largeTextLayout && styles.lessonCardLarge]}
             >
-              <View style={[styles.lessonNumber, isComplete && styles.lessonNumberComplete, isCurrent && styles.lessonNumberNext]}>
-                <Text style={[styles.lessonNumberText, isComplete && styles.lessonNumberTextComplete]}>{String(index + 1).padStart(2, '0')}</Text>
-              </View>
+              <Text style={[styles.lessonNumberText, isComplete && styles.lessonNumberTextComplete, isCurrent && styles.lessonNumberTextCurrent]}>{String(index + 1).padStart(2, '0')}</Text>
               <View style={styles.lessonCopy}>
-                <Text style={styles.lessonStatus}>{status} · 10 turns</Text>
+                <Text style={styles.lessonStatus}>{status} · {lesson.beats.length} turns</Text>
                 <Text style={styles.lessonTitle}>{lesson.title}</Text>
                 <Text style={styles.lessonSubtitle}>{lesson.subtitle}</Text>
               </View>
@@ -225,13 +222,12 @@ const useStyles = makeStyles((c) => ({
   headingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   headingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   headingCopyLarge: { flex: 0, width: '100%' },
-  title: { maxWidth: 260, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  title: { maxWidth: 320, fontSize: 30, lineHeight: 36, textAlign: 'left' },
   titleLarge: { maxWidth: '100%' },
-  detailTitle: { maxWidth: 260, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  detailTitle: { maxWidth: 320, fontSize: 30, lineHeight: 36, textAlign: 'left' },
   detailTitleLarge: { maxWidth: '100%' },
   intro: { maxWidth: 310, color: c.muted, fontSize: 14, lineHeight: 20 },
   introLarge: { maxWidth: '100%' },
-  headingMotifLarge: { alignSelf: 'flex-end' },
   backButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
   backButtonText: { color: c.forestText, fontSize: 14, fontWeight: '900' },
   plans: { width: '100%', gap: spacing.md },
@@ -242,21 +238,19 @@ const useStyles = makeStyles((c) => ({
   detailCue: { color: c.muted, fontSize: 13, lineHeight: 18 },
   lessons: { width: '100%', gap: spacing.sm },
   lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
-  lessonCardCurrent: { borderColor: c.gold, borderWidth: 2, backgroundColor: c.goldSoft },
+  lessonCardCurrent: { borderColor: c.gold, backgroundColor: c.goldSoft },
   lessonCardLarge: { alignItems: 'flex-start', minHeight: 96, padding: spacing.lg },
-  lessonNumber: { width: 44, height: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: c.backgroundWarm },
-  lessonNumberComplete: { backgroundColor: c.forestSoft },
-  lessonNumberNext: { borderColor: c.gold, borderWidth: 2 },
-  lessonNumberText: { color: c.muted, fontSize: 12, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  lessonNumberText: { width: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontSize: 17, lineHeight: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
   lessonNumberTextComplete: { color: c.forestText },
+  lessonNumberTextCurrent: { color: c.ink },
   lessonCopy: { minWidth: 0, flex: 1, gap: 2 },
   lessonStatus: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
   lessonTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 18, lineHeight: 23, fontWeight: '700' },
   lessonSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
   lessonArrow: { color: c.forestText, fontSize: 22, fontWeight: '900' },
-  planCard: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm, boxShadow: '0 5px 16px rgba(35, 39, 35, 0.06)' },
-  planCardCurrent: { borderColor: c.gold, borderWidth: 2, backgroundColor: c.goldSoft },
-  planCardCompact: { gap: spacing.xs, paddingVertical: spacing.sm, boxShadow: 'none' },
+  planCard: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm },
+  planCardCurrent: { borderColor: c.gold, backgroundColor: c.goldSoft },
+  planCardCompact: { gap: spacing.xs, paddingVertical: spacing.sm },
   planCardLarge: { padding: spacing.lg, gap: spacing.sm },
   planAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   planTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },

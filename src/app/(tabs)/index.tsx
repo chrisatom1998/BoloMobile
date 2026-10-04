@@ -17,23 +17,12 @@ import { useAppState } from '@/state/app-state';
 import { colors, makeStyles, maxContentWidth, radius, spacing, useSharedStyles } from '@/theme';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
-const gardenSaffronHalo = require('../../../assets/images/today-garden-saffron-halo.svg');
-const gardenRoseHalo = require('../../../assets/images/today-garden-rose-halo.svg');
 const gardenStreakIcon = require('../../../assets/images/today-garden-streak-icon.svg');
 const gardenWaterIcon = require('../../../assets/images/today-garden-water-icon.svg');
 const gardenFlowers = [
-  {
-    flower: require('../../../assets/images/today-garden-flower-brand.svg'),
-    soil: require('../../../assets/images/today-garden-soil-brand.svg'),
-  },
-  {
-    flower: require('../../../assets/images/today-garden-flower-forest.svg'),
-    soil: require('../../../assets/images/today-garden-soil-forest.svg'),
-  },
-  {
-    flower: require('../../../assets/images/today-garden-flower-gold.svg'),
-    soil: require('../../../assets/images/today-garden-soil-gold.svg'),
-  },
+  require('../../../assets/images/today-garden-flower-brand.svg'),
+  require('../../../assets/images/today-garden-flower-forest.svg'),
+  require('../../../assets/images/today-garden-flower-gold.svg'),
 ] as const;
 const dailyGoalArcLength = 259.36;
 
@@ -59,8 +48,9 @@ export default function HomeScreen() {
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const openLesson = useCallback((lessonId: string) => router.push({ pathname: '/scene/[id]', params: { id: lessonId } }), [router]);
   const openPlan = useCallback((planId: string) => router.push({ pathname: '/lesson-plans', params: { planId } }), [router]);
-  const goalPercent = Math.min(100, Math.round(practice.seconds / (goal * 60) * 100));
+  // Whole minutes drive both the "min today" label and the dial so they never disagree.
   const minutesToday = Math.floor(practice.seconds / 60);
+  const goalPercent = Math.min(100, Math.round(minutesToday / goal * 100));
   const featuredPhrase = duePhrases[0] ?? phrases[0] ?? null;
   const featuredMastery = featuredPhrase ? (phraseReviews ?? {})[featuredPhrase.hi]?.mastery ?? 0 : 0;
   const gardenSummary = duePhrases.length > 0
@@ -108,9 +98,7 @@ export default function HomeScreen() {
     <View style={[styles.goalFooter, largeTextLayout && styles.goalFooterLarge]} testID="today-daily-goal">
       <View style={[styles.goalHeader, largeTextLayout && styles.goalHeaderLarge]}>
         <JournalDisplay style={styles.goalFooterTitle}>Daily practice target</JournalDisplay>
-        <View style={styles.goalTodayBadge}>
-          <Text style={styles.goalTodayBadgeText}>{minutesToday} min today</Text>
-        </View>
+        <Text style={styles.goalTodayText}>{minutesToday} min today</Text>
       </View>
 
       <View
@@ -163,6 +151,7 @@ export default function HomeScreen() {
             testID={`today-goal-choice-${minutes}`}
           >
             <Text
+              numberOfLines={1}
               style={[
                 styles.goalChoiceText,
                 minutes === 5 && styles.goalChoiceTextFive,
@@ -171,7 +160,7 @@ export default function HomeScreen() {
               ]}
               testID={`today-goal-label-${minutes}`}
             >
-              {minutes}{'\n'}min
+              {minutes} min
             </Text>
             <View
               style={[styles.goalMarkerSpot, minutes === 10 && styles.goalMarkerSpotMiddle]}
@@ -225,19 +214,18 @@ export default function HomeScreen() {
       </View>
 
       <MotionReveal mode={motionMode} motionKey={lessonSelection.lessonId} style={styles.languageGarden} testID="today-primary-motion">
-        <Image accessible={false} contentFit="contain" pointerEvents="none" source={gardenSaffronHalo} style={styles.saffronHalo} />
-        <Image accessible={false} contentFit="contain" pointerEvents="none" source={gardenRoseHalo} style={styles.roseHalo} />
         <View style={[styles.gardenIntro, largeTextLayout && styles.gardenIntroLarge]}>
           <View style={styles.gardenIntroCopy}>
             <JournalKicker>LANGUAGE GARDEN</JournalKicker>
             <JournalDisplay style={styles.gardenTitle}>Asha is here to help it grow.</JournalDisplay>
             <Text style={styles.gardenBody}>{gardenSummary}</Text>
             <View style={styles.gardenChips}>
-              <Pressable accessibilityLabel="View practice streak" accessibilityRole="button" hitSlop={8} onPress={() => router.push('/progress' as Href)} style={[styles.gardenChip, styles.streakChip]}>
+              <Pressable accessibilityLabel="View practice streak" accessibilityRole="button" hitSlop={8} onPress={() => router.push('/progress' as Href)} style={styles.gardenChip}>
                 <Image accessible={false} contentFit="contain" source={gardenStreakIcon} style={styles.gardenChipIcon} />
                 <Text style={styles.streakChipText}>{streak} day{streak === 1 ? '' : 's'}</Text>
               </Pressable>
-              <View accessibilityLabel={`${duePhrases.length} saved phrases ready to water`} style={[styles.gardenChip, styles.waterChip]}>
+              <Text accessible={false} style={styles.gardenChipDivider}>·</Text>
+              <View accessibilityLabel={`${duePhrases.length} saved phrases ready to water`} style={styles.gardenChip}>
                 <Image accessible={false} contentFit="contain" source={gardenWaterIcon} style={styles.gardenChipIcon} />
                 <Text style={styles.waterChipText}>{duePhrases.length} to water</Text>
               </View>
@@ -258,11 +246,8 @@ export default function HomeScreen() {
           testID="today-language-garden"
         >
           <View style={styles.flowerPatch}>
-            {gardenFlowers.map(({ flower, soil }, index) => (
-              <View key={index} style={styles.flowerPair}>
-                <Image accessible={false} contentFit="contain" source={flower} style={styles.flowerIcon} />
-                <Image accessible={false} contentFit="contain" source={soil} style={styles.soilIcon} />
-              </View>
+            {gardenFlowers.map((flower, index) => (
+              <Image accessible={false} contentFit="contain" key={index} source={flower} style={styles.flowerIcon} />
             ))}
           </View>
           <View style={styles.phraseCopy}>
@@ -271,6 +256,8 @@ export default function HomeScreen() {
             <Text style={styles.phraseMastery}>{featuredPhrase ? `${featuredMastery}/5 roots strong` : 'Ready for your first saved phrase'}</Text>
           </View>
         </PressableFeedback>
+
+        <View style={styles.gardenDivider} />
 
         <View style={styles.nextPractice} testID="today-next-practice">
           <JournalKicker>{lessonSelection.kicker}</JournalKicker>
@@ -290,8 +277,8 @@ export default function HomeScreen() {
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
-      <PressableFeedback accessibilityLabel="Browse all 10 plans" accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.lessonPlansLink} testID="today-plan-catalog">
-        <Text style={styles.lessonPlansTitle}>Browse all 10 plans</Text>
+      <PressableFeedback accessibilityLabel={`Browse all ${lessonPlans.length} plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.lessonPlansLink} testID="today-plan-catalog">
+        <Text style={styles.lessonPlansTitle}>{`Browse all ${lessonPlans.length} plans`}</Text>
         <Text style={styles.lessonPlansArrow}>→</Text>
       </PressableFeedback>
       {goalFooter}
@@ -334,10 +321,8 @@ export default function HomeScreen() {
               onPress={() => openPlan(plan.id)}
               style={[styles.planCard, largeTextLayout && styles.planCardLarge]}
             >
-              <View style={styles.planNumber}>
-                <Text style={styles.planNumberText}>{String(plan.order).padStart(2, '0')}</Text>
-              </View>
               <View style={styles.planCopy}>
+                <Text style={styles.planOrder}>Plan {String(plan.order).padStart(2, '0')}</Text>
                 <Text style={styles.planTitle}>{plan.title}</Text>
                 <Text style={styles.planMeta}>{planMeta}</Text>
                 <View accessibilityLabel={`${percent} percent complete`} style={styles.planTrack}>
@@ -371,37 +356,33 @@ const useStyles = makeStyles((c) => ({
   greeting: { marginTop: 1, fontSize: 30, lineHeight: 36, letterSpacing: -0.6 },
   brandTagline: { color: c.muted, fontSize: 14, lineHeight: 20, marginTop: spacing.sm, textAlign: 'left' },
   headerMotif: { position: 'absolute', right: 0, top: -2, width: 158, height: 196 },
-  settingsButton: { alignSelf: 'flex-start', minHeight: 48, minWidth: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md, boxShadow: '0 4px 12px rgba(33, 37, 33, 0.08)' },
+  settingsButton: { alignSelf: 'flex-start', minHeight: 48, minWidth: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md },
   settingsDots: { color: c.brandText, fontSize: 15, fontWeight: '900', letterSpacing: 1.2 },
   settingsLabel: { color: c.muted, fontSize: 13, fontWeight: '800' },
-  languageGarden: { width: '100%', minHeight: 431, position: 'relative', alignItems: 'stretch', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: '#F8EBDD', borderColor: c.line, borderWidth: 1, padding: 17, boxShadow: '0 10px 24px rgba(35, 39, 35, 0.08)' },
-  saffronHalo: { position: 'absolute', right: 4, top: -39, width: 182, height: 182 },
-  roseHalo: { position: 'absolute', right: 2, top: 99, width: 110, height: 110 },
-  gardenIntro: { width: '100%', minHeight: 150, flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: spacing.sm, zIndex: 1 },
+  languageGarden: { width: '100%', alignItems: 'stretch', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: 1, padding: spacing.lg },
+  gardenIntro: { width: '100%', minHeight: 150, flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: spacing.sm },
   gardenIntroLarge: { minHeight: 0, gap: spacing.md },
   gardenIntroCopy: { minWidth: 170, flex: 1, alignItems: 'flex-start' },
   gardenTitle: { maxWidth: 194, marginTop: 4, fontSize: 20, lineHeight: 25, letterSpacing: -0.25 },
   gardenBody: { maxWidth: 194, color: c.muted, fontSize: 14, lineHeight: 20, marginTop: 4 },
-  gardenChips: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  gardenChip: { height: 28, flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: radius.pill, paddingHorizontal: 9 },
-  waterChip: { backgroundColor: c.brandSoft },
+  gardenChips: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm },
+  gardenChip: { minHeight: 24, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  gardenChipDivider: { color: c.lineStrong, fontSize: 12, fontWeight: '900' },
   gardenChipIcon: { width: 14, height: 14 },
-  waterChipText: { color: c.brandText, fontSize: 11, fontWeight: '900' },
-  portraitFrame: { width: 132, height: 158, marginTop: -8, marginRight: -6, overflow: 'hidden', borderRadius: 24, borderCurve: 'continuous', backgroundColor: '#FFF8EF', borderColor: 'rgba(255,255,255,0.9)', borderWidth: 2, padding: 6, boxShadow: '0 8px 16px rgba(88, 54, 36, 0.12)' },
+  waterChipText: { color: c.brandText, fontSize: 12, fontWeight: '800' },
+  portraitFrame: { width: 120, height: 144, overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised },
   portraitFrameLarge: { marginTop: 0, marginRight: 0 },
-  gardenPortrait: { width: '100%', height: '100%', borderRadius: 18, borderCurve: 'continuous' },
-  gardenDivider: { width: '100%', height: 1, backgroundColor: c.line, marginTop: 6 },
-  phraseCard: { width: '100%', minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.goldSoft, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginTop: 22 },
+  gardenPortrait: { width: '100%', height: '100%' },
+  gardenDivider: { width: '100%', height: 1, backgroundColor: c.line, marginTop: spacing.lg },
+  phraseCard: { width: '100%', minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   phraseCardLarge: { flexWrap: 'wrap' },
-  flowerPatch: { width: 112, height: 48, flexDirection: 'row', alignItems: 'flex-end' },
-  flowerPair: { width: 32, height: 48, marginRight: 4, position: 'relative', alignItems: 'center' },
-  flowerIcon: { position: 'absolute', left: 4, top: 0, width: 24, height: 24, zIndex: 1 },
-  soilIcon: { position: 'absolute', left: 0, bottom: 2, width: 32, height: 24 },
+  flowerPatch: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  flowerIcon: { width: 24, height: 24 },
   phraseCopy: { minWidth: 0, flex: 1 },
-  phraseTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 16, lineHeight: 21, fontWeight: '700', marginTop: 1 },
-  phraseMastery: { color: c.muted, fontSize: 11, lineHeight: 15, fontWeight: '700', marginTop: 1 },
-  nextPractice: { width: '100%', minHeight: 123, alignItems: 'center', justifyContent: 'center', borderRadius: 18, borderCurve: 'continuous', backgroundColor: '#FFF7E3', borderColor: 'rgba(232, 199, 143, 0.48)', borderWidth: 1, padding: spacing.md, gap: 6, marginTop: 21, boxShadow: '0 5px 14px rgba(94, 66, 34, 0.08)' },
-  nextPracticeTitle: { width: '100%', fontSize: 20, lineHeight: 25, letterSpacing: -0.25, textAlign: 'center' },
+  phraseTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 17, lineHeight: 22, fontWeight: '700', marginTop: 2 },
+  phraseMastery: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '700', marginTop: 1 },
+  nextPractice: { width: '100%', minHeight: 110, alignItems: 'flex-start', justifyContent: 'center', gap: 6, paddingTop: spacing.lg },
+  nextPracticeTitle: { width: '100%', fontSize: 20, lineHeight: 25, letterSpacing: -0.25, textAlign: 'left' },
   learningHeading: { width: '100%', minHeight: 35, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.md },
   learningHeadingLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   learningTitle: { minWidth: 0, flexShrink: 1, fontSize: 20, lineHeight: 25, letterSpacing: -0.25 },
@@ -419,9 +400,7 @@ const useStyles = makeStyles((c) => ({
   goalSummary: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.xs },
   goalSummaryLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   todayLabel: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'left' },
-  streakChip: { backgroundColor: c.forestSoft },
-  streakChipIcon: { color: c.forestText },
-  streakChipText: { color: c.forestText, fontSize: 12, fontWeight: '900' },
+  streakChipText: { color: c.forestText, fontSize: 12, fontWeight: '800' },
   progressTrack: { width: '100%', height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm },
   progressFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
   arcSteps: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
@@ -435,7 +414,7 @@ const useStyles = makeStyles((c) => ({
   arcStepLabel: { color: c.muted, fontSize: 11, fontWeight: '900', textAlign: 'center', textTransform: 'uppercase' },
   arcStepLabelActive: { color: c.ink },
   arcConnector: { height: 1, flex: 0.42, backgroundColor: c.gold },
-  nextButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', backgroundColor: c.neutralSurface, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  nextButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', backgroundColor: c.neutralSurface, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   nextButtonText: { color: c.white, fontSize: 14, fontWeight: '800' },
   gardenCue: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.md },
   gardenCueIcon: { width: 46, height: 46, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 1, backgroundColor: c.goldSoft, alignItems: 'center', justifyContent: 'center' },
@@ -449,48 +428,45 @@ const useStyles = makeStyles((c) => ({
   lessonPlansLink: { width: '100%', minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, borderTopColor: c.line, borderBottomColor: c.line, borderTopWidth: 1, borderBottomWidth: 1, paddingHorizontal: spacing.xs, paddingVertical: spacing.xs },
   lessonPlansTitle: { color: c.forestText, fontSize: 14, lineHeight: 20, fontWeight: '900' },
   lessonPlansArrow: { color: c.forestText, fontSize: 20, fontWeight: '900' },
-  goalFooter: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: 14, gap: 6, boxShadow: '0 6px 18px rgba(35, 39, 35, 0.05)' },
+  goalFooter: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.lg, gap: 6 },
   goalFooterLarge: { padding: spacing.lg, gap: spacing.md },
   goalHeader: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   goalHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   goalFooterTitle: { minWidth: 0, flexShrink: 1, color: c.ink, fontSize: 21, lineHeight: 27, letterSpacing: -0.25, textAlign: 'left' },
-  goalTodayBadge: { minHeight: 32, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start', borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md, paddingVertical: 5 },
-  goalTodayBadgeText: { color: c.brandText, fontSize: 12, lineHeight: 17, fontWeight: '900', fontVariant: ['tabular-nums'] },
+  goalTodayText: { color: c.forestText, fontSize: 13, lineHeight: 18, fontWeight: '800', fontVariant: ['tabular-nums'] },
   goalDial: { width: '100%', maxWidth: 320, height: 144, alignSelf: 'center', position: 'relative' },
   goalDialLarge: { height: 190 },
   goalDialArc: { position: 'absolute', left: 0, right: 0, top: -6, height: 136 },
-  goalChoice: { position: 'absolute', width: 48, minWidth: 48, height: 58, minHeight: 48, alignItems: 'center', justifyContent: 'flex-start', zIndex: 2 },
-  goalChoiceFive: { left: '19.078947%', top: 76, transform: [{ translateX: -24 }] },
-  goalChoiceTen: { left: '50%', top: 2, transform: [{ translateX: -24 }] },
-  goalChoiceFifteen: { right: '19.078947%', top: 76, transform: [{ translateX: 24 }] },
-  goalChoiceText: { color: c.muted, fontSize: 12, lineHeight: 14, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'] },
+  goalChoice: { position: 'absolute', width: 60, minWidth: 48, height: 58, minHeight: 48, alignItems: 'center', justifyContent: 'flex-start', zIndex: 2 },
+  goalChoiceFive: { left: '19.078947%', top: 76, transform: [{ translateX: -30 }] },
+  goalChoiceTen: { left: '50%', top: 2, transform: [{ translateX: -30 }] },
+  goalChoiceFifteen: { right: '19.078947%', top: 76, transform: [{ translateX: 30 }] },
+  goalChoiceText: { color: c.muted, fontSize: 11, lineHeight: 14, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'] },
   goalChoiceTextFive: { transform: [{ translateX: -8 }] },
   goalChoiceTextFifteen: { transform: [{ translateX: 8 }] },
   goalChoiceTextActive: { color: c.ink, fontWeight: '900' },
-  goalMarkerSpot: { position: 'absolute', left: 12, bottom: 2, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  goalMarkerSpot: { position: 'absolute', left: 18, bottom: 2, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   goalMarkerSpotMiddle: { bottom: 1.5 },
   goalMarker: { width: 9, height: 9, borderRadius: radius.pill },
   goalMarkerStart: { backgroundColor: c.gold },
   goalMarkerMiddle: { backgroundColor: c.gold },
   goalMarkerEnd: { backgroundColor: c.gold },
-  goalMarkerActive: { width: 22, height: 22, backgroundColor: c.brand, borderColor: c.white, borderWidth: 2, boxShadow: '0 2px 5px rgba(98, 47, 31, 0.28)' },
+  goalMarkerActive: { width: 20, height: 20, backgroundColor: c.brand, borderColor: c.white, borderWidth: 2 },
   goalValue: { position: 'absolute', left: 58, right: 58, top: 70, alignItems: 'center', zIndex: 1 },
   goalValueMinutes: { color: c.forestText, fontFamily: 'Georgia', fontSize: 36, lineHeight: 40, fontWeight: '700', letterSpacing: -0.5, textAlign: 'center', fontVariant: ['tabular-nums'] },
   goalValueLabel: { color: c.muted, fontSize: 13, lineHeight: 17, fontWeight: '800', textAlign: 'center' },
   goalProgressCopy: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '800', textAlign: 'center', fontVariant: ['tabular-nums'] },
   challengeChecks: { width: '100%', maxWidth: 252, alignSelf: 'center', flexDirection: 'row', alignItems: 'stretch', justifyContent: 'center', gap: spacing.sm, marginTop: 10 },
   challengeChecksLarge: { flexDirection: 'column' },
-  challengePill: { minWidth: 0, minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, borderCurve: 'continuous', borderColor: '#DFC99D', borderWidth: 1, backgroundColor: c.paper, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  challengePillDone: { borderColor: '#B9D3C9', backgroundColor: c.successSoft },
+  challengePill: { minWidth: 0, minHeight: 44, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paper, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
+  challengePillDone: { borderColor: c.forestSoft, backgroundColor: c.successSoft },
   challengeCheck: { color: c.muted, fontSize: 12, lineHeight: 17, fontWeight: '800', textAlign: 'center' },
   challengeCheckDone: { color: c.forestText },
-  planCard: { width: '100%', minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, boxShadow: '0 4px 12px rgba(35, 39, 35, 0.05)' },
+  planCard: { width: '100%', minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.lg },
   planCardLarge: { minHeight: 96, flexWrap: 'wrap', alignItems: 'flex-start', padding: spacing.lg },
-  planNumber: { width: 42, height: 42, flexShrink: 0, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
-  planNumberText: { color: c.brandText, fontSize: 13, lineHeight: 18, fontWeight: '900', fontVariant: ['tabular-nums'] },
   planAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   planTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  planOrder: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
+  planOrder: { color: c.brandText, fontSize: 11, lineHeight: 15, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase', fontVariant: ['tabular-nums'] },
   planMeta: { color: c.muted, fontSize: 11, lineHeight: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
   planTitleRow: { minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   planTitleRowLarge: { alignItems: 'flex-start' },

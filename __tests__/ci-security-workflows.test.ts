@@ -206,7 +206,7 @@ describe('Maestro flow validation across checkout line endings', () => {
 
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('Validated 4 Maestro device flows and 1 subflows');
+    expect(result.stdout).toContain('Validated 5 Maestro device-flow definitions and 1 subflows');
   });
 
   test.each(['flows/0.yaml', 'subflows/helper.yaml'])('rejects a wrong bundle identifier in CRLF %s', (invalidFile) => {
@@ -216,14 +216,21 @@ describe('Maestro flow validation across checkout line endings', () => {
     expect(result.stderr).toContain(`${invalidFile} does not target the Bolo bundle identifier (com.bolo.hindi).`);
   });
 
-  function validateFixture(newline: string, invalidFile?: string) {
+  test('rejects optional simulator voice assertions', () => {
+    const result = validateFixture('\n', undefined, true);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Simulator limitation assertions must not be conditional.');
+  });
+
+  function validateFixture(newline: string, invalidFile?: string, optionalVoice = false) {
     const fixtureRoot = mkdtempSync(resolve(tmpdir(), 'bolo-maestro-validation-'));
     const commands = [
       '- launchApp:',
       '    clearState: true',
       '- stopApp',
-      '- assertVisible: "Scene complete"',
-      '- assertVisible: "Turn 2 of 2"',
+      '- assertVisible:',
+      '    id: "scene-completion-title"',
+      '- assertVisible: "Turn 2 of [0-9]+"',
       '- assertVisible: "Enable live practice"',
       '- setPermissions:',
       '    permissions:',
@@ -236,11 +243,15 @@ describe('Maestro flow validation across checkout line endings', () => {
     try {
       mkdirSync(resolve(fixtureRoot, '.maestro/flows'), { recursive: true });
       mkdirSync(resolve(fixtureRoot, '.maestro/subflows'), { recursive: true });
-      const files = ['flows/0.yaml', 'flows/1.yaml', 'flows/2.yaml', 'flows/3.yaml', 'subflows/helper.yaml'];
+      const files = ['flows/0.yaml', 'flows/1.yaml', 'flows/2.yaml', 'flows/3.yaml', 'flows/06-simulator-voice-unsupported.yaml', 'subflows/helper.yaml'];
       for (const file of files) {
         const appId = file === invalidFile ? 'com.other.app' : 'com.bolo.hindi';
-        const body = file === 'flows/0.yaml' ? commands : ['- stopApp'];
+        const body = file === 'flows/0.yaml' ? commands : file === 'flows/06-simulator-voice-unsupported.yaml' ? [...(optionalVoice ? ['- runFlow:', '    when:', '      visible: "Asha is listening"'] : []), '- extendedWaitUntil:', '    visible: "Live voice requires a physical iPhone.*"'] : ['- stopApp'];
         writeFileSync(resolve(fixtureRoot, '.maestro', file), [`appId: ${appId}`, '---', ...body, ''].join(newline), 'utf8');
+      }
+      for (const file of ['.eas/workflows/nightly-maestro.yml', '.github/workflows/record-ios-physical-signoff.yml']) {
+        mkdirSync(resolve(fixtureRoot, file.split('/').slice(0, -1).join('/')), { recursive: true });
+        writeFileSync(resolve(fixtureRoot, file), read(file).replace(/\n/gu, newline), 'utf8');
       }
       return spawnSync(process.execPath, [resolve(root, 'scripts/validate-e2e-flows.mjs')], {
         cwd: fixtureRoot,
@@ -271,6 +282,35 @@ describe('nightly and release approval gates', () => {
     expect(signoffWorkflow).toContain('checks_completed:');
     expect(signoffWorkflow).toContain('test "$CHECKS_COMPLETED" = "true"');
     expect(signoffWorkflow).toContain('$GITHUB_ACTOR');
+  });
+
+  test.each([
+    [{ VOICE_CHECKS_COMPLETED: 'false' }, false],
+    [{ VOICE_EVIDENCE: '' }, false],
+    [{ VOICE_EVIDENCE: '   ' }, false],
+    [{ SIGNOFF_NOTES: '  ' }, false],
+    [{}, true],
+  ])('requires real iPhone voice confirmation and observations: %j', (overrides, passes) => {
+    const workflow = read('.github/workflows/record-ios-physical-signoff.yml');
+    const gate = matchingBlock(workflow, '      - name: Require an explicit, attributable signoff', '      - name: Record physical-iPhone test evidence')
+      .split('run: |\n')[1]?.replace(/^          /gmu, '');
+    if (!gate) throw new Error('Missing physical signoff validation script.');
+    const result = spawnSync('/bin/bash', ['-c', gate], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        RELEASE_COMMIT: 'a'.repeat(40),
+        EAS_BUILD_ID: 'test-build',
+        TESTFLIGHT_BUILD: '1.0 (1)',
+        CHECKS_COMPLETED: 'true',
+        VOICE_CHECKS_COMPLETED: 'true',
+        VOICE_EVIDENCE: 'Recognized both utterances; heard replies finish; second turn ready; microphone released.',
+        SIGNOFF_NOTES: 'Test iPhone and iOS version',
+        ...overrides,
+      },
+    });
+    expect(result.status === 0).toBe(passes);
   });
 });
 

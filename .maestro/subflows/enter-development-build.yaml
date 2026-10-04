@@ -1,5 +1,9 @@
 appId: com.bolo.hindi
 ---
+# The dev launcher can surface an iOS "Open in Bolo?" URL prompt on launch.
+- tapOn:
+    text: "Open"
+    optional: true
 - tapOn:
     text: "Bolo, http://.*:8081"
     optional: true

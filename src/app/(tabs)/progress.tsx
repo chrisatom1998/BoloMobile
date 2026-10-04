@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { Platform, Share, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
+import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
@@ -105,20 +105,20 @@ export default function ProgressScreen() {
           <JournalKicker>Your language garden</JournalKicker>
           <JournalDisplay style={[styles.pageTitle, largeTextLayout && styles.pageTitleLarge]}>What is taking root.</JournalDisplay>
         </View>
-        <JournalMotif accessibilityLabel="Progress journal motif" size="tile" style={largeTextLayout ? styles.pageHeadingMotifLarge : undefined} />
       </View>
 
       <View style={styles.hero}>
-        <Text accessible={false} importantForAccessibility="no" pointerEvents="none" style={styles.heroGlyph}>ब</Text>
-        <View style={styles.heroIcon}><Sprout color={colors.goldSoft} size={25} /></View>
-        <Text style={styles.heroEyebrow}>
-          {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
-        </Text>
+        <View style={styles.heroEyebrowRow}>
+          <Sprout color={colors.forestText} size={16} strokeWidth={2} />
+          <Text style={styles.heroEyebrow}>
+            {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
+          </Text>
+        </View>
         <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
         <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
         <View style={styles.heroFootnotes}>
-          <View style={styles.heroFootnote}><Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text></View>
-          <View style={[styles.heroFootnote, styles.heroFootnoteForest]}><Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text></View>
+          <Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text>
+          <Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text>
         </View>
         <PressableFeedback
           accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
@@ -164,7 +164,7 @@ export default function ProgressScreen() {
       {featuredPhrase ? (
         <PressableFeedback accessibilityLabel={`Water saved phrase ${featuredPhrase.hi}`} accessibilityRole="button" onPress={() => router.push((duePhrases.length ? '/review' : '/phrases') as Href)} style={styles.featuredPhrase}>
           <View style={styles.featuredPhraseHeading}>
-            <View style={styles.featuredPhraseIcon}><Sprout color={colors.forestText} size={20} /></View>
+            <Sprout color={colors.forestText} size={16} strokeWidth={2} />
             <Text style={styles.gardenEyebrow}>Featured phrase</Text>
           </View>
           {learnerProfile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
@@ -228,19 +228,15 @@ export const createProgressStyles = (c: ThemeColors) => ({
   pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs, paddingTop: spacing.xs },
   pageHeadingCopyLarge: { flex: 0, width: '100%' },
-  pageTitle: { maxWidth: 225, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  pageTitle: { maxWidth: 300, fontSize: 30, lineHeight: 36, textAlign: 'left' },
   pageTitleLarge: { maxWidth: '100%' },
-  pageHeadingMotifLarge: { alignSelf: 'flex-end' },
-  hero: { width: '100%', position: 'relative', overflow: 'hidden', alignItems: 'flex-start', borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm, boxShadow: '0 10px 24px rgba(0, 0, 0, 0.09)' },
-  heroIcon: { width: 46, height: 46, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center' },
-  heroGlyph: { position: 'absolute', right: -6, bottom: -48, color: c.heroGlyph, fontSize: 156, lineHeight: 180, fontWeight: '900' },
+  hero: { width: '100%', alignItems: 'flex-start', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm },
+  heroEyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   heroTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 32, fontWeight: '700', textAlign: 'left' },
   heroBody: { color: c.muted, fontSize: 14, lineHeight: 21, textAlign: 'left' },
-  heroFootnotes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  heroFootnote: { maxWidth: '100%', flexShrink: 1, borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  heroFootnoteText: { color: c.ink, fontSize: 12, fontWeight: '800' },
-  heroFootnoteForest: { backgroundColor: c.forestSoft },
+  heroFootnotes: { width: '100%', gap: 2, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.sm, marginTop: spacing.xs },
+  heroFootnoteText: { color: c.muted, fontSize: 12, lineHeight: 17, fontWeight: '700', fontVariant: ['tabular-nums'] },
   heroFootnoteForestText: { color: c.forestText },
   heroAction: { minHeight: 48, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
   heroActionText: { color: c.neutralSurfaceText, fontSize: 14, fontWeight: '900' },
@@ -253,11 +249,9 @@ export const createProgressStyles = (c: ThemeColors) => ({
   gardenDayLabelToday: { color: c.brandText },
   gardenLeaf: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center' },
   gardenLeafActive: { borderColor: c.forest, borderWidth: 1, backgroundColor: c.forestSoft },
-  gardenLeafToday: { borderColor: c.neutralSurface, borderWidth: 2, backgroundColor: c.neutralSurface },
-  featuredPhrase: { width: '100%', backgroundColor: c.paperRaised, borderColor: c.gold, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
-  featuredPhraseHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  featuredPhraseIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.goldSoft, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  featuredListen: { marginLeft: 'auto', width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
+  gardenLeafToday: { borderColor: c.forest, borderWidth: 2, backgroundColor: c.forestSoft },
+  featuredPhrase: { width: '100%', backgroundColor: c.paperRaised, borderColor: c.gold, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
+  featuredPhraseHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 6 },
   featuredHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 28, lineHeight: 36, fontWeight: '700' },
   featuredLatin: { color: c.brandText, fontSize: 15, fontWeight: '900' },
   featuredEnglish: { color: c.muted, fontSize: 15, lineHeight: 21 },
@@ -268,10 +262,10 @@ export const createProgressStyles = (c: ThemeColors) => ({
   waterButton: { minHeight: 48, borderRadius: radius.md, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
   waterButtonText: { color: c.neutralSurfaceText, fontSize: 14, fontWeight: '900' },
   stats: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  stat: { minWidth: 130, minHeight: 100, flexGrow: 1, flexBasis: 130, backgroundColor: c.paperRaised, borderRadius: 18, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, padding: spacing.md, alignItems: 'center', justifyContent: 'center', gap: 3, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.035)' },
-  statValue: { color: c.ink, fontSize: 27, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  statLabel: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '700', textAlign: 'center' },
-  card: { width: '100%', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg, boxShadow: '0 4px 14px rgba(0, 0, 0, 0.035)' },
+  stat: { minWidth: 130, minHeight: 84, flexGrow: 1, flexBasis: 130, backgroundColor: c.paper, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, alignItems: 'flex-start', justifyContent: 'center', gap: 2 },
+  statValue: { color: c.ink, fontFamily: 'Georgia', fontSize: 26, lineHeight: 30, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  statLabel: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '700', textAlign: 'left' },
+  card: { width: '100%', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   title: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
   cardMeta: { color: c.muted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },

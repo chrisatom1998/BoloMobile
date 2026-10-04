@@ -54,6 +54,16 @@ function emptyAcceptance(): AcceptanceRecord {
   };
 }
 
+function activeAcceptance(): AcceptanceRecord {
+  return {
+    version: 1,
+    exceptions: [
+      { ghsa: 'GHSA-vfj7-8cjw-p6xm', module: 'braces', owner: 'chris johnson', acceptedOn: '2026-08-01', expires: '2027-01-01' },
+      { ghsa: 'GHSA-86w9-cpqp-85rv', module: 'node-forge', owner: 'chris johnson', acceptedOn: '2026-08-01', expires: '2027-01-01' },
+    ],
+  };
+}
+
 function advisory(ghsa: string, title: string) {
   return {
     source: ghsa,
@@ -110,12 +120,34 @@ describe('dependency audit exceptions', () => {
     expect(result.failures.join(' ')).toContain('not approved by the audit gate');
   });
 
-  it('accepts a clean audit when no security exceptions are active', () => {
-    const result = evaluate(cleanAudit(), emptyAcceptance());
+  it('accepts a clean audit with the active exception record', () => {
+    const result = evaluate(cleanAudit(), activeAcceptance());
 
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
     expect(result.accepted).toEqual([]);
+  });
+
+  it('requires every approved exception to stay in the record', () => {
+    const result = evaluate(cleanAudit(), emptyAcceptance());
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join(' ')).toContain('must contain exactly 2 approved entries');
+  });
+
+  it('accepts the approved braces and node-forge advisories on their reviewed modules', () => {
+    const audit = {
+      auditReportVersion: 2,
+      vulnerabilities: {
+        braces: { name: 'braces', severity: 'high', via: [{ source: 1, name: 'braces', url: 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm', severity: 'high', range: '<=3.0.3' }] },
+        'node-forge': { name: 'node-forge', severity: 'high', via: [{ source: 2, name: 'node-forge', url: 'https://github.com/advisories/GHSA-86w9-cpqp-85rv', severity: 'high', range: '<=1.4.0' }] },
+      },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0, total: 2 } },
+    };
+    const result = evaluate(audit, activeAcceptance());
+
+    expect(result.ok).toBe(true);
+    expect(result.accepted.map((entry) => entry.module).sort()).toEqual(['braces', 'node-forge']);
   });
 
   it('rejects the two retired image-size advisories if they reappear', () => {
@@ -142,7 +174,7 @@ describe('dependency audit exceptions', () => {
       },
     };
 
-    expect(evaluate(audit, emptyAcceptance()).ok).toBe(true);
+    expect(evaluate(audit, activeAcceptance()).ok).toBe(true);
   });
 
   it('fails closed on a pure high-severity via cycle', () => {

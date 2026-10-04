@@ -1,0 +1,13 @@
+appId: com.bolo.hindi
+---
+# Relaunching a development build can reopen the Expo dev menu over the app.
+- extendedWaitUntil:
+    visible: "Runtime version.*"
+    timeout: 5000
+    optional: true
+- tapOn:
+    id: "xmark"
+    optional: true
+- tapOn:
+    text: "Dismiss"
+    optional: true

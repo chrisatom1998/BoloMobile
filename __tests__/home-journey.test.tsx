@@ -1,3 +1,6 @@
+// Keep built-in journey fixtures independent of locally imported lessons.
+jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
+
 import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
@@ -126,7 +129,7 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('A warm hello')).toBeTruthy();
     expect(view.getByText('Your learning path')).toBeTruthy();
     expect(view.getByText('10 plans · 100 lessons')).toBeTruthy();
-    expect(view.getByText('01')).toBeTruthy();
+    expect(view.getByText('Plan 01')).toBeTruthy();
     expect(view.getByText('0 of 10 lessons')).toBeTruthy();
     expect(view.getByLabelText('Browse all 10 plans')).toBeTruthy();
     expect(view.queryByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeNull();
@@ -144,16 +147,16 @@ describe('HomeScreen primary journey', () => {
     });
   });
 
-  it('centers the yellow phrase card without changing the garden total spacing', async () => {
+  it('keeps the phrase and next-lesson sections flat inside the garden card', async () => {
     const view = await render(<HomeScreen />);
 
-    const phraseCardMargin = StyleSheet.flatten(view.getByTestId('today-language-garden').props.style).marginTop;
-    const nextPracticeMargin = StyleSheet.flatten(view.getByTestId('today-next-practice').props.style).marginTop;
+    const phraseCard = StyleSheet.flatten(view.getByTestId('today-language-garden').props.style);
+    const nextPractice = StyleSheet.flatten(view.getByTestId('today-next-practice').props.style);
 
-    expect(phraseCardMargin).toBe(22);
-    expect(nextPracticeMargin).toBe(21);
-    expect(phraseCardMargin + nextPracticeMargin).toBe(43);
-    expect(Math.abs(phraseCardMargin - nextPracticeMargin)).toBeLessThanOrEqual(1);
+    expect(phraseCard.backgroundColor).toBeUndefined();
+    expect(phraseCard.borderWidth).toBeUndefined();
+    expect(nextPractice.backgroundColor).toBeUndefined();
+    expect(nextPractice.borderWidth).toBeUndefined();
   });
 
   it('advances the current plan card after the prior plan is complete', async () => {
@@ -166,7 +169,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('02')).toBeTruthy();
+    expect(view.getByText('Plan 02')).toBeTruthy();
     expect(view.getByText('Ask where someone lives')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeTruthy();
     expect(view.queryByLabelText('Start speaking, plan 1 of 10, 10 of 10 lessons complete')).toBeNull();

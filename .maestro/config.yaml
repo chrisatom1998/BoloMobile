@@ -1,3 +1,7 @@
+# Flows 03 and 05 drive real GPT-Live voice and run only on a physical iPhone.
+# Flow 06 checks only the expected iOS Simulator limitation.
 flows:
-  - "flows/*.yaml"
-
+  - "flows/00-ci-smoke.yaml"
+  - "flows/02-scene-resume-and-phrases.yaml"
+  - "flows/04-data-deletion.yaml"
+  - "flows/06-simulator-voice-unsupported.yaml"

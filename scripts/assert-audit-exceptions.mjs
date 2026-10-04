@@ -11,7 +11,11 @@ const acceptancePath = resolve(appRoot, 'docs/security-exceptions.md');
 const acceptanceBegin = '<!-- acceptance-record:begin -->';
 const acceptanceEnd = '<!-- acceptance-record:end -->';
 const blockingSeverities = new Set(['high', 'critical']);
-const approvedExceptions = new Map();
+// Temporary, owner-approved exceptions. Each must match docs/security-exceptions.md.
+const approvedExceptions = new Map([
+  ['GHSA-vfj7-8cjw-p6xm', { module: 'braces', expires: '2027-01-01' }],
+  ['GHSA-86w9-cpqp-85rv', { module: 'node-forge', expires: '2027-01-01' }],
+]);
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

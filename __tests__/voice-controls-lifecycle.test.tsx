@@ -111,7 +111,7 @@ describe('voice control lifecycle', () => {
       return { remove: jest.fn() };
     });
     requestPermissionMock.mockResolvedValue({ granted: true } as Awaited<ReturnType<typeof requestRecordingPermissionsAsync>>);
-    checkPronunciationMock.mockResolvedValue({ transcript: 'Namaste', feedback: 'Keep the first vowel short.' });
+    checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'Namaste', feedback: 'Keep the first vowel short.' });
     reportGeneratedMessageMock.mockResolvedValue({ reported: true });
   });
 
@@ -220,8 +220,33 @@ describe('voice control lifecycle', () => {
     await view.unmount();
   });
 
+  it('shows no-speech retry coaching and immediately makes recording available again', async () => {
+    checkPronunciationMock.mockResolvedValueOnce({ outcome: 'no-speech', transcript: '', understood: false, feedback: 'I did not catch anything. Please try again.' });
+    const view = await render(<PronunciationRecorder lessonTitle="Greeting" target={{ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' }} />);
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
+    await fireEvent.press(view.getByLabelText('Stop recording'));
+    await waitFor(() => expect(view.getByText('I did not catch anything. Please try again.')).toBeTruthy());
+    expect(view.getByLabelText('Record pronunciation').props.accessibilityState.disabled).toBe(false);
+    expect(view.queryByText(/invalid response/u)).toBeNull();
+    await view.unmount();
+  });
+
+  it('shows a malformed-response error separately from learner retry coaching and releases the recorder', async () => {
+    checkPronunciationMock.mockRejectedValueOnce(new Error('Bolo returned an invalid response. Please try again.'));
+    const view = await render(<PronunciationRecorder lessonTitle="Greeting" target={{ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' }} />);
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
+    await fireEvent.press(view.getByLabelText('Stop recording'));
+    await waitFor(() => expect(view.getByText('Bolo returned an invalid response. Please try again.')).toBeTruthy());
+    expect(view.getByLabelText('Record pronunciation').props.accessibilityState.disabled).toBe(false);
+    expect(view.queryByText('Report feedback')).toBeNull();
+    expect(speakTextMock).not.toHaveBeenCalled();
+    await view.unmount();
+  });
+
   it('ignores pronunciation feedback that resolves after unmount', async () => {
-    const request = deferred<{ transcript: string; feedback: string }>();
+    const request = deferred<Awaited<ReturnType<typeof checkPronunciation>>>();
     let requestSignal: AbortSignal | undefined;
     checkPronunciationMock.mockImplementation((_input, signal) => {
       requestSignal = signal;
@@ -240,7 +265,7 @@ describe('voice control lifecycle', () => {
     await view.unmount();
     expect(requestSignal?.aborted).toBe(true);
     await act(async () => {
-      request.resolve({ transcript: 'Namaste', feedback: 'Late feedback.' });
+      request.resolve({ outcome: 'speech', transcript: 'Namaste', feedback: 'Late feedback.' });
       for (let index = 0; index < 6; index += 1) await Promise.resolve();
     });
 
@@ -276,11 +301,11 @@ describe('voice control lifecycle', () => {
   });
 
   it('does not mark replacement feedback as reported when the prior report finishes later', async () => {
-    const replacementFeedback = deferred<{ transcript: string; feedback: string }>();
+    const replacementFeedback = deferred<Awaited<ReturnType<typeof checkPronunciation>>>();
     const pendingReport = deferred<{ reported: true }>();
     let reportSignal: AbortSignal | undefined;
     checkPronunciationMock
-      .mockResolvedValueOnce({ transcript: 'Namaste', feedback: 'First feedback.' })
+      .mockResolvedValueOnce({ outcome: 'speech', transcript: 'Namaste', feedback: 'First feedback.' })
       .mockReturnValueOnce(replacementFeedback.promise);
     reportGeneratedMessageMock.mockImplementation((_input, signal) => {
       reportSignal = signal;
@@ -308,7 +333,7 @@ describe('voice control lifecycle', () => {
       await Promise.resolve();
     });
 
-    replacementFeedback.resolve({ transcript: 'Namaste', feedback: 'Replacement feedback.' });
+    replacementFeedback.resolve({ outcome: 'speech', transcript: 'Namaste', feedback: 'Replacement feedback.' });
     await waitFor(() => expect(view.getByText('Replacement feedback.')).toBeTruthy());
     expect(reportSignal?.aborted).toBe(true);
 

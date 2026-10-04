@@ -2,6 +2,8 @@ import { Check, Eye, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { lessonHindiLabel } from '@/lib/lesson-display';
+import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
@@ -9,6 +11,7 @@ type PracticeResult = 'correct' | 'incorrect';
 
 type Props = {
   disabled?: boolean;
+  scriptPreference?: ScriptPreference;
   targetHi: string;
   targetLatin: string;
   targetEn: string;
@@ -27,7 +30,7 @@ type Props = {
  * There is no reset effect here: the scene runtime remounts this component with
  * a per-beat `key`, so a new or resumed beat always opens with the answer hidden.
  */
-export function RecallRevealPractice({ disabled = false, targetHi, targetLatin, targetEn, onResolve }: Props) {
+export function RecallRevealPractice({ disabled = false, scriptPreference = 'both', targetHi, targetLatin, targetEn, onResolve }: Props) {
   const { colors } = useTheme();
   const styles = useStyles();
   const [revealed, setRevealed] = useState(false);
@@ -60,14 +63,14 @@ export function RecallRevealPractice({ disabled = false, targetHi, targetLatin, 
       </View>
       {revealed ? (
         <View
-          accessibilityLabel={`Answer revealed. ${targetHi}. ${targetLatin}.`}
+          accessibilityLabel={`Answer revealed. ${lessonHindiLabel(targetHi, scriptPreference, targetLatin)}.`}
           accessibilityLiveRegion="polite"
           style={styles.answerCard}
           testID="scene-recall-reveal-answer"
         >
           <Text style={styles.answerEyebrow}>Hindi</Text>
-          <Text style={styles.answerHindi}>{targetHi}</Text>
-          <Text style={styles.answerLatin}>{targetLatin}</Text>
+          {scriptPreference !== 'latin' ? <Text style={styles.answerHindi}>{targetHi}</Text> : null}
+          {scriptPreference !== 'devanagari' ? <Text style={styles.answerLatin}>{targetLatin}</Text> : null}
         </View>
       ) : (
         <View style={styles.hiddenCard} testID="scene-recall-reveal-hidden">

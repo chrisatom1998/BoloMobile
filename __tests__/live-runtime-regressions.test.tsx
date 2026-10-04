@@ -1,4 +1,4 @@
-import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
 import { Alert, Animated, AppState, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
 
@@ -743,7 +743,7 @@ describe('typed live coaching request control', () => {
     await flushMicrotasks();
   });
 
-  it('never persists a learner-only turn when the request fails before a reply', async () => {
+  it('retains a failed draft for retry without persisting a learner-only turn', async () => {
     boloApi.sendMobileChat.mockRejectedValueOnce(new Error('Asha is unavailable.'));
     const view = await render(<LiveScreen />);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Do not leave this orphaned.');
@@ -753,6 +753,19 @@ describe('typed live coaching request control', () => {
     expect(appState.__appendChatMessagesMock).not.toHaveBeenCalled();
     expect(view.queryByText('Do not leave this orphaned.')).toBeNull();
     expect(view.getByText('Asha is unavailable.').props.accessibilityRole).toBe('alert');
+    expect(view.getByLabelText('Message Asha').props.value).toBe('Do not leave this orphaned.');
+    expect(view.getByLabelText('Send message').props.accessibilityState.disabled).toBe(false);
+
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'The retry worked.', language: 'en' });
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    expect(boloApi.sendMobileChat).toHaveBeenCalledTimes(2);
+    expect(boloApi.sendMobileChat).toHaveBeenLastCalledWith(expect.objectContaining({
+      text: 'Do not leave this orphaned.', messages: [],
+    }), expect.any(AbortSignal));
+    expect(appState.__appendChatMessagesMock).toHaveBeenCalledTimes(1);
+    expect(view.getByLabelText('Message Asha').props.value).toBe('');
+    expect(view.getByLabelText('Selectable chat text: The retry worked.')).toBeTruthy();
     await view.unmount();
     await flushMicrotasks();
   });
@@ -774,6 +787,7 @@ describe('typed live coaching request control', () => {
     expect(boloApi.sendMobileChat.mock.calls[0][0]).toEqual(expect.objectContaining({ messages: [] }));
     expect(appState.__appendChatMessagesMock).not.toHaveBeenCalled();
     expect(view.getByLabelText('Selectable chat text: Please correct this.')).toBeTruthy();
+    expect(view.getByLabelText('Message Asha').props.value).toBe('Please correct this.');
 
     await act(async () => {
       request.resolve({ transcript: '', reply: 'Here is the correction.', language: 'en' });
@@ -786,6 +800,7 @@ describe('typed live coaching request control', () => {
     ]);
     expect(view.getByLabelText('Selectable chat text: Please correct this.')).toBeTruthy();
     expect(view.getByLabelText('Selectable chat text: Here is the correction.')).toBeTruthy();
+    expect(view.getByLabelText('Message Asha').props.value).toBe('');
     await view.unmount();
     await flushMicrotasks();
   });
@@ -847,6 +862,8 @@ describe('typed live coaching request control', () => {
     ]);
     expect(view.getByLabelText('Selectable chat text: Keep this completed turn.')).toBeTruthy();
     expect(view.getByLabelText('Selectable chat text: The text reply succeeded.')).toBeTruthy();
+    expect(view.getByLabelText('Message Asha').props.value).toBe('');
+    expect(view.getByLabelText('Send message').props.accessibilityState.disabled).toBe(true);
     expect(speech.speakText).toHaveBeenCalledWith(
       'The text reply succeeded.',
       expect.any(AbortSignal),
@@ -967,6 +984,49 @@ describe('live coaching state', () => {
     expect(view.queryByRole('button', { name: 'Explain Chris' })).toBeNull();
     await view.unmount();
     await flushMicrotasks();
+  });
+
+  it('opens Words for a purely Romanized Hindi reply using the structured source service', async () => {
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Namaste! Main theek hoon.', language: 'hi' });
+    boloApi.prepareSavedPhraseFromText.mockResolvedValueOnce({ hi: 'नमस्ते! मैं ठीक हूँ।', latin: 'Namaste! Main theek hoon.', en: 'Hello! I am well.' });
+    const view = await render(<LiveScreen />);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Namaste');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    await fireEvent.press(view.getByLabelText('Explore Hindi words: Namaste! Main theek hoon.'));
+    await waitFor(() => expect(view.getByRole('button', { name: 'Explain मैं' })).toBeTruthy());
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenCalledWith({ clientId: expect.any(String), text: 'Namaste! Main theek hoon.' }, expect.any(AbortSignal));
+    await view.unmount();
+  });
+
+  it('preserves unknown Hindi spelling and proper names from native chat into the phrase picker', async () => {
+    const latin = 'Kripayaa paanee dijiye.';
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: latin, language: 'hi' });
+    boloApi.prepareSavedPhraseFromText.mockResolvedValueOnce({ hi: 'कृपया पानी दीजिए।', latin, en: 'Please give me water.' });
+    const view = await render(<LiveScreen />);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'My friend Paanee is visiting.');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    expect(view.getByLabelText('Selectable chat text: My friend Paanee is visiting.').props.value).toBe('My friend Paanee is visiting.');
+    expect(view.getByLabelText(`Selectable chat text: ${latin}`).props.value).toBe(latin);
+    await fireEvent.press(view.getByLabelText(`Save transcript phrase: ${latin}`));
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe(latin);
+    await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
+    await flushMicrotasks();
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenCalledWith({ clientId: 'client-12345678', text: latin, sourceText: latin, preserveRomanizedText: true }, expect.any(AbortSignal));
+    expect(view.getByLabelText('Romanized Hindi phrase').props.value).toBe(latin);
+    expect(view.getByLabelText('Hindi phrase').props.value).toBe('कृपया पानी दीजिए।');
+    await view.unmount();
+  });
+
+  it('does not turn surrounding English prose into selectable Hindi words', async () => {
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Say Namaste to greet your friend.', language: 'en' });
+    const view = await render(<LiveScreen />);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Teach me a greeting');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    expect(view.queryByLabelText('Explore Hindi words: Say Namaste to greet your friend.')).toBeNull();
+    await view.unmount();
   });
 
   it('keeps the full-message trimming fallback when no chat text was highlighted', async () => {

@@ -1,3 +1,6 @@
+// Validate the fixed bundled catalog separately from the creator extension.
+jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
+
 import { sceneCategories, scenes } from '../src/data/scenes';
 import { offlineHindiAudio } from '../src/data/offline-hindi-audio';
 import { lessonPlans } from '../src/data/lesson-plans';

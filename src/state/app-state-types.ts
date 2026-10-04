@@ -12,6 +12,8 @@ export type ScriptPreference = 'both' | 'devanagari' | 'latin';
 export type LearningGoal = 'travel' | 'conversation' | 'family' | 'work';
 
 export type LearnerProfile = {
+  displayName?: string;
+  phrasePlaybackRate?: number;
   completed: boolean;
   level: LearnerLevel;
   scriptPreference: ScriptPreference;
@@ -20,7 +22,19 @@ export type LearnerProfile = {
   microphoneTested: boolean;
 };
 
+export type SceneAttempt = {
+  id: string;
+  score: number;
+  correct: number;
+  total: number;
+  weakPhrases: string[];
+  seconds: number;
+  answeredBeatIndex: number | null;
+};
+
 export type SceneProgress = {
+  attempt?: SceneAttempt;
+  lastCompletedAttemptId?: string;
   completions: number;
   bestScore: number;
   bestAccuracy: number;
