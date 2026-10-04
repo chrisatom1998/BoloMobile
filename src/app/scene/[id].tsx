@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
-import { MotionProgress, MotionReveal } from '@/components/motion';
+import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { isWordOrderPracticeable } from '@/components/practice-mode';
 import { RecallRevealPractice } from '@/components/recall-reveal-practice';
@@ -29,7 +29,7 @@ import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { shuffleChoices } from '@/lib/shuffle-choices';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 
@@ -412,7 +412,7 @@ function SceneScreen() {
       ) : null}
       <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
         <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
-        <ChevronRight color={colors.white} size={18} />
+        <ChevronRight color={colors.ink} size={18} />
       </Pressable>
     </View>
   ) : null;
@@ -434,13 +434,27 @@ function SceneScreen() {
       style={sharedStyles.screen}
       testID="scene-scroll"
     >
-      <Stack.Screen options={{ title: activeScene.title }} />
-      <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
-        <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
-        <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
-        <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={17} /><Text style={styles.hudText}>{score}</Text></View>
+      {/* The serif heading below names the scene, so the bar stays untitled. */}
+      <Stack.Screen options={{ title: activeScene.title, headerTitle: '' }} />
+      <View style={styles.header}>
+        <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
+          <View accessibilityLabel={`Turn ${beatIndex + 1} of ${activeScene.beats.length}`} style={styles.beatSegments}>
+            {activeScene.beats.map((_, index) => {
+              const filled = index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
+              return <View key={index} style={[styles.beatSegment, filled && styles.beatSegmentFilled]} testID={`scene-beat-segment-${index}`} />;
+            })}
+          </View>
+          <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
+        </View>
+        <View style={styles.titleBlock}>
+          <Text style={styles.place}>{activeScene.place}</Text>
+          <Text style={styles.sceneTitle}>{activeScene.title}</Text>
+        </View>
+        <View style={styles.hudRow}>
+          <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
+          <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
+        </View>
       </View>
-      <View style={styles.track}><MotionProgress color={activeScene.color} mode={motionMode} percent={(beatIndex + Number(resolution !== null || alreadyResolvedIncorrect)) / activeScene.beats.length * 100} style={styles.trackFill} testID="scene-progress-motion" /></View>
 
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
@@ -458,280 +472,309 @@ function SceneScreen() {
       ) : null}
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
-      <View style={[styles.world, { borderColor: activeScene.color }]}> 
-        <View style={[styles.worldTop, largeTextLayout && styles.worldTopLarge]}><Text style={styles.emoji}>{activeScene.emoji}</Text><Text style={styles.place}>{activeScene.place}</Text></View>
-        <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
-          <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
-          <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
-            <Pressable
-              accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
-                ? 'Agree to connected AI processing to enable this voice.'
-                : pronunciationBusy
-                  ? 'Finish pronunciation practice before playing another voice.'
-                  : aiConsent
-                    ? 'Plays the Hindi situation, then its English translation.'
-                    : 'Plays bundled Hindi lesson audio offline.'}
-              accessibilityLabel="Hear Asha"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
-              disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
-              onPress={() => play(situationPromptSpeech ?? beat.npc)}
-              style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
-            ><Volume2 color={colors.ink} size={18} /></Pressable>
-            <Text style={[styles.npc, largeTextLayout && styles.npcLarge]}>{lessonHindiLabel(beat.npc, scriptPreference)}</Text>
-            <Text style={styles.translation}>{beat.translation}</Text>
-          </View>
+      <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
+        <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
+        <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
+          <Text style={styles.speakerName}>Asha</Text>
+          <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
+            ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
+            : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
+          <Text style={styles.translation}>{beat.translation}</Text>
+          <Pressable
+            accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
+              ? 'Agree to connected AI processing to enable this voice.'
+              : pronunciationBusy
+                ? 'Finish pronunciation practice before playing another voice.'
+                : aiConsent
+                  ? 'Plays the Hindi situation, then its English translation.'
+                  : 'Plays bundled Hindi lesson audio offline.'}
+            accessibilityLabel="Hear Asha"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
+            disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
+            onPress={() => play(situationPromptSpeech ?? beat.npc)}
+            style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
+          >
+            <Volume2 color={colors.brandText} size={16} />
+            <Text style={styles.speakerText}>Listen</Text>
+          </Pressable>
         </View>
       </View>
 
-      {currentUsesName ? <View style={styles.hint}>
-        <Text style={styles.hintTitle}>Practice with your name</Text>
-        <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
-        <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
-      </View> : null}
-      <View style={styles.answerHeader}>
-        <View>
-          <Text style={sharedStyles.eyebrow}>Your response</Text>
+      {picked !== null && beat.choices[picked] ? (
+        <View style={styles.learnerRow}>
+          <View style={styles.learnerBubble}>
+            <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={styles.learnerText}>{lessonHindiLabel(beat.choices[picked].hi, scriptPreference, beat.choices[picked].latin)}</Text>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.sheet}>
+        {currentUsesName ? <View style={styles.hint}>
+          <Text style={styles.hintTitle}>Practice with your name</Text>
+          <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
+          <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
+        </View> : null}
+        <View style={[styles.answerHeader, largeTextLayout && styles.answerHeaderLarge]}>
           <Text style={styles.answerTitle}>{effectivePrompt}</Text>
+          {resolution === null ? (
+            <Pressable
+              accessibilityLabel={showHint ? 'Hide Asha’s hint' : 'Show Asha’s hint'}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showHint }}
+              onPress={() => setShowHint((visible) => !visible)}
+              style={[styles.hintButton, showHint && styles.hintButtonActive]}
+            >
+              <Text style={styles.hintButtonText}>Hint</Text>
+            </Pressable>
+          ) : null}
         </View>
+        {resolution === null && showHint ? <Text style={styles.hintBody}>{effectiveTip}</Text> : null}
+
+        {effectiveMode === 'choice' ? (
+          <View key={choicePresentation.key} style={styles.choices} testID="scene-choices">
+            {choicePresentation.choices.map(({ item: choice, sourceIndex }) => {
+              const selected = picked === sourceIndex;
+              const revealed = picked !== null && choice.correct;
+              const answered = picked !== null;
+              const accessibilityLabel = answered
+                ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}`
+                : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
+              const wrong = selected && !choice.correct;
+              return (
+                <Pressable
+                  key={choice.hi}
+                  testID={`scene-choice-${sourceIndex}`}
+                  accessibilityLabel={accessibilityLabel}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: picked !== null || pronunciationBusy || needsName, selected }}
+                  disabled={picked !== null || pronunciationBusy || needsName}
+                  onPress={() => choose(sourceIndex)}
+                  style={[styles.choice, largeTextLayout && styles.choiceLarge, wrong && styles.choiceWrong, revealed && styles.choiceCorrect]}
+                >
+                  <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]} testID="scene-choice-copy">
+                    {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={[styles.choiceHindi, revealed && styles.choiceHindiCorrect, wrong && styles.choiceHindiWrong]}>{choice.hi}</Text> : null}
+                    {scriptPreference !== 'devanagari' ? <Text style={[styles.choiceRomanized, revealed && styles.choiceMetaCorrect, wrong && styles.choiceMetaWrong]}>{choice.latin}</Text> : null}
+                    {answered ? <Text style={[styles.choiceMeaning, revealed && styles.choiceMetaCorrect, wrong && styles.choiceMetaWrong]}>{choice.en}</Text> : null}
+                  </View>
+                  {selected ? (choice.correct ? <Check color={colors.forest} size={22} /> : <X color={colors.danger} size={22} />) : revealed ? <Check color={colors.forest} size={22} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : effectiveMode === 'wordOrder' ? (
+          <WordOrderPractice
+            scriptPreference={scriptPreference}
+            disabled={pronunciationBusy || resolution !== null || needsName}
+            key={`word-order-${activeScene.id}-${beatIndex}-${target.hi}-${wordOrderRetryNonce}`}
+            onResolve={handleAlternateResult}
+            showInstructions={false}
+            targetHi={target.hi}
+            targetLatin={target.latin}
+          />
+        ) : (
+          <RecallRevealPractice
+            scriptPreference={scriptPreference}
+            disabled={pronunciationBusy || resolution !== null || needsName}
+            key={`recall-reveal-${activeScene.id}-${beatIndex}-${target.hi}`}
+            onResolve={handleAlternateResult}
+            targetEn={target.en}
+            targetHi={target.hi}
+            targetLatin={target.latin}
+          />
+        )}
+
+        {resolution !== null ? (
+          <View testID="scene-feedback">
+            <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
+              <View style={styles.resultCopy}>
+                <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{correct
+                  ? 'Natural choice!'
+                  : effectiveMode === 'wordOrder'
+                    ? 'Check the word order.'
+                    : effectiveMode === 'recallReveal'
+                      ? 'Keep practicing this phrase.'
+                      : 'Not quite—notice the pattern.'}</Text>
+                {englishMistakeFeedback ? <Text style={[styles.resultBody, styles.resultWrongText]} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
+                {englishMistakeFeedback ? <Text style={styles.resultTip}>Pattern: {effectiveTip}</Text> : null}
+                {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
+                  <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
+                    <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
+                    {scriptPreference !== 'latin' ? <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
+                    {scriptPreference !== 'devanagari' ? <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text> : null}
+                  </View>
+                ) : null}
+                {picked === null && resolution === 'incorrect' ? (
+                  <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
+                    <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
+                    {scriptPreference !== 'latin' ? <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
+                    {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
+                    <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
+                  </View>
+                ) : feedbackReply ? <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={styles.resultHindi}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
+              </View>
+            </MotionReveal>
+          </View>
+        ) : null}
+
+        {recoveryActionsFirst ? answerActions : null}
+
+        {resolution !== null ? (
+          <>
+            <View testID="scene-save">
+              <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
+                <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
+                  <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={styles.wordTray} testID="scene-words">
+              <Text style={styles.wordTrayTitle}>Unpack the answer</Text>
+              <Text style={styles.wordTrayHint}>Tap a Hindi word for its meaning in this phrase.</Text>
+              <View style={styles.wordTokenWrap}>
+                {hindiWordTokens(target.hi).map((word) => {
+                  const romanizedWord = romanizeDevanagari(word);
+                  return (
+                    <Pressable
+                      accessibilityHint={aiConsent ? 'Opens a contextual English explanation.' : 'Agree to connected AI processing to unpack this word.'}
+                      accessibilityLabel={`Explain ${lessonHindiLabel(word, scriptPreference, romanizedWord)} in the answer`}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: !aiConsent }}
+                      disabled={!aiConsent}
+                      key={word}
+                      onPress={() => setWordDefinitionWord(word)}
+                      style={[styles.wordToken, !aiConsent && styles.disabled]}
+                    ><Text style={styles.wordTokenText}>{lessonHindiLabel(word, scriptPreference, romanizedWord)}</Text></Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </>
+        ) : null}
+
+        {aiConsent && !needsName ? (
+          <View testID="scene-pronunciation">
+            <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
+          </View>
+        ) : null}
+        {!recoveryActionsFirst ? answerActions : null}
       </View>
-      {effectiveMode === 'choice' ? (
-        <View key={choicePresentation.key} style={styles.choices} testID="scene-choices">
-          {choicePresentation.choices.map(({ item: choice, sourceIndex }, displayIndex) => {
-            const selected = picked === sourceIndex;
-            const revealed = picked !== null && choice.correct;
-            const answered = picked !== null;
-            const accessibilityLabel = answered
-              ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}`
-              : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
-            return (
-              <Pressable
-                key={choice.hi}
-                testID={`scene-choice-${sourceIndex}`}
-                accessibilityLabel={accessibilityLabel}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: picked !== null || pronunciationBusy || needsName, selected }}
-                disabled={picked !== null || pronunciationBusy || needsName}
-                onPress={() => choose(sourceIndex)}
-                style={[styles.choice, largeTextLayout && styles.choiceLarge, selected && (choice.correct ? styles.choiceCorrect : styles.choiceWrong), revealed && styles.choiceCorrect]}
-              >
-                <Text style={styles.choiceNumberText}>{displayIndex + 1}</Text>
-                <View style={[styles.choiceCopy, largeTextLayout && styles.choiceCopyLarge]} testID="scene-choice-copy">
-                  {scriptPreference !== 'latin' ? <Text style={styles.choiceHindi}>{choice.hi}</Text> : null}
-                  {scriptPreference !== 'devanagari' ? <Text style={styles.choiceRomanized}>{choice.latin}</Text> : null}
-                  {answered ? <Text style={styles.choiceMeaning}>{choice.en}</Text> : null}
-                </View>
-                {selected ? (choice.correct ? <Check color={colors.success} size={22} /> : <X color={colors.danger} size={22} />) : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : effectiveMode === 'wordOrder' ? (
-        <WordOrderPractice
-          scriptPreference={scriptPreference}
-          disabled={pronunciationBusy || resolution !== null || needsName}
-          key={`word-order-${activeScene.id}-${beatIndex}-${target.hi}-${wordOrderRetryNonce}`}
-          onResolve={handleAlternateResult}
-          showInstructions={false}
-          targetHi={target.hi}
-          targetLatin={target.latin}
-        />
-      ) : (
-        <RecallRevealPractice
-          scriptPreference={scriptPreference}
-          disabled={pronunciationBusy || resolution !== null || needsName}
-          key={`recall-reveal-${activeScene.id}-${beatIndex}-${target.hi}`}
-          onResolve={handleAlternateResult}
-          targetEn={target.en}
-          targetHi={target.hi}
-          targetLatin={target.latin}
-        />
-      )}
-
-      {resolution === null ? (
-        <Pressable
-          accessibilityLabel={showHint ? 'Hide Asha’s hint' : 'Show Asha’s hint'}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: showHint }}
-          onPress={() => setShowHint((visible) => !visible)}
-          style={styles.hint}
-        >
-          <Text style={styles.hintTitle}>{showHint ? 'Hide Asha’s hint' : 'Need a hint?'}</Text>
-          {showHint ? <Text style={styles.hintBody}>{effectiveTip}</Text> : null}
-        </Pressable>
-      ) : (
-        <View testID="scene-feedback">
-          <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, largeTextLayout && styles.resultLarge]} testID="scene-result">
-            <View style={styles.resultCopy}>
-              <Text style={styles.resultTitle}>{correct
-                ? 'Natural choice!'
-                : effectiveMode === 'wordOrder'
-                  ? 'Check the word order.'
-                  : effectiveMode === 'recallReveal'
-                    ? 'Keep practicing this phrase.'
-                    : 'Not quite—notice the pattern.'}</Text>
-              {englishMistakeFeedback ? <Text style={styles.resultBody} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
-              {englishMistakeFeedback ? <Text style={styles.resultTip}>Pattern: {effectiveTip}</Text> : null}
-              {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
-                <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
-                  <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
-                  {scriptPreference !== 'latin' ? <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
-                  {scriptPreference !== 'devanagari' ? <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text> : null}
-                </View>
-              ) : null}
-              {picked === null && resolution === 'incorrect' ? (
-                <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
-                  <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
-                  {scriptPreference !== 'latin' ? <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
-                  {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
-                  <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
-                </View>
-              ) : feedbackReply ? <Text style={styles.resultHindi}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
-            </View>
-          </MotionReveal>
-        </View>
-      )}
-
-      {recoveryActionsFirst ? answerActions : null}
-
-      {resolution !== null ? (
-        <>
-          <View testID="scene-save">
-            <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
-              <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-              <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
-                <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
-              </Pressable>
-            </View>
-          </View>
-          <View style={styles.wordTray} testID="scene-words">
-            <Text style={styles.wordTrayTitle}>Unpack the answer</Text>
-            <Text style={styles.wordTrayHint}>Tap a Hindi word for its meaning in this phrase.</Text>
-            <View style={styles.wordTokenWrap}>
-              {hindiWordTokens(target.hi).map((word) => {
-                const romanizedWord = romanizeDevanagari(word);
-                return (
-                  <Pressable
-                    accessibilityHint={aiConsent ? 'Opens a contextual English explanation.' : 'Agree to connected AI processing to unpack this word.'}
-                    accessibilityLabel={`Explain ${lessonHindiLabel(word, scriptPreference, romanizedWord)} in the answer`}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: !aiConsent }}
-                    disabled={!aiConsent}
-                    key={word}
-                    onPress={() => setWordDefinitionWord(word)}
-                    style={[styles.wordToken, !aiConsent && styles.disabled]}
-                  ><Text style={styles.wordTokenText}>{lessonHindiLabel(word, scriptPreference, romanizedWord)}</Text></Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </>
-      ) : null}
-
-      {aiConsent && !needsName ? (
-        <View testID="scene-pronunciation">
-          <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
-        </View>
-      ) : null}
-      {!recoveryActionsFirst ? answerActions : null}
       {wordDefinitionWord ? <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible /> : null}
     </ScrollView>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: 14 },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
-  progressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.xs },
-  hud: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  hudText: { color: c.ink, fontWeight: '900' },
-  turn: { color: c.muted, fontSize: 13, fontWeight: '800' },
-  track: { height: 7, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
-  trackFill: { height: '100%', borderRadius: radius.pill },
+  header: { gap: 14 },
+  progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
+  beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
+  beatSegmentFilled: { backgroundColor: c.brand },
+  turn: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  titleBlock: { gap: 2 },
+  place: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
+  sceneTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 31, fontWeight: '700', letterSpacing: -0.3 },
+  hudRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: 10 },
+  hudText: { color: c.ink, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   resumeNotice: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '700', textAlign: 'center' },
-  world: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 2, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.md },
-  worldTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  worldTopLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.xs },
-  emoji: { fontSize: 30 },
-  place: { color: c.muted, fontSize: 12, fontWeight: '700' },
-  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  ashaRowLarge: { flexDirection: 'column' },
-  asha: { width: 48, height: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brandSoft },
-  bubble: { flex: 1, backgroundColor: c.background, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, gap: spacing.xs },
-  bubbleLarge: { alignSelf: 'stretch', flex: 0 },
-  speaker: { position: 'absolute', zIndex: 1, right: spacing.sm, top: spacing.sm, width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paper, alignItems: 'center', justifyContent: 'center' },
-  speakerLarge: { alignSelf: 'flex-end', position: 'relative', right: undefined, top: undefined },
+  ashaRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
+  asha: { width: 36, height: 36, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderBottomLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: 14, gap: spacing.xs },
+  bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
+  speakerName: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  npc: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
+  npcLarge: {},
+  npcLatin: { color: c.brandText, fontFamily: 'System', fontSize: 15, lineHeight: 22, fontWeight: '500' },
+  translation: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  speaker: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md, marginTop: 2 },
+  speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
+  speakerText: { color: c.brandText, fontSize: 13, fontWeight: '600' },
+  learnerRow: { alignItems: 'flex-end' },
+  learnerBubble: { maxWidth: '82%', backgroundColor: c.brand, borderRadius: 22, borderBottomRightRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  learnerText: { color: c.white, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
   disabled: { opacity: 0.4 },
   audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  npc: { color: c.ink, fontSize: 21, lineHeight: 29, fontWeight: '800', paddingRight: 48 },
-  npcLarge: { paddingRight: 0 },
-  translation: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  answerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  answerTitle: { color: c.ink, fontSize: 22, lineHeight: 29, fontWeight: '900', marginTop: spacing.xs },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
+  answerTitle: { minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },
+  hintButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
+  hintButtonActive: { backgroundColor: c.gold },
+  hintButtonText: { color: c.goldText, fontSize: 13, fontWeight: '600' },
   choices: { gap: spacing.sm },
-  choice: { minHeight: 82, backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  choice: { minHeight: 64, backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
-  choiceCorrect: { borderColor: c.success, backgroundColor: c.successSoft },
+  choiceCorrect: { borderColor: c.forest, backgroundColor: c.forest },
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
-  choiceNumberText: { width: 20, color: c.mutedSoft, fontFamily: 'Georgia', fontSize: 16, lineHeight: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 3 },
+  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 2 },
   choiceCopyLarge: { flex: 0, width: '100%' },
-  choiceHindi: { color: c.ink, fontSize: 18, lineHeight: 24, fontWeight: '800' },
-  choiceRomanized: { color: c.forestText, fontSize: 14, lineHeight: 20, fontWeight: '700' },
-  choiceMeaning: { color: c.muted, fontSize: 12, lineHeight: 17 },
+  choiceHindi: { width: '100%', color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
+  choiceHindiCorrect: { color: c.white },
+  choiceHindiWrong: { color: c.danger },
+  choiceRomanized: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  choiceMeaning: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  choiceMetaCorrect: { color: c.white, opacity: 0.85 },
+  choiceMetaWrong: { color: c.danger, opacity: 0.85 },
   hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, padding: spacing.lg, gap: spacing.lg },
+  result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
+  resultWrong: { backgroundColor: c.dangerSoft },
+  resultWrongText: { color: c.danger },
   resultLarge: { alignItems: 'stretch' },
   resultCopy: { gap: spacing.xs },
-  resultTitle: { color: c.white, fontSize: 17, fontWeight: '900' },
-  resultBody: { color: c.white, fontSize: 15, lineHeight: 21, fontWeight: '700' },
-  resultTip: { color: c.heroSubtle, fontSize: 14, lineHeight: 20 },
-  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.heroSubtle, borderTopWidth: 1, paddingTop: spacing.md, gap: 2 },
-  wordOrderSolutionLabel: { color: c.heroSubtle, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  wordOrderSolutionHindi: { color: c.white, fontSize: 21, lineHeight: 29, fontWeight: '900' },
-  wordOrderSolutionLatin: { color: c.heroSubtle, fontSize: 15, lineHeight: 21, fontWeight: '700' },
-  alternateCoachNote: { marginTop: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: 2 },
+  resultTitle: { color: c.forestText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  resultBody: { color: c.ink, fontSize: 14, lineHeight: 20 },
+  resultTip: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.dangerLine, borderTopWidth: 1, paddingTop: spacing.md, gap: 2 },
+  wordOrderSolutionLabel: { color: c.muted, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
+  wordOrderSolutionHindi: { color: c.ink, fontFamily: displayFont, fontSize: 21, lineHeight: 29, fontWeight: '700' },
+  wordOrderSolutionLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
+  alternateCoachNote: { marginTop: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: 2 },
   alternateCoachLabel: { color: c.ink, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  alternateCoachHindi: { color: c.ink, fontSize: 18, lineHeight: 26, fontWeight: '800' },
-  alternateCoachLatin: { color: c.forestText, fontSize: 15, lineHeight: 21, fontWeight: '700' },
+  alternateCoachHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
+  alternateCoachLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
   alternateCoachEnglish: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  resultHindi: { color: c.heroSubtle, fontSize: 18, lineHeight: 25, fontWeight: '700' },
+  resultHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
   answerActions: { gap: spacing.sm },
-  tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '900' },
-  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  nextText: { color: c.white, fontSize: 16, fontWeight: '900' },
-  saveRow: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
+  tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '600' },
+  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  nextText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  saveRow: { backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   saveRowLarge: { alignItems: 'stretch', flexDirection: 'column' },
   saveCopy: { flex: 1, gap: spacing.xs },
   saveCopyLarge: { flex: 0, width: '100%' },
-  saveTitle: { color: c.ink, fontSize: 15, fontWeight: '900' },
+  saveTitle: { color: c.ink, fontSize: 15, fontWeight: '600' },
   saveMeaning: { color: c.muted, fontSize: 13 },
-  saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center' },
+  saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   saveButtonLarge: { alignSelf: 'flex-start' },
-  saveButtonActive: { backgroundColor: c.brand },
-  wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
-  wordTrayTitle: { color: c.brandText, fontSize: 17, lineHeight: 23, fontWeight: '900' },
-  wordTrayHint: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  saveButtonActive: { backgroundColor: c.brand, borderColor: c.brand },
+  wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.brandSoft, padding: spacing.lg },
+  wordTrayTitle: { color: c.brandText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  wordTrayHint: { color: c.muted, fontSize: 13, lineHeight: 19 },
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  wordToken: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  wordTokenText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  wordTokenText: { color: c.brandText, fontFamily: displayFont, fontSize: 17, lineHeight: 24, fontWeight: '600' },
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
-  finishBadge: { width: 74, height: 74, borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
+  finishBadge: { width: 74, height: 74, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   finishHeading: { alignItems: 'stretch', gap: spacing.xs },
-  finishHindi: { color: c.brandDark, fontSize: 28, lineHeight: 36, fontWeight: '900', textAlign: 'center' },
+  finishHindi: { color: c.brandDark, fontFamily: displayFont, fontSize: 28, lineHeight: 36, fontWeight: '700', textAlign: 'center' },
   finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
-  finishTitle: { color: c.ink, fontSize: 26, lineHeight: 32, fontWeight: '900', textAlign: 'center' },
+  finishTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', textAlign: 'center' },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paper, borderRadius: radius.md, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
-  finishValue: { color: c.ink, fontSize: 20, fontWeight: '900' },
-  finishLabel: { color: c.muted, fontSize: 11, textAlign: 'center' },
-  secondaryButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: c.ink, fontSize: 16, fontWeight: '800' },
+  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
+  finishValue: { color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 30, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  finishLabel: { color: c.muted, fontSize: 12, textAlign: 'center' },
+  secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { color: c.ink, fontSize: 16, fontWeight: '600' },
   tertiaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  tertiaryText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  tertiaryText: { color: c.forestText, fontSize: 14, fontWeight: '700' },
 }));

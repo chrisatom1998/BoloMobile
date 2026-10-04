@@ -25,6 +25,8 @@ type SegmentedControlProps<T extends string> = {
   stackedAtLargeText?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
+  /** `dark` restyles the control for night-coloured screens such as Asha. */
+  tone?: 'light' | 'dark';
   value: T;
 };
 
@@ -45,9 +47,11 @@ export function SegmentedControl<T extends string>({
   stackedAtLargeText = false,
   style,
   testID,
+  tone = 'light',
   value,
 }: SegmentedControlProps<T>) {
   const styles = useStyles();
+  const dark = tone === 'dark';
   const largeTextLayout = useLargeTextLayout();
   const usesStackedLayout = stacked || columnCount === 1 || (stackedAtLargeText && largeTextLayout);
   const usesTwoColumnLayout = columnCount === 2 && !usesStackedLayout;
@@ -66,9 +70,9 @@ export function SegmentedControl<T extends string>({
               disabled={disabled}
               key={option.value}
               onPress={() => onValueChange(option.value)}
-              style={({ pressed }) => [styles.stackedTrigger, selected && styles.stackedTriggerSelected, disabled && styles.stackedTriggerDisabled, pressed && !disabled && styles.stackedTriggerPressed]}
+              style={({ pressed }) => [styles.stackedTrigger, dark && styles.stackedTriggerDark, selected && (dark ? styles.stackedTriggerSelectedDark : styles.stackedTriggerSelected), disabled && styles.stackedTriggerDisabled, pressed && !disabled && styles.stackedTriggerPressed]}
             >
-              <Text style={[styles.stackedLabel, selected && styles.stackedLabelSelected, disabled && styles.labelDisabled]}>{option.label}</Text>
+              <Text style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
             </Pressable>
           );
         })}
@@ -104,12 +108,13 @@ export function SegmentedControl<T extends string>({
                   style={({ pressed }) => [
                     styles.stackedTrigger,
                     styles.twoColumnTrigger,
-                    selected && styles.stackedTriggerSelected,
+                    dark && styles.stackedTriggerDark,
+                    selected && (dark ? styles.stackedTriggerSelectedDark : styles.stackedTriggerSelected),
                     disabled && styles.stackedTriggerDisabled,
                     pressed && !disabled && styles.stackedTriggerPressed,
                   ]}
                 >
-                  <Text style={[styles.stackedLabel, selected && styles.stackedLabelSelected, disabled && styles.labelDisabled]}>{option.label}</Text>
+                  <Text style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
                 </Pressable>
               );
             })}
@@ -127,8 +132,8 @@ export function SegmentedControl<T extends string>({
       value={value}
       variant="primary"
     >
-      <Tabs.List accessibilityLabel={accessibilityLabel} style={[styles.list, compact && styles.listCompact, disabled && styles.listDisabled]}>
-        <Tabs.Indicator pointerEvents="none" style={[styles.indicator, compact && styles.indicatorCompact]} />
+      <Tabs.List accessibilityLabel={accessibilityLabel} style={[styles.list, compact && styles.listCompact, dark && styles.listDark, disabled && styles.listDisabled]}>
+        <Tabs.Indicator pointerEvents="none" style={[styles.indicator, compact && styles.indicatorCompact, dark && styles.indicatorDark]} />
         {options.map((option) => (
           <Tabs.Trigger
             accessibilityHint={disabled ? disabledHint : undefined}
@@ -140,7 +145,7 @@ export function SegmentedControl<T extends string>({
             value={option.value}
           >
             {({ isSelected }) => (
-              <Tabs.Label numberOfLines={1} style={[styles.label, isSelected && styles.labelSelected, disabled && styles.labelDisabled]}>
+              <Tabs.Label numberOfLines={1} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
                 {option.label}
               </Tabs.Label>
             )}
@@ -247,5 +252,31 @@ const useStyles = makeStyles((c) => ({
   },
   stackedLabelSelected: {
     color: c.neutralSurfaceText,
+  },
+  listDark: {
+    borderColor: c.nightLine,
+    backgroundColor: c.nightSurface,
+    boxShadow: 'none',
+  },
+  indicatorDark: {
+    backgroundColor: c.gold,
+    boxShadow: 'none',
+  },
+  labelDark: {
+    color: c.heroSubtle,
+  },
+  labelSelectedDark: {
+    color: c.ink,
+  },
+  labelDisabledDark: {
+    color: c.heroSubtle,
+  },
+  stackedTriggerDark: {
+    borderColor: c.nightLine,
+    backgroundColor: c.nightSurface,
+  },
+  stackedTriggerSelectedDark: {
+    borderColor: c.gold,
+    backgroundColor: c.gold,
   },
 }));

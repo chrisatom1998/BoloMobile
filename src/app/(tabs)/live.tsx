@@ -1,15 +1,15 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { StatusBar } from 'expo-status-bar';
+import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
+import { Lock, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, AppState, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { ChatMessageRow } from '@/components/chat-message-row';
-import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
+import { JournalDisplay } from '@/components/journal-chrome';
 import { LiveComposer } from '@/components/live-composer';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
@@ -28,7 +28,7 @@ import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { displayFont, makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -158,6 +158,13 @@ export default function LiveScreen() {
   const clearPendingUserMessage = useCallback((expectedId: string) => {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
   }, []);
+
+  // Only the dark Asha screen uses light status-bar text; every other screen
+  // relies on the root layout's dark style, so restore it on blur.
+  useFocusEffect(useCallback(() => {
+    setStatusBarStyle('light', true);
+    return () => setStatusBarStyle('dark', true);
+  }, []));
 
   useFocusEffect(useCallback(() => {
     setScreenFocused(true);
@@ -425,19 +432,18 @@ export default function LiveScreen() {
         style={[styles.studioPhrase, { width: heroContentWidth }]}
       >
         <View style={styles.studioPhraseHeading}>
-          <View>
+          <View style={styles.studioPhraseCopy}>
             <Text style={styles.studioPhraseEyebrow}>Featured phrase</Text>
             <Text style={styles.studioPhraseEnglish}>{studioPhrase.en}</Text>
           </View>
-          <View style={styles.studioListenIcon}><Volume2 color={colors.forestText} size={18} /></View>
+          <View style={styles.studioListenIcon}><Volume2 color={colors.ink} size={18} /></View>
         </View>
-        <View style={styles.studioPhraseLine} />
-        <Text style={styles.studioPhraseHindi}>{studioPhrase.hi}</Text>
+        <Text accessibilityLanguage="hi-IN" style={styles.studioPhraseHindi}>{studioPhrase.hi}</Text>
         <Text style={styles.studioPhraseLatin}>{studioPhrase.latin}</Text>
         <View style={styles.studioPhraseFooter}>
           <Text style={styles.studioPhraseCue}>Say “{studioPhrase.latin}” naturally; keep the rhythm relaxed.</Text>
           <View style={styles.studioMastery}>
-            <Sprout color={colors.forestText} size={15} />
+            <Sprout color={colors.goldText} size={15} />
             <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `${studioPhraseMastery}/5 roots` : 'Plant a root'}</Text>
           </View>
         </View>
@@ -445,9 +451,12 @@ export default function LiveScreen() {
     </View>
   ) : null;
 
+  const statusKicker = aiConsent
+    ? { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', responding: 'SPEAKING' }[realtimeStatus]
+    : 'LIVE VOICE';
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.screen}>
-      <StatusBar style="dark" />
       <FlatList
         ref={listRef}
         contentInsetAdjustmentBehavior="never"
@@ -460,34 +469,19 @@ export default function LiveScreen() {
         testID="live-chat-list"
         ListHeaderComponent={(
           <View>
-            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, largeTextLayout && styles.voiceHeroLarge, !aiConsent && styles.voiceHeroConsent, { paddingTop: insets.top + spacing.sm }]} testID="voice-conversation-hero">
-              <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, largeTextLayout && { minHeight: Math.ceil(260 * fontScale) }, { width: heroContentWidth }]} testID="asha-header-topbar">
+            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, largeTextLayout && styles.voiceHeroLarge, !aiConsent && styles.voiceHeroConsent, { paddingTop: insets.top + spacing.xl }]} testID="voice-conversation-hero">
+              <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
                 <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
-                  <Image
-                    accessible={false}
-                    cachePolicy="memory-disk"
-                    contentFit="cover"
-                    source={ashaPortrait}
-                    style={styles.ashaPortrait}
-                    testID="asha-header-portrait"
-                    transition={0}
-                  />
                   <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
-                    <JournalKicker>Asha · your practice partner</JournalKicker>
                     <JournalDisplay numberOfLines={reflowHeaderLayout ? undefined : 2} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked]}>Speak with Asha</JournalDisplay>
                     <Text numberOfLines={reflowHeaderLayout ? undefined : 1} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Private Hindi coach · {responseLanguageName} replies</Text>
                   </View>
                 </View>
                 <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
                   <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-                    <View style={styles.privateDot} />
+                    <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
                     <Text style={styles.privateText}>Private</Text>
                   </View>
-                  {aiConsent ? (
-                    <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                      <MessageCircle color={colors.ink} size={19} />
-                    </Pressable>
-                  ) : null}
                 </View>
               </View>
               {!aiConsent ? (
@@ -509,28 +503,53 @@ export default function LiveScreen() {
                   ]}
                   stackedAtLargeText
                   style={[styles.languageSelector, { width: heroContentWidth }]}
+                  tone="dark"
                   value={responseLanguage}
                 />
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}>
-                  <View style={styles.liveVoiceBadge}>
-                    <View style={styles.liveVoiceDot} />
-                    <Text style={styles.liveVoiceText}>Live voice</Text>
+                  <View style={[styles.portraitStage, compactVoiceLayout && styles.portraitStageCompact]}>
+                    <View pointerEvents="none" style={[styles.portraitRing, styles.portraitRingOuter, compactVoiceLayout && styles.portraitRingOuterCompact]} />
+                    <View pointerEvents="none" style={[styles.portraitRing, styles.portraitRingInner, compactVoiceLayout && styles.portraitRingInnerCompact]} />
+                    <Image
+                      accessible={false}
+                      cachePolicy="memory-disk"
+                      contentFit="cover"
+                      source={ashaPortrait}
+                      style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
+                      testID="asha-header-portrait"
+                      transition={0}
+                    />
                   </View>
-                  <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" />
                   <View style={styles.heroCopy}>
+                    <View style={styles.statusRow}>
+                      <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
+                      <Text style={styles.liveVoiceText}>{statusKicker}</Text>
+                    </View>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
                   </View>
+                  <View style={styles.orbRow}>
+                    {aiConsent ? (
+                      <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                        <MessageCircle color={colors.white} size={20} />
+                      </Pressable>
+                    ) : null}
+                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" tone="dark" />
+                  </View>
                 </View>
                 <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
-                  <View style={styles.captionLabelBadge} testID="live-caption-label-badge">
-                    <Text style={styles.captionLabel}>You</Text>
+                  <View style={[styles.captionCard, styles.captionCardYou]}>
+                    <View style={styles.captionLabelBadge} testID="live-caption-label-badge">
+                      <Text style={styles.captionLabel}>You</Text>
+                    </View>
+                    <Text accessibilityLiveRegion="polite" style={styles.captionText} testID="live-input-caption">{aiConsent ? romanizeDevanagari(liveUserTranscript) || 'Your words appear here as you speak.' : 'Enable live practice to see captions.'}</Text>
                   </View>
-                  <Text accessibilityLiveRegion="polite" style={styles.captionText} testID="live-input-caption">{aiConsent ? romanizeDevanagari(liveUserTranscript) || 'Your words appear here as you speak.' : 'Enable live practice to see captions.'}</Text>
-                  <View style={styles.captionLabelBadge}>
-                    <Text style={styles.captionLabel}>Asha</Text>
+                  <View style={[styles.captionCard, styles.captionCardAsha]}>
+                    <View style={styles.captionLabelBadge}>
+                      <Text style={[styles.captionLabel, styles.captionLabelAsha]}>Asha</Text>
+                    </View>
+                    <Text accessibilityLiveRegion="polite" style={[styles.captionText, styles.captionTextAsha]} testID="live-output-caption">{aiConsent ? romanizeDevanagari(liveAshaTranscript) || 'Asha’s words appear here as she speaks.' : 'Enable live practice to see captions.'}</Text>
                   </View>
-                  <Text accessibilityLiveRegion="polite" style={styles.captionText} testID="live-output-caption">{aiConsent ? romanizeDevanagari(liveAshaTranscript) || 'Asha’s words appear here as she speaks.' : 'Enable live practice to see captions.'}</Text>
                 </CaptionReveal>
               </View>
             </View>
@@ -552,7 +571,7 @@ export default function LiveScreen() {
                       onPress={confirmClearChat}
                       style={[styles.clearChatButton, (busy || realtimeLocked) && styles.disabled]}
                     >
-                      <Trash2 color={colors.danger} size={17} />
+                      <Trash2 color={colors.dangerSoft} size={17} />
                     </Pressable>
                   ) : null}
                 </View>
@@ -610,7 +629,7 @@ export default function LiveScreen() {
       />
 
       {aiConsent ? <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + 52) }]}>
-        {busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Asha is thinking\u2026'}</Text> : null}
+        {busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Asha is thinking…'}</Text> : null}
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
         {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
         <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
@@ -636,103 +655,117 @@ export default function LiveScreen() {
 }
 
 export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
-  screen: { flex: 1, backgroundColor: c.background },
-  list: { flex: 1, backgroundColor: c.background },
-  listContent: { backgroundColor: c.background, paddingBottom: spacing.lg },
+  screen: { flex: 1, backgroundColor: c.night },
+  list: { flex: 1, backgroundColor: c.night },
+  listContent: { backgroundColor: c.night, paddingBottom: spacing.lg },
   voiceHero: {
     minHeight: 492,
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
-    backgroundColor: c.background,
+    backgroundColor: c.night,
     overflow: 'hidden',
   },
   voiceHeroCompact: { gap: spacing.xs, minHeight: 430, paddingBottom: spacing.md },
   voiceHeroLarge: { minHeight: 0, overflow: 'visible' },
   voiceHeroConsent: { minHeight: 0, overflow: 'visible', paddingBottom: spacing.xl },
-  topbar: { minHeight: 112, alignSelf: 'center', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'flex-start', paddingRight: 122, position: 'relative' },
+  topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
   headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   headerIdentityLarge: { flex: 0 },
-  ashaPortrait: { width: 52, height: 52, flexShrink: 0, borderRadius: 18, backgroundColor: c.brandSoft },
   headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2, overflow: 'hidden' },
   headerCopyStacked: { overflow: 'visible' },
-  headerTitle: { alignSelf: 'stretch', marginTop: spacing.xs, maxWidth: 260, fontSize: 29, lineHeight: 35, textAlign: 'left' },
+  headerTitle: { alignSelf: 'stretch', color: c.white, maxWidth: 260, fontSize: 28, lineHeight: 34, textAlign: 'left' },
   headerTitleStacked: { maxWidth: '100%' },
-  headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.muted, fontSize: 11, lineHeight: 15, textAlign: 'left' },
+  headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.heroSubtle, fontSize: 13, lineHeight: 18, textAlign: 'left' },
   headerSubtitleStacked: { flexShrink: 0 },
-  headerActions: { position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerActionsStacked: { alignSelf: 'flex-end', flexWrap: 'wrap', justifyContent: 'flex-end', position: 'relative', right: undefined },
-  privateBadge: { minHeight: 32, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10 },
-  privateDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
-  privateText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
-  chatButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
+  privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.nightLine, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
+  privateText: { color: c.brandSoft, fontSize: 13, fontWeight: '600' },
+  chatButton: { position: 'absolute', left: 0, top: 26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { alignSelf: 'center' },
   heroConsent: { alignSelf: 'center' },
-  liveControls: { alignSelf: 'center', alignItems: 'center', gap: spacing.md },
-  voiceStage: { alignSelf: 'center', minHeight: 178, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs, padding: spacing.md, overflow: 'hidden' },
-  voiceStageCompact: { minHeight: 160, paddingVertical: spacing.sm },
-  liveVoiceBadge: { minHeight: 27, borderRadius: radius.pill, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.sm },
-  liveVoiceDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.forest },
-  liveVoiceText: { color: c.forestText, fontSize: 10, lineHeight: 14, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
-  heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: 3 },
-  heroTitle: { minWidth: 0, flexShrink: 1, color: c.ink, fontFamily: 'Georgia', fontSize: 21, lineHeight: 27, fontWeight: '700', textAlign: 'center' },
-  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-  captionBlock: { minHeight: 94, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 20, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  captionLabelBadge: { minHeight: 30, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', overflow: 'visible', borderRadius: radius.pill, backgroundColor: c.forestSoft, paddingHorizontal: spacing.sm, paddingVertical: 5 },
-  captionLabel: { color: c.forestText, fontSize: 12, lineHeight: 18, fontWeight: '800', letterSpacing: 0.25, textAlign: 'center' },
-  captionText: { minWidth: 0, alignSelf: 'stretch', color: c.ink, fontSize: 14, lineHeight: 20, fontWeight: '700', textAlign: 'center' },
-  studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.md },
+  liveControls: { alignSelf: 'center', alignItems: 'center', gap: 10 },
+  voiceStage: { alignSelf: 'center', alignItems: 'center', gap: 10 },
+  voiceStageCompact: { gap: spacing.sm },
+  portraitStage: { width: 144, height: 144, alignItems: 'center', justifyContent: 'center' },
+  portraitStageCompact: { width: 124, height: 124 },
+  portraitRing: { position: 'absolute', borderRadius: radius.pill, borderWidth: 2 },
+  portraitRingOuter: { width: 144, height: 144, borderColor: 'rgba(231, 172, 61, 0.25)' },
+  portraitRingOuterCompact: { width: 124, height: 124 },
+  portraitRingInner: { width: 128, height: 128, borderColor: 'rgba(231, 172, 61, 0.5)' },
+  portraitRingInnerCompact: { width: 110, height: 110 },
+  ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface },
+  ashaPortraitCompact: { width: 96, height: 96 },
+  heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.gold, opacity: 0.6 },
+  statusDotLive: { opacity: 1 },
+  liveVoiceText: { color: c.gold, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1 },
+  heroTitle: { minWidth: 0, maxWidth: 300, flexShrink: 1, color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
+  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroSubtle, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  orbRow: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  captionBlock: { alignSelf: 'center', gap: 10 },
+  captionCard: { alignSelf: 'stretch', gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md },
+  captionCardYou: { backgroundColor: c.nightSurface },
+  captionCardAsha: { backgroundColor: c.paperRaised },
+  captionLabelBadge: { minHeight: 30, alignSelf: 'flex-start', justifyContent: 'center', overflow: 'visible', paddingVertical: 5 },
+  captionLabel: { color: c.heroSubtle, fontSize: 12, lineHeight: 18, fontWeight: '800', letterSpacing: 0.25 },
+  captionLabelAsha: { color: c.brand },
+  captionText: { minWidth: 0, alignSelf: 'stretch', color: c.white, fontSize: 16, lineHeight: 23 },
+  captionTextAsha: { color: c.ink },
+  studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, padding: spacing.lg },
   studioPhraseHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  studioPhraseEyebrow: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
-  studioPhraseEnglish: { color: c.ink, fontFamily: 'Georgia', fontSize: 20, lineHeight: 26, fontWeight: '700' },
-  studioListenIcon: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  studioPhraseLine: { height: 1, backgroundColor: c.line },
-  studioPhraseHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 24, lineHeight: 32, fontWeight: '700' },
-  studioPhraseLatin: { color: c.brandText, fontSize: 14, fontWeight: '900' },
+  studioPhraseCopy: { minWidth: 0, flex: 1, gap: 2 },
+  studioPhraseEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
+  studioPhraseEnglish: { color: c.white, fontFamily: displayFont, fontSize: 19, lineHeight: 25, fontWeight: '600' },
+  studioListenIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  studioPhraseHindi: { color: c.white, fontFamily: displayFont, fontSize: 24, lineHeight: 32, fontWeight: '600' },
+  studioPhraseLatin: { color: c.gold, fontSize: 14, fontWeight: '600' },
   studioPhraseFooter: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  studioPhraseCue: { minWidth: 0, flex: 1, color: c.muted, fontSize: 12, lineHeight: 17 },
+  studioPhraseCue: { minWidth: 0, flex: 1, color: c.heroSubtle, fontSize: 12, lineHeight: 17 },
   studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
-  studioMasteryText: { color: c.forestText, fontSize: 11, fontWeight: '900' },
-  featuredPhraseSection: { alignItems: 'center', backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  askSection: { minHeight: 116, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
+  studioMasteryText: { color: c.goldText, fontSize: 11, fontWeight: '700' },
+  featuredPhraseSection: { alignItems: 'center', backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  askSection: { minHeight: 116, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
-  sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.lineStrong },
+  sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.nightLine },
   askHeadingRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', position: 'relative', gap: spacing.md },
   askHeadingCopy: { minWidth: 0, alignItems: 'center', gap: 3 },
   askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { color: c.brandDark, fontSize: 11, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
-  askTitle: { color: c.ink, fontSize: 19, lineHeight: 24, fontWeight: '900', textAlign: 'center' },
-  clearChatButton: { position: 'absolute', right: 0, width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
-  messageRow: { alignItems: 'flex-start', backgroundColor: c.paper, paddingHorizontal: 20, marginBottom: spacing.sm },
+  askEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
+  askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
+  clearChatButton: { position: 'absolute', right: 0, width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
+  messageRow: { alignItems: 'flex-start', backgroundColor: c.night, paddingHorizontal: 20, marginBottom: spacing.sm },
   messageRowYou: { alignItems: 'flex-end' },
-  message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.xs, shadowColor: c.black, shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.04 * c.shadowOpacityScale, shadowRadius: 10, elevation: 1 * c.shadowOpacityScale },
-  ashaMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
-  userMessage: { backgroundColor: c.night },
+  message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md, gap: spacing.xs },
+  ashaMessage: { backgroundColor: c.paperRaised },
+  userMessage: { backgroundColor: c.nightSurface },
   messageIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  messageLabel: { color: c.brandDark, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  messageLabel: { color: c.brand, fontSize: 12, fontWeight: '600' },
   messageText: { alignSelf: 'stretch', color: c.ink, fontSize: 16, lineHeight: 23, margin: 0, padding: 0 },
   userText: { color: c.white },
   messageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingTop: spacing.xs },
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
-  transcriptFooter: { backgroundColor: c.paper, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  transcriptTurnCard: { borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.backgroundWarm, gap: spacing.sm, padding: spacing.md },
-  transcriptTurnEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.75, textTransform: 'uppercase' },
-  transcriptTurnButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  transcriptTurnButtonText: { color: c.white, fontSize: 14, fontWeight: '900', textAlign: 'center' },
-  composer: { backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
+  transcriptFooter: { backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },
+  transcriptTurnCard: { borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, gap: spacing.sm, padding: spacing.md },
+  transcriptTurnEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.75, textTransform: 'uppercase' },
+  transcriptTurnButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  transcriptTurnButtonText: { color: c.ink, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  composer: { backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
   examples: { justifyContent: 'center', gap: spacing.sm, paddingRight: spacing.xl },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 11 },
-  exampleText: { color: c.ink, fontSize: 12, fontWeight: '800', textAlign: 'center' },
+  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },
+  exampleText: { color: c.white, fontSize: 14, textAlign: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.backgroundWarm, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15 },
-  inputDisabled: { backgroundColor: c.line, color: c.mutedSoft, opacity: 0.65 },
-  sendButton: { width: 48, height: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center' },
+  input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: StyleSheet.hairlineWidth, color: c.white, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15 },
+  inputDisabled: { backgroundColor: c.nightSurface, color: c.heroSubtle, opacity: 0.65 },
+  sendButton: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
-  requestStatus: { color: c.forest, fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  requestStatus: { color: c.gold, fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  error: { color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
 } as const);
 
 const useStyles = makeStyles(createLiveStyles);
