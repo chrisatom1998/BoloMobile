@@ -84,7 +84,7 @@ export function RecallRevealPractice({ disabled = false, targetHi, targetLatin, 
           style={[styles.primary, locked && styles.disabled]}
           testID="scene-recall-reveal-show"
         >
-          <Eye color={colors.white} size={16} />
+          <Eye color={colors.ink} size={16} />
           <Text style={styles.primaryText}>Reveal answer</Text>
         </Pressable>
       ) : (
@@ -112,7 +112,7 @@ export function RecallRevealPractice({ disabled = false, targetHi, targetLatin, 
             style={[styles.gradeRight, locked && styles.disabled]}
             testID="scene-recall-reveal-got-it"
           >
-            <Check color={colors.white} size={16} />
+            <Check color={colors.forestText} size={16} />
             <Text style={styles.gradeRightText}>Got it</Text>
           </Pressable>
         </View>
@@ -122,25 +122,27 @@ export function RecallRevealPractice({ disabled = false, targetHi, targetLatin, 
   );
 }
 
+const SERIF = 'Georgia';
+
 const useStyles = makeStyles((c) => ({
-  container: { gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
-  instructions: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
-  promptCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, gap: spacing.xs },
-  promptEyebrow: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  promptText: { color: c.ink, fontSize: 20, lineHeight: 27, fontWeight: '900' },
-  hiddenCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderStyle: 'dashed', borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
-  hiddenText: { color: c.muted, fontSize: 14, lineHeight: 20, fontStyle: 'italic', textAlign: 'center' },
-  answerCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, gap: spacing.xs },
-  answerEyebrow: { color: c.heroSubtle, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  answerHindi: { color: c.white, fontSize: 22, lineHeight: 29, fontWeight: '900' },
-  answerLatin: { color: c.heroSubtle, fontSize: 15, lineHeight: 20, fontWeight: '700' },
-  primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  primaryText: { color: c.white, fontSize: 15, fontWeight: '900' },
-  gradeRow: { flexDirection: 'row', gap: spacing.sm },
-  gradeWrong: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  gradeWrongText: { color: c.danger, fontSize: 15, fontWeight: '900' },
-  gradeRight: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.success, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  gradeRightText: { color: c.white, fontSize: 15, fontWeight: '900' },
+  container: { gap: spacing.md },
+  instructions: { color: c.ink, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  promptCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.background, gap: 2 },
+  promptEyebrow: { color: c.muted, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  promptText: { color: c.ink, fontFamily: SERIF, fontSize: 20, lineHeight: 27, fontWeight: '700' },
+  hiddenCard: { minHeight: 64, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.white, borderWidth: 1.5, borderStyle: 'dashed', borderColor: c.lineStrong, alignItems: 'center', justifyContent: 'center' },
+  hiddenText: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  answerCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.brandSoft, gap: 2 },
+  answerEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
+  answerHindi: { color: c.ink, fontFamily: SERIF, fontSize: 22, lineHeight: 30, fontWeight: '700' },
+  answerLatin: { color: c.brandText, fontSize: 14, lineHeight: 20, fontWeight: '500' },
+  primary: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
+  primaryText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  gradeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  gradeWrong: { minHeight: 52, flexGrow: 1, flexBasis: 140, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 2, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  gradeWrongText: { color: c.danger, fontSize: 15, fontWeight: '700' },
+  gradeRight: { minHeight: 52, flexGrow: 1, flexBasis: 140, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.successSoft, borderWidth: 2, borderColor: c.forest, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  gradeRightText: { color: c.forestText, fontSize: 15, fontWeight: '700' },
   disabled: { opacity: 0.4 },
   footer: { color: c.muted, fontSize: 13, lineHeight: 18 },
 }));

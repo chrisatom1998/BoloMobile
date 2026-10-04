@@ -155,7 +155,7 @@ export function WordOrderPractice({ disabled = false, showInstructions = true, t
           style={[styles.primary, (!ready || locked) && styles.disabled]}
           testID="scene-word-order-check"
         >
-          <Check color={colors.white} size={16} />
+          <Check color={colors.ink} size={16} />
           <Text style={styles.primaryText}>Check</Text>
         </Pressable>
       </View>
@@ -164,24 +164,26 @@ export function WordOrderPractice({ disabled = false, showInstructions = true, t
   );
 }
 
+const SERIF = 'Georgia';
+
 const useStyles = makeStyles((c) => ({
-  container: { gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
-  instructions: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
-  tray: { minHeight: 60, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
-  trayPlaceholder: { color: c.muted, fontSize: 14, fontStyle: 'italic' },
-  trayToken: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: c.night },
-  trayTokenText: { color: c.white, fontSize: 17, fontWeight: '800' },
+  container: { gap: spacing.md },
+  instructions: { color: c.ink, fontFamily: SERIF, fontSize: 17, lineHeight: 23, fontWeight: '700' },
+  tray: { minHeight: 64, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.background, borderWidth: 1.5, borderStyle: 'dashed', borderColor: c.lineStrong, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
+  trayPlaceholder: { color: c.muted, fontSize: 14 },
+  trayToken: { paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.brand },
+  trayTokenText: { color: c.white, fontFamily: SERIF, fontSize: 17, lineHeight: 24, fontWeight: '700' },
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  tileText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.white, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
+  tileText: { color: c.ink, fontFamily: SERIF, fontSize: 18, lineHeight: 25, fontWeight: '700' },
   tileUsed: { backgroundColor: c.background, borderStyle: 'dashed', opacity: 0.5 },
   tileUsedText: { color: c.muted },
   tileLocked: { opacity: 0.4 },
   controls: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  primary: { minHeight: 44, flexGrow: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  primaryText: { color: c.white, fontSize: 15, fontWeight: '900' },
-  secondary: { minHeight: 44, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  secondaryText: { color: c.ink, fontSize: 14, fontWeight: '800' },
+  primary: { minHeight: 48, flexGrow: 1, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
+  primaryText: { color: c.ink, fontSize: 15, fontWeight: '700' },
+  secondary: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.white, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
+  secondaryText: { color: c.ink, fontSize: 14, fontWeight: '600' },
   disabled: { opacity: 0.4 },
   hint: { color: c.muted, fontSize: 13, lineHeight: 18 },
 }));

@@ -31,12 +31,17 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ dismissTo: mockRouterDismissTo, replace: mockRouterReplace }),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+
 jest.mock('lucide-react-native', () => ({
   Bookmark: () => null,
   Check: () => null,
   ChevronRight: () => null,
   Eye: () => null,
   Heart: () => null,
+  Lightbulb: () => null,
   RotateCcw: () => null,
   Star: () => null,
   Volume2: () => null,
@@ -126,7 +131,11 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByLabelText(choiceLabel('chai', 0, 0, true)).props.accessibilityState).toEqual({ disabled: true, selected: false });
 
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
-    expect(view.getByText('Turn 2 of 2')).toBeTruthy();
+    const progress = view.getByLabelText('Turn 2 of 2');
+    expect(progress.props.accessibilityRole).toBe('progressbar');
+    expect(progress.props.accessibilityValue).toEqual({ max: 2, min: 1, now: 2 });
+    expect(within(progress).getByText('2/2')).toBeTruthy();
+    expect(view.getAllByTestId('scene-progress-segment-active')).toHaveLength(2);
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     expect(view.getByText('Natural choice!')).toBeTruthy();
     expect(view.getByText('50')).toBeTruthy();
@@ -156,7 +165,7 @@ describe('SceneScreen primary journey', () => {
 
     await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
-    expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+    expect(view.getByLabelText('Turn 1 of 2')).toBeTruthy();
   });
 
   it('integrates word-order and recall-reveal beats with the shared scene journey', async () => {
@@ -325,7 +334,7 @@ describe('SceneScreen primary journey', () => {
   it('scores a resumed scene only over the beats answered after the checkpoint', async () => {
     mockAppState.sceneProgress = { chai: { lastBeatIndex: 1 } };
     const view = await render(<SceneScreen />);
-    expect(view.getByText('Turn 2 of 2')).toBeTruthy();
+    expect(view.getByLabelText('Turn 2 of 2')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
@@ -337,7 +346,7 @@ describe('SceneScreen primary journey', () => {
     });
 
     await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
-    expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+    expect(view.getByLabelText('Turn 1 of 2')).toBeTruthy();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
@@ -360,6 +369,43 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(finish);
 
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds the learner turn and Asha’s reply to the conversation and labels each choice outcome', async () => {
+    const beat = getScene('chai')!.beats[0]!;
+    const target = beat.choices.find((choice) => choice.correct)!;
+    const wrong = beat.choices[1]!;
+    const view = await render(<SceneScreen />);
+
+    expect(view.queryByTestId('scene-learner-reply')).toBeNull();
+    expect(view.queryByTestId('scene-npc-reply')).toBeNull();
+    expect(view.getByText(romanizeDevanagari(beat.npc))).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrong)));
+    expect(within(view.getByTestId('scene-learner-reply')).getByText(wrong.hi)).toBeTruthy();
+    expect(within(view.getByTestId('scene-npc-reply')).getByText(wrong.reply)).toBeTruthy();
+    expect(view.getByLabelText(choiceAccessibilityLabel(wrong, true)).props.accessibilityValue).toEqual({ text: 'Not quite' });
+    expect(view.getByLabelText(choiceAccessibilityLabel(target, true)).props.accessibilityValue).toEqual({ text: 'Natural answer' });
+
+    await fireEvent.press(view.getByRole('button', { name: 'Try again' }));
+    expect(view.queryByTestId('scene-learner-reply')).toBeNull();
+    await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(target)));
+    expect(within(view.getByTestId('scene-learner-reply')).getByText(target.hi)).toBeTruthy();
+    expect(within(view.getByTestId('scene-npc-reply')).getByText(target.reply)).toBeTruthy();
+    expect(view.getByLabelText(choiceAccessibilityLabel(target, true)).props.accessibilityValue).toEqual({ text: 'Correct' });
+    expect(view.getByLabelText(choiceAccessibilityLabel(wrong, true)).props.accessibilityValue?.text).toBeUndefined();
+  });
+
+  it('closes the lesson from the header and stops scene audio', async () => {
+    const view = await render(<SceneScreen />);
+    stopSpeakingMock.mockClear();
+
+    const close = view.getByRole('button', { name: 'Close lesson' });
+    expect(StyleSheet.flatten(close.props.style)).toMatchObject({ height: 44, width: 44 });
+    await fireEvent.press(close);
+
+    expect(stopSpeakingMock).toHaveBeenCalled();
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
   it('shows a safe not-found route and returns to the scene catalog', async () => {
@@ -418,7 +464,7 @@ describe('SceneScreen primary journey', () => {
 
     const choicesAfter = view.getByTestId('scene-choices');
     const buttonsAfter = within(choicesAfter).getAllByRole('button');
-    expect(StyleSheet.flatten(view.getAllByTestId('scene-choice-copy')[0]!.props.style)).toMatchObject({
+    expect(StyleSheet.flatten(view.getAllByTestId('scene-choice-meta')[0]!.props.style)).toMatchObject({
       flexDirection: 'row',
       flexWrap: 'wrap',
     });
@@ -497,7 +543,7 @@ describe('SceneScreen primary journey', () => {
       await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
       await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
 
-      expect(view.getByText('Turn 1 of 1')).toBeTruthy();
+      expect(view.getByLabelText('Turn 1 of 1')).toBeTruthy();
       expect(shuffleSpy).toHaveBeenCalledTimes(2);
       await view.unmount();
     } finally {
@@ -610,7 +656,7 @@ describe('SceneScreen primary journey', () => {
       expect(StyleSheet.flatten(view.getByTestId('scene-progress-header').props.style)).toMatchObject({ flexDirection: 'column' });
       expect(StyleSheet.flatten(view.getByTestId('scene-asha-row').props.style)).toMatchObject({ flexDirection: 'column' });
       expect(StyleSheet.flatten(view.getByTestId('scene-asha-bubble').props.style)).toMatchObject({ alignSelf: 'stretch', flex: 0 });
-      expect(StyleSheet.flatten(view.getByLabelText('Hear Asha').props.style)).toMatchObject({ alignSelf: 'flex-end', position: 'relative' });
+      expect(StyleSheet.flatten(view.getByLabelText('Hear Asha').props.style)).toMatchObject({ alignSelf: 'stretch', minHeight: 44 });
       expect(StyleSheet.flatten(view.getByLabelText(choiceLabel('chai', 0)).props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
 
       await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
