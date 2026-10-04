@@ -228,7 +228,37 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('No activity yet')).toBeTruthy();
     expect(view.queryByText('Your Hindi is taking root.')).toBeNull();
     expect(view.queryByText('Your garden starts with one small turn.')).toBeNull();
-    expect(view.getByText('Last 7 days')).toBeTruthy();
+    expect(view.getByText('THIS WEEK')).toBeTruthy();
+    expect(view.getByLabelText('Weekly practice minutes chart')).toBeTruthy();
+    expect(view.getByText('Nothing logged yet this week. One short lesson starts the chart.')).toBeTruthy();
+    expect(view.getByLabelText('Start speaking, 0 of 10 lessons complete')).toBeTruthy();
+  });
+
+  it('summarizes the week from real practice minutes and links lesson plans', async () => {
+    const today = new Date();
+    const key = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    mockAppState.practiceHistory = [{ answers: 0, correct: 0, date: key, reviews: 0, seconds: 7 * 60 }];
+    mockAppState.sceneProgress = {
+      'plan-essentials-01': {
+        bestAccuracy: 100,
+        bestScore: 10,
+        completions: 1,
+        lastBeatIndex: 0,
+        lastPracticedAt: '2026-07-28T12:00:00.000Z',
+        totalAnswers: 4,
+        totalCorrect: 3,
+        weakPhrases: [],
+      },
+    };
+
+    const view = await render(<ProgressScreen />);
+
+    expect(view.getByText('7 minutes across 1 day this week.')).toBeTruthy();
+    expect(view.getByText('75%')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Start speaking, 1 of 10 lessons complete'));
+    expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/lesson-plans', params: { planId: 'essentials' } });
+    await fireEvent.press(view.getByLabelText('See all lesson plans'));
+    expect(mockRouter.push).toHaveBeenCalledWith('/lesson-plans');
   });
 
   it('shows an unfinished lesson and active streak as the first progress summary', async () => {
@@ -259,9 +289,13 @@ describe('previously uncovered audit screens', () => {
   it('keeps the progress hero legible against the active palette', () => {
     const styles = createProgressStyles(lightColors);
 
-    expect(styles.hero.backgroundColor).toBe(lightColors.paperRaised);
-    expect(styles.heroTitle.color).toBe(lightColors.ink);
-    expect(styles.heroBody.color).toBe(lightColors.muted);
+    expect(styles.weekHero.backgroundColor).toBe(lightColors.brand);
+    expect(styles.weekSummary.color).toBe(lightColors.white);
+    expect(styles.day.color).toBe(lightColors.brandSoft);
+    expect(styles.dayToday.color).toBe(lightColors.goldSoft);
+    expect(styles.focusCard.backgroundColor).toBe(lightColors.paperRaised);
+    expect(styles.focusTitle.color).toBe(lightColors.ink);
+    expect(styles.focusBody.color).toBe(lightColors.muted);
     expect(styles.content.paddingBottom).toBeGreaterThanOrEqual(100);
   });
 

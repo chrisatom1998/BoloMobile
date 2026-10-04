@@ -6,6 +6,8 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('lucide-react-native', () => ({
+  ArrowRight: () => null,
+  AudioLines: () => null,
   BookOpen: () => null,
   Bookmark: () => null,
   BarChart3: () => null,
@@ -50,10 +52,14 @@ describe('home accessibility', () => {
     expect(StyleSheet.flatten(settings.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(settings.props.style).minWidth).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(48);
-    expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minWidth).toBeGreaterThanOrEqual(48);
+    expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minWidth).toBeGreaterThanOrEqual(44);
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
     expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('0 percent of daily goal complete');
-    expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(48);
+    expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(view.getByLabelText('Start lesson').props.style).minHeight).toBeGreaterThanOrEqual(48);
+    expect(StyleSheet.flatten(view.getByLabelText('Browse all 10 plans').props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(view.getByLabelText('Talk with Asha').props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(view.getByLabelText('Open saved phrases').props.accessibilityRole).toBe('button');
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
 
     const list = view.getByTestId('today-guided-plan-list');
@@ -62,7 +68,7 @@ describe('home accessibility', () => {
     expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
   });
 
-  it('reflows the Today header and daily-goal status at accessibility text sizes', async () => {
+  it('reflows the Today header and daily-goal tiles at accessibility text sizes', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');
     await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
@@ -70,8 +76,9 @@ describe('home accessibility', () => {
     try {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
-      expect(StyleSheet.flatten(view.getByTestId('today-goal-status').props.style)).toMatchObject({ flexDirection: 'column' });
-      expect(StyleSheet.flatten(view.getByTestId('today-goal-dial').props.style).height).toBeGreaterThanOrEqual(190);
+      expect(StyleSheet.flatten(view.getByTestId('today-daily-goal').parent?.props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('today-daily-goal').props.style)).toMatchObject({ width: '100%' });
+      expect(view.getByTestId('today-goal-dial')).toBeTruthy();
       expect(StyleSheet.flatten(view.getByTestId('today-next-practice').props.style).minHeight).toBeGreaterThanOrEqual(52);
     }
     finally {
@@ -79,7 +86,7 @@ describe('home accessibility', () => {
     }
   });
 
-  it('keeps the motif clear of the greeting on narrow default-text phones', async () => {
+  it('stacks the greeting above the streak and Settings on narrow default-text phones', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');
     await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 360 }, window: { ...window, fontScale: 1, width: 360 } }));

@@ -1,18 +1,17 @@
 import { useRouter, type Href } from 'expo-router';
-import { Award, Check, Leaf, Share2, Sprout } from 'lucide-react-native';
+import { Award, Check, Share2 } from 'lucide-react-native';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { useMemo } from 'react';
 import { Platform, Share, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { JournalDisplay, JournalKicker, JournalMotif } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { categoryMastery, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 
 export default function ProgressScreen() {
   const router = useRouter();
@@ -22,10 +21,22 @@ export default function ProgressScreen() {
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
   const { duePhrases, learnerProfile, phraseReviews, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
-  const { week, maxMinutes } = useMemo(() => {
+  const { week, maxMinutes, totalMinutes } = useMemo(() => {
     const days = weeklyPractice(practiceHistory);
-    return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.round(day.seconds / 60))) };
+    const minutes = days.map((day) => Math.round(day.seconds / 60));
+    return { week: days, maxMinutes: Math.max(1, ...minutes), totalMinutes: minutes.reduce((total, value) => total + value, 0) };
   }, [practiceHistory]);
+  const planProgress = useMemo(() => {
+    const plans = lessonPlans.map((plan) => {
+      const done = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+      return { done, id: plan.id, title: plan.title, total: plan.lessonIds.length };
+    });
+    // Show the plan being worked on with its neighbours: the last finished plan and the next one.
+    const current = plans.findIndex((plan) => plan.done < plan.total);
+    const anchor = current === -1 ? plans.length - 1 : current;
+    const start = Math.max(0, Math.min(anchor - 1, plans.length - 3));
+    return plans.slice(start, start + 3);
+  }, [sceneProgress]);
   const { accuracy, categories, completedScenes, milestones } = useMemo(() => ({
     categories: categoryMastery(sceneProgress),
     accuracy: learningAccuracy(sceneProgress),
@@ -88,6 +99,12 @@ export default function ProgressScreen() {
       ? `${activeDaysThisWeek} active day${activeDaysThisWeek === 1 ? '' : 's'}`
       : 'No activity yet';
 
+  const weekSummary = totalMinutes > 0
+    ? `${totalMinutes} minute${totalMinutes === 1 ? '' : 's'} across ${activeDaysThisWeek} day${activeDaysThisWeek === 1 ? '' : 's'} this week.`
+    : activeDaysThisWeek > 0
+      ? `Practiced on ${activeDaysThisWeek} day${activeDaysThisWeek === 1 ? '' : 's'} this week. Every short session counts.`
+      : 'Nothing logged yet this week. One short lesson starts the chart.';
+
   function shareMilestones() {
     const achieved = milestones.filter((item) => item.achieved).map((item) => item.title);
     const message = achieved.length
@@ -102,198 +119,203 @@ export default function ProgressScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
       <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
         <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
-          <JournalKicker>Your language garden</JournalKicker>
-          <JournalDisplay style={[styles.pageTitle, largeTextLayout && styles.pageTitleLarge]}>What is taking root.</JournalDisplay>
+          <Text accessibilityRole="header" style={styles.pageTitle}>Progress</Text>
+          <Text style={[styles.pageSubtitle, largeTextLayout && styles.pageSubtitleLarge]}>What is taking root.</Text>
         </View>
-        <JournalMotif accessibilityLabel="Progress journal motif" size="tile" style={largeTextLayout ? styles.pageHeadingMotifLarge : undefined} />
+        <PressableFeedback accessibilityHint="Opens the share sheet with your completed scenes and milestones." accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton} testID="progress-share">
+          <Share2 color={colors.ink} size={18} />
+        </PressableFeedback>
       </View>
 
-      <View style={styles.hero}>
-        <Text accessible={false} importantForAccessibility="no" pointerEvents="none" style={styles.heroGlyph}>ब</Text>
-        <View style={styles.heroIcon}><Sprout color={colors.goldSoft} size={25} /></View>
-        <Text style={styles.heroEyebrow}>
+      <View style={styles.weekHero} testID="progress-week-hero">
+        <Text accessible={false} importantForAccessibility="no" pointerEvents="none" style={styles.weekGlyph}>बो</Text>
+        <View style={[styles.weekHeader, largeTextLayout && styles.weekHeaderLarge]}>
+          <Text style={styles.weekEyebrow}>THIS WEEK</Text>
+          <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
+        </View>
+        <View accessibilityLabel="Weekly practice minutes chart" accessible style={styles.chart}>
+          {week.map((day, index) => {
+            const minutes = Math.round(day.seconds / 60);
+            const today = index === week.length - 1;
+            return (
+              <View key={day.date} style={styles.barColumn}>
+                <Text style={styles.barValue}>{minutes > 0 ? minutes : '–'}</Text>
+                <View style={[styles.bar, { height: Math.max(4, Math.round(minutes / maxMinutes * 56)) }, minutes > 0 ? styles.barActive : styles.barEmpty, today && styles.barToday]} />
+                <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
+              </View>
+            );
+          })}
+        </View>
+        <Text style={styles.weekSummary}>{weekSummary}</Text>
+      </View>
+
+      <View style={styles.stats}>
+        <View style={[styles.stat, largeTextLayout && styles.statLarge]}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
+        <View style={[styles.stat, largeTextLayout && styles.statLarge]}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
+        <View style={[styles.stat, largeTextLayout && styles.statLarge]}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>practice streak</Text></View>
+        <View style={[styles.stat, largeTextLayout && styles.statLarge]}><Text style={styles.statValue}>{reviewStreak}</Text><Text style={styles.statLabel}>review streak</Text></View>
+      </View>
+
+      <View style={styles.focusCard} testID="progress-lesson-focus">
+        <Text style={styles.eyebrow}>
           {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
         </Text>
-        <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
-        <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
-        <View style={styles.heroFootnotes}>
-          <View style={styles.heroFootnote}><Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text></View>
-          <View style={[styles.heroFootnote, styles.heroFootnoteForest]}><Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text></View>
+        <Text style={styles.focusTitle}>{lessonFocus.title}</Text>
+        <Text style={styles.focusBody}>{lessonFocus.metric}</Text>
+        <View style={styles.focusNotes}>
+          <View style={styles.focusNote}><Text style={styles.focusNoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text></View>
+          <View style={[styles.focusNote, styles.focusNoteForest]}><Text style={[styles.focusNoteText, styles.focusNoteForestText]}>{streakLabel}</Text></View>
         </View>
         <PressableFeedback
           accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
           accessibilityRole="button"
           onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
-          style={styles.heroAction}
+          style={styles.primaryButton}
         >
-          <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
+          <Text style={styles.primaryButtonText}>{lessonFocus.action}</Text>
         </PressableFeedback>
       </View>
 
-      <View style={styles.stats}>
-        <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>practice streak</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{reviewStreak}</Text><Text style={styles.statLabel}>review streak</Text></View>
-      </View>
-
-      <View style={styles.gardenCard}>
+      <View style={styles.card} testID="progress-lesson-plans">
         <View style={styles.cardTitleRow}>
-          <View>
-            <Text style={styles.gardenEyebrow}>This week</Text>
-            <Text style={styles.title}>Your practice pattern.</Text>
-          </View>
-          <Text style={styles.gardenMeta}>{weekActivityLabel}</Text>
+          <Text accessibilityRole="header" style={styles.title}>Lesson plans</Text>
+          <PressableFeedback accessibilityLabel="See all lesson plans" accessibilityRole="link" onPress={() => router.push('/lesson-plans' as Href)} style={styles.linkButton}>
+            <Text style={styles.linkText}>See all</Text>
+          </PressableFeedback>
         </View>
-        <View accessibilityLabel="Weekly practice garden" style={styles.gardenWeek}>
-          {week.map((day, index) => {
-            const practiced = day.seconds > 0 || day.reviews > 0;
-            const today = index === week.length - 1;
-            return (
-              <View key={day.date} style={styles.gardenDay}>
-                <Text style={[styles.gardenDayLabel, today && styles.gardenDayLabelToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
-                <View style={[styles.gardenLeaf, practiced && styles.gardenLeafActive, today && styles.gardenLeafToday]}>
-                  <Leaf color={practiced || today ? colors.forestText : colors.lineStrong} fill={practiced || today ? colors.forestSoft : 'transparent'} size={20} strokeWidth={1.8} />
-                </View>
+        {planProgress.map((plan) => {
+          const complete = plan.done === plan.total;
+          return (
+            <PressableFeedback
+              accessibilityLabel={`${plan.title}, ${plan.done} of ${plan.total} lessons complete`}
+              accessibilityRole="button"
+              key={plan.id}
+              onPress={() => router.push({ pathname: '/lesson-plans', params: { planId: plan.id } })}
+              style={styles.planRow}
+            >
+              <View style={styles.planCopy}>
+                <Text style={styles.planTitle}>{plan.title}</Text>
+                <Text style={styles.planMeta}>{plan.done} of {plan.total}</Text>
               </View>
-            );
-          })}
-        </View>
+              <View style={styles.track}><View style={[styles.fill, complete && styles.fillComplete, { width: `${Math.round(plan.done / Math.max(1, plan.total) * 100)}%` }]} /></View>
+            </PressableFeedback>
+          );
+        })}
       </View>
 
       {featuredPhrase ? (
-        <PressableFeedback accessibilityLabel={`Water saved phrase ${featuredPhrase.hi}`} accessibilityRole="button" onPress={() => router.push((duePhrases.length ? '/review' : '/phrases') as Href)} style={styles.featuredPhrase}>
-          <View style={styles.featuredPhraseHeading}>
-            <View style={styles.featuredPhraseIcon}><Sprout color={colors.forestText} size={20} /></View>
-            <Text style={styles.gardenEyebrow}>Featured phrase</Text>
+        <PressableFeedback accessibilityLabel={`Water saved phrase ${featuredPhrase.hi}`} accessibilityRole="button" onPress={() => router.push((duePhrases.length ? '/review' : '/phrases') as Href)} style={styles.card}>
+          <Text style={styles.eyebrow}>Featured phrase</Text>
+          <View style={styles.featuredCopy}>
+            {learnerProfile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
+            {learnerProfile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
+            <Text style={styles.featuredEnglish}>{featuredPhrase.en}</Text>
           </View>
-          {learnerProfile.scriptPreference !== 'latin' ? <Text style={styles.featuredHindi}>{featuredPhrase.hi}</Text> : null}
-          {learnerProfile.scriptPreference !== 'devanagari' ? <Text style={styles.featuredLatin}>{featuredPhrase.latin}</Text> : null}
-          <Text style={styles.featuredEnglish}>{featuredPhrase.en}</Text>
           <View style={styles.featuredMasteryRow}>
-            <Text style={styles.featuredMasteryLabel}>Mastery</Text>
-            <View style={styles.featuredLeaves}>{Array.from({ length: 5 }, (_, index) => <Leaf color={index < featuredMastery ? colors.forest : colors.lineStrong} fill={index < featuredMastery ? colors.forestSoft : 'transparent'} key={index} size={18} strokeWidth={1.8} />)}</View>
+            <View accessibilityLabel={`Mastery ${featuredMastery} of 5`} style={styles.segments}>
+              {Array.from({ length: 5 }, (_, index) => <View key={index} style={[styles.segment, index < featuredMastery && styles.segmentFilled]} />)}
+            </View>
             <Text style={styles.featuredMasteryValue}>{featuredMastery}/5</Text>
           </View>
-          <View style={styles.waterButton}><Text style={styles.waterButtonText}>{duePhrases.length ? 'Water this phrase' : 'Visit your phrase garden'}</Text></View>
+          <View style={styles.primaryButton}><Text style={styles.primaryButtonText}>{duePhrases.length ? 'Water this phrase' : 'Visit your phrase garden'}</Text></View>
         </PressableFeedback>
       ) : null}
 
       <View style={styles.card}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.title}>Last 7 days</Text>
-          <Text style={styles.cardMeta}>minutes</Text>
-        </View>
-        <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
-          {week.map((day) => {
-            const minutes = Math.round(day.seconds / 60);
-            return (
-              <View key={day.date} style={styles.barColumn}>
-                <Text style={styles.barValue}>{minutes}</Text>
-                <View style={styles.barTrack}><View style={[styles.bar, { height: `${Math.max(4, minutes / maxMinutes * 100)}%` }]} /></View>
-                <Text style={styles.day}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.title}>Category mastery</Text>
+        <Text accessibilityRole="header" style={styles.title}>Category mastery</Text>
         {categories.map((item) => (
-          <View key={item.category} style={styles.masteryRow}>
-            <View style={styles.masteryCopy}><Text style={styles.masteryTitle}>{item.category}</Text><Text style={styles.masteryMeta}>{item.completed}/{item.total}</Text></View>
-            <View style={styles.masteryTrack}><View style={[styles.masteryFill, { width: `${item.percent}%` }]} /></View>
+          <View key={item.category} style={styles.planRow}>
+            <View style={styles.planCopy}><Text style={styles.planTitle}>{item.category}</Text><Text style={styles.planMeta}>{item.completed} of {item.total}</Text></View>
+            <View style={styles.track}><View style={[styles.fill, item.completed === item.total && styles.fillComplete, { width: `${item.percent}%` }]} /></View>
           </View>
         ))}
       </View>
 
       <View style={styles.card}>
-        <View style={styles.cardTitleRow}><Text style={styles.title}>Can-do milestones</Text><Award color={colors.gold} size={22} /></View>
+        <View style={styles.cardTitleRow}><Text accessibilityRole="header" style={styles.title}>Can-do milestones</Text><Award color={colors.brand} size={20} /></View>
         {milestones.map((item) => (
           <View key={item.id} style={styles.milestone}>
             <View style={[styles.milestoneMark, item.achieved && styles.milestoneMarkDone]}>{item.achieved ? <Check color={colors.white} size={16} /> : null}</View>
-            <View style={styles.milestoneCopy}><Text style={styles.milestoneTitle}>{item.title}</Text><Text style={styles.masteryMeta}>{item.completed}/{item.sceneIds.length} scenes</Text></View>
+            <View style={styles.milestoneCopy}><Text style={styles.milestoneTitle}>{item.title}</Text><Text style={styles.planMeta}>{item.completed}/{item.sceneIds.length} scenes</Text></View>
           </View>
         ))}
-        <PressableFeedback accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}><Share2 color={colors.forestText} size={18} /><Text style={styles.shareText}>Share a private milestone card</Text></PressableFeedback>
+        <PressableFeedback accessibilityRole="button" onPress={shareMilestones} style={styles.secondaryButton}><Share2 color={colors.ink} size={18} /><Text style={styles.secondaryButtonText}>Share a private milestone card</Text></PressableFeedback>
       </View>
     </ScrollView>
   );
 }
 
 export const createProgressStyles = (c: ThemeColors) => ({
-  content: { alignItems: 'center', padding: spacing.lg, paddingTop: 18, paddingBottom: 120, gap: spacing.lg },
-  pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
+  content: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', paddingHorizontal: spacing.lg, paddingTop: 18, paddingBottom: 120, gap: spacing.lg },
+  pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs, paddingTop: spacing.xs },
+  pageHeadingCopy: { minWidth: 0, flex: 1, gap: 2 },
   pageHeadingCopyLarge: { flex: 0, width: '100%' },
-  pageTitle: { maxWidth: 225, fontSize: 30, lineHeight: 36, textAlign: 'left' },
-  pageTitleLarge: { maxWidth: '100%' },
-  pageHeadingMotifLarge: { alignSelf: 'flex-end' },
-  hero: { width: '100%', position: 'relative', overflow: 'hidden', alignItems: 'flex-start', borderRadius: 26, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.xl, gap: spacing.sm, boxShadow: '0 10px 24px rgba(0, 0, 0, 0.09)' },
-  heroIcon: { width: 46, height: 46, borderRadius: 16, borderCurve: 'continuous', backgroundColor: c.heroRaised, alignItems: 'center', justifyContent: 'center' },
-  heroGlyph: { position: 'absolute', right: -6, bottom: -48, color: c.heroGlyph, fontSize: 156, lineHeight: 180, fontWeight: '900' },
-  heroEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
-  heroTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 32, fontWeight: '700', textAlign: 'left' },
-  heroBody: { color: c.muted, fontSize: 14, lineHeight: 21, textAlign: 'left' },
-  heroFootnotes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  heroFootnote: { maxWidth: '100%', flexShrink: 1, borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
-  heroFootnoteText: { color: c.ink, fontSize: 12, fontWeight: '800' },
-  heroFootnoteForest: { backgroundColor: c.forestSoft },
-  heroFootnoteForestText: { color: c.forestText },
-  heroAction: { minHeight: 48, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
-  heroActionText: { color: c.neutralSurfaceText, fontSize: 14, fontWeight: '900' },
-  gardenCard: { width: '100%', backgroundColor: c.paper, borderTopColor: c.lineStrong, borderBottomColor: c.lineStrong, borderTopWidth: 1, borderBottomWidth: 1, paddingVertical: spacing.lg, gap: spacing.lg },
-  gardenEyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
-  gardenMeta: { color: c.muted, fontSize: 12, fontWeight: '800', textAlign: 'right' },
-  gardenWeek: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 3 },
-  gardenDay: { minWidth: 0, flex: 1, alignItems: 'center', gap: spacing.xs },
-  gardenDayLabel: { color: c.muted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-  gardenDayLabelToday: { color: c.brandText },
-  gardenLeaf: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, alignItems: 'center', justifyContent: 'center' },
-  gardenLeafActive: { borderColor: c.forest, borderWidth: 1, backgroundColor: c.forestSoft },
-  gardenLeafToday: { borderColor: c.neutralSurface, borderWidth: 2, backgroundColor: c.neutralSurface },
-  featuredPhrase: { width: '100%', backgroundColor: c.paperRaised, borderColor: c.gold, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm, boxShadow: '0 5px 16px rgba(84, 58, 11, 0.08)' },
-  featuredPhraseHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  featuredPhraseIcon: { width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.goldSoft, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  featuredListen: { marginLeft: 'auto', width: 38, height: 38, borderRadius: radius.pill, backgroundColor: c.forestSoft, alignItems: 'center', justifyContent: 'center' },
-  featuredHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 28, lineHeight: 36, fontWeight: '700' },
-  featuredLatin: { color: c.brandText, fontSize: 15, fontWeight: '900' },
-  featuredEnglish: { color: c.muted, fontSize: 15, lineHeight: 21 },
-  featuredMasteryRow: { width: '100%', flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, paddingTop: spacing.sm },
-  featuredMasteryLabel: { color: c.ink, fontSize: 11, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  featuredLeaves: { flexDirection: 'row', gap: 3 },
-  featuredMasteryValue: { color: c.forestText, fontSize: 13, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  waterButton: { minHeight: 48, borderRadius: radius.md, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
-  waterButtonText: { color: c.neutralSurfaceText, fontSize: 14, fontWeight: '900' },
-  stats: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  stat: { minWidth: 130, minHeight: 100, flexGrow: 1, flexBasis: 130, backgroundColor: c.paperRaised, borderRadius: 18, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, padding: spacing.md, alignItems: 'center', justifyContent: 'center', gap: 3, boxShadow: '0 4px 12px rgba(0, 0, 0, 0.035)' },
-  statValue: { color: c.ink, fontSize: 27, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  statLabel: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '700', textAlign: 'center' },
-  card: { width: '100%', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: 22, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.lg, boxShadow: '0 4px 14px rgba(0, 0, 0, 0.035)' },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  title: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
-  cardMeta: { color: c.muted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
-  chart: { height: 150, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  barColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.xs },
-  barValue: { color: c.muted, fontSize: 10, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  barTrack: { flex: 1, width: '70%', borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.backgroundWarm, justifyContent: 'flex-end' },
-  bar: { width: '100%', minHeight: 4, borderRadius: radius.pill, backgroundColor: c.brand },
-  day: { color: c.muted, fontSize: 11, fontWeight: '700' },
-  masteryRow: { gap: spacing.xs },
-  masteryCopy: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.sm },
-  masteryTitle: { color: c.ink, fontSize: 14, fontWeight: '800' },
-  masteryMeta: { color: c.muted, fontSize: 12, lineHeight: 17, fontVariant: ['tabular-nums'] },
-  masteryTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
-  masteryFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
-  milestone: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  pageTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 30, lineHeight: 36, fontWeight: '700', letterSpacing: -0.3, textAlign: 'left' },
+  pageSubtitle: { maxWidth: 260, color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
+  pageSubtitleLarge: { maxWidth: '100%' },
+  shareButton: { width: 44, height: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: c.line, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' },
+  weekHero: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: 28, borderCurve: 'continuous', backgroundColor: c.brand, padding: 20, gap: spacing.lg },
+  weekGlyph: { position: 'absolute', right: 8, bottom: -40, color: c.heroGlyph, opacity: 0.55, fontFamily: 'Georgia', fontSize: 150, lineHeight: 170, fontWeight: '700' },
+  weekHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  weekHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.xs },
+  weekEyebrow: { color: c.brandSoft, fontSize: 12, fontWeight: '600', letterSpacing: 1 },
+  weekMeta: { color: c.brandSoft, fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  chart: { minHeight: 104, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  barColumn: { minWidth: 0, flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  barValue: { color: c.brandSoft, fontSize: 11, fontVariant: ['tabular-nums'] },
+  bar: { width: '100%', maxWidth: 26, borderRadius: 8, borderCurve: 'continuous', backgroundColor: c.white },
+  barActive: { opacity: 0.85 },
+  barEmpty: { opacity: 0.25 },
+  barToday: { backgroundColor: c.gold, opacity: 1 },
+  day: { color: c.brandSoft, fontSize: 12, fontWeight: '500' },
+  // goldSoft keeps today's label above 4.5:1 on the brand card; the bar itself carries the gold.
+  dayToday: { color: c.goldSoft, fontWeight: '700' },
+  weekSummary: { color: c.white, fontSize: 14, lineHeight: 20, textAlign: 'left' },
+  stats: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  stat: { minWidth: 130, flexGrow: 1, flexBasis: 140, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', paddingVertical: 14, paddingHorizontal: spacing.lg, alignItems: 'flex-start', gap: 2 },
+  statLarge: { flexBasis: '100%' },
+  statValue: { color: c.ink, fontFamily: 'Georgia', fontSize: 30, lineHeight: 36, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  statLabel: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
+  focusCard: { width: '100%', backgroundColor: c.paperRaised, borderRadius: 22, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
+  eyebrow: { color: c.brandText, fontSize: 12, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
+  focusTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700', textAlign: 'left' },
+  focusBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
+  focusNotes: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  focusNote: { maxWidth: '100%', flexShrink: 1, borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: 10, paddingVertical: spacing.xs },
+  focusNoteText: { color: c.ink, fontSize: 12, fontWeight: '600' },
+  focusNoteForest: { backgroundColor: c.forestSoft },
+  focusNoteForestText: { color: c.forestText },
+  primaryButton: { minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, marginTop: spacing.xs },
+  primaryButtonText: { color: c.neutralSurfaceText, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  card: { width: '100%', backgroundColor: c.paperRaised, borderRadius: 22, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  title: { color: c.ink, fontFamily: 'Georgia', fontSize: 17, lineHeight: 23, fontWeight: '700' },
+  linkButton: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
+  linkText: { color: c.brandText, fontSize: 13, fontWeight: '600' },
+  planRow: { minHeight: 44, justifyContent: 'center', gap: 6 },
+  planCopy: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
+  planTitle: { flexShrink: 1, color: c.ink, fontSize: 14, lineHeight: 19, fontWeight: '600' },
+  planMeta: { color: c.muted, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
+  fill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
+  fillComplete: { backgroundColor: c.forest },
+  featuredCopy: { gap: 2 },
+  featuredHindi: { color: c.ink, fontFamily: 'Georgia', fontSize: 24, lineHeight: 32, fontWeight: '700' },
+  featuredLatin: { color: c.brand, fontSize: 15, lineHeight: 20, fontWeight: '500' },
+  featuredEnglish: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  featuredMasteryRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  segments: { flexDirection: 'row', gap: spacing.xs },
+  segment: { width: 18, height: 6, borderRadius: radius.pill, backgroundColor: c.line },
+  segmentFilled: { backgroundColor: c.brand },
+  featuredMasteryValue: { color: c.muted, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  milestone: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   milestoneMark: { width: 30, height: 30, borderRadius: radius.pill, borderWidth: 1, borderColor: c.line, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center' },
   milestoneMarkDone: { borderColor: c.forest, backgroundColor: c.forest },
   milestoneCopy: { minWidth: 0, flex: 1, gap: 2 },
-  milestoneTitle: { color: c.ink, fontSize: 15, fontWeight: '800' },
-  shareButton: { minHeight: 48, overflow: 'hidden', borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.forest, backgroundColor: c.forestSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  shareText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  milestoneTitle: { color: c.ink, fontSize: 14, lineHeight: 19, fontWeight: '600' },
+  secondaryButton: { minHeight: 48, borderRadius: radius.pill, borderWidth: 1, borderColor: c.line, backgroundColor: c.paperRaised, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  secondaryButtonText: { flexShrink: 1, color: c.ink, fontSize: 14, fontWeight: '600', textAlign: 'center' },
 } satisfies NamedStyles);
 
 const useStyles = makeStyles(createProgressStyles);

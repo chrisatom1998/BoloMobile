@@ -150,6 +150,25 @@ describe('PhrasesScreen primary journey', () => {
     }
   });
 
+  it('routes the review banner to the review flow and filters by category pill', async () => {
+    const tea = { en: 'One tea, please.', hi: 'एक चाय दीजिए।', latin: 'Ek chai dijiye.' };
+    mockAppState.phrases = [mockPhrase, tea];
+    const view = await render(<PhrasesScreen />);
+
+    expect(view.getByText('Phrases')).toBeTruthy();
+    expect(view.getByText('2 saved')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: /^Review \d+ phrases due today$/u }));
+    expect(mockRouterPush).toHaveBeenCalledWith('/review');
+
+    const cafe = view.getByLabelText('Phrase category: Café');
+    expect(view.getByLabelText('Phrase category: All').props.accessibilityState).toEqual({ selected: true });
+    await fireEvent.press(cafe);
+    expect(view.getByLabelText('Phrase category: Café').props.accessibilityState).toEqual({ selected: true });
+    expect(view.getByText('1 of 2 saved')).toBeTruthy();
+    expect(view.getByText('Ek chai dijiye.')).toBeTruthy();
+    expect(view.queryByText('namaste')).toBeNull();
+  });
+
   it('removes a phrase only after destructive confirmation', async () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
