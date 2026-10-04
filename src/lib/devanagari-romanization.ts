@@ -52,6 +52,8 @@ const NUKTA = '़';
 const DEVANAGARI_LETTER_OR_MARK = /[\u0900-\u0963\u0971-\u097F]/u;
 const BOLO_WORD_SPELLINGS: Record<string, string> = {
   आशा: 'Asha',
+  पानी: 'paani',
+  कृपया: 'kripya',
 };
 
 function isWordBoundary(character: string | undefined) {

@@ -326,6 +326,9 @@ export function useRealtimeConversation({ clientId, responseLanguage = 'en', onE
     const spokenReply = completedReplyRef.current.trim();
     const transcript = transcriptRef.current.trim();
     if (!spokenReply || !transcript || !inputItemIdRef.current) return;
+    // A max_output_tokens continuation is still streaming; finalizing now would
+    // commit the partial reply and leave only the tail for playback.
+    if (continuationPendingRef.current || !responseCompletedRef.current) return;
     const reply = spokenReply;
     rememberBoundedId(completedInputItemIdsRef.current, inputItemIdRef.current);
     inputItemIdRef.current = null;

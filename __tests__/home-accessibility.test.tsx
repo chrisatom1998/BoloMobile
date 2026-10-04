@@ -1,3 +1,6 @@
+// Keep built-in journey fixtures independent of locally imported lessons.
+jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
+
 import { act, render } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 

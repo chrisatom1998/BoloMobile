@@ -146,3 +146,18 @@ describe('WordOrderPractice', () => {
     expect(onResolve).not.toHaveBeenCalled();
   });
 });
+
+it.each(['latin', 'devanagari', 'both'] as const)('labels tiles and the tray in %s while scoring canonical order', async (preference) => {
+  const onResolve = jest.fn();
+  const view = await render(<WordOrderPractice scriptPreference={preference} targetHi="मैं ठीक हूँ।" targetLatin="Main theek hoon." onResolve={onResolve} />);
+  expect(view.queryByTestId('scene-word-order-answer')).toBeNull();
+  expect(view.queryByText(/Say it evenly:/)).toBeNull();
+  const firstLabel = preference === 'latin' ? 'Main' : preference === 'devanagari' ? 'मैं' : 'मैं\nMain';
+  expect(view.getByLabelText(`Add word ${firstLabel}`)).toBeTruthy();
+  for (const index of [0, 1, 2]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
+  expect(view.getByTestId('scene-word-order-tray').props.accessibilityLabel).toContain(firstLabel);
+  expect(view.queryByTestId('scene-word-order-answer')).toBeNull();
+  await fireEvent.press(view.getByTestId('scene-word-order-check'));
+  expect(onResolve).toHaveBeenCalledWith('correct');
+  expect(view.getByTestId('scene-word-order-answer')).toBeTruthy();
+});

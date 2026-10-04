@@ -12,6 +12,7 @@ jest.mock('expo-router', () => {
 });
 
 const mockRemovePhrase = jest.fn();
+const mockUpdateLearnerProfile = jest.fn();
 const mockPhrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
 // A phrase with no review record is due immediately; schedule this one for
 // tomorrow so the header's "everything reviewed" branch stays reachable.
@@ -23,7 +24,8 @@ const reviewedTomorrow = () => {
 };
 const mockAppState = {
   aiConsent: true,
-  learnerProfile: { scriptPreference: 'devanagari' },
+  learnerProfile: { scriptPreference: 'devanagari', phrasePlaybackRate: 1 },
+  updateLearnerProfile: mockUpdateLearnerProfile,
   phraseReviews: {} as ReturnType<typeof reviewedTomorrow>,
   phrases: [] as (typeof mockPhrase)[],
   removePhrase: mockRemovePhrase,
@@ -60,6 +62,7 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
 }));
 
+import { learnerPhraseLatin } from '../src/lib/learner-phrase-display';
 import PhrasesScreen from '../src/app/(tabs)/phrases';
 import { showAppAlert } from '../src/lib/app-alert';
 import { speakText, stopSpeaking } from '../src/lib/speech';
@@ -131,7 +134,7 @@ describe('PhrasesScreen primary journey', () => {
 
     expect(view.getByText('Everything is reviewed for today.')).toBeTruthy();
     expect(view.getByText('नमस्ते')).toBeTruthy();
-    expect(view.getByText('namaste')).toBeTruthy();
+    expect(view.getByText(learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin))).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Hear नमस्ते'));
     expect(speakTextMock).toHaveBeenCalledWith('नमस्ते', undefined, 1);
@@ -144,8 +147,8 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    for (const [label, rate] of [['0.10×', 0.1], ['0.25×', 0.25], ['0.50×', 0.5]] as const) {
-      await fireEvent.press(view.getByLabelText(`Replay namaste at ${label} speed`));
+    for (const [label, rate] of [['0.10×', 0.1], ['0.25×', 0.25], ['0.50×', 0.5], ['0.75×', 0.75], ['Normal', 1]] as const) {
+      await fireEvent.press(view.getByLabelText(`Replay ${learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin)} at ${label} speed`));
       expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, rate);
     }
   });
@@ -178,4 +181,29 @@ describe('PhrasesScreen primary journey', () => {
     await fireEvent.press(view.getByLabelText('Hear नमस्ते'));
     await waitFor(() => expect(view.getByRole('alert').props.children).toBe('AI voice playback failed.'));
   });
+});
+
+
+it('uses the remembered playback speed for Listen and highlights it', async () => {
+  mockAppState.aiConsent = true;
+  mockAppState.phrases = [mockPhrase];
+  mockAppState.learnerProfile.phrasePlaybackRate = 0.75;
+  const view = await render(<PhrasesScreen />);
+  expect(view.getByLabelText(`Replay ${learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin)} at 0.75× speed`).props.accessibilityState.selected).toBe(true);
+  await fireEvent.press(view.getByLabelText(`Hear ${mockPhrase.hi}`));
+  await waitFor(() => expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, 0.75));
+  await fireEvent.press(view.getByLabelText(`Replay ${learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin)} at Normal speed`));
+  expect(mockUpdateLearnerProfile).toHaveBeenCalledWith({ phrasePlaybackRate: 1 });
+  mockAppState.learnerProfile.phrasePlaybackRate = 1;
+});
+
+
+it('shows the saved audit spelling while sending canonical Hindi to speech', async () => {
+  const phrase = { hi: 'कृपया पानी दीजिए।', latin: 'Kripayaa paanee dijiye.', en: 'Please give me water.' };
+  mockAppState.aiConsent = true;
+  mockAppState.phrases = [phrase];
+  const view = await render(<PhrasesScreen />);
+  expect(view.getByText(phrase.latin)).toBeTruthy();
+  await fireEvent.press(view.getByLabelText(`Hear ${phrase.hi}`));
+  expect(speakTextMock).toHaveBeenLastCalledWith(phrase.hi, undefined, 1);
 });

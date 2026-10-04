@@ -20,10 +20,19 @@ on:
         type: boolean
         required: true
         default: false
-      notes:
-        description: Device, iOS version, and any release-testing notes
+      voice_checks_completed:
+        description: Real iPhone English and Hindi spoken turns passed transcript, audible playback, next-turn, and microphone cleanup checks
+        type: boolean
+        required: true
+        default: false
+      voice_evidence:
+        description: Observed spoken/recognized transcripts, audible reply completion, next-turn readiness and microphone cleanup on this build
         type: string
-        required: false
+        required: true
+      notes:
+        description: Required iPhone model, iOS version, and release-testing notes
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -42,6 +51,8 @@ jobs:
       EAS_BUILD_ID: ${{ inputs.eas_build_id }}
       TESTFLIGHT_BUILD: ${{ inputs.testflight_build }}
       CHECKS_COMPLETED: ${{ inputs.checks_completed }}
+      VOICE_CHECKS_COMPLETED: ${{ inputs.voice_checks_completed }}
+      VOICE_EVIDENCE: ${{ inputs.voice_evidence }}
       SIGNOFF_NOTES: ${{ inputs.notes }}
     steps:
       - name: Require an explicit, attributable signoff
@@ -49,6 +60,9 @@ jobs:
         run: |
           set -euo pipefail
           test "$CHECKS_COMPLETED" = "true"
+          test "$VOICE_CHECKS_COMPLETED" = "true"
+          test -n "${VOICE_EVIDENCE//[[:space:]]/}"
+          test -n "${SIGNOFF_NOTES//[[:space:]]/}"
           if [[ ! "$RELEASE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
             echo "::error::release_commit must be an exact lowercase 40-character Git commit SHA."
             exit 1
@@ -67,7 +81,10 @@ jobs:
             printf -- "- EAS build: `%s`\n" "$EAS_BUILD_ID"
             printf -- "- TestFlight build: `%s`\n" "$TESTFLIGHT_BUILD"
             echo
-            echo "The dispatcher explicitly confirmed every physical-iPhone checklist item passed."
+            echo "The dispatcher explicitly confirmed every physical-iPhone checklist item and the separate real spoken-voice gate passed."
+            echo
+            echo "### Real iPhone voice evidence"
+            printf '%s\n' "$VOICE_EVIDENCE"
             if [[ -n "$SIGNOFF_NOTES" ]]; then
               echo
               echo "### Notes"

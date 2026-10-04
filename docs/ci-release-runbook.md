@@ -50,9 +50,9 @@ In the Expo project’s **preview** environment, define:
 - `BOLO_EAS_PROJECT_ID`: the linked EAS project UUID.
 - `BOLO_EXPO_OWNER`: the publishing Expo account.
 
-The two staging URLs must be present and must differ from the production API and site. The nightly workflow refuses the checked-in production defaults before running any live test. It then runs the deployed-policy validator, the bounded live-service acceptance passes, builds the unsigned `staging-e2e` Simulator app, and executes the iOS smoke flow 00 plus flows 02–05.
+The two staging URLs must be present and must differ from the production API and site. The nightly workflow refuses the checked-in production defaults before running any live test. It then runs the deployed-policy validator, the bounded live-service acceptance passes, builds the unsigned `staging-e2e` Simulator app, and executes the iOS smoke flow 00 plus flows 02–04 and 06.
 
-Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Simulator voice flows may take the “physical iPhone required” branch, so actual WebRTC microphone turns remain a release signoff item.
+Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Flow 06 requires the simulator’s unsupported-device explanation and closed session controls; it is not spoken-voice acceptance. Maestro does not support physical iPhones. Real microphone input, recognized transcripts, audible replies, next-turn readiness, and resource cleanup require the separate [physical iPhone voice checklist](voice-acceptance.md) and the existing **Record iOS physical signoff** workflow on the exact installed build.
 
 The PR smoke job downloads Maestro CLI 2.8.0 over HTTPS and verifies the vendor-published `checksums_sha256.txt` digest before extraction. When updating Maestro, review the signed GitHub release, replace both `MAESTRO_VERSION` and `MAESTRO_SHA256`, and verify the new asset locally before merging.
 
@@ -114,13 +114,13 @@ After TestFlight processing, install the submitted build on a physical iPhone an
 
 - first launch and persisted onboarding;
 - microphone deny, later allow, and clear permission copy;
-- a real English live-voice turn and a real Hindi reply-mode turn;
+- real spoken turns in English and Hindi reply modes, each with a recognized learner transcript, an assistant reply heard through the iPhone, completed playback, and an enabled next turn;
 - audio track disabled between turns and released on End, navigation, and background;
 - no background recording or retained microphone file;
 - typed chat, speech playback, reporting, and remote deletion;
 - privacy/support/terms pages and production backend behavior;
 - processed TestFlight size and absence of unexpected App Store Connect warnings.
 
-Only then open **Actions → Record iOS physical signoff → Run workflow** on `main`. Enter the exact 40-character release commit, EAS build ID, TestFlight version/build number, confirm the complete checklist, and record the device/iOS details in notes. A false checklist confirmation fails instead of producing a successful skipped job; the successful run summary attributes the evidence to the dispatching GitHub actor.
+Only then open **Actions → Record iOS physical signoff → Run workflow** on `main`. Enter the exact 40-character release commit, EAS build ID, TestFlight version/build number, confirm both the complete checklist and the separate real-iPhone voice checkbox, record the observed transcripts and playback/cleanup results in voice evidence, and include device/iOS details in notes. A false checklist confirmation fails instead of producing a successful skipped job; the successful run summary attributes the evidence to the dispatching GitHub actor.
 
 TestFlight processing success and a recorded physical signoff are not App Store review submission; public App Store release remains a separate owner action.

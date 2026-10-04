@@ -162,8 +162,8 @@ export default function OnboardingScreen() {
 const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl },
   onboardingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brandMark: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: c.white, fontSize: 34, fontWeight: '900' },
+  brandMark: { minHeight: 44, justifyContent: 'center' },
+  brandMarkText: { color: c.brand, fontFamily: 'Georgia', fontSize: 40, lineHeight: 48, fontWeight: '700' },
   cancelButton: { width: 44, height: 44, borderRadius: radius.pill, borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
   intro: { gap: spacing.sm },
   heading: { color: c.ink, fontSize: 32, lineHeight: 38, fontWeight: '900' },

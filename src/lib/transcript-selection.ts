@@ -1,3 +1,5 @@
+import { displayHindiTranscript } from '@/lib/learner-phrase-display';
+import { knownHindiDisplayPhrase } from '@/lib/known-hindi-phrases';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 
 const DEVANAGARI_CHARACTER = /[\u0900-\u097f]/u;
@@ -46,6 +48,27 @@ export function sourceTextForDisplayedSelection(input: {
   const end = Math.max(start, Math.min(input.end, displayText.length));
   if (end <= start) return '';
   if (sourceText === displayText) return displayText.slice(start, end).trim();
+
+  const known = knownHindiDisplayPhrase(sourceText);
+  if (known && displayText === displayHindiTranscript(sourceText)) {
+    const originalSource = /[\u0900-\u097f]/u.test(sourceText) ? sourceText : known.hi;
+    if (start === 0 && end === displayText.length) return originalSource.trim();
+    const sourceWords = Array.from(originalSource.matchAll(/[\u0900-\u0963\u0971-\u097f]+/gu));
+    const displayWords = Array.from(displayText.matchAll(/[A-Za-z]+/gu));
+    if (sourceWords.length === displayWords.length) {
+      const selected = displayWords.flatMap((word, index) => start < word.index + word[0].length && end > word.index ? [index] : []);
+      if (selected.length) {
+        const firstIndex = selected[0]!;
+        const lastIndex = selected[selected.length - 1]!;
+        const first = sourceWords[firstIndex]!;
+        const last = sourceWords[lastIndex]!;
+        // Include selected punctuation from the original source, never the dictionary.
+        const sourceStart = start < displayWords[firstIndex]!.index ? (sourceWords[firstIndex - 1] ? sourceWords[firstIndex - 1]!.index + sourceWords[firstIndex - 1]![0].length : 0) : first.index;
+        const sourceEnd = end > displayWords[lastIndex]!.index + displayWords[lastIndex]![0].length ? (sourceWords[lastIndex + 1]?.index ?? originalSource.length) : last.index + last[0].length;
+        return originalSource.slice(sourceStart, sourceEnd).trim();
+      }
+    }
+  }
 
   let displayOffset = 0;
   let sourceOffset = 0;

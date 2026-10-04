@@ -5,6 +5,10 @@ tags:
   - ios
 ---
 - launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
     clearState: true
     clearKeychain: true
     permissions:
@@ -50,10 +54,12 @@ tags:
     timeout: 45000
 - assertVisible: "Enable live practice"
 - stopApp
-- launchApp
-- tapOn:
-    text: "Dismiss"
-    optional: true
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+- runFlow: ../subflows/dismiss-dev-menu.yaml
 - assertNotVisible: "Your Hindi plan in one minute"
 - tapOn: "Settings"
 - assertVisible: "Learning preferences"

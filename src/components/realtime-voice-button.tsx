@@ -28,6 +28,8 @@ type Props = {
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Shares this exact control's turn action with a companion UI surface. */
   onTurnActionReady?: (action: (() => void) | null) => void;
+  /** False while the hosting screen is blurred; ends any live session so the mic never stays open off-screen. */
+  active?: boolean;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
@@ -125,7 +127,7 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton({ active = true, clientId, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting' || voice.status === 'responding';
@@ -145,6 +147,16 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
   }, [onStatusChange, voice.status]);
 
   useEffect(() => () => onStatusChangeRef.current?.('disconnected'), []);
+
+  const statusRef = useRef(voice.status);
+  const disconnectRef = useRef(voice.disconnect);
+  useEffect(() => {
+    statusRef.current = voice.status;
+    disconnectRef.current = voice.disconnect;
+  });
+  useEffect(() => {
+    if (!active && statusRef.current !== 'disconnected') disconnectRef.current();
+  }, [active]);
 
   const press = useCallback(() => {
     if (blocked) return;
@@ -198,7 +210,7 @@ export function RealtimeVoiceButton({ clientId, compact = false, disabled = fals
         </Pressable>
       </Animated.View>
       {connected ? (
-        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
+        <Pressable testID="realtime-voice-end" accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
           <X color={colors.danger} size={18} />
         </Pressable>
       ) : null}

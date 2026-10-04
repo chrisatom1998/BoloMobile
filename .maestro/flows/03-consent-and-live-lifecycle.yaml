@@ -1,11 +1,15 @@
 appId: com.bolo.hindi
-name: Consent acceptance, microphone denial, withdrawal, and live cleanup
+name: Consent acceptance, voice refusal, withdrawal, and background persistence
 tags:
   - critical
   - privacy
   - voice
 ---
 - launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
     clearState: true
     permissions:
       microphone: deny
@@ -47,20 +51,6 @@ tags:
     text: "Don’t Allow"
     optional: true
 - assertVisible: ".*(Microphone access is required for live voice practice|Live voice requires a physical iPhone).*"
-- setPermissions:
-    permissions:
-      microphone: allow
-- stopApp
-- launchApp
-- tapOn:
-    text: "Dismiss"
-    optional: true
-- tapOn: "Asha"
-- tapOn:
-    id: "realtime-voice-orb"
-- extendedWaitUntil:
-    visible: ".*(Asha is listening|Live voice requires a physical iPhone).*"
-    timeout: 30000
 - tapOn: "Today"
 - tapOn: "Settings"
 - scrollUntilVisible:
@@ -74,8 +64,10 @@ tags:
 - assertVisible: "Before using Asha"
 - pressKey: Home
 - launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
     stopApp: false
-- tapOn:
-    text: "Dismiss"
-    optional: true
+- runFlow: ../subflows/dismiss-dev-menu.yaml
 - assertVisible: "Settings"

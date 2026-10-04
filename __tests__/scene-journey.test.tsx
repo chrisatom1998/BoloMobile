@@ -2,6 +2,8 @@ import { act, fireEvent, render, waitFor, within } from '@testing-library/react-
 import type { PropsWithChildren } from 'react';
 import { Dimensions, ScrollView, StyleSheet } from 'react-native';
 
+import { lessonHindiLabel } from '../src/lib/lesson-display';
+import type { SceneAttempt, ScriptPreference } from '../src/state/app-state-types';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 
 let mockSceneId = 'chai';
@@ -17,13 +19,16 @@ const mockAppState = {
   aiConsent: true,
   checkpointScene: mockCheckpointScene,
   clientId: 'client-12345678',
-  learnerProfile: { scriptPreference: 'latin' as const },
+  learnerProfile: { scriptPreference: 'both' as ScriptPreference, displayName: '' },
+  updateLearnerProfile: jest.fn(),
   markSceneComplete: mockMarkSceneComplete,
   motionPreference: 'gentle' as 'gentle' | 'lively' | 'reduced',
   phrases: [] as { en: string; hi: string; latin: string }[],
-  sceneProgress: {} as Record<string, { lastBeatIndex: number }>,
+  sceneProgress: {} as Record<string, { lastBeatIndex: number; attempt?: SceneAttempt }>,
   togglePhrase: mockTogglePhrase,
 };
+
+jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'new-attempt') }));
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
@@ -82,8 +87,8 @@ const ALTERNATE_COACH_HINDI = 'करीब है—फिर से कोश�
 
 function choiceAccessibilityLabel(choice: { en: string; hi: string; latin: string }, answered = false) {
   return answered
-    ? `${choice.hi} ${choice.latin} ${choice.en}`
-    : `${choice.hi} ${choice.latin}`;
+    ? `${lessonHindiLabel(choice.hi, mockAppState.learnerProfile.scriptPreference, choice.latin)} ${choice.en}`
+    : lessonHindiLabel(choice.hi, mockAppState.learnerProfile.scriptPreference, choice.latin);
 }
 
 function choiceLabel(sceneId: string, beatIndex: number, sourceIndex = 0, answered = false) {
@@ -104,11 +109,16 @@ function collectTestIds(node: unknown, ids: string[] = []) {
   return ids;
 }
 
+function resumeAt(lastBeatIndex: number, overrides: Partial<SceneAttempt> = {}) {
+  return { lastBeatIndex, attempt: { id: 'resume-attempt', score: 0, correct: 0, total: lastBeatIndex, weakPhrases: [], seconds: 0, answeredBeatIndex: null, ...overrides } };
+}
+
 describe('SceneScreen primary journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSceneId = 'chai';
     mockAppState.aiConsent = true;
+    mockAppState.learnerProfile = { scriptPreference: 'both', displayName: '' };
     mockAppState.motionPreference = 'gentle';
     mockAppState.phrases = [];
     mockAppState.sceneProgress = {};
@@ -134,6 +144,7 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42, {
+      attemptId: expect.any(String),
       correct: 1,
       score: 50,
       total: 2,
@@ -144,7 +155,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('Scene complete')).toBeTruthy();
     const completion = view.getByTestId('scene-completion-motion');
     expect(within(completion).getByTestId('scene-completion-headline').props.accessibilityLanguage).toBe('hi-IN');
-    expect(within(completion).getByTestId('scene-completion-gloss').props.children).toBe('Aapne kar dikhaya! · You did it!');
+    expect(within(completion).getByTestId('scene-completion-gloss').props.children).toBe('You did it!');
     const completionTestIds = collectTestIds(view.toJSON());
     expect(completionTestIds.indexOf('scene-completion-headline') + 1)
       .toBe(completionTestIds.indexOf('scene-completion-gloss'));
@@ -161,25 +172,25 @@ describe('SceneScreen primary journey', () => {
 
   it('integrates word-order and recall-reveal beats with the shared scene journey', async () => {
     mockSceneId = 'plan-essentials-06';
-    mockAppState.sceneProgress = { [mockSceneId]: { lastBeatIndex: 4 } };
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
     const wordTarget = getScene(mockSceneId)?.beats[4]?.choices.find((choice) => choice.correct);
     expect(wordTarget).toBeTruthy();
     const wordView = await render(<SceneScreen />);
 
     expect(wordView.getByTestId('scene-word-order')).toBeTruthy();
     expect(wordView.queryByTestId('scene-choices')).toBeNull();
-    for (const token of wordOrderTokens(wordTarget!.hi)) {
-      await fireEvent.press(wordView.getByLabelText(`Add word ${token}`));
+    for (const [index] of wordOrderTokens(wordTarget!.hi).entries()) {
+      await fireEvent.press(wordView.getByTestId(`scene-word-order-tile-${index}`));
     }
     await fireEvent.press(wordView.getByLabelText('Check my sentence'));
     expect(wordView.getByText('Natural choice!')).toBeTruthy();
     expect(wordView.getByText('1 correct')).toBeTruthy();
     await fireEvent.press(wordView.getByRole('button', { name: 'Continue' }));
-    expect(mockCheckpointScene).toHaveBeenCalledWith(mockSceneId, 5);
+    expect(mockCheckpointScene).toHaveBeenCalledWith(mockSceneId, 5, expect.objectContaining({ answeredBeatIndex: 4 }));
     await wordView.unmount();
 
     mockSceneId = 'plan-essentials-04';
-    mockAppState.sceneProgress = { [mockSceneId]: { lastBeatIndex: 9 } };
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
     const recallTarget = getScene(mockSceneId)?.beats[9]?.choices.find((choice) => choice.correct);
     expect(recallTarget).toBeTruthy();
     const recallView = await render(<SceneScreen />);
@@ -191,16 +202,17 @@ describe('SceneScreen primary journey', () => {
     expect(recallView.getByText('Keep practicing this phrase.')).toBeTruthy();
     await fireEvent.press(recallView.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, {
+      attemptId: expect.any(String),
       correct: 0,
       score: 0,
-      total: 1,
+      total: 10,
       weakPhrases: [recallTarget!.hi],
     });
   });
 
   it('falls back to choice instructions for a one-token word-order target', async () => {
     mockSceneId = 'plan-essentials-01';
-    mockAppState.sceneProgress = { [mockSceneId]: { lastBeatIndex: 4 } };
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
     const beat = getScene(mockSceneId)!.beats[4]!;
     const target = beat.choices.find((choice) => choice.correct)!;
     const view = await render(<SceneScreen />);
@@ -218,15 +230,15 @@ describe('SceneScreen primary journey', () => {
 
   it('reveals natural word order and keeps Asha’s coach note separate across a no-score retry', async () => {
     mockSceneId = 'plan-essentials-06';
-    mockAppState.sceneProgress = { [mockSceneId]: { lastBeatIndex: 4 } };
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
     const target = getScene(mockSceneId)!.beats[4]!.choices.find((choice) => choice.correct)!;
     const view = await render(<SceneScreen />);
     const initialTileOrder = within(view.getByTestId('scene-word-order-choices'))
       .getAllByRole('button')
       .map((button) => String(button.props.accessibilityLabel));
 
-    for (const token of [...wordOrderTokens(target.hi)].reverse()) {
-      await fireEvent.press(view.getByLabelText(`Add word ${token}`));
+    for (const index of wordOrderTokens(target.hi).map((_, index) => index).reverse()) {
+      await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     }
     await fireEvent.press(view.getByLabelText('Check my sentence'));
 
@@ -259,13 +271,13 @@ describe('SceneScreen primary journey', () => {
       .getAllByRole('button')
       .map((button) => String(button.props.accessibilityLabel))).toEqual(initialTileOrder);
 
-    for (const token of wordOrderTokens(target.hi)) {
-      await fireEvent.press(view.getByLabelText(`Add word ${token}`));
+    for (const [index] of wordOrderTokens(target.hi).entries()) {
+      await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     }
     await fireEvent.press(view.getByLabelText('Check my sentence'));
     expect(view.getByText('0 correct')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
-    expect(mockCheckpointScene).toHaveBeenCalledWith(mockSceneId, 5);
+    expect(mockCheckpointScene).toHaveBeenCalledWith(mockSceneId, 5, expect.objectContaining({ answeredBeatIndex: 4 }));
   });
 
   it('keeps choice order on Try again and cannot add score after the first miss', async () => {
@@ -288,7 +300,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('0 correct')).toBeTruthy();
     expect(view.queryByText('50')).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
-    expect(mockCheckpointScene).toHaveBeenCalledWith('chai', 1);
+    expect(mockCheckpointScene).toHaveBeenCalledWith('chai', 1, expect.objectContaining({ total: 1 }));
   });
 
   it('shows target-specific English coaching after a wrong planned-lesson choice', async () => {
@@ -322,17 +334,18 @@ describe('SceneScreen primary journey', () => {
     expect(sceneScrollToMock).toHaveBeenCalledWith({ animated: false, y: 468 });
   });
 
-  it('scores a resumed scene only over the beats answered after the checkpoint', async () => {
-    mockAppState.sceneProgress = { chai: { lastBeatIndex: 1 } };
+  it('includes the complete lesson when resuming and starts a new attempt on replay', async () => {
+    mockAppState.sceneProgress = { chai: resumeAt(1) };
     const view = await render(<SceneScreen />);
     expect(view.getByText('Turn 2 of 2')).toBeTruthy();
 
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42, {
+      attemptId: expect.any(String),
       correct: 1,
       score: 50,
-      total: 1,
+      total: 2,
       weakPhrases: [],
     });
 
@@ -343,6 +356,7 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenLastCalledWith('chai', 42, {
+      attemptId: expect.any(String),
       correct: 2,
       score: 100,
       total: 2,
@@ -351,7 +365,7 @@ describe('SceneScreen primary journey', () => {
   });
 
   it('ignores a repeated Finish press from the same scene beat', async () => {
-    mockAppState.sceneProgress = { chai: { lastBeatIndex: 1 } };
+    mockAppState.sceneProgress = { chai: resumeAt(1) };
     const view = await render(<SceneScreen />);
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     const finish = view.getByRole('button', { name: 'Finish' });
@@ -507,7 +521,7 @@ describe('SceneScreen primary journey', () => {
 
   it('continues from a completed guided lesson to its next sibling', async () => {
     mockSceneId = 'plan-essentials-01';
-    mockAppState.sceneProgress = { [mockSceneId]: { lastBeatIndex: 9 } };
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
     const finalTarget = getScene(mockSceneId)?.beats[9]?.choices.find((choice) => choice.correct);
     expect(finalTarget).toBeTruthy();
     const view = await render(<SceneScreen />);
@@ -531,7 +545,7 @@ describe('SceneScreen primary journey', () => {
 
   it('returns the final guided lesson to its completed plan', async () => {
     mockSceneId = 'plan-essentials-10';
-    mockAppState.sceneProgress = { [mockSceneId]: { lastBeatIndex: 9 } };
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
     const finalTarget = getScene(mockSceneId)?.beats[9]?.choices.find((choice) => choice.correct);
     expect(finalTarget).toBeTruthy();
     const view = await render(<SceneScreen />);
@@ -565,6 +579,7 @@ describe('SceneScreen primary journey', () => {
   });
 
   it('shows Romanized Hindi word chips while preserving the source word for definitions', async () => {
+    mockAppState.learnerProfile.scriptPreference = 'latin';
     const view = await render(<SceneScreen />);
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
 
@@ -621,5 +636,117 @@ describe('SceneScreen primary journey', () => {
     finally {
       await act(async () => Dimensions.set({ screen, window }));
     }
+  });
+});
+
+describe('lesson audit regressions', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSceneId = 'chai';
+    mockAppState.aiConsent = true;
+    mockAppState.sceneProgress = {};
+    mockAppState.learnerProfile = { scriptPreference: 'latin', displayName: '' };
+    mockElapsedSeconds.mockReturnValue(12);
+    mockCheckpointScene.mockImplementation((sceneId: string, lastBeatIndex: number, attempt: SceneAttempt) => {
+      mockAppState.sceneProgress[sceneId] = { lastBeatIndex, attempt };
+    });
+  });
+
+  afterEach(() => mockCheckpointScene.mockReset());
+
+  it('keeps a wrong first attempt, weak phrase and elapsed time through retry, reload and completion', async () => {
+    const first = await render(<SceneScreen />);
+    await fireEvent.press(first.getByTestId('scene-choice-1'));
+    expect(mockAppState.sceneProgress.chai?.attempt).toMatchObject({ correct: 0, total: 1, weakPhrases: ['एक चाय दीजिए।'], seconds: 12 });
+    await fireEvent.press(first.getByTestId('scene-try-again'));
+    await first.unmount();
+    mockElapsedSeconds.mockReturnValue(8);
+    const resumed = await render(<SceneScreen />);
+    await fireEvent.press(resumed.getByTestId('scene-choice-0'));
+    expect(resumed.getByText('0 correct')).toBeTruthy();
+    await fireEvent.press(resumed.getByTestId('scene-continue'));
+    await resumed.unmount();
+    mockElapsedSeconds.mockReturnValue(7);
+    const final = await render(<SceneScreen />);
+    expect(final.getByText('Turn 2 of 2')).toBeTruthy();
+    await fireEvent.press(final.getByTestId('scene-choice-0'));
+    await fireEvent.press(final.getByTestId('scene-continue'));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 27, {
+      attemptId: 'new-attempt', correct: 1, total: 2, score: 50, weakPhrases: ['एक चाय दीजिए।'],
+    });
+    expect(final.getByText('points')).toBeTruthy();
+  });
+
+  it('does not count a correct answer twice when reloading before Continue', async () => {
+    const first = await render(<SceneScreen />);
+    await fireEvent.press(first.getByTestId('scene-choice-0'));
+    await first.unmount();
+    const resumed = await render(<SceneScreen />);
+    await fireEvent.press(resumed.getByTestId('scene-choice-0'));
+    expect(mockAppState.sceneProgress.chai?.attempt).toMatchObject({ correct: 1, total: 1, score: 50 });
+  });
+
+  it('explains why an old position-only checkpoint restarts without inventing previous scores', async () => {
+    mockAppState.sceneProgress.chai = { lastBeatIndex: 1 };
+    const view = await render(<SceneScreen />);
+    expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+    expect(view.getByText(/This older saved lesson has no answer history/)).toBeTruthy();
+  });
+
+  it.each(['latin', 'devanagari', 'both'] as ScriptPreference[])('uses %s for situations and choices while retaining source Hindi for saved answers', async (preference) => {
+    mockAppState.learnerProfile.scriptPreference = preference;
+    const view = await render(<SceneScreen />);
+    const beat = getScene('chai')!.beats[0]!;
+    expect(view.getByText(lessonHindiLabel(beat.npc, preference))).toBeTruthy();
+    const choices = within(view.getByTestId('scene-choices'));
+    expect(Boolean(choices.queryByText(beat.choices[0]!.hi))).toBe(preference !== 'latin');
+    expect(Boolean(choices.queryByText(beat.choices[0]!.latin))).toBe(preference !== 'devanagari');
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByLabelText('Save phrase'));
+    expect(mockTogglePhrase).toHaveBeenCalledWith(beat.choices[0]);
+    const wordLabel = lessonHindiLabel('एक', preference, romanizeDevanagari('एक'));
+    await fireEvent.press(view.getByRole('button', { name: `Explain ${wordLabel} in the answer` }));
+    expect(mockWordDefinitionSheet).toHaveBeenLastCalledWith(expect.objectContaining({ initialWord: 'एक', phrase: beat.choices[0]!.hi }));
+  });
+
+  it.each([
+    { position: -1, total: 1 },
+    { position: 2, total: 2 },
+    { position: 99, total: 99 },
+    { position: 0, total: 2 },
+    { position: 1, total: 0 },
+  ])('resets an incompatible checkpoint at $position with $total answers without carrying its score forward', async ({ position, total }) => {
+    mockAppState.sceneProgress.chai = resumeAt(position, { total, correct: total, score: total * 50, seconds: 99 });
+    const view = await render(<SceneScreen />);
+    expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+    expect(view.getByText(/This saved lesson no longer matches its turns/)).toBeTruthy();
+    expect(view.getByText('0 correct')).toBeTruthy();
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByTestId('scene-continue'));
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByTestId('scene-continue'));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 12, expect.objectContaining({ correct: 2, total: 2, score: 100 }));
+  });
+
+  it('lets the learner replace the name placeholder and keeps their name in the answer', async () => {
+    mockSceneId = 'plan-essentials-02';
+    const view = await render(<SceneScreen />);
+    expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(true);
+    await fireEvent.changeText(view.getByTestId('scene-practice-name'), 'Chris');
+    for (const index of [0, 1, 2, 3]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
+    await fireEvent.press(view.getByTestId('scene-word-order-check'));
+    await fireEvent.press(view.getByLabelText('Save phrase'));
+    expect(mockTogglePhrase).toHaveBeenCalledWith(expect.objectContaining({ hi: 'मेरा नाम Chris है।', latin: 'Mera naam Chris hai.', en: 'My name is Chris' }));
+    expect(mockAppState.updateLearnerProfile).toHaveBeenCalledWith({ displayName: 'Chris' });
+  });
+
+  it('offers an offline action and keeps the consent details optional', async () => {
+    mockAppState.aiConsent = false;
+    const view = await render(<SceneScreen />);
+    expect(view.getByTestId('scene-ai-details').props.accessibilityState.expanded).toBe(false);
+    await fireEvent.press(view.getByTestId('scene-offline-continue'));
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    expect(view.getByTestId('scene-continue')).toBeTruthy();
+    expect(view.getByText('Offline lesson ready — no AI consent needed.')).toBeTruthy();
   });
 });

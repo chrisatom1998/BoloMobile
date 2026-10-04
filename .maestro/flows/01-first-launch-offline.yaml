@@ -5,6 +5,10 @@ tags:
   - offline
 ---
 - launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
     clearState: true
     clearKeychain: true
     permissions:
@@ -24,10 +28,12 @@ tags:
 - assertVisible: "Microphone access is off. Typed and written practice still work."
 - runFlow: ../subflows/complete-onboarding.yaml
 - stopApp
-- launchApp
-- tapOn:
-    text: "Dismiss"
-    optional: true
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+- runFlow: ../subflows/dismiss-dev-menu.yaml
 - assertNotVisible: "Your Hindi plan in one minute"
 - setAirplaneMode: enabled
 - scrollUntilVisible:
@@ -53,9 +59,7 @@ tags:
     direction: DOWN
     timeout: 20000
 - tapOn: "Hear Asha"
-- tapOn:
-    text: "Dismiss"
-    optional: true
+- runFlow: ../subflows/dismiss-dev-menu.yaml
 - scrollUntilVisible:
     element:
       text: ".*नमस्ते।.*"

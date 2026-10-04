@@ -5,6 +5,10 @@ tags:
   - privacy
 ---
 - launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
     clearState: true
 - runFlow: ../subflows/enter-development-build.yaml
 - runFlow: ../subflows/complete-onboarding.yaml
@@ -20,8 +24,10 @@ tags:
     visible: "Bolo data deleted"
     timeout: 35000
 - stopApp
-- launchApp
-- tapOn:
-    text: "Dismiss"
-    optional: true
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+- runFlow: ../subflows/dismiss-dev-menu.yaml
 - assertVisible: "Your Hindi plan in one minute"

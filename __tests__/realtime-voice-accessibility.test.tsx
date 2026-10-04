@@ -56,6 +56,23 @@ describe('realtime voice accessibility', () => {
     expect(haptics.hapticStartRecording).not.toHaveBeenCalled();
   });
 
+  it('ends an open live session when the hosting screen loses focus', async () => {
+    mockVoiceStatus = 'recording';
+    const props = { clientId: 'client-12345678', onError: jest.fn(), onTurnComplete: jest.fn() };
+    const view = await render(<RealtimeVoiceButton {...props} active />);
+    expect(mockDisconnect).not.toHaveBeenCalled();
+    await view.rerender(<RealtimeVoiceButton {...props} active={false} />);
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not tear down an already closed session on blur', async () => {
+    mockVoiceStatus = 'disconnected';
+    const props = { clientId: 'client-12345678', onError: jest.fn(), onTurnComplete: jest.fn() };
+    const view = await render(<RealtimeVoiceButton {...props} active />);
+    await view.rerender(<RealtimeVoiceButton {...props} active={false} />);
+    expect(mockDisconnect).not.toHaveBeenCalled();
+  });
+
   it('keeps both voice actions at least 44 points and exposes disabled state', async () => {
     const view = await render(<RealtimeVoiceButton clientId="client-12345678" disabled onError={jest.fn()} onTurnComplete={jest.fn()} />);
     const start = view.getByLabelText('Speak');

@@ -15,3 +15,8 @@ describe('Devanagari transcript romanization', () => {
     expect(romanizeDevanagari('कमरा १२A, floor 3')).toBe('Kamaraa 12A, floor 3');
   });
 });
+
+it('uses the same common spellings in source chat, saved phrases and word meanings', () => {
+  expect(romanizeDevanagari('कृपया पानी')).toBe('Kripya paani');
+  expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
+});
