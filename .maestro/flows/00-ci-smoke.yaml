@@ -37,13 +37,13 @@ tags:
 - tapOn: "Asha"
 - scrollUntilVisible:
     element:
-      text: "Before your first live turn"
+      text: "Before your first live conversation"
     direction: DOWN
     speed: 60
     visibilityPercentage: 80
     centerElement: true
     timeout: 45000
-- assertVisible: "Before your first live turn"
+- assertVisible: "Before your first live conversation"
 - scrollUntilVisible:
     element:
       text: "Enable live practice"

@@ -1,4 +1,4 @@
-import { Mic, Send, X } from 'lucide-react-native';
+import { Mic, MicOff, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -12,36 +12,39 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
-import { useRealtimeConversation, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import { useRealtimeConversation, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
-import type { AshaResponseLanguage } from '@/state/app-state-types';
+import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 type Props = {
   clientId: string;
+  history?: Pick<ChatMessage, 'role' | 'text'>[];
+  onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
+  enabled?: boolean;
   motionMode?: EffectiveMotion;
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  /** Shares this exact control's session teardown with the hosting screen. */
+  onDisconnectReady?: (disconnect: (() => void) | null) => void;
   /** Shares this exact control's turn action with a companion UI surface. */
   onTurnActionReady?: (action: (() => void) | null) => void;
-  /** False while the hosting screen is blurred; ends any live session so the mic never stays open off-screen. */
-  active?: boolean;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
-  onTurnComplete: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
+  onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
   responseLanguage?: AshaResponseLanguage;
 };
 
 const labels = {
   disconnected: 'Start a voice conversation',
   connecting: 'Connecting…',
-  ready: 'Speak',
-  recording: 'Send turn',
-  responding: 'Asha is speaking…',
+  ready: 'Unmute microphone',
+  recording: 'Mute microphone',
+  responding: 'Unmute microphone',
 } as const;
 
 const BREATH_MS = 2_600;
@@ -127,10 +130,10 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ active = true, clientId, compact = false, disabled = false, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
-  const voice = useRealtimeConversation({ clientId, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
+export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+  const voice = useRealtimeConversation({ clientId, enabled, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
-  const blocked = disabled || voice.status === 'connecting' || voice.status === 'responding';
+  const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
   const { colors } = useTheme();
@@ -148,19 +151,9 @@ export function RealtimeVoiceButton({ active = true, clientId, compact = false, 
 
   useEffect(() => () => onStatusChangeRef.current?.('disconnected'), []);
 
-  const statusRef = useRef(voice.status);
-  const disconnectRef = useRef(voice.disconnect);
-  useEffect(() => {
-    statusRef.current = voice.status;
-    disconnectRef.current = voice.disconnect;
-  });
-  useEffect(() => {
-    if (!active && statusRef.current !== 'disconnected') disconnectRef.current();
-  }, [active]);
-
   const press = useCallback(() => {
     if (blocked) return;
-    if (voice.status === 'recording') {
+    if (voice.microphoneEnabled) {
       hapticTap();
       void Promise.resolve().then(voice.finishTurn).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
       return;
@@ -169,7 +162,7 @@ export function RealtimeVoiceButton({ active = true, clientId, compact = false, 
     // connection free of simultaneous UI-sound/haptic work; on iOS that can
     // deadlock RemoteIO while the peer applies its remote audio description.
     // Once connected, starting later turns is safe to acknowledge haptically.
-    if (voice.status === 'ready') hapticStartRecording();
+    if (voice.status === 'ready' || voice.status === 'responding') hapticStartRecording();
     void voice.startTurn().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
   }, [blocked, onError, voice]);
 
@@ -177,6 +170,11 @@ export function RealtimeVoiceButton({ active = true, clientId, compact = false, 
     onTurnActionReady?.(press);
     return () => onTurnActionReady?.(null);
   }, [onTurnActionReady, press]);
+
+  useEffect(() => {
+    onDisconnectReady?.(voice.disconnect);
+    return () => onDisconnectReady?.(null);
+  }, [onDisconnectReady, voice.disconnect]);
 
   const endSession = useCallback(() => {
     hapticSelect();
@@ -194,6 +192,7 @@ export function RealtimeVoiceButton({ active = true, clientId, compact = false, 
       <Animated.View style={orbStyle}>
         <Pressable
           accessibilityLabel={labels[voice.status]}
+          accessibilityHint={connected ? 'The microphone stays on until you mute it or end the session. You can speak while Asha is speaking.' : 'Starts live conversation with your microphone on.'}
           accessibilityRole="button"
           accessibilityState={{ disabled: blocked }}
           disabled={blocked}
@@ -202,15 +201,15 @@ export function RealtimeVoiceButton({ active = true, clientId, compact = false, 
           testID="realtime-voice-orb"
         >
           <View style={styles.orbHighlight} />
-          {voice.status === 'ready'
+          {voice.status === 'ready' || voice.status === 'responding'
             ? <Mic color={colors.white} size={voiceIconSize} />
             : voice.status === 'recording'
-              ? <Send color={colors.white} size={voiceIconSize} />
+              ? <MicOff color={colors.white} size={voiceIconSize} />
               : <Text style={[styles.orbGlyph, minimal && styles.orbGlyphMinimal]}>आ</Text>}
         </Pressable>
       </Animated.View>
       {connected ? (
-        <Pressable testID="realtime-voice-end" accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
+        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
           <X color={colors.danger} size={18} />
         </Pressable>
       ) : null}

@@ -48,8 +48,10 @@ const unsupported = await readFile(path.join(flowDirectory, '06-simulator-voice-
 const nightly = await readFile('.eas/workflows/nightly-maestro.yml', 'utf8');
 if (unsupported.includes('when:')) throw new Error('Simulator limitation assertions must not be conditional.');
 if (!unsupported.includes('visible: "Live voice requires a physical iPhone.*"')) throw new Error('Simulator limitation must have its own required assertion.');
-if (files.includes('05-realtime-voice-turns.yaml') || nightly.includes('05-realtime-voice-turns.yaml') || !nightly.includes('06-simulator-voice-unsupported.yaml')) {
-  throw new Error('iOS Simulator must run the unsupported-device check. Real iPhone voice requires the manual signoff gate.');
+// Flow 05 drives real GPT-Live voice and only runs on a physical iPhone; the
+// simulator nightly must still run the unsupported-device check instead.
+if (nightly.includes('05-realtime-voice-turns.yaml') || !nightly.includes('06-simulator-voice-unsupported.yaml')) {
+  throw new Error('iOS Simulator must run the unsupported-device check. Real iPhone voice runs only on a physical device.');
 }
 const signoff = await readFile('.github/workflows/record-ios-physical-signoff.yml', 'utf8');
 for (const marker of ['voice_checks_completed:', 'voice_evidence:', 'test "$VOICE_CHECKS_COMPLETED" = "true"', 'test -n "${VOICE_EVIDENCE//[[:space:]]/}"']) {

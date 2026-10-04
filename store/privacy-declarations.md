@@ -1,6 +1,6 @@
 # Store privacy declarations
 
-Audited against the shipping client contract on July 16, 2026. AI data-use consent notice version: 8. These declarations cover consent-gated AI speech for selected lesson and reply text, optional typed coaching, GPT Realtime voice turns, pronunciation checks, automated text safety classification, a random installation identifier, optional AI-reply reports, and user-initiated report deletion. The production AI-speech and Realtime endpoints and OpenAI session handshake were verified on July 14, 2026; these declarations still do not assume unverified contractual service-provider status.
+Updated for the GPT-Live client migration on September 11, 2026. AI data-use consent notice version: 9. These declarations cover consent-gated AI speech, typed coaching, continuous GPT-Live conversation with bounded startup history, pronunciation checks, a random installation identifier, optional reports, and deletion. Production GPT-Live session and native device verification are separate rollout checks; this document does not claim those checks have passed.
 
 ## Apple App Privacy
 
@@ -34,7 +34,7 @@ Answer **Yes** to “Does your app collect or share any of the required user dat
 
 Security-practice answers supported by the client:
 
-- AI-voice text, typed coaching, pronunciation recordings, reports, deletion requests, and Realtime token requests are sent to the Bolo backend over HTTPS. Starting live voice requests microphone permission and opens a WebRTC media stream with its audio track disabled. The glowing orb begins each turn and sends it when tapped again. Microphone transmission is enabled only during an active turn, remains disabled between turns, and the stream is released when the user taps End (the close control), leaves the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Active Realtime microphone and response audio travel directly between the app and OpenAI over encrypted WebRTC using a short-lived client secret. Select “encrypted in transit” only after confirming every production leg.
+- AI-voice text, typed coaching, pronunciation recordings, reports, deletion requests, and GPT-Live connection offers and short recent chat history are sent to the Bolo backend over HTTPS. Starting live voice requests microphone permission and opens a WebRTC media stream. Your microphone stays on continuously until you mute it by tapping the orb. Tap again to unmute; you can speak while Asha is speaking. The stream is released when the user taps End (the close control), leaves the screen, or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Active GPT-Live microphone and response audio travel directly between the app and OpenAI over encrypted WebRTC after a server-authenticated SDP handshake. Select “encrypted in transit” only after confirming every production leg.
 - Users can withdraw connected-coaching consent. Clear chat removes only saved typed and voice chat from the device and does not delete submitted reports. Settings also deletes off-device reports associated with the current random installation identifier before clearing local data, including chat history, and rotating that identifier. Uninstalling alone removes only local data.
 - Scheduled cleanup keeps report records no longer than 90 days and support requests no longer than 180 days unless an active legal or safety matter requires longer retention. Rate events enforce a rolling one-hour limit and are deleted within 24 hours after they stop being active.
 - Do not claim an independent security review.
@@ -61,7 +61,7 @@ Security-practice answers supported by the client:
 - `src/services/bolo-api.ts`: outbound payloads, HTTPS endpoint, random installation identifier, and report payload.
 - `src/components/ai-consent-gate.tsx`: separate consent before connected processing.
 - `src/lib/speech.ts` and `src/lib/ai-voice-player.ts`: bounded AI-speech requests, caching, cancellation, playback, and temporary-file cleanup.
-- `src/components/realtime-voice-button.tsx` and `src/hooks/use-realtime-conversation.ts`: explicit live-turn controls, short-lived credential use, and Realtime streaming lifecycle.
+- `src/components/realtime-voice-button.tsx` and `src/hooks/use-realtime-conversation.ts`: continuous microphone controls, server-authenticated session setup, and GPT-Live streaming lifecycle.
 - `src/components/voice-turn-button.tsx`: explicit, time-limited pronunciation recording behavior.
 - `src/app/live.tsx`: English-default AI conversation and in-app report control.
 - `src/app/privacy.tsx`: user-facing data-use explanation.

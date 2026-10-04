@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const easArgs = process.argv.slice(2);
-const easCli = 'eas-cli@21.0.0';
+const easCli = 'eas-cli@24.8.0';
 
 if (easArgs.length === 0) {
   console.error('Pass an EAS CLI command, for example: build --platform ios --profile preview');

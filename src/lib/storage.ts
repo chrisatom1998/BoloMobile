@@ -28,7 +28,7 @@ export const storageKeys = {
   motionPreference: 'bolo-motion-preference',
 } as const;
 
-export const AI_CONSENT_VERSION = 8 as const;
+export const AI_CONSENT_VERSION = 9 as const;
 export const MAX_CHAT_HISTORY_MESSAGES = 100;
 export const MAX_CHAT_MESSAGE_CHARACTERS = 2_400;
 export const MAX_DAILY_PRACTICE_SECONDS = 24 * 60 * 60;
@@ -190,6 +190,17 @@ export function appendChatHistory(current: ChatMessage[], additions: ChatMessage
   const ids = normalized.map((message) => message!.id);
   if (new Set(ids).size !== ids.length) return current;
   return newestUniqueMessages([...current, ...(normalized as ChatMessage[])]);
+}
+
+/** Replace one live session's revisable snapshot without duplicating interim rows. */
+export function replaceChatHistorySnapshot(current: ChatMessage[], previousIds: string[], messages: ChatMessage[]): ChatMessage[] {
+  const normalized = messages.map((message) => normalizeChatMessage(message, true));
+  if (normalized.some((message) => message === null)) return current;
+  const rows = normalized as ChatMessage[];
+  if (new Set(rows.map((row) => row.id)).size !== rows.length) return current;
+  const replaced = new Set(previousIds);
+  const retained = current.filter((row) => !replaced.has(row.id));
+  return newestUniqueMessages([...retained, ...rows]);
 }
 
 export function sanitizePhrases(value: string | null): SavedPhrase[] {

@@ -56,10 +56,10 @@ if (!bundleResponse.ok) throw new Error(`The public privacy bundle returned HTTP
 const publicBundle = await bundleResponse.text();
 const requiredPrivacyFacts = [
   'WebRTC media stream',
-  'short-lived OpenAI Realtime credential',
-  'audio track disabled',
-  'Send turn',
-  'segments microphone audio in memory without creating a recording file',
+  'GPT-Live session',
+  'microphone stays on continuously until you mute it',
+  'speak while Asha is speaking',
+  'does not create a recording file',
   'Support requests contain the name, email',
   'up to 100 recent typed and transcribed Asha chat messages',
   'unencrypted storage on this device',

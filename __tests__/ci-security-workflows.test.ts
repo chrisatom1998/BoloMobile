@@ -104,6 +104,15 @@ describe('fail-closed merge verification', () => {
     expect(websiteJob).toContain('npm test --prefix website');
   });
 
+  test.each([
+    ['verify', 'website'],
+    ['production-config', 'ios-native-build'],
+  ])('provides an explicit non-deployed Live URL fixture for the %s static checks', (job, nextJob) => {
+    const jobSource = matchingBlock(ciWorkflow, `  ${job}:`, `  ${nextJob}:`);
+
+    expect(jobSource).toContain('BOLO_LIVE_API_URL: https://live.example.test');
+  });
+
   test('restores static validation of every committed Maestro flow', () => {
     const manifest = JSON.parse(read('package.json')) as {
       scripts: Record<string, string>;
@@ -125,6 +134,21 @@ describe('fail-closed merge verification', () => {
       expect(scroll).toContain('centerElement: true');
       expect(scroll).toContain('timeout: 45000');
     }
+  });
+
+  test('keeps the smoke consent selector aligned with the live screen heading', () => {
+    const screen = read('src/app/(tabs)/live.tsx');
+    const heading = screen.match(/<AiConsentGate actionLabel="Enable live practice" title="([^"]+)"/u)?.[1];
+    expect(heading).toBeDefined();
+    const smoke = read('.maestro/flows/00-ci-smoke.yaml');
+    expect(smoke).toContain(`      text: "${heading}"`);
+    expect(smoke).toContain(`- assertVisible: "${heading}"`);
+  });
+
+  test('configures the internal preview with the deployed public live endpoint', () => {
+    const eas = JSON.parse(read('eas.json'));
+    expect(eas.build.preview.distribution).toBe('internal');
+    expect(eas.build.preview.env?.BOLO_LIVE_API_URL).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
   });
 
   test('always aggregates every merge job and rejects non-success results', () => {

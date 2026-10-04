@@ -15,7 +15,7 @@ const MAX_GENERATED_TEXT_CHARACTERS = 2_400;
 const MAX_MOBILE_CHAT_TEXT_CHARACTERS = 500;
 
 export const MOBILE_LANGUAGE_MODE = 'english-unless-hindi-requested' as const;
-export const OPENAI_REALTIME_MODEL = 'gpt-realtime-2.1' as const;
+export const OPENAI_LIVE_MODEL = 'gpt-live-1' as const;
 export const AI_VOICE_TEXT_LIMIT = 240;
 export type ReportReason = 'unsafe_or_inappropriate' | 'incorrect_or_misleading';
 
@@ -28,6 +28,19 @@ function configuredApiUrl() {
 
 export function getBoloApiUrl() {
   return configuredApiUrl();
+}
+
+export function getBoloLiveApiUrl() {
+  const value = Constants.expoConfig?.extra?.boloLiveApiUrl;
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      const url = new URL(value.trim());
+      if (url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash) {
+        return value.trim().replace(/\/+$/u, '');
+      }
+    } catch { /* Surface the same actionable configuration message. */ }
+  }
+  throw new BoloApiError('Live voice is not configured in this build. Add a trusted GPT-Live server URL to enable it.');
 }
 
 export type AiVoiceAudio = {
@@ -47,10 +60,14 @@ type VoiceCoachResponse = {
   understood?: boolean;
 };
 
-type RealtimeClientSecret = {
-  value: string;
-  expires_at: number;
+export type LiveCallInput = {
+  clientId: string;
+  offerSdp: string;
+  responseLanguage: AshaResponseLanguage;
+  history?: { role: 'you' | 'asha'; text: string }[];
 };
+
+export type LiveCallResponse = { answerSdp: string; sessionId: string };
 
 type MobileChatInput = {
   text?: string;
@@ -105,12 +122,12 @@ function isVoiceCoachResponse(value: unknown): value is VoiceCoachResponse {
     && isBoundedText(value.feedback, MAX_GENERATED_TEXT_CHARACTERS);
 }
 
-function isRealtimeClientSecret(value: unknown): value is RealtimeClientSecret {
+function isLiveCallResponse(value: unknown): value is LiveCallResponse {
   return isRecord(value)
-    && isBoundedText(value.value, 4_096)
-    && !value.value.startsWith('sk-')
-    && typeof value.expires_at === 'number'
-    && Number.isFinite(value.expires_at);
+    && isBoundedText(value.answerSdp, 64_000)
+    && value.answerSdp.startsWith('v=0')
+    && /(?:^|\r?\n)m=audio /u.test(value.answerSdp)
+    && isBoundedText(value.sessionId, 256);
 }
 
 function isAiVoiceAudio(value: unknown): value is AiVoiceAudio {
@@ -135,6 +152,7 @@ async function post<T>(
   body: unknown,
   validate: (value: unknown) => value is T,
   signal?: AbortSignal,
+  baseUrl = getBoloApiUrl(),
 ): Promise<T> {
   const startedAt = Date.now();
   const controller = new AbortController();
@@ -143,7 +161,7 @@ async function post<T>(
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', abort, { once: true });
   try {
-    const response = await fetch(`${getBoloApiUrl()}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -283,12 +301,22 @@ export async function prepareSavedPhraseFromText(input: SavedPhrasePreparationIn
   return phrase;
 }
 
-export function createRealtimeClientSecret(clientId: string, signal?: AbortSignal) {
-  return post('/api/realtime-token', {
-    clientId,
-    model: OPENAI_REALTIME_MODEL,
-    languageMode: MOBILE_LANGUAGE_MODE,
-  }, isRealtimeClientSecret, signal);
+export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal) {
+  if (!/^[A-Za-z0-9-]{8,64}$/u.test(input.clientId)
+    || !isBoundedText(input.offerSdp, 64_000)
+    || !input.offerSdp.startsWith('v=0')
+    || !/(?:^|\r?\n)m=audio /u.test(input.offerSdp)
+    || !['en', 'hi'].includes(input.responseLanguage)
+    || (input.history !== undefined && (!Array.isArray(input.history)
+      || input.history.some((row) => !isRecord(row) || !['you', 'asha'].includes(row.role) || typeof row.text !== 'string')))) {
+    return Promise.reject(new BoloApiError('Bolo could not start this live voice session.'));
+  }
+  return post('/api/live-call', {
+    clientId: input.clientId,
+    offerSdp: input.offerSdp,
+    responseLanguage: input.responseLanguage,
+    history: input.history?.filter((row) => row.text.trim()).slice(-10).map(({ role, text }) => ({ role, text: text.trim().slice(0, 600) })),
+  }, isLiveCallResponse, signal, getBoloLiveApiUrl());
 }
 
 export function requestAiVoiceAudio(text: string, signal?: AbortSignal, language?: AshaResponseLanguage) {

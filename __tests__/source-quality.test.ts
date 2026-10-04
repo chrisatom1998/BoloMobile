@@ -32,13 +32,14 @@ describe('shipping source guardrails', () => {
   // The consent gate around pronunciation practice is asserted by rendering the
   // scene in __tests__/scene-consent-gating.test.tsx, and the Devanagari reply
   // instruction by buildMobileChatPayload in __tests__/language-and-api.test.ts.
-  it('keeps generated Hindi in Devanagari through voice replay', () => {
+  it('preserves Hindi pronunciation instructions and leaves Live speech on its audio track', () => {
     const realtime = fileSystem.readFileSync('src/hooks/use-realtime-conversation.ts', 'utf8');
-    const session = fileSystem.readFileSync('src/lib/realtime-session.ts', 'utf8');
+    const liveBackend = fileSystem.readFileSync('backend/live.ts', 'utf8');
     const pronunciationProfile = fileSystem.readFileSync('src/data/hindi-pronunciation-profile.json', 'utf8');
 
     expect(realtime).not.toContain('romanizeDevanagari');
-    expect(session).toContain('HINDI_LESSON_PRONUNCIATION_INSTRUCTIONS');
+    expect(realtime).not.toContain('speakText');
+    expect(liveBackend).toContain('authentic contemporary Standard Hindi sounds');
     expect(pronunciationProfile).toMatch(/do not apply American English vowels, stress, or letter-name pronunciation/u);
   });
 });
