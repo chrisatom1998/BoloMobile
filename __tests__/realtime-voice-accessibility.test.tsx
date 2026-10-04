@@ -2,6 +2,7 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 jest.mock('lucide-react-native', () => ({
+  AudioLines: () => null,
   Mic: () => null,
   Radio: () => null,
   MicOff: () => null,
@@ -140,5 +141,26 @@ describe('realtime voice accessibility', () => {
 
     expect(stage.width).toBe('100%');
     expect(end).toMatchObject({ backgroundColor: '#FBEDEA', borderColor: '#E4B5AE', right: 0, top: 28 });
+  });
+
+  it('renders the hero variant as an 84pt gold primary control without its own end button', async () => {
+    mockVoiceStatus = 'disconnected';
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="hero" />);
+    const start = view.getByLabelText('Start a voice conversation');
+    const style = StyleSheet.flatten(start.props.style);
+
+    expect(start.props.testID).toBe('realtime-voice-orb');
+    expect(style).toMatchObject({ backgroundColor: '#E7AC3D', height: 84, width: 84 });
+    await fireEvent.press(start);
+    expect(mockStartTurn).toHaveBeenCalledTimes(1);
+    await view.unmount();
+
+    mockVoiceStatus = 'recording';
+    const onDisconnectReady = jest.fn();
+    const recording = await render(<RealtimeVoiceButton clientId="client-12345678" onDisconnectReady={onDisconnectReady} onError={jest.fn()} size="hero" />);
+    expect(recording.queryByLabelText('End live voice session')).toBeNull();
+    expect(onDisconnectReady).toHaveBeenCalledWith(mockDisconnect);
+    await fireEvent.press(recording.getByLabelText('Mute microphone'));
+    expect(mockFinishTurn).toHaveBeenCalledTimes(1);
   });
 });

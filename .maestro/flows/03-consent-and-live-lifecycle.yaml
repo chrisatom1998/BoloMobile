@@ -27,6 +27,8 @@ tags:
     timeout: 20000
 - tapOn: "Enable live practice"
 - tapOn:
+    id: "live-composer-toggle"
+- tapOn:
     id: "message-asha-input"
 - inputText: "How do I say thank you?"
 - tapOn:

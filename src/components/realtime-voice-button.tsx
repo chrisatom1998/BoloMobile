@@ -1,4 +1,4 @@
-import { Mic, MicOff, X } from 'lucide-react-native';
+import { AudioLines, Mic, MicOff, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -25,8 +25,13 @@ type Props = {
   disabled?: boolean;
   enabled?: boolean;
   motionMode?: EffectiveMotion;
-  /** A compact, single-orb treatment for dense conversation headers. */
-  size?: 'regular' | 'minimal';
+  /**
+   * `minimal` is a compact, single-orb treatment for dense conversation headers.
+   * `hero` is the 84pt gold primary control for the dark Asha screen; it omits
+   * the built-in end control so the host can place one beside it (see
+   * `onDisconnectReady`).
+   */
+  size?: 'regular' | 'minimal' | 'hero';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
@@ -139,7 +144,9 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
   const { colors } = useTheme();
   const { orbStyle, rippleStyle } = useOrbMotion(voice.status, motionMode);
   const minimal = size === 'minimal';
-  const voiceIconSize = minimal ? 32 : 52;
+  const hero = size === 'hero';
+  const voiceIconSize = hero ? 30 : minimal ? 32 : 52;
+  const heroIconColor = colors.ink;
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -180,6 +187,34 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
     hapticSelect();
     voice.disconnect();
   }, [voice]);
+
+  if (hero) {
+    return (
+      <View style={styles.stageHero} testID="realtime-voice-stage">
+        <View pointerEvents="none" style={styles.heroHalo} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.ring, styles.ringInnerHero, voice.status === 'recording' && styles.ringInnerHeroRecording, rippleStyle]}
+        />
+        <Animated.View style={orbStyle}>
+          <Pressable
+            accessibilityLabel={labels[voice.status]}
+            accessibilityHint={connected ? 'The microphone stays on until you mute it or end the session. You can speak while Asha is speaking.' : 'Starts live conversation with your microphone on.'}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: blocked }}
+            disabled={blocked}
+            onPress={press}
+            style={[styles.orbHero, blocked && styles.disabled]}
+            testID="realtime-voice-orb"
+          >
+            {voice.status === 'ready' || voice.status === 'responding'
+              ? <MicOff color={heroIconColor} size={voiceIconSize} strokeWidth={2.4} />
+              : <AudioLines color={heroIconColor} size={voiceIconSize} strokeWidth={2.4} />}
+          </Pressable>
+        </Animated.View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.stage, compact && styles.stageCompact, minimal && styles.stageMinimal]} testID="realtime-voice-stage">
@@ -243,5 +278,10 @@ const useStyles = makeStyles((c) => ({
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
   endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
+  stageHero: { width: 108, height: 108, alignItems: 'center', justifyContent: 'center' },
+  heroHalo: { position: 'absolute', width: 104, height: 104, borderRadius: radius.pill, backgroundColor: 'rgba(231, 172, 61, 0.18)' },
+  ringInnerHero: { width: 104, height: 104, borderWidth: 0 },
+  ringInnerHeroRecording: { borderWidth: 2, borderColor: c.gold },
+  orbHero: { width: 84, height: 84, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center', shadowColor: c.gold, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 6 },
   disabled: { opacity: 0.5 },
 }));

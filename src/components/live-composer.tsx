@@ -6,7 +6,11 @@ import type { createLiveStyles } from '@/app/(tabs)/live';
 import { useTheme } from '@/theme';
 
 type Props = {
+  /** Focuses the input on mount, e.g. when the learner opens the composer. */
+  autoFocus?: boolean;
   disabled: boolean;
+  /** Seeds the draft once on mount (remount with a new `key` to reseed). */
+  initialText?: string;
   onSend: (text: string) => void;
   styles: ReturnType<typeof createLiveStyles>;
 };
@@ -15,9 +19,9 @@ type Props = {
  * Owns the typed message draft so a keystroke re-renders only the composer,
  * leaving the animated hero and the chat list untouched.
  */
-export const LiveComposer = memo(function LiveComposer({ disabled, onSend, styles }: Props) {
+export const LiveComposer = memo(function LiveComposer({ autoFocus = false, disabled, initialText = '', onSend, styles }: Props) {
   const { colors } = useTheme();
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(initialText);
   const sendDisabled = disabled || !input.trim();
 
   const send = useCallback(() => {
@@ -31,6 +35,7 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
     <View style={styles.inputRow}>
       <TextInput
         accessibilityLabel="Message Asha"
+        autoFocus={autoFocus && !disabled}
         testID="message-asha-input"
         editable={!disabled}
         maxLength={500}
@@ -38,11 +43,11 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
         onChangeText={setInput}
         onSubmitEditing={send}
         placeholder="Ask in English or Hindi…"
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={colors.heroSubtle}
         style={[styles.input, disabled && styles.inputDisabled]}
         value={input}
       />
-      <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={send} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
+      <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={send} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.ink} size={20} /></Pressable>
     </View>
   );
 });

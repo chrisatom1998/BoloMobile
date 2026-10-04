@@ -24,6 +24,7 @@ function collectTestIds(node: unknown, ids: string[] = []) {
 }
 
 const mockRouterPush = jest.fn();
+const mockRealtimeDisconnect = jest.fn();
 const longDevanagariReply = 'आप कैसे हैं? धन्यवाद, आशा। ज़रूर। आप कैसे हैं? धन्यवाद, आशा। ज़रूर।';
 
 jest.mock('expo-router', () => ({
@@ -41,6 +42,9 @@ jest.mock('lucide-react-native', () => ({
   ArrowDown: () => null,
   BookmarkPlus: () => null,
   Flag: () => null,
+  Keyboard: () => null,
+  KeyboardOff: () => null,
+  Lock: () => null,
   MessageCircle: () => null,
   Send: () => null,
   Sparkles: () => null,
@@ -72,6 +76,7 @@ jest.mock('@/components/realtime-voice-button', () => {
     RealtimeVoiceButton: ({
       disabled,
       onError,
+      onDisconnectReady,
       onInputTranscriptComplete,
       onStatusChange,
       onTranscriptChange,
@@ -81,6 +86,7 @@ jest.mock('@/components/realtime-voice-button', () => {
     }: {
       disabled?: boolean;
       onError: (message: string) => void;
+      onDisconnectReady?: (disconnect: (() => void) | null) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
@@ -96,6 +102,13 @@ jest.mock('@/components/realtime-voice-button', () => {
         onTurnActionReady?.(() => onStatusChange?.('recording'));
         return () => onTurnActionReady?.(null);
       }, [onStatusChange, onTurnActionReady]);
+      mockReact.useEffect(() => {
+        onDisconnectReady?.(() => {
+          mockRealtimeDisconnect();
+          onStatusChange?.('disconnected');
+        });
+        return () => onDisconnectReady?.(null);
+      }, [onDisconnectReady, onStatusChange]);
       return mockReact.createElement(
       mockReact.Fragment,
       null,
@@ -355,6 +368,10 @@ function getOnPress(instance: unknown) {
   throw new Error('The rendered element does not have an onPress callback.');
 }
 
+async function openComposer(view: Awaited<ReturnType<typeof render>>) {
+  await fireEvent.press(view.getByLabelText('Type instead'));
+}
+
 describe('live consent layout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -401,14 +418,23 @@ describe('live theme styles', () => {
   it('paints the chat list, bubbles, and composer from the active palette', () => {
     const styles = createLiveStyles(lightColors);
 
-    expect(styles.list.backgroundColor).toBe(lightColors.background);
+    expect(styles.screen.backgroundColor).toBe(lightColors.night);
+    expect(styles.list.backgroundColor).toBe(lightColors.night);
     expect(styles.ashaMessage.backgroundColor).toBe(lightColors.paperRaised);
     expect(styles.messageText.color).toBe(lightColors.ink);
-    expect(styles.composer.backgroundColor).toBe(lightColors.paperRaised);
-    expect(styles.input.backgroundColor).toBe(lightColors.backgroundWarm);
-    expect(styles.liveVoiceText.lineHeight).toBeGreaterThan(styles.liveVoiceText.fontSize);
-    expect(styles.captionLabelBadge.minHeight).toBeGreaterThanOrEqual(30);
-    expect(styles.captionLabelBadge.paddingVertical).toBeGreaterThanOrEqual(5);
+    expect(styles.userText.color).toBe(lightColors.white);
+    expect(styles.composer.backgroundColor).toBe(lightColors.night);
+    expect(styles.input.backgroundColor).toBe('#1E302D');
+    expect(styles.input.color).toBe(lightColors.white);
+    expect(styles.statusText.color).toBe(lightColors.gold);
+    expect(styles.statusText.lineHeight).toBeGreaterThan(styles.statusText.fontSize);
+    expect(styles.heroTitle).toEqual(expect.objectContaining({ color: lightColors.white, fontFamily: 'Georgia', fontSize: 22 }));
+    expect(styles.heroBody.color).toBe(lightColors.heroSubtle);
+    expect(styles.captionPanelYou.backgroundColor).toBe('#1E302D');
+    expect(styles.captionPanelAsha.backgroundColor).toBe(lightColors.white);
+    expect(styles.captionTextAsha.color).toBe(lightColors.ink);
+    expect(styles.captionLabelAsha.color).toBe(lightColors.brand);
+    expect(styles.captionLabelBadge.minHeight).toBeGreaterThanOrEqual(styles.captionLabel.lineHeight);
     expect(styles.captionLabelBadge.overflow).toBe('visible');
     expect(styles.captionLabel.fontSize).toBeGreaterThanOrEqual(12);
     expect(styles.captionLabel.lineHeight).toBeGreaterThanOrEqual(18);
@@ -416,6 +442,11 @@ describe('live theme styles', () => {
     expect(styles.captionLabel.letterSpacing).toBeLessThanOrEqual(0.25);
     expect('textTransform' in styles.captionLabel).toBe(false);
     expect(styles.examples.paddingRight).toBe(spacing.xl);
+    expect(styles.example.minHeight).toBeGreaterThanOrEqual(44);
+    expect(styles.secondaryControl.width).toBeGreaterThanOrEqual(44);
+    expect(styles.secondaryControl.height).toBeGreaterThanOrEqual(44);
+    expect(styles.chatButton.height).toBeGreaterThanOrEqual(44);
+    expect(styles.languageOption.minHeight).toBeGreaterThanOrEqual(44);
   });
 });
 
@@ -429,31 +460,44 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
     const hero = view.getByTestId('voice-conversation-hero');
 
-    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#F6F3ED');
+    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe(lightColors.night);
+    const topbar = within(view.getByTestId('asha-header-topbar'));
+    expect(topbar.getByText('Asha')).toBeTruthy();
+    expect(topbar.getByText('Private')).toBeTruthy();
+    expect(topbar.getByLabelText('Private conversation')).toBeTruthy();
     expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
-    expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
+    expect(view.queryByText('Speak with Asha')).toBeNull();
     expect(view.getByText('Ready when you are')).toBeTruthy();
     expect(view.getByText('Tap the orb to start talking with Asha.')).toBeTruthy();
     expect(view.getAllByText(/Tap the orb/u)).toHaveLength(1);
     const captionBadge = view.getByTestId('live-caption-label-badge');
     expect(within(captionBadge).getByText('You')).toBeTruthy();
+    expect(within(view.getByTestId('live-caption-asha')).getByText('Asha')).toBeTruthy();
     expect(view.queryByText('LIVE')).toBeNull();
     expect(view.getByText('Your words appear here as you speak.').props.accessibilityLiveRegion).toBe('polite');
     expect(view.queryByText('Tap the orb and ask anything in Hindi.')).toBeNull();
     expect(view.queryByText('Live Asha caption')).toBeNull();
     expect(view.queryByLabelText('Open text phrase help')).toBeNull();
     expect(view.getByText('Ask Asha')).toBeTruthy();
-    expect(view.getByText('How do I say…?')).toBeTruthy();
+    expect(view.getByText('Conversation')).toBeTruthy();
     expect(view.getByLabelText('Open chat history')).toBeTruthy();
     expect(view.queryByLabelText('Go back')).toBeNull();
     expect(view.getByTestId('featured-phrase-section')).toBeTruthy();
     expect(within(hero).queryByText('Featured phrase')).toBeNull();
 
-    const sheet = view.getByTestId('ask-asha-sheet');
-    const sheetStyle = StyleSheet.flatten(sheet.props.style);
-    expect(sheetStyle.marginTop).toBeLessThan(0);
-    expect(sheetStyle.borderTopLeftRadius).toBeGreaterThanOrEqual(30);
-    expect(view.getByTestId('ask-asha-sheet-handle')).toBeTruthy();
+    // The voice controls sit in a bottom dock after the scrolling conversation.
+    const testIds = collectTestIds(view.toJSON());
+    expect(testIds.indexOf('live-chat-list')).toBeLessThan(testIds.indexOf('live-voice-controls'));
+    expect(view.getByLabelText('Type instead')).toBeTruthy();
+    expect(view.queryByLabelText('End live voice session')).toBeNull();
+
+    // Typed coaching stays one tap away: the composer toggle and the "How do I say…?" chip.
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'How do I say…?' }));
+    expect(view.getByLabelText('Message Asha').props.value).toBe('How do I say ');
+    expect(view.getByLabelText('Hide message box').props.accessibilityState).toEqual({ expanded: true });
+    await fireEvent.press(view.getByLabelText('Hide message box'));
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
     expect(view.getByText('Connecting to Asha')).toBeTruthy();
@@ -468,7 +512,34 @@ describe('immersive live conversation design', () => {
     expect(view.getByTestId('live-output-caption')).toBeTruthy();
     expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
 
-    expect(view.getByLabelText('Message Asha')).toBeTruthy();
+    await openComposer(view);
+    expect(view.getByLabelText('Message Asha').props.value).toBe('');
+
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('derives the gold status line from realtime state and ends the session from the dock', async () => {
+    const view = await render(<LiveScreen />);
+    const statusText = () => within(view.getByTestId('live-status-line', { includeHiddenElements: true })).getByText(/./u, { includeHiddenElements: true }).props.children;
+
+    expect(statusText()).toBe('Tap to talk');
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(statusText()).toBe('Connecting');
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    expect(statusText()).toBe('Listening');
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    expect(statusText()).toBe('Speaking');
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    expect(statusText()).toBe('Mic muted');
+
+    const end = view.getByLabelText('End live voice session');
+    expect(end.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(end.props.style).width).toBeGreaterThanOrEqual(44);
+    await fireEvent.press(end);
+    expect(mockRealtimeDisconnect).toHaveBeenCalledTimes(1);
+    expect(view.getByText('Ready when you are')).toBeTruthy();
+    expect(view.queryByLabelText('End live voice session')).toBeNull();
 
     await view.unmount();
     await flushMicrotasks();
@@ -506,11 +577,14 @@ describe('immersive live conversation design', () => {
     await flushMicrotasks();
   });
 
-  it('keeps the compact Asha portrait and exposes one transcript-footer action that reuses the active voice turn', async () => {
+  it('frames one gold-ringed Asha portrait and exposes one transcript-footer action that reuses the active voice turn', async () => {
     const view = await render(<LiveScreen />);
 
     const portrait = view.getByTestId('asha-header-portrait');
-    expect(StyleSheet.flatten(portrait.props.style)).toEqual(expect.objectContaining({ height: 52, width: 52 }));
+    const portraitStyle = StyleSheet.flatten(portrait.props.style);
+    const expectedPortraitSize = Dimensions.get('window').height < 760 ? 112 : 148;
+    expect(portraitStyle).toEqual(expect.objectContaining({ borderColor: lightColors.gold, borderWidth: 3, height: expectedPortraitSize, width: expectedPortraitSize }));
+    expect(portraitStyle.borderRadius).toBe(expectedPortraitSize / 2);
     expect(view.getAllByText('Asha portrait')).toHaveLength(1);
     expect(view.queryByText('Continue with Asha')).toBeNull();
 
@@ -591,7 +665,7 @@ describe('immersive live conversation design', () => {
     await flushMicrotasks();
   });
 
-  it('compresses the raised sheet header on short iPhones so the title remains above the composer', async () => {
+  it('compresses the portrait stage and conversation heading on short iPhones so the dock stays reachable', async () => {
     const originalWindow = Dimensions.get('window');
     const originalScreen = Dimensions.get('screen');
     const compactSize = { fontScale: 1, height: 667, scale: 1, width: 375 };
@@ -605,9 +679,14 @@ describe('immersive live conversation design', () => {
       const sheetStyle = StyleSheet.flatten(view.getByTestId('ask-asha-sheet').props.style);
       const headingStyle = StyleSheet.flatten(view.getByTestId('ask-asha-heading').props.style);
 
+      const portraitStageStyle = StyleSheet.flatten(view.getByTestId('asha-portrait-stage').props.style);
+      const portraitStyle = StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style);
+
       expect(heroStyle.gap).toBe(4);
+      expect(portraitStageStyle).toEqual(expect.objectContaining({ height: 152, width: 152 }));
+      expect(portraitStyle).toEqual(expect.objectContaining({ height: 112, width: 112 }));
       expect(sheetStyle.gap).toBe(4);
-      expect(sheetStyle.paddingTop).toBe(4);
+      expect(sheetStyle.paddingTop).toBe(spacing.sm);
       expect(headingStyle.gap).toBe(0);
       await view.unmount();
       await flushMicrotasks();
@@ -635,7 +714,7 @@ describe('immersive live conversation design', () => {
 
       expect(topbarStyle.flexDirection).toBe('column');
       expect(topbarStyle.paddingRight).toBe(0);
-      expect(header.getByText('Speak with Asha').props.numberOfLines).toBeUndefined();
+      expect(header.getByText('Asha').props.numberOfLines).toBeUndefined();
       expect(header.getByText('Private Hindi coach · English replies').props.numberOfLines).toBeUndefined();
       await view.unmount();
       await flushMicrotasks();
@@ -730,6 +809,7 @@ describe('typed live coaching request control', () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     boloApi.sendMobileChat.mockReturnValue(request.promise);
     const view = await render(<LiveScreen />);
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please help with this sentence.');
     await fireEvent.press(view.getByLabelText('Send message'));
 
@@ -746,6 +826,7 @@ describe('typed live coaching request control', () => {
   it('never persists a learner-only turn when the request fails before a reply', async () => {
     boloApi.sendMobileChat.mockRejectedValueOnce(new Error('Asha is unavailable.'));
     const view = await render(<LiveScreen />);
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Do not leave this orphaned.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
@@ -761,6 +842,7 @@ describe('typed live coaching request control', () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     boloApi.sendMobileChat.mockReturnValue(request.promise);
     const view = await render(<LiveScreen />);
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please correct this.');
     const send = view.getByLabelText('Send message');
     const onPress = getOnPress(send);
@@ -796,6 +878,7 @@ describe('typed live coaching request control', () => {
     speech.speakText.mockReturnValueOnce(playback.promise);
     const view = await render(<LiveScreen />);
 
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Can I speak after this?');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
@@ -822,6 +905,7 @@ describe('typed live coaching request control', () => {
       return request.promise;
     });
     const view = await render(<LiveScreen />);
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Pending during unmount.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await view.unmount();
@@ -836,6 +920,7 @@ describe('typed live coaching request control', () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'The text reply succeeded.', language: 'en' });
     speech.speakText.mockRejectedValueOnce(new Error('Voice playback failed.'));
     const view = await render(<LiveScreen />);
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Keep this completed turn.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
@@ -997,6 +1082,7 @@ describe('live coaching state', () => {
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
     expect(view.getByText('Private Hindi coach · Hindi replies')).toBeTruthy();
 
+    await openComposer(view);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'How do I say thank you?');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
@@ -1155,6 +1241,7 @@ describe('live audio control exclusion', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
 
+    await openComposer(view);
     expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
     for (const listen of view.getAllByLabelText(/Read reply aloud:/u)) {
       expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(true);
@@ -1177,6 +1264,7 @@ describe('live audio control exclusion', () => {
   it('blocks typed chat and replay while the connected microphone is muted', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    await openComposer(view);
     expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
     await fireEvent.press(view.getByLabelText('Send message'));
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
@@ -1202,6 +1290,7 @@ describe('live audio control exclusion', () => {
     const view = await render(<LiveScreen />);
     const listen = view.getByLabelText(/Read reply aloud:/u);
     const example = view.getByRole('button', { name: 'Correct my Hindi' });
+    await openComposer(view);
     const send = view.getByLabelText('Send message');
 
     expect(listen.props.accessibilityRole).toBe('button');
