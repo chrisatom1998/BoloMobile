@@ -54,7 +54,7 @@ In the Expo project’s **preview** environment, define:
 
 The two staging URLs must be present and must differ from the production API and site. The nightly workflow refuses the checked-in production defaults before running any live test. It then runs the deployed-policy validator, the bounded live-service acceptance passes, builds the unsigned `staging-e2e` Simulator app, and executes the iOS smoke flow 00 plus flows 02–04 and 06.
 
-Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Flow 06 requires the simulator’s unsupported-device explanation and closed session controls; it is not spoken-voice acceptance. Maestro does not support physical iPhones. Real microphone input, recognized transcripts, audible replies, next-turn readiness, and resource cleanup require the separate [physical iPhone voice checklist](voice-acceptance.md) and the existing **Record iOS physical signoff** workflow on the exact installed build.
+Flow 01 is deliberately excluded from iOS nightly execution because `setAirplaneMode` is an Android-only Maestro command. It remains statically covered by `e2e:validate` and should run in the Android E2E lane. Flow 06 requires the simulator’s unsupported-device explanation and closed session controls; it is not spoken-voice acceptance. Maestro does not support physical iPhones. Real microphone input, recognized transcripts, audible replies, a continuous session with mute/unmute and overlapping speech accepted without reconnecting, and resource cleanup require the separate [physical iPhone voice checklist](voice-acceptance.md) and the existing **Record iOS physical signoff** workflow on the exact installed build.
 
 The PR smoke job downloads Maestro CLI 2.8.0 over HTTPS and verifies the vendor-published `checksums_sha256.txt` digest before extraction. When updating Maestro, review the signed GitHub release, replace both `MAESTRO_VERSION` and `MAESTRO_SHA256`, and verify the new asset locally before merging.
 
@@ -117,7 +117,7 @@ After TestFlight processing, install the submitted build on a physical iPhone an
 
 - first launch and persisted onboarding;
 - microphone deny, later allow, and clear permission copy;
-- real spoken turns in English and Hindi reply modes, each with a recognized learner transcript, an assistant reply heard through the iPhone, completed playback, and an enabled next turn;
+- real live sessions in English and Hindi reply modes, each with a recognized learner transcript and an assistant reply heard through the iPhone, the session staying connected, mute/unmute working, and another (including overlapping) utterance accepted without reconnecting;
 - audio track disabled between turns and released on End, navigation, and background;
 - no background recording or retained microphone file;
 - typed chat, speech playback, reporting, and remote deletion;

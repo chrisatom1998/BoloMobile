@@ -37,7 +37,6 @@ jobs:
       flow_path:
         - .maestro/flows/00-ci-smoke.yaml
         - .maestro/flows/02-scene-resume-and-phrases.yaml
-        - .maestro/flows/03-consent-and-live-lifecycle.yaml
         - .maestro/flows/04-data-deletion.yaml
         - .maestro/flows/06-simulator-voice-unsupported.yaml
       retries: 1

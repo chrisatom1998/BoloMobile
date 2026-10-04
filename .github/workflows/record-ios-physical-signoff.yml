@@ -21,12 +21,12 @@ on:
         required: true
         default: false
       voice_checks_completed:
-        description: Real iPhone English and Hindi spoken turns passed transcript, audible playback, next-turn, and microphone cleanup checks
+        description: Real iPhone English and Hindi live sessions passed transcript, audible reply, continuous-session, overlapping-speech, mute/unmute, and microphone cleanup checks
         type: boolean
         required: true
         default: false
       voice_evidence:
-        description: Observed spoken/recognized transcripts, audible reply completion, next-turn readiness and microphone cleanup on this build
+        description: Observed spoken/recognized transcripts, audible replies, continuous session without reconnecting, overlapping speech, mute/unmute and microphone cleanup on this build
         type: string
         required: true
       notes:

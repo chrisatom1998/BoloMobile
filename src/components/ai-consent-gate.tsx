@@ -18,8 +18,8 @@ type AiConsentGateProps = {
 /** Plain-language summary of the full notice below. The complete text stays reachable under "Read full notice". */
 const consentSummary = [
   'Lesson and saved-phrase audio is bundled and works offline.',
-  'After you agree, Asha speech, typed text, live voice turns, and pronunciation clips are processed by Bolo and OpenAI.',
-  'Your microphone is live only during a turn you start, and nothing is recorded in the background.',
+  'After you agree, Asha speech, typed text, live voice, and pronunciation clips are processed by Bolo and OpenAI.',
+  'Once live voice starts, your microphone stays on until you mute it, end the session, or leave the screen. Nothing is recorded in the background.',
   'Progress stays on this device. You can withdraw consent or delete your data in Settings.',
 ] as const;
 
