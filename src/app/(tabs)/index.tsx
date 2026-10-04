@@ -10,6 +10,7 @@ import { JournalDisplay } from '@/components/journal-chrome';
 import { MotionReveal } from '@/components/motion';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
+import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { dueSavedPhrases } from '@/lib/learning';
@@ -52,8 +53,13 @@ export default function HomeScreen() {
   const goalPercent = Math.min(100, Math.round(minutesToday / goal * 100));
   const minutesToGo = Math.max(0, goal - minutesToday);
   // Every due phrase counts here, not the 5-phrase review-session cap from duePhrases.
-  const dueCount = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity).length, [phraseReviews, phrases]);
-  const dateLine = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), []);
+  // `calendarDay` re-runs these after midnight: this tab stays mounted, and
+  // phrases can fall due overnight without their references changing.
+  const calendarDay = useCalendarDay();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based due check.
+  const dueCount = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity).length, [phraseReviews, phrases, calendarDay]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay is the only input to today's date line.
+  const dateLine = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), [calendarDay]);
   const lessonSelection = useMemo(() => {
     const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
     const resumed = catalog

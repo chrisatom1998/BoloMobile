@@ -213,7 +213,7 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
         </Pressable>
       </Animated.View>
       {connected ? (
-        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal, dark && styles.endButtonDark]}>
+        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal, dark && (minimal ? styles.endButtonDarkMinimal : styles.endButtonDark)]}>
           <X color={dark ? colors.white : colors.danger} size={18} />
         </Pressable>
       ) : null}
@@ -254,5 +254,7 @@ const useStyles = makeStyles((c) => ({
   orbDarkRecording: { backgroundColor: '#F2BE57' },
   orbGlyphDark: { color: c.ink },
   endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine },
+  // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
+  endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
   disabled: { opacity: 0.5 },
 }));

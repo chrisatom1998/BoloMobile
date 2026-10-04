@@ -67,11 +67,11 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
         onChangeText={changeInput}
         onSubmitEditing={submit}
         placeholder="Ask in English or Hindi…"
-        placeholderTextColor={colors.muted}
+        placeholderTextColor={colors.heroSubtle}
         style={[styles.input, locked && styles.inputDisabled]}
         value={input}
       />
-      <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={submit} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.white} size={20} /></Pressable>
+      <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={submit} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.ink} size={20} /></Pressable>
     </View>
   );
 });
