@@ -557,7 +557,7 @@ function SceneScreen() {
                     {scriptPreference !== 'devanagari' ? <Text style={[styles.choiceRomanized, revealed && styles.choiceMetaCorrect, wrong && styles.choiceMetaWrong]}>{choice.latin}</Text> : null}
                     {answered ? <Text style={[styles.choiceMeaning, revealed && styles.choiceMetaCorrect, wrong && styles.choiceMetaWrong]}>{choice.en}</Text> : null}
                   </View>
-                  {selected ? (choice.correct ? <Check color={colors.forest} size={22} /> : <X color={colors.danger} size={22} />) : revealed ? <Check color={colors.forest} size={22} /> : null}
+                  {selected ? (choice.correct ? <Check color={colors.white} size={22} /> : <X color={colors.danger} size={22} />) : revealed ? <Check color={colors.white} size={22} /> : null}
                 </Pressable>
               );
             })}
