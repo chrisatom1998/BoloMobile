@@ -1,5 +1,39 @@
 {
   "schemaVersion": 2,
-  "reviewBy": "2026-11-16",
-  "allowedAdvisories": []
+  "reviewBy": "2027-01-01",
+  "allowedAdvisories": [
+    {
+      "package": "braces",
+      "advisory": "GHSA-vfj7-8cjw-p6xm",
+      "severity": "high",
+      "usage": "build-only",
+      "rationale": "Reached only through Jest's micromatch (test tooling); not bundled into the app. No patched braces release exists yet. Accepted by chris johnson until 2027-01-01.",
+      "pathFingerprint": {
+        "isDirect": false,
+        "nodes": [
+          "node_modules/braces"
+        ],
+        "effects": [
+          "micromatch"
+        ]
+      }
+    },
+    {
+      "package": "node-forge",
+      "advisory": "GHSA-86w9-cpqp-85rv",
+      "severity": "high",
+      "usage": "build-only",
+      "rationale": "Reached only through @expo/cli code signing (developer tooling); not bundled into the app. No patched node-forge release exists yet. Accepted by chris johnson until 2027-01-01.",
+      "pathFingerprint": {
+        "isDirect": false,
+        "nodes": [
+          "node_modules/node-forge"
+        ],
+        "effects": [
+          "@expo/cli",
+          "@expo/code-signing-certificates"
+        ]
+      }
+    }
+  ]
 }
