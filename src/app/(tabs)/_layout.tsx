@@ -16,8 +16,10 @@ export default function PrimaryTabsLayout() {
     <NativeTabs
       backgroundColor={colors.paperRaised}
       disableTransparentOnScrollEdge
+      iconColor={{ default: colors.muted, selected: colors.brand }}
+      labelStyle={{ fontSize: 11, fontWeight: '600' }}
       minimizeBehavior="onScrollDown"
-      shadowColor={colors.lineStrong}
+      shadowColor={colors.line}
       tintColor={colors.brand}
     >
       <NativeTabs.Trigger name="index">

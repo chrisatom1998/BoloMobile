@@ -4,6 +4,7 @@ jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
+import { getScene } from '../src/data/scenes';
 import { colors } from '../src/theme';
 
 const mockRouterPush = jest.fn();
@@ -13,7 +14,7 @@ const mockAppState = {
   duePhrases: [] as { en: string; hi: string; latin: string }[],
   goal: 10 as 5 | 10 | 15,
   hydrated: true,
-  phraseReviews: {} as Record<string, { mastery: number }>,
+  phraseReviews: {} as Record<string, { mastery: number; dueAt?: string }>,
   phrases: [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }] as { en: string; hi: string; latin: string }[],
   practice: { chaiDone: true, date: '2026-07-16', liveDone: false, seconds: 300 },
   sceneProgress: {} as Record<string, {
@@ -29,20 +30,7 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
 }));
 
-jest.mock('lucide-react-native', () => ({
-  BookOpen: () => null,
-  Bookmark: () => null,
-  BarChart3: () => null,
-  Check: () => null,
-  ChevronRight: () => null,
-  Ear: () => null,
-  Flame: () => null,
-  Mic: () => null,
-  Settings: () => null,
-  Sparkles: () => null,
-  Sprout: () => null,
-  Target: () => null,
-}));
+jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
@@ -80,15 +68,13 @@ describe('HomeScreen primary journey', () => {
     mockAppState.streak = 2;
   });
 
-  it('renders the approved warm editorial header and keeps Settings navigation working', async () => {
+  it('renders the greeting header with the streak pill and keeps Settings navigation working', async () => {
     const view = await render(<HomeScreen />);
 
     expect(view.getByTestId('today-topbar').children).toHaveLength(2);
-    expect(view.getByText('A QUIET PRACTICE')).toBeTruthy();
-    expect(view.getByText('Make Hindi yours.')).toBeTruthy();
-    expect(view.queryByText('One useful moment at a time.')).toBeNull();
-    expect(view.getByText('LANGUAGE GARDEN')).toBeTruthy();
-    expect(view.getByText('Asha is here to help it grow.')).toBeTruthy();
+    expect(view.getByText('Namaste')).toBeTruthy();
+    expect(view.getAllByText('नमस्ते').length).toBeGreaterThanOrEqual(1);
+    expect(view.getByText('2 days')).toBeTruthy();
     expect(view.getByTestId('today-asha-portrait')).toBeTruthy();
 
     const settings = view.getByLabelText('Settings');
@@ -98,46 +84,54 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).toHaveBeenCalledWith('/settings');
   });
 
-  it('routes to Settings, the language garden, the next lesson, the current plan, and the full catalog', async () => {
+  it('routes to Settings, saved phrases, the next lesson, Asha, the current plan, and the full catalog', async () => {
     const view = await render(<HomeScreen />);
 
     await fireEvent.press(view.getByLabelText('Settings'));
-    await fireEvent.press(view.getByLabelText('Practice saved phrase नमस्ते'));
+    await fireEvent.press(view.getByLabelText('Review 1 saved phrase due now'));
     await fireEvent.press(view.getByLabelText('Start lesson'));
+    await fireEvent.press(view.getByLabelText('Talk with Asha'));
     await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete'));
     await fireEvent.press(view.getByLabelText('Browse all 10 plans'));
 
     expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/settings');
-    expect(mockRouterPush).toHaveBeenNthCalledWith(2, '/phrases');
+    expect(mockRouterPush).toHaveBeenNthCalledWith(2, '/review');
     expect(mockRouterPush).toHaveBeenNthCalledWith(3, {
       pathname: '/scene/[id]',
       params: { id: 'plan-essentials-01' },
     });
-    expect(mockRouterPush).toHaveBeenNthCalledWith(4, {
+    expect(mockRouterPush).toHaveBeenNthCalledWith(4, '/live');
+    expect(mockRouterPush).toHaveBeenNthCalledWith(5, {
       pathname: '/lesson-plans',
       params: { planId: 'essentials' },
     });
-    expect(mockRouterPush).toHaveBeenNthCalledWith(5, '/lesson-plans');
-    expect(mockRouterPush).not.toHaveBeenCalledWith('/live');
+    expect(mockRouterPush).toHaveBeenNthCalledWith(6, '/lesson-plans');
   });
 
-  it('shows only the current guided plan and keeps the full catalog behind one link', async () => {
+  it('shows the next lesson hero from real scene data and only the current guided plan', async () => {
+    const scene = getScene('plan-essentials-01')!;
     const view = await render(<HomeScreen />);
 
     expect(view.getByTestId('today-guided-plan-list')).toBeTruthy();
     expect(view.getByText('NEXT LESSON')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
-    expect(view.getByText('Your learning path')).toBeTruthy();
-    expect(view.getByText('10 plans · 100 lessons')).toBeTruthy();
-    expect(view.getByText('Plan 01')).toBeTruthy();
+    expect(view.getByText(scene.subtitle)).toBeTruthy();
+    expect(view.getByText(scene.place)).toBeTruthy();
+    for (const word of scene.words) expect(view.getAllByText(word).length).toBeGreaterThanOrEqual(1);
+    expect(view.getByText(`${scene.beats.length} beats`)).toBeTruthy();
+    expect(view.getByText('Your path')).toBeTruthy();
+    expect(view.getByText('Plan 01 of 10')).toBeTruthy();
     expect(view.getByText('0 of 10 lessons')).toBeTruthy();
+    expect(view.getByTestId('today-plan-segments').children).toHaveLength(10);
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.gold);
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.line);
     expect(view.getByLabelText('Browse all 10 plans')).toBeTruthy();
     expect(view.queryByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeNull();
-    expect(view.queryByText('Choose a path')).toBeNull();
     const testIds = collectTestIds(view.toJSON());
-    expect(testIds.indexOf('today-language-garden')).toBeLessThan(testIds.indexOf('today-current-plan'));
+    expect(testIds.indexOf('today-primary-motion')).toBeLessThan(testIds.indexOf('today-daily-goal'));
+    expect(testIds.indexOf('today-daily-goal')).toBeLessThan(testIds.indexOf('today-talk-with-asha'));
+    expect(testIds.indexOf('today-talk-with-asha')).toBeLessThan(testIds.indexOf('today-current-plan'));
     expect(testIds.indexOf('today-current-plan')).toBeLessThan(testIds.indexOf('today-plan-catalog'));
-    expect(testIds.indexOf('today-plan-catalog')).toBeLessThan(testIds.indexOf('today-daily-goal'));
 
     await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete'));
 
@@ -145,18 +139,6 @@ describe('HomeScreen primary journey', () => {
       pathname: '/lesson-plans',
       params: { planId: 'essentials' },
     });
-  });
-
-  it('keeps the phrase and next-lesson sections flat inside the garden card', async () => {
-    const view = await render(<HomeScreen />);
-
-    const phraseCard = StyleSheet.flatten(view.getByTestId('today-language-garden').props.style);
-    const nextPractice = StyleSheet.flatten(view.getByTestId('today-next-practice').props.style);
-
-    expect(phraseCard.backgroundColor).toBeUndefined();
-    expect(phraseCard.borderWidth).toBeUndefined();
-    expect(nextPractice.backgroundColor).toBeUndefined();
-    expect(nextPractice.borderWidth).toBeUndefined();
   });
 
   it('advances the current plan card after the prior plan is complete', async () => {
@@ -169,7 +151,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('Plan 02')).toBeTruthy();
+    expect(view.getByText('Plan 02 of 10')).toBeTruthy();
     expect(view.getByText('Ask where someone lives')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeTruthy();
     expect(view.queryByLabelText('Start speaking, plan 1 of 10, 10 of 10 lessons complete')).toBeNull();
@@ -184,6 +166,8 @@ describe('HomeScreen primary journey', () => {
 
     expect(view.getByText('NEXT LESSON')).toBeTruthy();
     expect(view.getByText('Say your name')).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.brand);
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.gold);
     await fireEvent.press(view.getByLabelText('Start lesson'));
 
     expect(mockRouterPush).toHaveBeenCalledWith({
@@ -212,7 +196,6 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('CONTINUE LESSON')).toBeTruthy();
     expect(view.getByText('Say you are new')).toBeTruthy();
     expect(view.getByText('Lesson 2 in progress')).toBeTruthy();
-    expect(view.getByText('Continue →')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, lesson 2 in progress, 0 of 10 lessons complete')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Continue'));
 
@@ -223,54 +206,41 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).not.toHaveBeenCalledWith('/live');
   });
 
-  it('shows live phrase, watering, streak, and mastery state in the garden', async () => {
-    mockAppState.duePhrases = [{ en: 'How are you?', hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?' }];
-    mockAppState.phrases = [...mockAppState.duePhrases];
+  it('shows the full due-phrase count, streak, and routes review to the quick review flow', async () => {
+    const due = [
+      { en: 'How are you?', hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?' },
+      { en: 'Thank you', hi: 'धन्यवाद', latin: 'Dhanyavaad' },
+    ];
+    mockAppState.duePhrases = [due[0]!];
+    mockAppState.phrases = due;
     mockAppState.phraseReviews = { 'आप कैसे हैं?': { mastery: 2 } };
-    mockAppState.practice = { chaiDone: false, date: '2026-07-16', liveDone: false, seconds: 300 };
     mockAppState.streak = 7;
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('One saved phrase is ready for a little water today.')).toBeTruthy();
     expect(view.getByText('7 days')).toBeTruthy();
-    expect(view.getByText('1 to water')).toBeTruthy();
-    expect(view.getByText('Aap kaise hain?')).toBeTruthy();
-    expect(view.getByText('2/5 roots strong')).toBeTruthy();
-    expect(view.getByText('A warm hello')).toBeTruthy();
+    expect(view.getByText('Ready to review')).toBeTruthy();
+    expect(view.getByText('2')).toBeTruthy();
+    expect(view.getByText('phrases due')).toBeTruthy();
 
-    await fireEvent.press(view.getByLabelText('Practice saved phrase आप कैसे हैं?'));
-    expect(mockRouterPush).toHaveBeenCalledWith('/phrases');
+    await fireEvent.press(view.getByLabelText('Review 2 saved phrases due now'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/review');
+    await fireEvent.press(view.getByLabelText('7 day practice streak'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/progress');
     expect(mockRouterPush).not.toHaveBeenCalledWith('/live');
   });
 
   it('updates the daily goal selection and renders progress from persisted practice', async () => {
     const view = await render(<HomeScreen />);
 
-    expect(view.getByTestId('today-goal-dial')).toBeTruthy();
+    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('50 percent of daily goal complete');
     expect(view.getByTestId('today-goal-value').props.children.join('')).toBe('10 min');
+    expect(view.getByText('5')).toBeTruthy();
+    expect(view.getByText(' min')).toBeTruthy();
+    expect(view.getByText('5 to go')).toBeTruthy();
     expect(view.getByLabelText('5 minute daily goal')).toBeTruthy();
-    expect(view.getByLabelText('10 minute daily goal')).toBeTruthy();
+    expect(view.getByLabelText('10 minute daily goal').props.accessibilityState).toEqual({ selected: true });
     expect(view.getByLabelText('15 minute daily goal')).toBeTruthy();
-    expect(view.getByText('5 min today')).toBeTruthy();
-    const goalArc = view.getByTestId('today-goal-arc', { includeHiddenElements: true });
-    expect(StyleSheet.flatten(goalArc.props.style).top).toBe(-6);
-    expect(goalArc.props.height).toBe(136);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-choice-5').props.style).left).toBe('19.078947%');
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-choice-15').props.style).right).toBe('19.078947%');
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-label-5').props.style).transform).toEqual([
-      { translateX: -8 },
-    ]);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-label-15').props.style).transform).toEqual([
-      { translateX: 8 },
-    ]);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-marker-spot-5').props.style).bottom).toBe(2);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-marker-spot-10').props.style).bottom).toBe(1.5);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-marker-spot-15').props.style).bottom).toBe(2);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-marker-5').props.style).backgroundColor).toBe(colors.gold);
-    expect(StyleSheet.flatten(view.getByTestId('today-goal-status').props.style).marginTop).toBe(10);
-    expect(view.getByText('✓ Chai scene')).toBeTruthy();
-    expect(view.getByText('Today · 50% of 10 min')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('15 minute daily goal'));
     expect(mockSetGoal).toHaveBeenCalledWith(15);
 
@@ -278,6 +248,12 @@ describe('HomeScreen primary journey', () => {
     await view.rerender(<HomeScreen />);
     expect(view.getByLabelText('15 minute daily goal').props.accessibilityState).toEqual({ selected: true });
     expect(view.getByTestId('today-goal-value').props.children.join('')).toBe('15 min');
-    expect(view.getByText('Today · 33% of 15 min')).toBeTruthy();
+    expect(view.getByText('10 to go')).toBeTruthy();
+    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('33 percent of daily goal complete');
+
+    mockAppState.practice = { chaiDone: true, date: '2026-07-16', liveDone: true, seconds: 1200 };
+    await view.rerender(<HomeScreen />);
+    expect(view.getByText('Goal reached')).toBeTruthy();
+    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('100 percent of daily goal complete');
   });
 });

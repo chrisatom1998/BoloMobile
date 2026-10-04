@@ -27,6 +27,8 @@ type Props = {
   motionMode?: EffectiveMotion;
   /** A compact, single-orb treatment for dense conversation headers. */
   size?: 'regular' | 'minimal';
+  /** `dark` renders the saffron orb for the night-coloured Asha screen. Styling only. */
+  tone?: 'light' | 'dark';
   onError: (message: string) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
@@ -130,7 +132,7 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', tone = 'light', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
   const voice = useRealtimeConversation({ clientId, enabled, history, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting';
@@ -139,7 +141,9 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
   const { colors } = useTheme();
   const { orbStyle, rippleStyle } = useOrbMotion(voice.status, motionMode);
   const minimal = size === 'minimal';
+  const dark = tone === 'dark';
   const voiceIconSize = minimal ? 32 : 52;
+  const iconColor = dark ? colors.ink : colors.white;
 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
@@ -183,11 +187,11 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
 
   return (
     <View style={[styles.stage, compact && styles.stageCompact, minimal && styles.stageMinimal]} testID="realtime-voice-stage">
-      <View style={[styles.ring, styles.ringOuter, compact && styles.ringOuterCompact, minimal && styles.ringOuterMinimal]} />
-      <View style={[styles.ring, styles.ringMiddle, compact && styles.ringMiddleCompact, minimal && styles.ringMiddleMinimal]} />
+      <View style={[styles.ring, styles.ringOuter, compact && styles.ringOuterCompact, minimal && styles.ringOuterMinimal, dark && styles.ringDark]} />
+      <View style={[styles.ring, styles.ringMiddle, compact && styles.ringMiddleCompact, minimal && styles.ringMiddleMinimal, dark && styles.ringDark]} />
       <Animated.View
         pointerEvents="none"
-        style={[styles.ring, styles.ringInner, compact && styles.ringInnerCompact, minimal && styles.ringInnerMinimal, voice.status === 'recording' && styles.ringInnerRecording, rippleStyle]}
+        style={[styles.ring, styles.ringInner, compact && styles.ringInnerCompact, minimal && styles.ringInnerMinimal, dark && styles.ringDark, voice.status === 'recording' && (dark ? styles.ringInnerRecordingDark : styles.ringInnerRecording), rippleStyle]}
       />
       <Animated.View style={orbStyle}>
         <Pressable
@@ -197,20 +201,20 @@ export function RealtimeVoiceButton({ clientId, history, onTranscriptSnapshot, c
           accessibilityState={{ disabled: blocked }}
           disabled={blocked}
           onPress={press}
-          style={[styles.orb, compact && styles.orbCompact, minimal && styles.orbMinimal, connected && styles.orbActive, voice.status === 'recording' && styles.orbRecording, blocked && styles.disabled]}
+          style={[styles.orb, compact && styles.orbCompact, minimal && styles.orbMinimal, dark && styles.orbDark, connected && (dark ? styles.orbDarkActive : styles.orbActive), voice.status === 'recording' && (dark ? styles.orbDarkRecording : styles.orbRecording), blocked && styles.disabled]}
           testID="realtime-voice-orb"
         >
           <View style={styles.orbHighlight} />
           {voice.status === 'ready' || voice.status === 'responding'
-            ? <Mic color={colors.white} size={voiceIconSize} />
+            ? <Mic color={iconColor} size={voiceIconSize} />
             : voice.status === 'recording'
-              ? <MicOff color={colors.white} size={voiceIconSize} />
-              : <Text style={[styles.orbGlyph, minimal && styles.orbGlyphMinimal]}>आ</Text>}
+              ? <MicOff color={iconColor} size={voiceIconSize} />
+              : <Text style={[styles.orbGlyph, minimal && styles.orbGlyphMinimal, dark && styles.orbGlyphDark]}>आ</Text>}
         </Pressable>
       </Animated.View>
       {connected ? (
-        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal]}>
-          <X color={colors.danger} size={18} />
+        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, compact && styles.endButtonCompact, minimal && styles.endButtonMinimal, dark && (minimal ? styles.endButtonDarkMinimal : styles.endButtonDark)]}>
+          <X color={dark ? colors.white : colors.danger} size={18} />
         </Pressable>
       ) : null}
     </View>
@@ -243,5 +247,14 @@ const useStyles = makeStyles((c) => ({
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
   endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
+  ringDark: { borderColor: 'rgba(231, 172, 61, 0.35)' },
+  ringInnerRecordingDark: { borderWidth: 1.5, borderColor: c.gold },
+  orbDark: { backgroundColor: c.gold, shadowColor: c.gold, shadowOpacity: 0.3 },
+  orbDarkActive: { backgroundColor: c.gold, shadowOpacity: 0.5 },
+  orbDarkRecording: { backgroundColor: '#F2BE57' },
+  orbGlyphDark: { color: c.ink },
+  endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine },
+  // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
+  endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
   disabled: { opacity: 0.5 },
 }));

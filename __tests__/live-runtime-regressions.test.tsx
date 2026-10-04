@@ -31,7 +31,7 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
 }));
 
-jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+jest.mock('expo-status-bar', () => ({ StatusBar: () => null, setStatusBarStyle: jest.fn() }));
 
 jest.mock('expo-image', () => ({
   Image: ({ style, testID }: { style?: StyleProp<TextStyle>; testID?: string }) => mockReact.createElement(MockText, { style, testID }, 'Asha portrait'),
@@ -41,6 +41,7 @@ jest.mock('lucide-react-native', () => ({
   ArrowDown: () => null,
   BookmarkPlus: () => null,
   Flag: () => null,
+  Lock: () => null,
   MessageCircle: () => null,
   Send: () => null,
   Sparkles: () => null,
@@ -401,11 +402,12 @@ describe('live theme styles', () => {
   it('paints the chat list, bubbles, and composer from the active palette', () => {
     const styles = createLiveStyles(lightColors);
 
-    expect(styles.list.backgroundColor).toBe(lightColors.background);
+    expect(styles.list.backgroundColor).toBe(lightColors.night);
     expect(styles.ashaMessage.backgroundColor).toBe(lightColors.paperRaised);
     expect(styles.messageText.color).toBe(lightColors.ink);
-    expect(styles.composer.backgroundColor).toBe(lightColors.paperRaised);
-    expect(styles.input.backgroundColor).toBe(lightColors.backgroundWarm);
+    expect(styles.userMessage.backgroundColor).toBe(lightColors.nightSurface);
+    expect(styles.composer.backgroundColor).toBe(lightColors.nightSurface);
+    expect(styles.input.backgroundColor).toBe(lightColors.night);
     expect(styles.liveVoiceText.lineHeight).toBeGreaterThan(styles.liveVoiceText.fontSize);
     expect(styles.captionLabelBadge.minHeight).toBeGreaterThanOrEqual(30);
     expect(styles.captionLabelBadge.paddingVertical).toBeGreaterThanOrEqual(5);
@@ -429,7 +431,7 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
     const hero = view.getByTestId('voice-conversation-hero');
 
-    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#F6F3ED');
+    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#10201E');
     expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
     expect(view.getByText('Ready when you are')).toBeTruthy();
@@ -510,7 +512,7 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
 
     const portrait = view.getByTestId('asha-header-portrait');
-    expect(StyleSheet.flatten(portrait.props.style)).toEqual(expect.objectContaining({ height: 52, width: 52 }));
+    expect(StyleSheet.flatten(portrait.props.style)).toEqual(expect.objectContaining({ height: 112, width: 112 }));
     expect(view.getAllByText('Asha portrait')).toHaveLength(1);
     expect(view.queryByText('Continue with Asha')).toBeNull();
 

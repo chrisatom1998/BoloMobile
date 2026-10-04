@@ -33,11 +33,21 @@ export const lightColors = {
 
   gold: '#E7AC3D',
   goldSoft: '#FFF1C9',
+  /** Readable text on goldSoft surfaces. */
+  goldText: '#6B4A10',
+  /** Readable secondary text on a solid gold surface. */
+  goldDeepText: '#4A3408',
+
+  /** Neutral progress-track fill behind coloured bars. */
+  track: '#EDE6DC',
 
   neutralSurface: '#172523',
   neutralSurfaceText: '#FFFFFF',
 
   night: '#10201E',
+  nightSurface: '#1E302D',
+  nightLine: '#34504B',
+  nightNav: '#0B1716',
   white: '#FFFFFF',
   black: '#000000',
 
@@ -70,8 +80,13 @@ export const radius = {
   sm: 10,
   md: 14,
   lg: 20,
+  xl: 24,
+  xxl: 28,
   pill: 999,
 } as const;
+
+/** Serif display face shared by headings and Devanagari text (falls back to the system Devanagari serif). */
+export const displayFont = 'Georgia';
 
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;
