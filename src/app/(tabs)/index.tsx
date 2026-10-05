@@ -183,6 +183,7 @@ export default function HomeScreen() {
                 accessibilityLabel={`${minutes} minute daily goal`}
                 accessibilityRole="button"
                 accessibilityState={{ selected: goal === minutes }}
+                hitSlop={{ left: 3, right: 3 }}
                 onPress={() => setGoal(minutes)}
                 style={[styles.goalChoice, goal === minutes && styles.goalChoiceActive]}
                 testID={`today-goal-choice-${minutes}`}
@@ -322,8 +323,8 @@ const useStyles = makeStyles((c) => ({
   goalValue: { minWidth: 0, flex: 1, gap: 2 },
   goalMinutes: { color: c.ink, fontFamily: displayFont, fontSize: 28, lineHeight: 32, fontWeight: '700', fontVariant: ['tabular-nums'] },
   goalMinutesUnit: { color: c.muted, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
-  goalChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  goalChoice: { minWidth: 44, flexGrow: 1, flexBasis: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.track },
+  goalChoices: { flexDirection: 'row', gap: 6 },
+  goalChoice: { minWidth: 0, flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.track },
   goalChoiceActive: { backgroundColor: c.ink },
   goalChoiceText: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   goalChoiceTextActive: { color: c.white },

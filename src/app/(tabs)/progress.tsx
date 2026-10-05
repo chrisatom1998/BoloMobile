@@ -84,13 +84,11 @@ export default function ProgressScreen() {
     : hasLearningActivity
       ? 'No active practice streak'
       : 'No practice streak yet';
-  const weekActivityLabel = reviewedThisWeek > 0
-    ? `${reviewedThisWeek} phrase review${reviewedThisWeek === 1 ? '' : 's'}`
-    : activeDaysThisWeek > 0
-      ? `${activeDaysThisWeek} active day${activeDaysThisWeek === 1 ? '' : 's'}`
-      : 'No activity yet';
+  const weekActivityLabel = activeDaysThisWeek > 0
+    ? `${minutesThisWeek} min practiced`
+    : 'No activity yet';
   const weekSummary = activeDaysThisWeek > 0
-    ? `${minutesThisWeek} minute${minutesThisWeek === 1 ? '' : 's'} across ${activeDaysThisWeek} day${activeDaysThisWeek === 1 ? '' : 's'} this week.`
+    ? `${activeDaysThisWeek} active day${activeDaysThisWeek === 1 ? '' : 's'}${reviewedThisWeek > 0 ? ` and ${reviewedThisWeek} phrase review${reviewedThisWeek === 1 ? '' : 's'}` : ''}.`
     : 'Your first practice minutes will show here.';
 
   function shareMilestones() {

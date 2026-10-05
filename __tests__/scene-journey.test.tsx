@@ -9,6 +9,8 @@ import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 let mockSceneId = 'chai';
 const mockRouterReplace = jest.fn();
 const mockRouterDismissTo = jest.fn();
+const mockRouterBack = jest.fn();
+const mockRouterCanGoBack = jest.fn(() => true);
 const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
@@ -33,7 +35,11 @@ jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'new-attempt') }));
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useLocalSearchParams: () => ({ id: mockSceneId }),
-  useRouter: () => ({ dismissTo: mockRouterDismissTo, replace: mockRouterReplace }),
+  useRouter: () => ({ back: mockRouterBack, canGoBack: mockRouterCanGoBack, dismissTo: mockRouterDismissTo, replace: mockRouterReplace }),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 jest.mock('lucide-react-native', () => ({
@@ -168,6 +174,19 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  it('closes the lesson from its own header button', async () => {
+    const view = await render(<SceneScreen />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Close lesson' }));
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+
+    mockRouterCanGoBack.mockReturnValueOnce(false);
+    await fireEvent.press(view.getByRole('button', { name: 'Close lesson' }));
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
   it('integrates word-order and recall-reveal beats with the shared scene journey', async () => {
