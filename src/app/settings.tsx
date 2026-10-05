@@ -16,7 +16,7 @@ import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } 
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
-import type { MotionPreference } from '@/state/app-state-types';
+import type { MotionPreference, ReminderSettings } from '@/state/app-state-types';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
@@ -208,6 +208,22 @@ export default function SettingsScreen() {
     );
   }
 
+  // A failed reminder save rolls state back to the device's previous reminder, whose
+  // notification applyRestoredReminder may already have cancelled. Drop the replacement
+  // notification and reschedule the previous reminder so OS and saved state agree.
+  async function revertRestoredReminder(replacement: ReminderSettings) {
+    if (replacement.notificationId && replacement.notificationId !== reminder.notificationId) {
+      await cancelPracticeReminder(replacement).catch(() => undefined);
+    }
+    if (!reminder.enabled) return;
+    try {
+      const rescheduled = await schedulePracticeReminder({ ...reminder, notificationId: null }, reminder.hour, reminder.minute);
+      if (!(await setReminder(rescheduled))) await cancelPracticeReminder(rescheduled).catch(() => undefined);
+    } catch {
+      // Leave the reminder as it was saved; the alert asks the learner to check it.
+    }
+  }
+
   async function performRestore(backup: ProgressBackup) {
     if (backupInFlightRef.current) return;
     backupInFlightRef.current = true;
@@ -218,12 +234,9 @@ export default function SettingsScreen() {
       if (!(await restoreProgress(progress))) return;
       const outcome = await applyRestoredReminder(reminder, backupReminder);
       if (!(await setReminder(outcome.reminder))) {
-        // The reminder write was rolled back, so drop the notification scheduled for it.
-        if (outcome.reminder.notificationId && outcome.reminder.notificationId !== reminder.notificationId) {
-          await cancelPracticeReminder(outcome.reminder).catch(() => undefined);
-        }
+        await revertRestoredReminder(outcome.reminder);
         if (mountedRef.current) {
-          showAppAlert('Progress restored', 'Your learning progress from the backup is now on this device, but Bolo could not save the practice reminder. Set it again below.');
+          showAppAlert('Progress restored', 'Your learning progress from the backup is now on this device, but Bolo could not save the practice reminder. Check your reminder below.');
         }
         return;
       }

@@ -54,7 +54,7 @@ jest.mock('@/state/app-state', () => ({
 
 import SettingsScreen from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
-import { applyRestoredReminder, cancelPracticeReminder } from '../src/lib/practice-reminder';
+import { applyRestoredReminder, cancelPracticeReminder, schedulePracticeReminder } from '../src/lib/practice-reminder';
 import { parseProgressBackup, serializeProgressBackup } from '../src/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '../src/lib/progress-backup-file';
 import { createAiConsentRecord, dateKey, defaultLearnerProfile } from '../src/lib/storage';
@@ -253,6 +253,7 @@ describe('SettingsScreen progress backup', () => {
   it('cancels the new notification and says so when saving the restored reminder fails', async () => {
     setReminder.mockResolvedValueOnce(false);
     (cancelPracticeReminder as jest.Mock).mockResolvedValueOnce({ enabled: false, hour: 20, minute: 15, notificationId: null });
+    (schedulePracticeReminder as jest.Mock).mockResolvedValueOnce({ enabled: true, hour: 9, minute: 0, notificationId: 'rescheduled-id' });
     pickMock.mockResolvedValueOnce(backupText());
     const view = await render(<SettingsScreen />);
 
@@ -262,6 +263,9 @@ describe('SettingsScreen progress backup', () => {
 
     await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Progress restored', expect.stringContaining('could not save the practice reminder')));
     expect(cancelPracticeReminder).toHaveBeenCalledWith({ enabled: true, hour: 20, minute: 15, notificationId: 'new-id' });
+    // The device's previous reminder is rescheduled so saved and OS state agree again.
+    expect(schedulePracticeReminder).toHaveBeenCalledWith({ ...deviceReminder, notificationId: null }, 9, 0);
+    expect(setReminder).toHaveBeenLastCalledWith({ enabled: true, hour: 9, minute: 0, notificationId: 'rescheduled-id' });
     expect(showAppAlertMock).not.toHaveBeenCalledWith('Progress restored', expect.stringContaining('from the backup is now on this device.'));
   });
 });

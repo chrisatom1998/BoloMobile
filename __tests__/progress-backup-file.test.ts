@@ -76,6 +76,14 @@ describe('native progress backup files', () => {
       mimeType: 'application/json',
       UTI: 'public.json',
     });
+    expect(mockFiles[0]?.deleted).toBe(true);
+  });
+
+  it('deletes the export copy even when the share sheet fails', async () => {
+    mockShare.mockRejectedValueOnce(new Error('share failed'));
+
+    await expect(shareProgressBackup('{}', 'backup.json')).rejects.toThrow('share failed');
+    expect(mockFiles[0]?.deleted).toBe(true);
   });
 
   it('explains when sharing is unavailable without writing a file', async () => {

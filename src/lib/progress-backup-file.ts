@@ -32,7 +32,12 @@ export async function shareProgressBackup(contents: string, fileName: string): P
     deleteQuietly(file);
     throw new ProgressBackupFileError('Bolo could not prepare the backup file. Check available storage and try again.');
   }
-  await shareAsync(file.uri, { dialogTitle: 'Save Bolo progress backup', mimeType: 'application/json', UTI: 'public.json' });
+  try {
+    await shareAsync(file.uri, { dialogTitle: 'Save Bolo progress backup', mimeType: 'application/json', UTI: 'public.json' });
+  } finally {
+    // The share sheet has settled, so the receiving app already has its copy.
+    deleteQuietly(file);
+  }
 }
 
 /** Let the learner choose a backup file. Resolves null when they cancel. */
