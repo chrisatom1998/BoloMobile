@@ -217,7 +217,16 @@ export default function SettingsScreen() {
       // restoreProgress reports and rolls back its own storage failures.
       if (!(await restoreProgress(progress))) return;
       const outcome = await applyRestoredReminder(reminder, backupReminder);
-      setReminder(outcome.reminder);
+      if (!(await setReminder(outcome.reminder))) {
+        // The reminder write was rolled back, so drop the notification scheduled for it.
+        if (outcome.reminder.notificationId && outcome.reminder.notificationId !== reminder.notificationId) {
+          await cancelPracticeReminder(outcome.reminder).catch(() => undefined);
+        }
+        if (mountedRef.current) {
+          showAppAlert('Progress restored', 'Your learning progress from the backup is now on this device, but Bolo could not save the practice reminder. Set it again below.');
+        }
+        return;
+      }
       if (!mountedRef.current) return;
       const reminderNote = outcome.status === 'not-scheduled'
         ? ' Your practice reminder was restored as off because Bolo could not schedule it. Turn it on again below.'

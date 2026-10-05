@@ -74,7 +74,7 @@ type AppActions = {
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
   clearChatHistory: () => void;
   setAiConsent: (consent: boolean) => Promise<boolean>;
-  setReminder: (reminder: ReminderSettings) => void;
+  setReminder: (reminder: ReminderSettings) => Promise<boolean>;
   setMotionPreference: (preference: MotionPreference) => void;
   restoreProgress: (progress: RestorableProgress) => Promise<boolean>;
   clearAllData: () => Promise<void>;
@@ -483,9 +483,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return true;
   }, [enqueuePersistence, replaceState]);
 
-  const setReminder = useCallback((reminder: ReminderSettings) => {
-    commit((current) => ({ ...current, reminder }), ['reminder']);
-  }, [commit]);
+  const setReminder = useCallback((reminder: ReminderSettings) => commit((current) => ({ ...current, reminder }), ['reminder']), [commit]);
 
   const setMotionPreference = useCallback((motionPreference: MotionPreference) => {
     commit((current) => ({ ...current, motionPreference }), ['motionPreference']);

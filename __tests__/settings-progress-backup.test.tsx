@@ -54,7 +54,7 @@ jest.mock('@/state/app-state', () => ({
 
 import SettingsScreen from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
-import { applyRestoredReminder } from '../src/lib/practice-reminder';
+import { applyRestoredReminder, cancelPracticeReminder } from '../src/lib/practice-reminder';
 import { parseProgressBackup, serializeProgressBackup } from '../src/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '../src/lib/progress-backup-file';
 import { createAiConsentRecord, dateKey, defaultLearnerProfile } from '../src/lib/storage';
@@ -100,7 +100,7 @@ describe('SettingsScreen progress backup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     restoreProgress = jest.fn(async () => true);
-    setReminder = jest.fn();
+    setReminder = jest.fn(async () => true);
     mockUseAppState.mockReturnValue({
       ...learningState(),
       aiConsent: true,
@@ -248,5 +248,20 @@ describe('SettingsScreen progress backup', () => {
     expect(setReminder).not.toHaveBeenCalled();
     expect(showAppAlertMock).not.toHaveBeenCalledWith('Progress restored', expect.any(String));
     expect(view.getByRole('button', { name: 'Restore from backup' }).props.accessibilityState).toEqual({ disabled: false, busy: false });
+  });
+
+  it('cancels the new notification and says so when saving the restored reminder fails', async () => {
+    setReminder.mockResolvedValueOnce(false);
+    (cancelPracticeReminder as jest.Mock).mockResolvedValueOnce({ enabled: false, hour: 20, minute: 15, notificationId: null });
+    pickMock.mockResolvedValueOnce(backupText());
+    const view = await render(<SettingsScreen />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Restore from backup' }));
+    await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Replace progress on this device?', expect.any(String), expect.any(Array)));
+    await act(async () => actionsFor('Replace progress on this device?').find(({ text }) => text === 'Restore')?.onPress?.());
+
+    await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Progress restored', expect.stringContaining('could not save the practice reminder')));
+    expect(cancelPracticeReminder).toHaveBeenCalledWith({ enabled: true, hour: 20, minute: 15, notificationId: 'new-id' });
+    expect(showAppAlertMock).not.toHaveBeenCalledWith('Progress restored', expect.stringContaining('from the backup is now on this device.'));
   });
 });

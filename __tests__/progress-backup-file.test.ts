@@ -111,6 +111,8 @@ describe('native progress backup files', () => {
   it('refuses oversized files before reading them', async () => {
     mockGetDocument.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///cache/big.json', name: 'big.json', size: MAX_PROGRESS_BACKUP_BYTES + 1 }] });
     await expect(pickProgressBackupText()).rejects.toThrow('larger than 2 MB');
+    expect(mockFiles.at(-1)?.uri).toBe('file:///cache/big.json');
+    expect(mockFiles.at(-1)?.deleted).toBe(true);
 
     mockNextFile.size = MAX_PROGRESS_BACKUP_BYTES + 1;
     mockGetDocument.mockResolvedValue({ canceled: false, assets: [{ uri: 'file:///cache/big.json', name: 'big.json' }] });

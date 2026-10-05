@@ -41,10 +41,10 @@ export async function pickProgressBackupText(): Promise<string | null> {
   if (result.canceled) return null;
   const asset = result.assets[0];
   if (!asset) throw new ProgressBackupFileError(UNREADABLE);
-  if ((asset.size ?? 0) > MAX_PROGRESS_BACKUP_BYTES) throw new ProgressBackupFileError(TOO_LARGE);
   const file = new File(asset.uri);
   try {
-    if (file.size > MAX_PROGRESS_BACKUP_BYTES) throw new ProgressBackupFileError(TOO_LARGE);
+    // The picker already copied the file into the cache, so even an oversized pick is cleaned up below.
+    if ((asset.size ?? 0) > MAX_PROGRESS_BACKUP_BYTES || file.size > MAX_PROGRESS_BACKUP_BYTES) throw new ProgressBackupFileError(TOO_LARGE);
     return await file.text();
   } catch (error) {
     if (error instanceof ProgressBackupFileError) throw error;
