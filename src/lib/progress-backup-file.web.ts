@@ -1,5 +1,3 @@
-import { getDocumentAsync } from 'expo-document-picker';
-
 import { MAX_PROGRESS_BACKUP_BYTES } from '@/lib/progress-backup';
 
 /** An error whose message is safe and friendly enough to show the learner. */
@@ -27,12 +25,49 @@ export async function shareProgressBackup(contents: string, fileName: string): P
   }
 }
 
+// Browsers that never fire `cancel` still refocus the window when the dialog closes.
+const CANCEL_FOCUS_GRACE_MS = 1000;
+
+/**
+ * Open the browser file dialog directly. expo-document-picker's web picker never
+ * settles when the learner cancels, which would leave the backup buttons busy.
+ */
+function chooseBrowserFile(): Promise<File | null> {
+  return new Promise((resolve, reject) => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      reject(new ProgressBackupFileError(UNREADABLE));
+      return;
+    }
+    const input = document.createElement('input');
+    let settled = false;
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (file: File | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(focusTimer);
+      window.removeEventListener('focus', onFocus);
+      input.remove();
+      resolve(file);
+    };
+    const onFocus = () => {
+      clearTimeout(focusTimer);
+      focusTimer = setTimeout(() => finish(input.files?.[0] ?? null), CANCEL_FOCUS_GRACE_MS);
+    };
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.style.display = 'none';
+    input.addEventListener('change', () => finish(input.files?.[0] ?? null));
+    input.addEventListener('cancel', () => finish(null));
+    window.addEventListener('focus', onFocus);
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
 /** Let the learner choose a backup file. Resolves null when they cancel. */
 export async function pickProgressBackupText(): Promise<string | null> {
-  const result = await getDocumentAsync({ multiple: false, type: ['application/json', '.json'] });
-  if (result.canceled) return null;
-  const file = result.assets[0]?.file;
-  if (!file) throw new ProgressBackupFileError(UNREADABLE);
+  const file = await chooseBrowserFile();
+  if (!file) return null;
   if (file.size > MAX_PROGRESS_BACKUP_BYTES) throw new ProgressBackupFileError(TOO_LARGE);
   try {
     return await file.text();

@@ -143,11 +143,13 @@ describe('native progress backup files', () => {
 
 describe('web progress backup files', () => {
   const originalDocument = (globalThis as { document?: unknown }).document;
+  const originalWindow = (globalThis as { window?: unknown }).window;
   const originalCreate = URL.createObjectURL;
   const originalRevoke = URL.revokeObjectURL;
 
   afterEach(() => {
     (globalThis as { document?: unknown }).document = originalDocument;
+    (globalThis as { window?: unknown }).window = originalWindow;
     URL.createObjectURL = originalCreate;
     URL.revokeObjectURL = originalRevoke;
     jest.useRealTimers();
@@ -176,20 +178,58 @@ describe('web progress backup files', () => {
     await expect(webFile.shareProgressBackup('{}', 'backup.json')).rejects.toThrow(webFile.ProgressBackupFileError);
   });
 
-  it('reads a picked browser file and handles cancel, size, and read failures', async () => {
-    mockGetDocument.mockResolvedValueOnce({ canceled: true, assets: null });
-    await expect(webFile.pickProgressBackupText()).resolves.toBeNull();
+  function fakeBrowserPicker() {
+    const listeners: Record<string, (() => void)[]> = {};
+    const windowListeners: Record<string, (() => void)[]> = {};
+    const input = {
+      type: '',
+      accept: '',
+      style: {} as Record<string, string>,
+      files: null as { size: number; text: () => Promise<string> }[] | null,
+      addEventListener: (name: string, listener: () => void) => { (listeners[name] ??= []).push(listener); },
+      click: jest.fn(),
+      remove: jest.fn(),
+    };
+    (globalThis as { document?: unknown }).document = { createElement: jest.fn(() => input), body: { appendChild: jest.fn() } };
+    (globalThis as { window?: unknown }).window = {
+      addEventListener: (name: string, listener: () => void) => { (windowListeners[name] ??= []).push(listener); },
+      removeEventListener: jest.fn(),
+    };
+    const fire = (name: string) => listeners[name]?.forEach((listener) => listener());
+    const focus = () => windowListeners.focus?.forEach((listener) => listener());
+    return { input, fire, focus };
+  }
 
-    mockGetDocument.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'blob:x', name: 'x.json', file: { size: 5, text: async () => 'hello' } }] });
-    await expect(webFile.pickProgressBackupText()).resolves.toBe('hello');
+  it('reads a picked browser file and handles size and read failures', async () => {
+    const pick = async (file: { size: number; text: () => Promise<string> } | null) => {
+      const { input, fire } = fakeBrowserPicker();
+      const result = webFile.pickProgressBackupText();
+      input.files = file ? [file] : [];
+      fire('change');
+      return result;
+    };
+    await expect(pick({ size: 5, text: async () => 'hello' })).resolves.toBe('hello');
+    await expect(pick({ size: MAX_PROGRESS_BACKUP_BYTES + 1, text: jest.fn() })).rejects.toThrow('larger than 2 MB');
+    await expect(pick({ size: 5, text: async () => { throw new Error('denied'); } })).rejects.toThrow('could not read that file');
+    await expect(pick(null)).resolves.toBeNull();
+  });
 
-    mockGetDocument.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'blob:x', name: 'x.json', file: { size: MAX_PROGRESS_BACKUP_BYTES + 1, text: jest.fn() } }] });
-    await expect(webFile.pickProgressBackupText()).rejects.toThrow('larger than 2 MB');
+  it('settles when the browser dialog is cancelled, with or without a cancel event', async () => {
+    const withEvent = fakeBrowserPicker();
+    const cancelled = webFile.pickProgressBackupText();
+    withEvent.fire('cancel');
+    await expect(cancelled).resolves.toBeNull();
+    expect(withEvent.input.remove).toHaveBeenCalled();
 
-    mockGetDocument.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'blob:x', name: 'x.json', file: { size: 5, text: async () => { throw new Error('denied'); } } }] });
-    await expect(webFile.pickProgressBackupText()).rejects.toThrow('could not read that file');
-
-    mockGetDocument.mockResolvedValueOnce({ canceled: false, assets: [{ uri: 'blob:x', name: 'x.json' }] });
-    await expect(webFile.pickProgressBackupText()).rejects.toThrow(webFile.ProgressBackupFileError);
+    jest.useFakeTimers();
+    try {
+      const focusOnly = fakeBrowserPicker();
+      const result = webFile.pickProgressBackupText();
+      focusOnly.focus();
+      jest.advanceTimersByTime(1000);
+      await expect(result).resolves.toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
