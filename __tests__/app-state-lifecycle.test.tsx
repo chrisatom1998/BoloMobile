@@ -36,6 +36,7 @@ const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage
   multiGet: jest.Mock;
   multiSet: jest.Mock;
   removeItem: jest.Mock;
+  setItem: jest.Mock;
 };
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 const observeMock = observe as jest.MockedFunction<typeof observe>;
@@ -96,6 +97,47 @@ describe('AppStateProvider hydration', () => {
       expect.stringContaining('temporary defaults'),
     );
 
+    await view.unmount();
+    warning.mockRestore();
+  });
+
+  it('keeps changes in memory without overwriting unread storage after a failed load', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    asyncStorage.multiGet.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const view = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(view.getByTestId('status').props.children).toBe('Ready'));
+    expect(showAppAlertMock).toHaveBeenCalledWith('Could not load saved progress', expect.stringContaining('will not be saved'));
+    expect(latestState.storageUnavailable).toBe(true);
+
+    await act(async () => {
+      latestState.togglePhrase({ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' });
+      latestState.setGoal(15);
+      latestState.replaceLiveChatSnapshot([], [{ id: 'asha-live', role: 'asha', text: 'Live caption.', language: 'en' }]);
+    });
+
+    await waitFor(() => expect(readSnapshot(view)).toMatchObject({ goal: 15, phrases: 1 }));
+    expect(latestState.chatHistory).toHaveLength(1);
+    expect(asyncStorage.multiSet).not.toHaveBeenCalled();
+    expect(asyncStorage.setItem).not.toHaveBeenCalled();
+    expect(asyncStorage.__store.size).toBe(0);
+
+    await view.unmount();
+    warning.mockRestore();
+  });
+
+  it('resumes saving after the learner clears data following a failed load', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    asyncStorage.multiGet.mockRejectedValueOnce(new Error('storage unavailable'));
+    const view = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(view.getByTestId('status').props.children).toBe('Ready'));
+
+    await act(async () => latestState.clearAllData());
+    expect(asyncStorage.multiSet).toHaveBeenCalledTimes(1);
+    expect(latestState.storageUnavailable).toBe(false);
+    await act(async () => latestState.setGoal(5));
+
+    await waitFor(() => expect(asyncStorage.__store.get(storageKeys.goal)).toBe('5'));
     await view.unmount();
     warning.mockRestore();
   });
@@ -191,6 +233,21 @@ describe('AppStateProvider day rollover', () => {
     await waitFor(() => expect(readSnapshot(view).practice)
       .toEqual({ date: '2026-07-21', chaiDone: false, liveDone: false, seconds: 0 }));
     await view.unmount();
+  });
+
+  it('rolls the day over in memory without writing defaults after a failed load', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    asyncStorage.multiGet.mockRejectedValueOnce(new Error('storage unavailable'));
+    const view = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(view.getByTestId('status').props.children).toBe('Ready'));
+
+    jest.setSystemTime(new Date(2026, 6, 21, 7, 30, 0));
+    await act(async () => { stateListener?.('active'); });
+
+    await waitFor(() => expect(readSnapshot(view).practice.date).toBe('2026-07-21'));
+    expect(asyncStorage.multiSet).not.toHaveBeenCalled();
+    await view.unmount();
+    warning.mockRestore();
   });
 
   it('leaves the practice day untouched when the app resumes on the same day', async () => {

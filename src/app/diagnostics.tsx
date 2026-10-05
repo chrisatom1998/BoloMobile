@@ -10,12 +10,20 @@ export default function DiagnosticsScreen() {
   const sharedStyles = useSharedStyles();
   const [snapshot, setSnapshot] = useState<ObservabilitySnapshot>({ days: {} });
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   useFocusEffect(useCallback(() => {
     let active = true;
     setLoading(true);
+    setFailed(false);
     void getObservabilitySnapshot().then((value) => {
       if (active) {
         setSnapshot(value);
+        setLoading(false);
+      }
+    }).catch(() => {
+      if (active) {
+        setSnapshot({ days: {} });
+        setFailed(true);
         setLoading(false);
       }
     });
@@ -36,7 +44,7 @@ export default function DiagnosticsScreen() {
             <View key={event} style={styles.row}><Text style={styles.event}>{event.replaceAll('_', ' ')}</Text><Text style={styles.count}>{counter?.count ?? 0}{counter?.totalDurationMs && counter.count > 0 ? ` · ${Math.round(counter.totalDurationMs / counter.count)} ms avg` : ''}</Text></View>
           ))}
         </View>
-      )) : <Text style={styles.empty}>No diagnostics recorded yet.</Text>}
+      )) : <Text style={styles.empty}>{failed ? 'Bolo could not read local diagnostics.' : 'No diagnostics recorded yet.'}</Text>}
     </ScrollView>
   );
 }

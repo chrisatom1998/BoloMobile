@@ -1,11 +1,13 @@
 /** @jest-environment node */
-import { createLiveRoutes, LIVE_REQUEST_TIMEOUT_MS, sanitizeLiveHistory } from '../backend/live';
+import { createLiveRoutes, LIVE_REQUEST_TIMEOUT_MS, LIVE_STATUS_CACHE_MS, sanitizeLiveHistory } from '../backend/live';
 
 const sdp = 'v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
 const validBody = { clientId: 'mobile-client-123', offerSdp: sdp, responseLanguage: 'en' };
 
 function setup() {
+  let now = 1_000_000;
   const deps = {
+    now: () => now,
     allowMobileRequest: jest.fn(async () => true),
     validClientId: (id: string) => /^[A-Za-z0-9-]{8,64}$/.test(id),
     secrets: { readSecret: jest.fn(async () => 'test-server-key') },
@@ -14,7 +16,12 @@ function setup() {
     error: (message: string, status: number) => ({ status, body: { error: message } }),
   };
   const routes = createLiveRoutes(deps);
-  return { deps, call: routes['POST /api/live-call'][0]!, status: routes['GET /api/live-status'][0]! };
+  return {
+    deps,
+    call: routes['POST /api/live-call'][0]!,
+    status: routes['GET /api/live-status'][0]!,
+    advance: (ms: number) => { now += ms; },
+  };
 }
 
 describe('GPT-Live backend', () => {
@@ -147,10 +154,51 @@ describe('GPT-Live backend', () => {
   });
 
   it('distinguishes configured credentials from missing model access', async () => {
-    const { deps, status } = setup();
+    const { deps, status, advance } = setup();
     deps.openAI.mockRejectedValue(new Error('private upstream detail'));
     expect((await status()).body).toEqual({ configured: true, available: false, model: 'gpt-live-1', protocol: 'live' });
+    advance(LIVE_STATUS_CACHE_MS);
     deps.secrets.readSecret.mockRejectedValue(new Error('missing key'));
     expect((await status()).body).toEqual({ configured: false, available: false, model: 'gpt-live-1', protocol: 'live' });
+  });
+
+  it('a second status call within the cache window does not call openAI again', async () => {
+    const { deps, status, advance } = setup();
+    deps.openAI.mockImplementation(async path => ({ ok: true, json: async () => ({ id: path.split('/').at(-1) }) }));
+    const expected = { status: 200, body: { configured: true, available: true, model: 'gpt-live-1', protocol: 'live' } };
+    expect(await status()).toEqual(expected);
+    advance(LIVE_STATUS_CACHE_MS - 1);
+    expect(await status()).toEqual(expected);
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(1);
+    expect(deps.openAI).toHaveBeenCalledTimes(2);
+    expect(setup().deps.openAI).not.toHaveBeenCalled();
+
+    advance(1);
+    deps.openAI.mockRejectedValue(new Error('model unavailable'));
+    expect((await status()).body.available).toBe(false);
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(2);
+    expect(deps.openAI).toHaveBeenCalledTimes(4);
+  });
+
+  it('caches a missing credential so status checks do not hammer the secret store', async () => {
+    const { deps, status } = setup();
+    deps.secrets.readSecret.mockResolvedValue(' ');
+    expect((await status()).body).toEqual({ configured: false, available: false, model: 'gpt-live-1', protocol: 'live' });
+    expect((await status()).body.configured).toBe(false);
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(1);
+    expect(deps.openAI).not.toHaveBeenCalled();
+  });
+
+  it('defaults the cache clock to Date.now', async () => {
+    jest.useFakeTimers();
+    const { deps } = setup();
+    const { now: _now, ...withoutClock } = deps;
+    const status = createLiveRoutes(withoutClock)['GET /api/live-status'][0]!;
+    await status();
+    await status();
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(1);
+    jest.setSystemTime(Date.now() + LIVE_STATUS_CACHE_MS);
+    await status();
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(2);
   });
 });

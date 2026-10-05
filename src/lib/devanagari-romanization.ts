@@ -6,8 +6,10 @@ const INDEPENDENT_VOWELS: Record<string, string> = {
   उ: 'u',
   ऊ: 'oo',
   ऋ: 'ri',
+  ऍ: 'e',
   ए: 'e',
   ऐ: 'ai',
+  ऑ: 'o',
   ओ: 'o',
   औ: 'au',
 };
@@ -19,8 +21,10 @@ const VOWEL_SIGNS: Record<string, string> = {
   'ु': 'u',
   'ू': 'oo',
   'ृ': 'ri',
+  'ॅ': 'e',
   'े': 'e',
   'ै': 'ai',
+  'ॉ': 'o',
   'ो': 'o',
   'ौ': 'au',
 };

@@ -112,7 +112,13 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
         Math.min(MAX_PLAYBACK_TIMEOUT_MS, PLAYBACK_TIMEOUT_MS / rate),
       );
       if (signal.aborted) cancel();
-      else player.play();
+      else {
+        try {
+          player.play();
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error('Offline lesson audio failed. Please try again.'));
+        }
+      }
     });
     return true;
   } finally {

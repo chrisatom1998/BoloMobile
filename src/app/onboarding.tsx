@@ -63,10 +63,14 @@ export default function OnboardingScreen() {
   const [microphoneStatus, setMicrophoneStatus] = useState('You can test this later in live practice.');
 
   async function testMicrophone() {
-    const current = await AudioModule.getRecordingPermissionsAsync();
-    const permission = current.granted ? current : await AudioModule.requestRecordingPermissionsAsync();
-    setMicrophoneTested(true);
-    setMicrophoneStatus(permission.granted ? 'Microphone ready.' : 'Microphone access is off. Typed and written practice still work.');
+    try {
+      const current = await AudioModule.getRecordingPermissionsAsync();
+      const permission = current.granted ? current : await AudioModule.requestRecordingPermissionsAsync();
+      setMicrophoneTested(true);
+      setMicrophoneStatus(permission.granted ? 'Microphone ready.' : 'Microphone access is off. Typed and written practice still work.');
+    } catch {
+      setMicrophoneStatus('Bolo could not check microphone access. Typed and written practice still work.');
+    }
   }
 
   function finish() {

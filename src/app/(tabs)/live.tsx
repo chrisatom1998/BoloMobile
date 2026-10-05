@@ -1,4 +1,4 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
@@ -67,7 +67,6 @@ function CaptionReveal({ children, mode, style }: { children: ReactNode; mode: E
 }
 
 export default function LiveScreen() {
-  const router = useRouter();
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -92,9 +91,12 @@ export default function LiveScreen() {
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [screenFocused, setScreenFocused] = useState(true);
+  const [wordSheetKey, setWordSheetKey] = useState(0);
   const liveSnapshotIdsRef = useRef<string[]>([]);
   const practiced = useRef(false);
   const mountedRef = useRef(true);
+  // Tabs stay mounted, so a typed reply can resolve after blur; it must not play then.
+  const screenFocusedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
   const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
@@ -168,11 +170,13 @@ export default function LiveScreen() {
 
   useFocusEffect(useCallback(() => {
     setScreenFocused(true);
+    screenFocusedRef.current = true;
     practiced.current = false;
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
       setScreenFocused(false);
+      screenFocusedRef.current = false;
       if (practiced.current) addPracticeSeconds(elapsedSeconds());
       void stopSpeaking();
     };
@@ -270,6 +274,7 @@ export default function LiveScreen() {
     setLiveAshaTranscript('');
     selectedChatTextRef.current.clear();
     setWordDefinitionPhrase(null);
+    setWordSheetKey((key) => key + 1);
     clearChatHistory();
   }, [clearChatHistory]);
 
@@ -329,7 +334,7 @@ export default function LiveScreen() {
       }
       clearPendingUserMessage(userMessage.id);
       recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
-      if (realtimeStatusRef.current === 'disconnected') {
+      if (realtimeStatusRef.current === 'disconnected' && screenFocusedRef.current) {
         try {
           if (result.language === 'hi') await speakText(result.reply, controller.signal, 1, 'hi', 'playback', true);
           else await speakText(result.reply, controller.signal, 1, undefined, 'playback', true);
@@ -422,13 +427,10 @@ export default function LiveScreen() {
   const featuredPhrase = realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
     <View style={styles.featuredPhraseSection} testID="featured-phrase-section">
       <Pressable
-        accessibilityHint={aiConsent && !realtimeOwnsAudio ? 'Plays this Hindi phrase.' : 'Opens your saved phrases for review.'}
+        accessibilityHint="Plays this Hindi phrase."
         accessibilityLabel={`Review pronunciation reference for ${studioPhrase.hi}`}
         accessibilityRole="button"
-        onPress={() => {
-          if (aiConsent && !realtimeOwnsAudio) void speak(studioPhrase.hi);
-          else router.push('/phrases');
-        }}
+        onPress={() => { void speak(studioPhrase.hi); }}
         style={[styles.studioPhrase, { width: heroContentWidth }]}
       >
         <View style={styles.studioPhraseHeading}>
@@ -649,7 +651,7 @@ export default function LiveScreen() {
         <LiveComposer disabled={busy || realtimeLocked} onSend={sendText} styles={styles} />
       </View> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
-      {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={!!wordDefinitionPhrase} /> : null}
+      {aiConsent ? <WordDefinitionSheet key={wordSheetKey} clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={!!wordDefinitionPhrase} /> : null}
     </KeyboardAvoidingView>
   );
 }

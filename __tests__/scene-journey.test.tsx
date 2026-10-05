@@ -334,6 +334,22 @@ describe('SceneScreen primary journey', () => {
     expect(sceneScrollToMock).toHaveBeenCalledWith({ animated: false, y: 468 });
   });
 
+  it('keeps the resume notice off later turns of a resumed lesson', async () => {
+    mockSceneId = 'plan-essentials-06';
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
+    const target = getScene(mockSceneId)?.beats[4]?.choices.find((choice) => choice.correct);
+    const view = await render(<SceneScreen />);
+    expect(view.getByText('Continuing at turn 5.')).toBeTruthy();
+
+    for (const [index] of wordOrderTokens(target!.hi).entries()) {
+      await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
+    }
+    await fireEvent.press(view.getByLabelText('Check my sentence'));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    expect(view.getByText('Turn 6 of 10')).toBeTruthy();
+    expect(view.queryByText(/Continuing at turn/u)).toBeNull();
+  });
+
   it('includes the complete lesson when resuming and starts a new attempt on replay', async () => {
     mockAppState.sceneProgress = { chai: resumeAt(1) };
     const view = await render(<SceneScreen />);
@@ -600,6 +616,15 @@ describe('SceneScreen primary journey', () => {
     }));
   });
 
+  it('starts the Listen button name with its visible text for voice control', async () => {
+    const view = await render(<SceneScreen />);
+    const listen = view.getByRole('button', { name: /^Listen\b/u });
+
+    expect(listen.props.accessibilityLabel).toBe('Listen to Asha');
+    expect(within(listen).getByText('Listen')).toBeTruthy();
+    await waitFor(() => expect(speakTextMock).toHaveBeenCalled());
+  });
+
   it('renders AI playback failures as alerts and stops playback on unmount', async () => {
     const view = await render(<SceneScreen />);
 
@@ -608,7 +633,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.queryByRole('alert')).toBeNull();
 
     speakTextMock.mockRejectedValueOnce(new Error('AI voice is unavailable.'));
-    await fireEvent.press(view.getByLabelText('Hear Asha'));
+    await fireEvent.press(view.getByLabelText('Listen to Asha'));
     await waitFor(() => expect(view.getByRole('alert').props.children).toBe('AI voice is unavailable.'));
 
     await view.unmount();
@@ -625,7 +650,7 @@ describe('SceneScreen primary journey', () => {
       expect(StyleSheet.flatten(view.getByTestId('scene-progress-header').props.style)).toMatchObject({ flexDirection: 'column' });
       expect(StyleSheet.flatten(view.getByTestId('scene-asha-row').props.style)).toMatchObject({ flexDirection: 'column' });
       expect(StyleSheet.flatten(view.getByTestId('scene-asha-bubble').props.style)).toMatchObject({ alignSelf: 'stretch', flex: 0 });
-      expect(StyleSheet.flatten(view.getByLabelText('Hear Asha').props.style)).toMatchObject({ alignSelf: 'flex-end', position: 'relative' });
+      expect(StyleSheet.flatten(view.getByLabelText('Listen to Asha').props.style)).toMatchObject({ alignSelf: 'flex-end', position: 'relative' });
       expect(StyleSheet.flatten(view.getByLabelText(choiceLabel('chai', 0)).props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
 
       await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));

@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
+import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
@@ -22,10 +23,13 @@ export default function ProgressScreen() {
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
   const { phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
+  // `calendarDay` rolls the week forward after midnight on this always-mounted tab.
+  const calendarDay = useCalendarDay();
   const { week, maxMinutes } = useMemo(() => {
     const days = weeklyPractice(practiceHistory);
     return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.round(day.seconds / 60))) };
-  }, [practiceHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based week.
+  }, [practiceHistory, calendarDay]);
   const { accuracy, completedScenes, milestones } = useMemo(() => ({
     accuracy: learningAccuracy(sceneProgress),
     milestones: milestoneProgress(sceneProgress),

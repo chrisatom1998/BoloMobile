@@ -10,6 +10,7 @@ import { SegmentedControl } from '@/components/segmented-control';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { lessonPlans } from '@/data/lesson-plans';
 import { scenes, type SceneCategory } from '@/data/scenes';
+import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
@@ -60,7 +61,10 @@ export default function PhrasesScreen() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   // List all due phrases here, not the 5-phrase review-session cap from duePhrases.
-  const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases]);
+  // `calendarDay` re-runs this after midnight on this always-mounted tab.
+  const calendarDay = useCalendarDay();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based due check.
+  const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases, calendarDay]);
   const reviews = phraseReviews ?? {};
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
@@ -210,7 +214,7 @@ export default function PhrasesScreen() {
                 </View>
               </View>
               <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
-                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
+                <PressableFeedback accessibilityHint={offline ? 'Bundled lesson audio works offline.' : canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
                   <Volume2 color={colors.brandText} size={18} />
                 </PressableFeedback>
                 <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>

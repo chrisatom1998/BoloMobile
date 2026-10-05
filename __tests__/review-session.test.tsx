@@ -111,6 +111,19 @@ describe('ReviewScreen session stability', () => {
     expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
   });
 
+  it('keeps card controls reachable and does not announce the answer before reveal', async () => {
+    mockAppState.duePhrases = [phraseA];
+    const view = await render(<ReviewScreen />);
+    expect(view.queryAllByLabelText(new RegExp(phraseA.hi, 'u'))).toHaveLength(0);
+
+    // An accessible ancestor would merge the card into one element and hide its buttons.
+    let ancestor = view.getByRole('button', { name: 'Reveal answer' }).parent;
+    while (ancestor) {
+      expect(ancestor.props.accessible).not.toBe(true);
+      ancestor = ancestor.parent;
+    }
+  });
+
   it('disables Listen without consent or bundled audio and surfaces playback failures', async () => {
     mockAppState.aiConsent = false;
     mockAppState.duePhrases = [phraseA];

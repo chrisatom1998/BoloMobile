@@ -160,7 +160,7 @@ function SceneScreen() {
     key: `${scene?.id ?? 'missing-scene'}:${beatIndex}:${choiceNonce}`,
   }), [beatIndex, choiceNonce, currentBeat, effectiveMode, scene?.id]);
 
-  // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
+  // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Listen button.
   useEffect(() => {
     if (!autoPlayKey || npcLine === undefined || situationPromptSpeech === undefined) return;
     if (resolution !== null) return;
@@ -458,7 +458,7 @@ function SceneScreen() {
 
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
-      {initialBeatIndex > 0 ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Continuing at turn {initialBeatIndex + 1}.</Text> : null}
+      {initialBeatIndex > 0 && beatIndex === initialBeatIndex ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Continuing at turn {initialBeatIndex + 1}.</Text> : null}
 
       {!aiConsent ? (
         <View style={styles.hint}>
@@ -488,7 +488,7 @@ function SceneScreen() {
                 : aiConsent
                   ? 'Plays the Hindi situation, then its English translation.'
                   : 'Plays bundled Hindi lesson audio offline.'}
-            accessibilityLabel="Hear Asha"
+            accessibilityLabel="Listen to Asha"
             accessibilityRole="button"
             accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
             disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}

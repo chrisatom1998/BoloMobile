@@ -62,12 +62,19 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
 }));
 
+let mockCalendarDay = '2026-10-05';
+
+jest.mock('@/hooks/use-calendar-day', () => ({
+  useCalendarDay: () => mockCalendarDay,
+}));
+
 import { learnerPhraseLatin } from '../src/lib/learner-phrase-display';
 import PhrasesScreen from '../src/app/(tabs)/phrases';
 import { showAppAlert } from '../src/lib/app-alert';
-import { speakText, stopSpeaking } from '../src/lib/speech';
+import { hasOfflineSpeech, speakText, stopSpeaking } from '../src/lib/speech';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
+const hasOfflineSpeechMock = hasOfflineSpeech as jest.MockedFunction<typeof hasOfflineSpeech>;
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
 
@@ -128,6 +135,25 @@ describe('PhrasesScreen primary journey', () => {
     expect(view.getAllByText(/Due now/u)).toHaveLength(8);
   });
 
+  it('recomputes due phrases after midnight while the tab stays mounted', async () => {
+    jest.useFakeTimers({ advanceTimers: true, now: new Date(2026, 9, 5, 23, 30) });
+    mockAppState.phrases = [mockPhrase];
+    mockAppState.phraseReviews = { [mockPhrase.hi]: { mastery: 0, intervalDays: 1, dueAt: '2026-10-06', lastReviewedAt: null, correctReviews: 1, totalReviews: 1 } };
+    try {
+      const view = await render(<PhrasesScreen />);
+      expect(view.getByText('Everything is reviewed for today.')).toBeTruthy();
+
+      jest.setSystemTime(new Date(2026, 9, 6, 0, 1));
+      mockCalendarDay = '2026-10-06';
+      await view.rerender(<PhrasesScreen />);
+      expect(view.getByText('A quick practice keeps 1 phrase fresh.')).toBeTruthy();
+      expect(view.getByText('Due now')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+      mockCalendarDay = '2026-10-05';
+    }
+  });
+
   it('always renders the Romanized phrase and English meaning on each saved card', async () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
@@ -171,6 +197,17 @@ describe('PhrasesScreen primary journey', () => {
     const actions = expectDefined(showAppAlertMock.mock.calls[0])[2] as { onPress?: () => void; text: string }[];
     actions.find(({ text }) => text === 'Remove')?.onPress?.();
     expect(mockRemovePhrase).toHaveBeenCalledWith('नमस्ते');
+  });
+
+  it('only promises offline Listen audio when the phrase has a bundled clip', async () => {
+    mockAppState.phrases = [mockPhrase];
+    const view = await render(<PhrasesScreen />);
+    expect(view.getByTestId('saved-phrase-listen').props.accessibilityHint).toBeUndefined();
+
+    hasOfflineSpeechMock.mockReturnValue(true);
+    await view.rerender(<PhrasesScreen />);
+    expect(view.getByTestId('saved-phrase-listen').props.accessibilityHint).toBe('Bundled lesson audio works offline.');
+    hasOfflineSpeechMock.mockReturnValue(false);
   });
 
   it('renders playback failures as accessible alerts', async () => {

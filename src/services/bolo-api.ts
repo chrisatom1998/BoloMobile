@@ -167,8 +167,15 @@ async function post<T>(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const payload: unknown = await response.json().catch(() => null);
-    const message = isRecord(payload) && typeof payload.error === 'string' ? payload.error : undefined;
+    // An abort while the body streams is a timeout or cancel, not a bad response.
+    const payload: unknown = await response.json().catch((error: unknown) => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    });
+    // 5xx text may carry raw server internals; only 4xx messages are user-facing.
+    const message = response.status >= 400 && response.status < 500 && isRecord(payload) && typeof payload.error === 'string'
+      ? payload.error
+      : undefined;
     if (!response.ok) throw new BoloApiError(message || 'Bolo could not complete that request.', response.status);
     if (!validate(payload)) throw new BoloApiError('Bolo returned an invalid response. Please try again.', response.status);
     observe('ai_request_succeeded', Date.now() - startedAt);

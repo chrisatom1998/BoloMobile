@@ -186,6 +186,26 @@ describe('Realtime peer setup cleanup', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
+  it.each(['native', 'web'])('fails promptly when the peer closes before the data channel opens on %s', async platform => {
+    const { dataChannel, microphone, peer, peerHandlers, stream } = mountWebPeer();
+    dataChannel.readyState = 'connecting';
+    (mediaDevices.getUserMedia as jest.Mock).mockResolvedValue(stream);
+    (RTCPeerConnection as unknown as jest.Mock).mockReturnValue(peer);
+    const onClose = jest.fn();
+    const createSession = platform === 'native' ? createNativeSession : createWebSession;
+    const pending = createSession({ exchangeSdp: async () => 'answer', onClose, onMessage: jest.fn() }).catch(error => error);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
+    peer.connectionState = 'failed';
+    peerHandlers.get('connectionstatechange')?.();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(await pending).toEqual(expect.objectContaining({ message: 'The live voice connection closed before it was ready.' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(microphone.stop).toHaveBeenCalledTimes(1);
+    expect(peer.close).toHaveBeenCalledTimes(1);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('closes the native microphone and peer when abort fires during remote description setup', async () => {
     const remoteDescription = deferred<void>();
     const microphone = { enabled: true, stop: jest.fn() };

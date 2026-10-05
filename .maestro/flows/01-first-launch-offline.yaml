@@ -55,10 +55,10 @@ tags:
 - assertVisible: "Turn 1 of 10"
 - scrollUntilVisible:
     element:
-      text: "Hear Asha"
+      text: "Listen to Asha"
     direction: DOWN
     timeout: 20000
-- tapOn: "Hear Asha"
+- tapOn: "Listen to Asha"
 - runFlow: ../subflows/dismiss-dev-menu.yaml
 - scrollUntilVisible:
     element:

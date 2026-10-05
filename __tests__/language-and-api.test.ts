@@ -392,7 +392,7 @@ describe('connected coaching contract', () => {
         ? { error: 'Could not prepare phrase.' } : { hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' } };
     }) as unknown as typeof fetch;
     try {
-      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'Namaste! Main theek hoon.' })).rejects.toThrow('Could not prepare phrase.');
+      await expect(prepareSavedPhraseFromText({ clientId: 'client-12345678', text: 'Namaste! Main theek hoon.' })).rejects.toThrow('Bolo could not complete that request.');
     } finally { globalThis.fetch = originalFetch; }
   });
 

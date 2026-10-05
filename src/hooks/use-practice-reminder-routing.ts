@@ -7,6 +7,7 @@ const PRACTICE_REMINDER_ROUTE = '/review' as const;
 type NotificationResponseLike = {
   actionIdentifier: string;
   notification: {
+    date: number;
     request: {
       content: { data?: Record<string, unknown> | null };
       identifier: string;
@@ -47,7 +48,9 @@ export function usePracticeReminderRouting(enabled: boolean) {
       }),
     });
     const handle = (response: NotificationResponseLike) => {
-      const responseId = response.notification.request.identifier;
+      // A repeating daily reminder reuses its identifier for every delivery,
+      // so the delivery date distinguishes Tuesday's tap from Monday's.
+      const responseId = `${response.notification.request.identifier}:${response.notification.date}`;
       if (!active || handledResponseIds.current.has(responseId)) return;
       const route = practiceReminderRoute(response, Notifications.DEFAULT_ACTION_IDENTIFIER);
       if (!route) return;

@@ -133,6 +133,12 @@ export default function SettingsScreen() {
 
   async function changeReminder(hour?: number) {
     if (savingReminder) return;
+    if (hour !== undefined && state.storageUnavailable) {
+      // A reminder scheduled now could not save its notification id, leaving an
+      // OS notification nothing can cancel once the app reopens normally.
+      showAppAlert('Could not set reminder', 'Bolo could not read saved progress, so a reminder set now would not be saved. Reopen the app and try again.');
+      return;
+    }
     setSavingReminder(true);
     try {
       const next = hour === undefined

@@ -75,6 +75,21 @@ describe('offline voice playback speed', () => {
     timeoutSpy.mockRestore();
   });
 
+  it('cleans up the listener and watchdog when play throws', async () => {
+    jest.useFakeTimers();
+    try {
+      const remove = jest.fn();
+      mockPlayer.addListener.mockReturnValue({ remove });
+      mockPlayer.play.mockImplementation(() => { throw new Error('Player unavailable'); });
+      await expect(playOfflineSpeech('saved phrase', new AbortController().signal)).rejects.toThrow('Player unavailable');
+      expect(remove).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(0);
+      expect(mockPlayer.release).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('ignores Object.prototype keys arriving as speech text', async () => {
     for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
       expect(hasOfflineSpeech(key)).toBe(false);

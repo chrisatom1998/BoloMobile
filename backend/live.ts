@@ -2,6 +2,7 @@
 export const LIVE_MODEL = 'gpt-live-1';
 export const LIVE_BACKEND_MODEL = 'gpt-5.6-terra';
 export const LIVE_REQUEST_TIMEOUT_MS = 20_000;
+export const LIVE_STATUS_CACHE_MS = 60_000;
 const MAX_SDP_LENGTH = 64_000;
 const MAX_HISTORY_ITEMS = 12;
 const MAX_HISTORY_TEXT_LENGTH = 600;
@@ -19,6 +20,7 @@ type LiveDependencies<TJson, TError> = {
   json: (body: Record<string, unknown>) => TJson;
   error: (message: string, status: number) => TError;
   secrets: { readSecret: (name: string) => Promise<string> };
+  now?: () => number;
 };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -97,35 +99,45 @@ function createSession(offerSdp: string, language: 'en' | 'hi', history: unknown
 }
 
 export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TError>) {
+  const now = deps.now ?? Date.now;
+  // Reuse one status result per window so repeated checks cannot drive
+  // unbounded secret reads or paid upstream model lookups.
+  let cachedStatus: { configured: boolean; available: boolean; at: number } | undefined;
+  const liveStatus = async () => {
+    let configured = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    try {
+      const key = await deps.secrets.readSecret('OPENAI_API_KEY');
+      configured = Boolean(key?.trim());
+      if (!configured) return { configured, available: false };
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => { controller.abort(); reject(new Error('live_status_timeout')); }, LIVE_REQUEST_TIMEOUT_MS);
+      });
+      const lookup = async () => {
+        const models = await Promise.all([LIVE_MODEL, LIVE_BACKEND_MODEL].map(async id => {
+          const response = await deps.openAI('/models/' + id, key, { method: 'GET', signal: controller.signal });
+          if (!response.ok) throw new Error('live_model_unavailable');
+          const model: unknown = await response.json();
+          return record(model) && model.id === id;
+        }));
+        return models.every(Boolean);
+      };
+      return { configured, available: await Promise.race([lookup(), timeout]) };
+    } catch {
+      return { configured, available: false };
+    } finally {
+      controller.abort();
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  };
   return {
     'GET /api/live-status': [async () => {
-      let configured = false;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const controller = new AbortController();
-      try {
-        const key = await deps.secrets.readSecret('OPENAI_API_KEY');
-        configured = Boolean(key?.trim());
-        if (!configured) return deps.json({ configured, available: false, model: LIVE_MODEL, protocol: 'live' });
-        const timeout = new Promise<never>((_, reject) => {
-          timer = setTimeout(() => { controller.abort(); reject(new Error('live_status_timeout')); }, LIVE_REQUEST_TIMEOUT_MS);
-        });
-        const lookup = async () => {
-          const models = await Promise.all([LIVE_MODEL, LIVE_BACKEND_MODEL].map(async id => {
-            const response = await deps.openAI('/models/' + id, key, { method: 'GET', signal: controller.signal });
-            if (!response.ok) throw new Error('live_model_unavailable');
-            const model: unknown = await response.json();
-            return record(model) && model.id === id;
-          }));
-          return models.every(Boolean);
-        };
-        const available = await Promise.race([lookup(), timeout]);
-        return deps.json({ configured, available, model: LIVE_MODEL, protocol: 'live' });
-      } catch {
-        return deps.json({ configured, available: false, model: LIVE_MODEL, protocol: 'live' });
-      } finally {
-        controller.abort();
-        if (timer !== undefined) clearTimeout(timer);
+      if (!cachedStatus || now() - cachedStatus.at >= LIVE_STATUS_CACHE_MS) {
+        cachedStatus = { ...await liveStatus(), at: now() };
       }
+      const { configured, available } = cachedStatus;
+      return deps.json({ configured, available, model: LIVE_MODEL, protocol: 'live' });
     }],
     'POST /api/live-call': [async ({ body }: { body?: unknown }) => {
       if (!record(body) || typeof body.clientId !== 'string' || !deps.validClientId(body.clientId)) {

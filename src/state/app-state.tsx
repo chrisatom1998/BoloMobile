@@ -52,6 +52,8 @@ type SceneCompletion = {
 type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   aiConsent: boolean;
   hydrated: boolean;
+  /** True after a failed load: changes stay in memory and nothing is written. */
+  storageUnavailable: boolean;
   streak: number;
   dailySteps: number;
   duePhrases: SavedPhrase[];
@@ -175,12 +177,16 @@ export async function persistAiConsentChoice(aiConsent: boolean) {
 export function AppStateProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [hydrated, setHydrated] = useState(false);
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
   // State updaters may run more than once in development. Keep persistence
   // outside React's state setter so a render retry cannot write twice.
   const stateRef = useRef<PersistedState>(initialState);
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
   const liveSnapshotWriteQueuedRef = useRef(false);
+  // After a failed load, storage may still hold real progress we could not
+  // read; never overwrite it with this session's temporary defaults.
+  const loadFailedRef = useRef<boolean>(false);
 
   const replaceState = useCallback((next: PersistedState) => {
     stateRef.current = next;
@@ -218,6 +224,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           motionPreference: sanitizeMotionPreference(readStored(storageKeys.motionPreference)),
         };
         if (active) {
+          loadFailedRef.current = false;
+          setStorageUnavailable(false);
           replaceState(next);
           setHydrated(true);
           if (clientId !== readStored(storageKeys.clientId)) {
@@ -232,9 +240,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         observe('runtime_error');
         if (active) {
           const fallback = { ...initialState, clientId: sanitizeClientId(null) };
+          loadFailedRef.current = true;
+          setStorageUnavailable(true);
           replaceState(fallback);
           setHydrated(true);
-          showAppAlert('Could not load saved progress', 'Bolo opened with temporary defaults. Check available storage before making changes.');
+          showAppAlert('Could not load saved progress', 'Bolo opened with temporary defaults. Changes will not be saved until the app reopens successfully.');
         }
       }
     })();
@@ -253,6 +263,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       if (practice.date === current.practice.date) return;
       const next = { ...current, practice };
       replaceState(next);
+      if (loadFailedRef.current) return;
       void enqueuePersistence(() => persistState(next, ['practice'])).catch((error: unknown) => {
         reportPersistenceFailure(error, 'Bolo could not save today\'s practice reset. Check available storage and reopen the app.');
       });
@@ -290,6 +301,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const previous = { ...current, practice: currentPractice(current) };
     const next = updater(previous);
     replaceState(next);
+    if (loadFailedRef.current) return;
     void enqueuePersistence(() => persistState(next, keys)).catch((error: unknown) => {
       reportPersistenceFailure(error);
       replaceState(restoreFailedPersistedState(stateRef.current, previous, next, keys));
@@ -444,6 +456,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const chatHistory = replaceChatHistorySnapshot(current.chatHistory, previousIds, messages);
     if (chatHistory === current.chatHistory) return;
     replaceState({ ...current, chatHistory });
+    if (loadFailedRef.current) return;
     // A slow device can receive many deltas during one storage write. Queue at
     // most one follow-up snapshot, reading the newest state when it begins.
     if (liveSnapshotWriteQueuedRef.current) return;
@@ -495,11 +508,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       clientId: sanitizeClientId(null),
     };
     const entries = storageEntries(next, Object.keys(storageKeys) as PersistedKey[]);
+    const { reminder } = stateRef.current;
     try {
-      // Cancel the scheduled daily reminder before wiping its notificationId,
-      // otherwise the OS notification keeps firing with no way to turn it off.
-      if (state.reminder.notificationId) await cancelPracticeReminder(state.reminder);
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
+      // Storage is now in a known state, so later changes may be saved again.
+      loadFailedRef.current = false;
+      setStorageUnavailable(false);
       clearAiVoicePlaybackCache();
       // Storage now holds the defaults; update in-memory state before anything
       // else can fail so the two never diverge.
@@ -511,12 +525,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } finally {
       clearingAllDataRef.current = false;
     }
+    // Cancel the scheduled daily reminder now that its notificationId is wiped;
+    // otherwise the OS notification keeps firing with no way to turn it off.
+    // A failed wipe throws above and leaves it scheduled to match the kept data.
+    if (reminder.notificationId) {
+      try {
+        await cancelPracticeReminder(reminder);
+      } catch (error) {
+        console.warn('Bolo could not cancel the practice reminder.', error);
+      }
+    }
     try {
       await clearObservability();
     } catch (error) {
       console.warn('Bolo could not clear stored diagnostics.', error);
     }
-  }, [enqueuePersistence, replaceState, state.reminder]);
+  }, [enqueuePersistence, replaceState]);
 
   const actions = useMemo<AppActions>(() => ({
     setGoal,
@@ -542,11 +566,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     ...state,
     aiConsent: state.aiConsent !== null,
     hydrated,
+    storageUnavailable,
     streak: calculateStreak(state.streakDays, completedToday(state.practice)),
     dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
     duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews, Infinity),
     reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
-  }), [state, hydrated]);
+  }), [state, hydrated, storageUnavailable]);
 
   return (
     <AppActionsContext.Provider value={actions}>

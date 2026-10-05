@@ -146,7 +146,7 @@ describe('AppStateProvider clearAllData', () => {
     await view.unmount();
   });
 
-  it('cancels the scheduled daily reminder before wiping its notification id', async () => {
+  it('cancels the scheduled daily reminder after the wipe succeeds', async () => {
     seedEveryStorageKey();
     const reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'notif-123' };
     asyncStorage.__store.set(storageKeys.reminder, JSON.stringify(reminder));
@@ -202,6 +202,42 @@ describe('AppStateProvider clearAllData', () => {
     expect(observe).toHaveBeenCalledWith('runtime_error');
     expect(Object.fromEntries(asyncStorage.__store)).toEqual(original);
     expect(clearAiVoicePlaybackCache).not.toHaveBeenCalled();
+    await view.unmount();
+    warning.mockRestore();
+  });
+
+  it('keeps the scheduled daily reminder when the clear write fails', async () => {
+    seedEveryStorageKey();
+    const reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'notif-123' };
+    asyncStorage.__store.set(storageKeys.reminder, JSON.stringify(reminder));
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    asyncStorage.multiSet.mockRejectedValueOnce(new Error('disk full'));
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).clientId).toBe('client-old-12345'));
+
+    await fireEvent.press(view.getByLabelText('Clear all provider data'));
+    await waitFor(() => expect(view.getByTestId('clear-error').props.children).toContain('existing local data was left in place'));
+
+    expect(cancelPracticeReminder).not.toHaveBeenCalled();
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.reminder) ?? 'null')).toEqual(reminder);
+    await view.unmount();
+    warning.mockRestore();
+  });
+
+  it('completes the wipe when cancelling the reminder fails afterwards', async () => {
+    seedEveryStorageKey();
+    asyncStorage.__store.set(storageKeys.reminder, JSON.stringify({ enabled: true, hour: 19, minute: 0, notificationId: 'notif-123' }));
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (cancelPracticeReminder as jest.Mock).mockRejectedValueOnce(new Error('notifications unavailable'));
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).clientId).toBe('client-old-12345'));
+
+    await fireEvent.press(view.getByLabelText('Clear all provider data'));
+    await waitFor(() => expect(readSnapshot(view).clientId).not.toBe('client-old-12345'));
+
+    expect(view.getByTestId('clear-error').props.children).toBe('');
+    expect(warning).toHaveBeenCalledWith('Bolo could not cancel the practice reminder.', expect.any(Error));
+    expect(asyncStorage.__store.get(storageKeys.phrases)).toBe('[]');
     await view.unmount();
     warning.mockRestore();
   });

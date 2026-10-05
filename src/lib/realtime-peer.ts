@@ -11,6 +11,7 @@ import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-pe
 const DISCONNECTED_WATCHDOG_MS = 10_000;
 // Allow the 10s ICE gather and 30s backend request budgets, plus native setup.
 const NEGOTIATION_TIMEOUT_MS = 45_000;
+const CLOSED_BEFORE_READY = 'The live voice connection closed before it was ready.';
 
 type NativeEventTarget = {
   addEventListener(
@@ -154,6 +155,7 @@ export async function createRealtimePeerSession({
 
     await new Promise<void>((resolve, reject) => {
       if (signal?.aborted) return reject(new Error('The live voice connection was canceled.'));
+      if (closed) return reject(new Error(CLOSED_BEFORE_READY));
       if (dataChannel.readyState === 'open') return resolve();
       let settled = false;
       const finish = (cause?: Error) => {
@@ -161,15 +163,19 @@ export async function createRealtimePeerSession({
         settled = true;
         clearTimeout(timeout);
         signal?.removeEventListener('abort', abort);
+        negotiation.signal.removeEventListener('abort', peerClosed);
         if (cause) reject(cause);
         else resolve();
       };
       const timeout = setTimeout(() => finish(new Error('The live voice data channel took too long to open.')), 15_000);
       const abort = () => finish(new Error('The live voice connection was canceled.'));
+      // close() aborts negotiation, so a remote failure ends this wait at once.
+      const peerClosed = () => (signal?.aborted ? abort() : finish(new Error(CLOSED_BEFORE_READY)));
       dataEvents.addEventListener('open', () => {
         finish();
       }, { once: true });
       signal?.addEventListener('abort', abort, { once: true });
+      negotiation.signal.addEventListener('abort', peerClosed, { once: true });
       if (signal?.aborted) abort();
     });
 

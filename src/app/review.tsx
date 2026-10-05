@@ -83,7 +83,7 @@ export default function ReviewScreen() {
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.screen} testID="review-scroll">
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
       <View style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
-      <View accessible accessibilityLabel={`Review phrase ${phrase.hi}`} style={styles.card}>
+      <View style={styles.card}>
         <Text style={sharedStyles.eyebrow}>Say this naturally</Text>
         <Text style={styles.prompt}>{phrase.en}</Text>
         {revealed ? (

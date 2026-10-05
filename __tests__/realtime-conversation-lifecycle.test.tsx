@@ -150,6 +150,37 @@ describe('GPT-Live conversation lifecycle', () => {
     await unmount();
   });
 
+  it('resolves a pending microphone command when the user ends the session', async () => {
+    const onError = jest.fn();
+    const { result, unmount } = await mount({ onError });
+    let outcome!: Promise<unknown>;
+    await act(async () => { outcome = result.current.startTurn().then(() => 'resolved', (error) => error); await flush(); });
+    expect(peer.send).toHaveBeenCalledWith(expect.objectContaining({ type: 'session.input_audio.unmute' }));
+    await act(async () => { result.current.disconnect(); await flush(); });
+    expect(await outcome).toBe('resolved');
+    expect(onError).not.toHaveBeenCalled();
+    expect(result.current.status).toBe('disconnected');
+    expect(result.current.microphoneEnabled).toBe(false);
+    expect(peer.setMicrophoneEnabled).not.toHaveBeenCalledWith(true);
+    await unmount();
+  });
+
+  it('resolves a superseded microphone command and applies only the newer one', async () => {
+    const { result, unmount } = await mount();
+    let first!: Promise<unknown>;
+    await act(async () => { first = result.current.startTurn().then(() => 'resolved', (error) => error); await flush(); });
+    let second!: Promise<void>;
+    await act(async () => { second = result.current.finishTurn(); await flush(); });
+    expect(await first).toBe('resolved');
+    acknowledge(true);
+    expect(result.current.microphoneEnabled).toBe(false);
+    await act(async () => { acknowledge(false); await second; });
+    expect(result.current.microphoneEnabled).toBe(false);
+    expect(result.current.status).toBe('ready');
+    expect(peer.setMicrophoneEnabled).not.toHaveBeenCalledWith(true);
+    await unmount();
+  });
+
   it('cancels pending startup and closes a late peer without resurrecting the session', async () => {
     let resolvePeer!: (peer: RealtimePeerSession) => void;
     createPeerMock.mockImplementation((options) => {

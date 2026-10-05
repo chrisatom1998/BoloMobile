@@ -75,9 +75,11 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     lifecycleRef.current += 1;
     const pending = pendingCommandRef.current;
     pendingCommandRef.current = null;
+    // Ending the session is deliberate (End, leaving, background), not a
+    // failure of the pending mic command; the state below is already final.
     if (pending) {
       clearTimeout(pending.timer);
-      pending.reject(new Error('The live voice session ended.'));
+      pending.resolve();
     }
     // Request server finalization before AbortSignal releases the transport.
     // Background/unmount still release microphone and playback immediately.
@@ -240,10 +242,11 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const peer = peerRef.current;
     if (!peer) return Promise.resolve();
     const previous = pendingCommandRef.current;
+    // A newer command replaces the old one deliberately; settle it quietly.
     if (previous) {
       clearTimeout(previous.timer);
       pendingCommandRef.current = null;
-      previous.reject(new Error('The microphone command was superseded.'));
+      previous.resolve();
     }
     // Disable capture immediately, including while the server confirms a mute.
     // Enable only after Live accepts the matching unmute command.

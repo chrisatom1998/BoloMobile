@@ -24,11 +24,20 @@ function collectTestIds(node: unknown, ids: string[] = []) {
 }
 
 const mockRouterPush = jest.fn();
+// Tabs stay mounted; this lets a test blur the screen without unmounting it.
+const mockFocusListeners = new Set<(focused: boolean) => void>();
 const longDevanagariReply = 'आप कैसे हैं? धन्यवाद, आशा। ज़रूर। आप कैसे हैं? धन्यवाद, आशा। ज़रूर।';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
-  useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
+  useFocusEffect: (effect: () => void | (() => void)) => {
+    const [focused, setFocused] = mockReact.useState(true);
+    mockReact.useEffect(() => {
+      mockFocusListeners.add(setFocused);
+      return () => { mockFocusListeners.delete(setFocused); };
+    }, []);
+    mockReact.useEffect(() => (focused ? effect() : undefined), [effect, focused]);
+  },
 }));
 
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null, setStatusBarStyle: jest.fn() }));
@@ -230,6 +239,7 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 let mockAiConsent = true;
+let mockInitialChatHistory: { id: string; role: 'you' | 'asha'; text: string; language?: 'en' | 'hi' }[] = [];
 
 jest.mock('@/state/app-state', () => ({
   __appendChatMessagesMock: jest.fn(),
@@ -247,7 +257,7 @@ jest.mock('@/state/app-state', () => ({
     };
     const [chatHistory, setChatHistory] = mockReact.useState<
       { id: string; role: 'you' | 'asha'; text: string; language?: 'en' | 'hi' }[]
-    >([]);
+    >(() => mockInitialChatHistory);
     const [learnerProfile, setLearnerProfile] = mockReact.useState<{
       completed: boolean;
       level: 'new' | 'beginner' | 'intermediate';
@@ -879,6 +889,30 @@ describe('typed live coaching request control', () => {
     await view.unmount();
     await flushMicrotasks();
   });
+
+  it('records but does not play a typed reply that arrives after the learner leaves the tab', async () => {
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const view = await render(<LiveScreen />);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Reply while I am in a lesson.');
+    await fireEvent.press(view.getByLabelText('Send message'));
+
+    await act(async () => {
+      mockFocusListeners.forEach((setFocused) => setFocused(false));
+    });
+    await act(async () => {
+      request.resolve({ transcript: '', reply: 'This should stay silent.', language: 'en' });
+      await flushMicrotasks();
+    });
+
+    expect(appState.__appendChatMessagesMock).toHaveBeenCalledWith([
+      expect.objectContaining({ role: 'you', text: 'Reply while I am in a lesson.' }),
+      expect.objectContaining({ role: 'asha', text: 'This should stay silent.' }),
+    ]);
+    expect(speech.speakText).not.toHaveBeenCalled();
+    await view.unmount();
+    await flushMicrotasks();
+  });
 });
 
 describe('live coaching state', () => {
@@ -1157,6 +1191,83 @@ describe('live coaching state', () => {
     await view.unmount();
     await flushMicrotasks();
     alert.mockRestore();
+  });
+
+  it('keeps an open Words sheet and its request when capped history drops the oldest message', async () => {
+    mockInitialChatHistory = [
+      { id: 'asha-oldest', role: 'asha', text: 'आप कैसे हैं?', language: 'hi' },
+      ...Array.from({ length: 99 }, (_, index) => ({ id: `you-${index}`, role: 'you' as const, text: `Message ${index}` })),
+    ];
+    const definition = deferred<string>();
+    let definitionSignal: AbortSignal | undefined;
+    boloApi.getContextualWordDefinition.mockImplementation((_input: unknown, signal: AbortSignal) => {
+      definitionSignal = signal;
+      return definition.promise;
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      await fireEvent.press(expectDefined(view.getAllByLabelText(/Explore Hindi words:/u)[0]));
+      await fireEvent.press(view.getByRole('button', { name: 'Explain आप' }));
+      expect(view.getByText('Finding the useful meaning…')).toBeTruthy();
+
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      expect(definitionSignal?.aborted).toBe(false);
+      await act(async () => {
+        definition.resolve('A polite “you”.');
+        await flushMicrotasks();
+      });
+      expect(view.getByText('A polite “you”.')).toBeTruthy();
+      expect(boloApi.getContextualWordDefinition).toHaveBeenCalledTimes(1);
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      mockInitialChatHistory = [];
+    }
+  });
+
+  it('starts a fresh Words sheet only after the learner clears chat', async () => {
+    boloApi.sendMobileChat.mockResolvedValue({ transcript: '', reply: 'Namaste! Main theek hoon.', language: 'hi' });
+    boloApi.prepareSavedPhraseFromText.mockResolvedValue({ hi: 'नमस्ते! मैं ठीक हूँ।', latin: 'Namaste! Main theek hoon.', en: 'Hello! I am well.' });
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    const sendAndOpenWords = async () => {
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Namaste');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      await flushMicrotasks();
+      await fireEvent.press(expectDefined(view.getAllByLabelText('Explore Hindi words: Namaste! Main theek hoon.').at(-1)));
+      await waitFor(() => expect(view.getByRole('button', { name: 'Explain मैं' })).toBeTruthy());
+      await fireEvent.press(view.getByLabelText('Close word meanings'));
+    };
+
+    await sendAndOpenWords();
+    await sendAndOpenWords();
+    // The sheet keeps its resolved source across new messages.
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
+    const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
+    const clearAction = (prompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
+      ?.find(({ text }) => text === 'Clear chat');
+    await act(async () => {
+      clearAction?.onPress?.();
+      await Promise.resolve();
+    });
+    await sendAndOpenWords();
+    expect(boloApi.prepareSavedPhraseFromText).toHaveBeenCalledTimes(2);
+    await view.unmount();
+    await flushMicrotasks();
+    alert.mockRestore();
+  });
+
+  it('plays the featured phrase from the empty chat footer', async () => {
+    const view = await render(<LiveScreen />);
+    const featured = view.getByLabelText('Review pronunciation reference for चीनी कम, कृपया।');
+    expect(featured.props.accessibilityHint).toBe('Plays this Hindi phrase.');
+    await fireEvent.press(featured);
+    expect(speech.speakText).toHaveBeenCalledWith('चीनी कम, कृपया।');
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    await view.unmount();
+    await flushMicrotasks();
   });
 
   it('gives each Asha message action a unique bounded accessible name', async () => {

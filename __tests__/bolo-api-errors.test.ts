@@ -63,6 +63,22 @@ describe('Bolo API shared failure boundary', () => {
     });
   });
 
+  it('shows the generic message for a 5xx JSON error string', async () => {
+    globalThis.fetch = jest.fn(async () => response({
+      ok: false,
+      status: 500,
+      payload: { error: 'TypeError: Cannot read properties of undefined (reading key)' },
+    })) as unknown as typeof fetch;
+
+    const error = await sendMobileChat(input).catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(BoloApiError);
+    expect(error).toMatchObject({
+      message: 'Bolo could not complete that request.',
+      status: 500,
+    });
+  });
+
   it('uses the generic request error for a 5xx response with invalid JSON', async () => {
     globalThis.fetch = jest.fn(async () => response({
       ok: false,
@@ -121,6 +137,41 @@ describe('Bolo API shared failure boundary', () => {
     await rejection;
     expect(pending.fetchMock).toHaveBeenCalledTimes(1);
     expect(pending.requestSignal()?.aborted).toBe(true);
+  });
+
+  it('reports a cancel while the response body is still streaming as canceled', async () => {
+    const caller = new AbortController();
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: () => {
+        caller.abort();
+        return Promise.reject(abortError());
+      },
+    })) as unknown as typeof fetch;
+
+    await expect(sendMobileChat(input, caller.signal)).rejects.toMatchObject({
+      name: 'BoloApiError',
+      message: 'The request was canceled.',
+    });
+  });
+
+  it('reports a timeout while the response body is still streaming as timed out', async () => {
+    jest.useFakeTimers();
+    globalThis.fetch = jest.fn(async (_url: string, init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(abortError()), { once: true });
+      }),
+    })) as unknown as typeof fetch;
+    const rejection = expect(sendMobileChat(input)).rejects.toMatchObject({
+      name: 'BoloApiError',
+      message: 'The request timed out. Check your connection and try again.',
+    });
+
+    await jest.advanceTimersByTimeAsync(30_000);
+    await rejection;
   });
 
   it('counts only real failures in diagnostics, not caller cancellations', async () => {

@@ -4,6 +4,7 @@ import { Dimensions, StyleSheet } from 'react-native';
 const mockPush = jest.fn();
 const mockUseAppState = jest.fn();
 const mockSetMotionPreference = jest.fn();
+const mockSetReminder = jest.fn();
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -57,11 +58,12 @@ jest.mock('@/state/app-state', () => ({
 
 import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
-import { clearAllPracticeReminders } from '../src/lib/practice-reminder';
+import { clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
 import { deleteMobileData } from '../src/services/bolo-api';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 const clearAllPracticeRemindersMock = clearAllPracticeReminders as jest.MockedFunction<typeof clearAllPracticeReminders>;
+const schedulePracticeReminderMock = schedulePracticeReminder as jest.MockedFunction<typeof schedulePracticeReminder>;
 const deleteMobileDataMock = deleteMobileData as jest.MockedFunction<typeof deleteMobileData>;
 
 type AlertAction = {
@@ -219,6 +221,17 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(clearAllPracticeRemindersMock).not.toHaveBeenCalled();
     expect(clearAllData).not.toHaveBeenCalled();
     expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
+  });
+
+  it('refuses to schedule a reminder it cannot save after a failed storage load', async () => {
+    mockUseAppState.mockReturnValue({ ...mockUseAppState(), setReminder: mockSetReminder, storageUnavailable: true });
+    const view = await render(<SettingsScreen />);
+
+    await fireEvent.press(view.getByLabelText('Practice reminder time: 7:00 PM'));
+
+    await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Could not set reminder', expect.stringContaining('would not be saved')));
+    expect(schedulePracticeReminderMock).not.toHaveBeenCalled();
+    expect(mockSetReminder).not.toHaveBeenCalled();
   });
 
   it('keeps local reminder state available for retry when system cancellation fails', async () => {

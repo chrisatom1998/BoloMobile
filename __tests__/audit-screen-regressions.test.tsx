@@ -41,6 +41,12 @@ jest.mock('@/state/app-state', () => ({
   useAppActions: () => mockAppState,
 }));
 
+let mockCalendarDay = '2026-10-05';
+
+jest.mock('@/hooks/use-calendar-day', () => ({
+  useCalendarDay: () => mockCalendarDay,
+}));
+
 jest.mock('@/lib/speech', () => ({
   hasOfflineSpeech: jest.fn(() => false),
   speakText: jest.fn(),
@@ -65,6 +71,8 @@ import { lightColors } from '../src/theme';
 
 const boloApi = jest.requireMock('../src/services/bolo-api') as { prepareSavedPhraseFromText: jest.Mock };
 const speech = jest.requireMock('../src/lib/speech') as { speakText: jest.Mock };
+const observability = jest.requireMock('../src/lib/observability') as { getObservabilitySnapshot: jest.Mock };
+const audio = jest.requireMock('expo-audio') as { AudioModule: { getRecordingPermissionsAsync: jest.Mock } };
 
 const phrase = { hi: 'आप कैसे हैं?', latin: 'Aap kaise hain?', en: 'How are you?' };
 
@@ -101,6 +109,25 @@ describe('previously uncovered audit screens', () => {
     await waitFor(() => expect(view.getByText('ai request succeeded')).toBeTruthy());
     expect(view.queryByText(/Infinity/u)).toBeNull();
     expect(view.getByText('0')).toBeTruthy();
+  });
+
+  it('stops loading diagnostics when the local snapshot cannot be read', async () => {
+    observability.getObservabilitySnapshot.mockRejectedValueOnce(new Error('Storage unavailable.'));
+    const view = await render(<DiagnosticsScreen />);
+
+    await waitFor(() => expect(view.queryByText('Loading private diagnostics…')).toBeNull());
+    expect(view.getByText('Bolo could not read local diagnostics.')).toBeTruthy();
+  });
+
+  it('reports a failed microphone permission check instead of leaving stale status text', async () => {
+    audio.AudioModule.getRecordingPermissionsAsync.mockRejectedValueOnce(new Error('Permission service unavailable.'));
+    const view = await render(<OnboardingScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Check microphone access' }));
+
+    await waitFor(() => expect(view.getByText('Bolo could not check microphone access. Typed and written practice still work.')).toBeTruthy());
+    expect(view.queryByText('You can test this later in live practice.')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Build my practice plan' }));
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith(expect.objectContaining({ microphoneTested: false }), 10);
   });
 
   it('disables connected review audio when consent is absent and no bundled clip exists', async () => {
@@ -249,6 +276,23 @@ describe('previously uncovered audit screens', () => {
     expect(view.queryByText('Your Hindi is taking root.')).toBeNull();
     expect(view.queryByText('Your garden starts with one small turn.')).toBeNull();
     expect(view.getByText('Last 7 days')).toBeTruthy();
+  });
+
+  it('rolls the progress week forward after midnight while the tab stays mounted', async () => {
+    jest.useFakeTimers({ advanceTimers: true, now: new Date(2026, 9, 5, 23, 30) });
+    mockAppState.practiceHistory = [{ date: '2026-09-29', seconds: 0, correct: 0, answers: 0, reviews: 3 }];
+    try {
+      const view = await render(<ProgressScreen />);
+      expect(view.getByText('0 scenes learned · 3 reviews this week')).toBeTruthy();
+
+      jest.setSystemTime(new Date(2026, 9, 6, 0, 1));
+      mockCalendarDay = '2026-10-06';
+      await view.rerender(<ProgressScreen />);
+      expect(view.getByText('0 scenes learned · 0 reviews this week')).toBeTruthy();
+    } finally {
+      jest.useRealTimers();
+      mockCalendarDay = '2026-10-05';
+    }
   });
 
   it('shows an unfinished lesson and active streak as the first progress summary', async () => {

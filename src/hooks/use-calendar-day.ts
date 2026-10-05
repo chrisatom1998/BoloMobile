@@ -18,9 +18,18 @@ export function useCalendarDay() {
       const next = localDayKey();
       return next === current ? current : next;
     });
-    const now = new Date();
-    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    const timer = setTimeout(refresh, nextMidnight.getTime() - now.getTime() + 1000);
+    let timer: ReturnType<typeof setTimeout>;
+    // Re-arm after each fire: a clock or time zone change can make the timer
+    // fire on the same local day, which would not re-run this effect.
+    const scheduleMidnight = () => {
+      const now = new Date();
+      const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      timer = setTimeout(() => {
+        refresh();
+        scheduleMidnight();
+      }, nextMidnight.getTime() - now.getTime() + 1000);
+    };
+    scheduleMidnight();
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
     });

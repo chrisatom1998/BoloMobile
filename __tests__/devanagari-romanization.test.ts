@@ -20,3 +20,13 @@ it('uses the same common spellings in source chat, saved phrases and word meanin
   expect(romanizeDevanagari('कृपया पानी')).toBe('Kripya paani');
   expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
 });
+
+it('romanizes candra loanword vowels instead of leaking raw Devanagari', () => {
+  expect(romanizeDevanagari('डॉक्टर')).toBe('Doktar');
+  expect(romanizeDevanagari('ऑफ़िस')).toBe('Ofis');
+  expect(romanizeDevanagari('कॉफ़ी')).toBe('Kofee');
+  expect(romanizeDevanagari('स्टॉप')).toBe('Stop');
+  for (const word of ['बॅंक', 'ऍक्शन', 'डॉक्टर के ऑफ़िस में कॉफ़ी']) {
+    expect(romanizeDevanagari(word)).not.toMatch(/[\u0900-\u097F]/u);
+  }
+});

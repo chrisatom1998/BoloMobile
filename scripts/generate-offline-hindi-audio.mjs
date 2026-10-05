@@ -60,10 +60,11 @@ async function generateAshaAudio(text) {
         if (audio.length) return audio;
       }
       if (attempt === MAX_GENERATION_ATTEMPTS || (response.status !== 429 && response.status < 500)) {
-        throw new Error(`Could not generate Asha's bundled audio (${response.status}).`);
+        // Client errors and bad payloads will not succeed on retry; fail fast.
+        throw Object.assign(new Error(`Could not generate Asha's bundled audio (${response.status}).`), { permanent: true });
       }
     } catch (error) {
-      if (attempt === MAX_GENERATION_ATTEMPTS) {
+      if (attempt === MAX_GENERATION_ATTEMPTS || error?.permanent) {
         throw error instanceof Error ? error : new Error("Asha's bundled audio generation failed.");
       }
     }

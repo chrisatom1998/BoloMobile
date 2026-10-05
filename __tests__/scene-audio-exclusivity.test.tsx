@@ -64,7 +64,7 @@ describe('scene audio exclusivity', () => {
 
   it('blocks scene playback and answer selection throughout pronunciation activity', async () => {
     const view = await render(<SceneScreen />);
-    const listen = view.getByLabelText('Hear Asha');
+    const listen = view.getByLabelText('Listen to Asha');
     const answer = view.getByLabelText(/^एक चाय दीजिए/u);
 
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledTimes(1));

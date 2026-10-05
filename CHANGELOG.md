@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stopped saving changes after local progress fails to load, so the temporary defaults can no longer overwrite the learner's unreadable saved phrases and progress; saving resumes after "Delete my Bolo data" succeeds.
+- Cancelled the daily practice reminder only after the data-deletion write succeeds, so a failed wipe no longer leaves the reminder shown as on while its OS notification is already gone.
+- Showed the generic request error for 5xx responses instead of raw server error text, keeping service messages only for 4xx responses.
+- Reported a timeout or cancel that fires while the response body is still downloading as such, instead of as an invalid response.
+- Cached the live-status check for 60 seconds per route instance so repeated checks no longer re-read the server key and make paid OpenAI model lookups every time.
+- Stopped retrying permanent client errors and invalid payloads when generating bundled offline Hindi audio.
+- Blocked scheduling a daily reminder while saved progress could not be read, since its notification identifier could not be stored and the OS reminder would outlive the app's ability to cancel it.
+- Romanized the loanword vowels ऑ/ॉ and ऍ/ॅ instead of leaking raw Devanagari into Latin-script text, so डॉक्टर now reads "Doktar" rather than "Daॉktar".
+- Routed every delivery of the repeating daily practice reminder, not only the first tap per app session, by de-duplicating on the delivery date as well as the shared notification identifier.
+- Stopped showing an error banner when the learner ends a live voice session or toggles the microphone again while a mute/unmute command is still awaiting confirmation.
+- Failed live voice startup immediately with a clear message when the connection drops before the data channel opens, instead of waiting out the 15-second watchdog and reporting a timeout.
+- Cleaned up the offline lesson audio status listener and watchdog timer when playback fails to start.
+- Re-armed the calendar-day midnight timer after a clock or time zone change so Home's due count no longer goes stale until the next foreground.
+- Stopped Asha from reading a typed reply aloud when it arrives after the learner has switched to another tab; the reply is still saved in the chat.
+- Removed the review card's grouping label so VoiceOver and TalkBack can reach the Reveal, Listen, and Slow buttons and no longer hear the Hindi answer before it is revealed.
+- Kept the Words sheet mounted with its explanation once the saved chat reaches the 100-message cap, instead of remounting on every new message.
+- Recomputed due-phrase counts, the Phrases tab badge, and the Progress week after midnight on the always-mounted tabs.
+- Surfaced a message when private diagnostics cannot be read or the onboarding microphone check fails, instead of hanging on stale text.
+- Cleared the lesson's "Continuing at turn N" notice once the learner moves past the resumed turn, and renamed the Listen button's accessibility label to start with its visible text for voice control.
+- Limited the saved-phrase Listen hint about offline audio to phrases that actually have a bundled clip, and removed an unreachable fallback on the Asha featured phrase.
 - Snapshotted the quick-review session at mount so grading a phrase no longer shrinks the live due list underneath the advancing card index, which skipped phrases, produced "2 of 1 remembered" summaries, and could drop the learner into an unrequested low-mastery session instead of the completion screen.
 - Scored resumed scenes over the beats actually answered after the checkpoint instead of the full beat count, which permanently understated best accuracy and practice-history answer totals.
 - Cancelled the scheduled daily practice reminder during "Delete my Bolo data" so the OS notification can no longer keep firing with no way to turn it off after its stored identifier is wiped.

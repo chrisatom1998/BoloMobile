@@ -1,5 +1,8 @@
 import { NativeTabs } from 'expo-router/unstable-native-tabs';
+import { useMemo } from 'react';
 
+import { useCalendarDay } from '@/hooks/use-calendar-day';
+import { dueSavedPhrases } from '@/lib/learning';
 import { useAppState } from '@/state/app-state';
 import { useTheme } from '@/theme';
 
@@ -8,9 +11,12 @@ import { useTheme } from '@/theme';
  * the triggers static matters: native tabs remount if their route list changes.
  */
 export default function PrimaryTabsLayout() {
-  const { duePhrases } = useAppState();
+  const { phraseReviews, phrases } = useAppState();
   const { colors } = useTheme();
-  const dueCount = duePhrases.length;
+  // The tabs stay mounted, so `calendarDay` re-counts phrases that fall due overnight.
+  const calendarDay = useCalendarDay();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based due check.
+  const dueCount = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity).length, [phraseReviews, phrases, calendarDay]);
 
   return (
     <NativeTabs

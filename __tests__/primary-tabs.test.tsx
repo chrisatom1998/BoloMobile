@@ -15,10 +15,20 @@ jest.mock('expo-router/unstable-native-tabs', () => {
   return { NativeTabs };
 });
 
-let mockDuePhrases = [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }];
+const hello = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' };
+const tomorrowReview = { mastery: 1, intervalDays: 1, dueAt: '2026-10-06', lastReviewedAt: '2026-10-05', correctReviews: 1, totalReviews: 1 };
+const mockAppState = {
+  phraseReviews: {} as Record<string, typeof tomorrowReview>,
+  phrases: [hello],
+};
+let mockCalendarDay = '2026-10-05';
 
 jest.mock('@/state/app-state', () => ({
-  useAppState: () => ({ duePhrases: mockDuePhrases }),
+  useAppState: () => mockAppState,
+}));
+
+jest.mock('@/hooks/use-calendar-day', () => ({
+  useCalendarDay: () => mockCalendarDay,
 }));
 
 import PrimaryTabsLayout from '../src/app/(tabs)/_layout';
@@ -41,10 +51,36 @@ describe('primary tab navigation', () => {
   });
 
   it('does not show an empty badge when nothing is due', async () => {
-    mockDuePhrases = [];
+    mockAppState.phrases = [];
     const view = await render(<PrimaryTabsLayout />);
 
     expect(view.queryByTestId('tab-badge')).toBeNull();
-    mockDuePhrases = [{ en: 'Hello', hi: 'नमस्ते', latin: 'namaste' }];
+    mockAppState.phrases = [hello];
+  });
+
+  it('counts every due phrase in the badge', async () => {
+    mockAppState.phrases = Array.from({ length: 12 }, (_, index) => ({ ...hello, hi: `${hello.hi}-${index}` }));
+    const view = await render(<PrimaryTabsLayout />);
+
+    expect(view.getByTestId('tab-badge').props.children).toBe('9+');
+    mockAppState.phrases = [hello];
+  });
+
+  it('refreshes the badge after midnight while the tabs stay mounted', async () => {
+    jest.useFakeTimers({ advanceTimers: true, now: new Date(2026, 9, 5, 23, 30) });
+    mockAppState.phraseReviews = { [hello.hi]: tomorrowReview };
+    try {
+      const view = await render(<PrimaryTabsLayout />);
+      expect(view.queryByTestId('tab-badge')).toBeNull();
+
+      jest.setSystemTime(new Date(2026, 9, 6, 0, 1));
+      mockCalendarDay = '2026-10-06';
+      await view.rerender(<PrimaryTabsLayout />);
+      expect(view.getByTestId('tab-badge').props.children).toBe('1');
+    } finally {
+      jest.useRealTimers();
+      mockAppState.phraseReviews = {};
+      mockCalendarDay = '2026-10-05';
+    }
   });
 });

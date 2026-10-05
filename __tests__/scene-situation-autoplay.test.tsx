@@ -85,12 +85,12 @@ describe('scene situation auto-play', () => {
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledWith('चीनी कम या ज़्यादा?\nLess sugar or more?'));
   });
 
-  it('replays the ordered Hindi and English response prompt from Hear Asha', async () => {
+  it('replays the ordered Hindi and English response prompt from Listen to Asha', async () => {
     const view = await render(<SceneScreen />);
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledTimes(1));
     speakTextMock.mockClear();
 
-    await fireEvent.press(view.getByLabelText('Hear Asha'));
+    await fireEvent.press(view.getByLabelText('Listen to Asha'));
 
     expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?\nHello! What will you have?');
     expect(speakTextMock).toHaveBeenCalledTimes(1);
@@ -125,7 +125,7 @@ describe('scene situation auto-play', () => {
     expect(speakTextMock).not.toHaveBeenCalledWith(expect.stringContaining('Hello! What will you have?'));
 
     speakTextMock.mockClear();
-    await fireEvent.press(view.getByLabelText('Hear Asha'));
+    await fireEvent.press(view.getByLabelText('Listen to Asha'));
     expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?');
     expect(speakTextMock).not.toHaveBeenCalledWith(expect.stringContaining('Hello! What will you have?'));
   });

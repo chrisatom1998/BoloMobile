@@ -7,7 +7,7 @@ const mockGetLastResponse = jest.fn();
 const mockSetNotificationHandler = jest.fn((_handler: { handleNotification(): Promise<unknown> }) => undefined);
 type MockNotificationResponse = {
   actionIdentifier: string;
-  notification: { request: { content: { data: { url: unknown } }; identifier: string } };
+  notification: { date: number; request: { content: { data: { url: unknown } }; identifier: string } };
 };
 let responseListener: ((value: MockNotificationResponse) => void) | null = null;
 
@@ -33,10 +33,15 @@ function expectDefined<T>(value: T | undefined): T {
   return value;
 }
 
-function response(identifier = 'reminder-1', url: unknown = '/review', actionIdentifier = 'default'): MockNotificationResponse {
+function response(
+  identifier = 'reminder-1',
+  url: unknown = '/review',
+  actionIdentifier = 'default',
+  date = 1_700_000_000_000,
+): MockNotificationResponse {
   return {
     actionIdentifier,
-    notification: { request: { content: { data: { url } }, identifier } },
+    notification: { date, request: { content: { data: { url } }, identifier } },
   };
 }
 
@@ -81,5 +86,22 @@ describe('practice reminder routing', () => {
 
     await hook.unmount();
     expect(mockRemove).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes each delivery of the repeating daily reminder', async () => {
+    const day = 24 * 60 * 60 * 1000;
+    await renderHook(() => usePracticeReminderRouting(true));
+    await waitFor(() => expect(responseListener).not.toBeNull());
+
+    await act(async () => {
+      responseListener?.(response('daily-reminder', '/review', 'default', 1_700_000_000_000));
+      responseListener?.(response('daily-reminder', '/review', 'default', 1_700_000_000_000));
+    });
+    expect(mockPush).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      responseListener?.(response('daily-reminder', '/review', 'default', 1_700_000_000_000 + day));
+    });
+    expect(mockPush).toHaveBeenCalledTimes(2);
   });
 });
