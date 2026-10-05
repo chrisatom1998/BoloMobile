@@ -18,7 +18,7 @@ jest.mock('expo-notifications', () => ({
   setNotificationChannelAsync: jest.fn(),
 }));
 
-import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
+import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
 
 describe('practice reminders', () => {
   beforeEach(() => {
@@ -62,5 +62,42 @@ describe('practice reminders', () => {
     await clearAllPracticeReminders();
 
     expect(mockCancelAll).toHaveBeenCalledTimes(1);
+  });
+
+  describe('restoring a reminder from a progress backup', () => {
+    const current = { enabled: true, hour: 9, minute: 0, notificationId: 'old-reminder' };
+
+    it('reschedules an enabled backup reminder and replaces the device notification', async () => {
+      const outcome = await applyRestoredReminder(current, { enabled: true, hour: 20, minute: 30 });
+
+      expect(mockCancel).toHaveBeenCalledWith('old-reminder');
+      expect(outcome).toEqual({ reminder: { enabled: true, hour: 20, minute: 30, notificationId: 'reminder-1' }, status: 'scheduled' });
+    });
+
+    it('restores an enabled reminder as off at the backed-up time when scheduling fails', async () => {
+      mockGetPermissions.mockResolvedValue({ granted: false });
+      mockRequestPermissions.mockResolvedValue({ granted: false, ios: { status: 1 } });
+
+      const outcome = await applyRestoredReminder(current, { enabled: true, hour: 20, minute: 30 });
+
+      expect(mockSchedule).not.toHaveBeenCalled();
+      expect(mockCancel).toHaveBeenCalledWith('old-reminder');
+      expect(outcome).toEqual({ reminder: { enabled: false, hour: 20, minute: 30, notificationId: null }, status: 'not-scheduled' });
+    });
+
+    it('cancels the device reminder when the backup reminder is off', async () => {
+      const outcome = await applyRestoredReminder(current, { enabled: false, hour: 7, minute: 15 });
+
+      expect(mockSchedule).not.toHaveBeenCalled();
+      expect(outcome).toEqual({ reminder: { enabled: false, hour: 7, minute: 15, notificationId: null }, status: 'off' });
+    });
+
+    it('keeps the existing reminder when it cannot be cancelled', async () => {
+      mockCancel.mockRejectedValue(new Error('native failure'));
+
+      const outcome = await applyRestoredReminder(current, { enabled: false, hour: 7, minute: 15 });
+
+      expect(outcome).toEqual({ reminder: current, status: 'unchanged' });
+    });
   });
 });

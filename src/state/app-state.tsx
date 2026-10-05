@@ -7,6 +7,7 @@ import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
+import { restorableProgressKeys, type RestorableProgress } from '@/lib/progress-backup';
 import { updatePracticeWidget } from '@/lib/practice-widget';
 import {
   appendChatHistory,
@@ -75,6 +76,7 @@ type AppActions = {
   setAiConsent: (consent: boolean) => Promise<boolean>;
   setReminder: (reminder: ReminderSettings) => void;
   setMotionPreference: (preference: MotionPreference) => void;
+  restoreProgress: (progress: RestorableProgress) => Promise<boolean>;
   clearAllData: () => Promise<void>;
 };
 
@@ -284,15 +286,18 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     });
   }, [hydrated, state.phraseReviews, state.phrases, state.practice, state.streakDays]);
 
-  const commit = useCallback((updater: (current: PersistedState) => PersistedState, keys: PersistedKey[]) => {
-    if (clearingAllDataRef.current) return;
+  // Resolves true once the change is saved, or false after a failed write was
+  // reported and rolled back. Most callers fire and forget.
+  const commit = useCallback((updater: (current: PersistedState) => PersistedState, keys: PersistedKey[], failureMessage?: string) => {
+    if (clearingAllDataRef.current) return Promise.resolve(false);
     const current = stateRef.current;
     const previous = { ...current, practice: currentPractice(current) };
     const next = updater(previous);
     replaceState(next);
-    void enqueuePersistence(() => persistState(next, keys)).catch((error: unknown) => {
-      reportPersistenceFailure(error);
+    return enqueuePersistence(() => persistState(next, keys)).then(() => true, (error: unknown) => {
+      reportPersistenceFailure(error, failureMessage);
       replaceState(restoreFailedPersistedState(stateRef.current, previous, next, keys));
+      return false;
     });
   }, [enqueuePersistence, replaceState]);
 
@@ -486,6 +491,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     commit((current) => ({ ...current, motionPreference }), ['motionPreference']);
   }, [commit]);
 
+  // Replaces learning progress from a validated backup. The random client id,
+  // AI consent, chat history, and reminder (which needs OS scheduling) are left
+  // untouched; callers restore the reminder separately through setReminder.
+  const restoreProgress = useCallback((progress: RestorableProgress) => commit((current) => {
+    const restored = Object.fromEntries(restorableProgressKeys.map((key) => [key, progress[key]])) as RestorableProgress;
+    return { ...current, ...restored, practice: restored.practice.date === dateKey() ? restored.practice : emptyPractice() };
+  }, [...restorableProgressKeys], 'Bolo could not save the restored progress, so your previous progress was kept. Check available storage and try again.'), [commit]);
+
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
@@ -535,8 +548,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setAiConsent,
     setReminder,
     setMotionPreference,
+    restoreProgress,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, clearAllData]);
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, restoreProgress, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,
