@@ -363,7 +363,7 @@ function SceneScreen() {
   if (done) {
     return (
       <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-completion-scroll">
-        <Stack.Screen options={{ title: activeScene.title }} />
+        <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
         <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-complete`} style={styles.finishIntro} testID="scene-completion-motion">
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
           <Text style={sharedStyles.eyebrow}>Scene complete</Text>
