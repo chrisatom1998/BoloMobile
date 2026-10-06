@@ -39,7 +39,8 @@ describe('shipping source guardrails', () => {
 
     expect(realtime).not.toContain('romanizeDevanagari');
     expect(realtime).not.toContain('speakText');
-    expect(liveBackend).toContain('authentic contemporary Standard Hindi sounds');
+    expect(liveBackend).toContain('native Hindi speaker');
+    expect(liveBackend).toContain('natural contemporary Standard Hindi pronunciation');
     expect(pronunciationProfile).toMatch(/do not apply American English vowels, stress, or letter-name pronunciation/u);
   });
 });
