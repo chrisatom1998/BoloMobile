@@ -15,6 +15,7 @@ import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
+import { useAshaLiveSession } from '@/hooks/use-asha-live-session';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { type EffectiveMotion, useMotionPreference } from '@/hooks/use-motion-preference';
@@ -79,6 +80,7 @@ export default function LiveScreen() {
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
+  const liveSession = useAshaLiveSession();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
   const [busy, setBusy] = useState(false);
@@ -534,7 +536,7 @@ export default function LiveScreen() {
                         <MessageCircle color={colors.white} size={20} />
                       </Pressable>
                     ) : null}
-                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" tone="dark" />
+                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} liveSession={liveSession} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" tone="dark" />
                   </View>
                 </View>
                 <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
