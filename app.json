@@ -104,6 +104,27 @@
         }
       ],
       "expo-asset",
+      [
+        "expo-font",
+        {
+          "ios": {
+            "fonts": ["./assets/fonts/TiroDevanagariHindi-Regular.ttf"]
+          },
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Tiro Devanagari Hindi",
+                "fontDefinitions": [
+                  {
+                    "path": "./assets/fonts/TiroDevanagariHindi-Regular.ttf",
+                    "weight": 400
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
       "expo-image",
       "expo-status-bar",
       "expo-web-browser",

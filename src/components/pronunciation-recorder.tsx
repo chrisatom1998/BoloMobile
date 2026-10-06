@@ -118,7 +118,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
 
 const useStyles = makeStyles((c) => ({
   container: {
-    backgroundColor: c.forestSoft,
+    backgroundColor: c.brandSoft,
     borderRadius: radius.lg,
     borderCurve: 'continuous',
     padding: spacing.lg,
@@ -126,7 +126,7 @@ const useStyles = makeStyles((c) => ({
   },
   copy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   text: { flex: 1, gap: spacing.xs },
-  title: { color: c.ink, fontSize: 15, fontWeight: '800' },
+  title: { color: c.brandText, fontSize: 15, fontWeight: '800' },
   body: { color: c.muted, fontSize: 14, lineHeight: 20 },
   feedbackCard: { gap: spacing.sm },
   feedback: { color: c.ink, fontSize: 15, lineHeight: 22, fontWeight: '600' },
