@@ -60,8 +60,8 @@ function sanitize(value: unknown): ObservabilitySnapshot {
 }
 
 export async function getObservabilitySnapshot(): Promise<ObservabilitySnapshot> {
-  const raw = await storage().getItem(OBSERVABILITY_KEY);
   try {
+    const raw = await storage().getItem(OBSERVABILITY_KEY);
     return sanitize(raw ? JSON.parse(raw) : null);
   } catch {
     return { days: {} };

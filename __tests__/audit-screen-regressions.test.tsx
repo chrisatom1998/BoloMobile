@@ -219,7 +219,7 @@ describe('previously uncovered audit screens', () => {
     };
     const view = await render(<OnboardingScreen />);
 
-    expect(view.getByRole('radio', { name: 'Intermediate' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }).props.accessibilityState).toEqual({ checked: true });
     expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
     expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
     expect(view.getByRole('radio', { name: 'Hindi first' }).props.accessibilityState).toEqual({ checked: true });

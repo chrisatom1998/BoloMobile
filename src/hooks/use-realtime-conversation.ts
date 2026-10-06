@@ -8,8 +8,10 @@ import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
 import { resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { createLiveCall } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
+
 
 export type { LiveTranscriptRow } from '@/lib/live-transcripts';
 export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding';
@@ -160,7 +162,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (Platform.OS !== 'web') {
         const permission = await requestRecordingPermissionsAsync();
         if (!current()) return;
-        if (!permission.granted) throw new Error('Microphone access is required for live voice practice.');
+        if (!permission.granted) throw new Error(LIVE_MIC_PERMISSION_MESSAGE);
       }
       await stopSpeaking();
       if (!current()) return;

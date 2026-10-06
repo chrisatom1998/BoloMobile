@@ -54,6 +54,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
   const latinTokens = wordOrderTokens(targetLatin);
   const label = (index: number) => lessonHindiLabel(solution[index] ?? '', scriptPreference, latinTokens.length === solution.length ? latinTokens[index] : undefined);
   const placedTokens = placedIndexes.map(label);
+  const tokenLanguage = scriptPreference === 'latin' ? undefined : 'hi-IN';
   const ready = placedIndexes.length === solution.length;
   const locked = disabled || status !== 'building';
 
@@ -88,7 +89,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
   return (
     <View testID="scene-word-order" style={styles.container}>
       {showInstructions ? (
-        <Text style={styles.instructions} accessibilityRole="header">
+        <Text style={styles.instructions}>
           Tap the words in the order they belong in the Hindi sentence.
         </Text>
       ) : null}
@@ -104,7 +105,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
           <Text style={styles.trayPlaceholder}>Your sentence appears here</Text>
         ) : placedTokens.map((token, position) => (
           <View key={`placed-${position}-${token}`} style={styles.trayToken}>
-            <Text style={styles.trayTokenText}>{token}</Text>
+            <Text accessibilityLanguage={tokenLanguage} style={styles.trayTokenText}>{token}</Text>
           </View>
         ))}
       </View>
@@ -123,7 +124,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
               style={[styles.tile, used && styles.tileUsed, locked && styles.tileLocked]}
               testID={`scene-word-order-tile-${tile.index}`}
             >
-              <Text style={[styles.tileText, used && styles.tileUsedText]}>{label(tile.index)}</Text>
+              <Text accessibilityLanguage={tokenLanguage} style={[styles.tileText, used && styles.tileUsedText]}>{label(tile.index)}</Text>
             </Pressable>
           );
         })}

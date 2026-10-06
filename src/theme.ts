@@ -8,6 +8,8 @@ export const lightColors = {
   paperRaised: '#FFFFFF',
   line: '#E5DED4',
   lineStrong: '#CEC4B7',
+  /** Text-field outline; meets the 3:1 non-text contrast minimum on paper surfaces. */
+  inputBorder: '#8F8679',
 
   ink: '#172523',
   muted: '#535D5A',
@@ -33,6 +35,8 @@ export const lightColors = {
 
   gold: '#E7AC3D',
   goldSoft: '#FFF1C9',
+  /** Gold for icons and small marks on light surfaces (3:1+ on white). */
+  goldIcon: '#B87D17',
   /** Readable text on goldSoft surfaces. */
   goldText: '#6B4A10',
   /** Readable secondary text on a solid gold surface. */

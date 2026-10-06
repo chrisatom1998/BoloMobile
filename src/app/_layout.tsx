@@ -64,7 +64,7 @@ function AppNavigator() {
         </Stack>
       ) : (
         <View accessibilityLabel="Loading Bolo" accessibilityLiveRegion="polite" accessibilityRole="progressbar" style={styles.loading} testID="app-hydration-loading">
-          <Text style={styles.loadingMark}>ब</Text>
+          <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" maxFontSizeMultiplier={1.2} style={styles.loadingMark}>ब</Text>
           <ActivityIndicator color={colors.brand} />
         </View>
       )}

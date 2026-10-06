@@ -468,7 +468,7 @@ describe('immersive live conversation design', () => {
 
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     expect(view.getByTestId('live-output-caption')).toBeTruthy();
-    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
 
     expect(view.getByLabelText('Message Asha')).toBeTruthy();
 
@@ -554,7 +554,7 @@ describe('immersive live conversation design', () => {
 
     await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
 
-    const message = view.getAllByLabelText(/^Selectable chat text:/u)
+    const message = view.getAllByLabelText(/^(?:You|Asha): /u)
       .find((candidate) => candidate.props.value === displayReply);
     if (!message) throw new Error('The Romanized Asha message was not rendered.');
     expect(message.props.value).toBe(displayReply);
@@ -567,7 +567,7 @@ describe('immersive live conversation design', () => {
       message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
       await Promise.resolve();
     });
-    const resizedMessage = view.getAllByLabelText(/^Selectable chat text:/u)
+    const resizedMessage = view.getAllByLabelText(/^(?:You|Asha): /u)
       .find((candidate) => candidate.props.value === displayReply);
     if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
     expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
@@ -740,7 +740,7 @@ describe('typed live coaching request control', () => {
       request.resolve({ transcript: '', reply: 'Here is an announced correction.', language: 'en' });
       for (let index = 0; index < 12; index += 1) await Promise.resolve();
     });
-    expect(view.getByLabelText('Selectable chat text: Here is an announced correction.').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByLabelText('Asha: Here is an announced correction.').props.accessibilityLiveRegion).toBe('polite');
     await view.unmount();
     await flushMicrotasks();
   });
@@ -767,7 +767,7 @@ describe('typed live coaching request control', () => {
     }), expect.any(AbortSignal));
     expect(appState.__appendChatMessagesMock).toHaveBeenCalledTimes(1);
     expect(view.getByLabelText('Message Asha').props.value).toBe('');
-    expect(view.getByLabelText('Selectable chat text: The retry worked.')).toBeTruthy();
+    expect(view.getByLabelText('Asha: The retry worked.')).toBeTruthy();
     await view.unmount();
     await flushMicrotasks();
   });
@@ -788,7 +788,7 @@ describe('typed live coaching request control', () => {
     expect(boloApi.sendMobileChat).toHaveBeenCalledTimes(1);
     expect(boloApi.sendMobileChat.mock.calls[0][0]).toEqual(expect.objectContaining({ messages: [] }));
     expect(appState.__appendChatMessagesMock).not.toHaveBeenCalled();
-    expect(view.getByLabelText('Selectable chat text: Please correct this.')).toBeTruthy();
+    expect(view.getByLabelText('You: Please correct this.')).toBeTruthy();
     expect(view.getByLabelText('Message Asha').props.value).toBe('Please correct this.');
 
     await act(async () => {
@@ -800,8 +800,8 @@ describe('typed live coaching request control', () => {
       expect.objectContaining({ role: 'you', text: 'Please correct this.' }),
       expect.objectContaining({ role: 'asha', text: 'Here is the correction.', language: 'en' }),
     ]);
-    expect(view.getByLabelText('Selectable chat text: Please correct this.')).toBeTruthy();
-    expect(view.getByLabelText('Selectable chat text: Here is the correction.')).toBeTruthy();
+    expect(view.getByLabelText('You: Please correct this.')).toBeTruthy();
+    expect(view.getByLabelText('Asha: Here is the correction.')).toBeTruthy();
     expect(view.getByLabelText('Message Asha').props.value).toBe('');
     await view.unmount();
     await flushMicrotasks();
@@ -862,8 +862,8 @@ describe('typed live coaching request control', () => {
       expect.objectContaining({ role: 'you', text: 'Keep this completed turn.' }),
       expect.objectContaining({ role: 'asha', text: 'The text reply succeeded.', language: 'en' }),
     ]);
-    expect(view.getByLabelText('Selectable chat text: Keep this completed turn.')).toBeTruthy();
-    expect(view.getByLabelText('Selectable chat text: The text reply succeeded.')).toBeTruthy();
+    expect(view.getByLabelText('You: Keep this completed turn.')).toBeTruthy();
+    expect(view.getByLabelText('Asha: The text reply succeeded.')).toBeTruthy();
     expect(view.getByLabelText('Message Asha').props.value).toBe('');
     expect(view.getByLabelText('Send message').props.accessibilityState.disabled).toBe(true);
     expect(speech.speakText).toHaveBeenCalledWith(
@@ -907,7 +907,7 @@ describe('live coaching state', () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
 
-    const message = view.getByLabelText('Selectable chat text: Hello there.');
+    const message = view.getByLabelText('Asha: Hello there.');
     expect(message.props.readOnly).toBe(true);
     await fireEvent(message, 'selectionChange', { nativeEvent: { selection: { start: 0, end: 5 } } });
     // Losing focus collapses the native selection before the adjacent button
@@ -949,7 +949,7 @@ describe('live coaching state', () => {
     await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
 
     const displayReply = romanizeDevanagari(longDevanagariReply);
-    const message = view.getAllByLabelText(/^Selectable chat text:/u)
+    const message = view.getAllByLabelText(/^(?:You|Asha): /u)
       .find((candidate) => candidate.props.value === displayReply);
     if (!message) throw new Error('The Romanized Asha message was not rendered.');
     const selectedText = 'Aap kaise hain?';
@@ -1009,8 +1009,8 @@ describe('live coaching state', () => {
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'My friend Paanee is visiting.');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();
-    expect(view.getByLabelText('Selectable chat text: My friend Paanee is visiting.').props.value).toBe('My friend Paanee is visiting.');
-    expect(view.getByLabelText(`Selectable chat text: ${latin}`).props.value).toBe(latin);
+    expect(view.getByLabelText('You: My friend Paanee is visiting.').props.value).toBe('My friend Paanee is visiting.');
+    expect(view.getByLabelText(`Asha: ${latin}`).props.value).toBe(latin);
     await fireEvent.press(view.getByLabelText(`Save transcript phrase: ${latin}`));
     expect(view.getByLabelText('Selected transcript text').props.value).toBe(latin);
     await fireEvent.press(view.getByRole('button', { name: 'Add Romanized + English' }));
@@ -1091,8 +1091,8 @@ describe('live coaching state', () => {
     expect(clear.props.accessibilityRole).toBe('button');
     expect(StyleSheet.flatten(clear.props.style).minHeight).toBeGreaterThanOrEqual(44);
     await fireEvent.press(clear);
-    expect(view.getByLabelText('Selectable chat text: Namaste')).toBeTruthy();
-    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
+    expect(view.getByLabelText('You: Namaste')).toBeTruthy();
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
 
     const firstPrompt = alert.mock.calls.find(([title]) => title === 'Clear Asha chat?');
     const cancelAction = (firstPrompt?.[2] as { text?: string; style?: string; onPress?: () => void }[] | undefined)
@@ -1103,8 +1103,8 @@ describe('live coaching state', () => {
       await Promise.resolve();
     });
     expect(appState.__clearChatHistoryMock).not.toHaveBeenCalled();
-    expect(view.getByLabelText('Selectable chat text: Namaste')).toBeTruthy();
-    expect(view.getByLabelText('Selectable chat text: Hello there.')).toBeTruthy();
+    expect(view.getByLabelText('You: Namaste')).toBeTruthy();
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
 
     await fireEvent.press(clear);
     const confirmPrompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
@@ -1116,8 +1116,8 @@ describe('live coaching state', () => {
     });
 
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
-    expect(view.queryByLabelText('Selectable chat text: Namaste')).toBeNull();
-    expect(view.queryByLabelText('Selectable chat text: Hello there.')).toBeNull();
+    expect(view.queryByLabelText('You: Namaste')).toBeNull();
+    expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
     expect(view.getByDisplayValue('Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
     expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
     await view.unmount();

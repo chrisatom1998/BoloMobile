@@ -26,8 +26,9 @@ export default function ProgressScreen() {
     const days = weeklyPractice(practiceHistory);
     return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.round(day.seconds / 60))) };
   }, [practiceHistory]);
-  const { accuracy, completedScenes, milestones } = useMemo(() => ({
+  const { accuracy, answered, completedScenes, milestones } = useMemo(() => ({
     accuracy: learningAccuracy(sceneProgress),
+    answered: Object.values(sceneProgress).some((item) => item.totalAnswers > 0),
     milestones: milestoneProgress(sceneProgress),
     completedScenes: Object.values(sceneProgress).filter((item) => item.completions > 0).length,
   }), [sceneProgress]);
@@ -121,7 +122,12 @@ export default function ProgressScreen() {
           <Text style={styles.weekEyebrow}>Last 7 days</Text>
           <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
         </View>
-        <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
+        <View
+          accessible
+          accessibilityLabel={`Practice minutes, last 7 days: ${week.map((day) => `${new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${Math.round(day.seconds / 60)}`).join(', ')}`}
+          accessibilityRole="image"
+          style={styles.chart}
+        >
           {week.map((day, index) => {
             const minutes = Math.round(day.seconds / 60);
             const today = index === week.length - 1;
@@ -139,7 +145,7 @@ export default function ProgressScreen() {
 
       <View style={styles.stats}>
         <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
+        <View accessible accessibilityLabel={answered ? `${accuracy}% answer accuracy` : 'Answer accuracy appears after your first lesson'} style={styles.stat}><Text style={styles.statValue}>{answered ? `${accuracy}%` : '–'}</Text><Text style={styles.statLabel}>{answered ? 'answer accuracy' : 'accuracy after your first lesson'}</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>day practice streak</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{phrases.length}</Text><Text style={styles.statLabel}>phrases saved</Text></View>
       </View>
@@ -174,10 +180,16 @@ export default function ProgressScreen() {
         {planProgress.map((plan) => (
           <View key={plan.id} style={styles.planRow}>
             <View style={styles.planCopy}>
-              <Text numberOfLines={1} style={styles.planTitle}>{plan.title}</Text>
+              <Text numberOfLines={largeTextLayout ? undefined : 1} style={styles.planTitle}>{plan.title}</Text>
               <Text style={styles.planMeta}>{plan.completed === plan.total ? 'Complete' : `${plan.completed}/${plan.total}`}</Text>
             </View>
-            <View accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`} style={styles.planTrack}>
+            <View
+              accessible
+              accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`}
+              accessibilityRole="progressbar"
+              accessibilityValue={{ min: 0, max: plan.total, now: plan.completed }}
+              style={styles.planTrack}
+            >
               <View style={[styles.planFill, plan.completed === plan.total && styles.planFillComplete, { width: `${Math.max(plan.percent, plan.completed > 0 ? 4 : 0)}%` }]} />
             </View>
           </View>
@@ -202,11 +214,11 @@ export const createProgressStyles = (c: ThemeColors) => ({
   weekHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   weekEyebrow: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
   weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', textAlign: 'right' },
-  chart: { height: 120, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  barColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  chart: { minHeight: 120, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   barValue: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
-  barTrack: { flex: 1, width: '100%', maxWidth: 28, justifyContent: 'flex-end' },
-  bar: { width: '100%', minHeight: 6, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.28)' },
+  barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 28, justifyContent: 'flex-end' },
+  bar: { width: '100%', minHeight: 6, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.55)' },
   barToday: { backgroundColor: c.gold },
   day: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontWeight: '600' },
   dayToday: { color: c.white },

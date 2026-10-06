@@ -123,7 +123,7 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('Plan 01 of 10')).toBeTruthy();
     expect(view.getByText('0 of 10 lessons')).toBeTruthy();
     expect(view.getByTestId('today-plan-segments').children).toHaveLength(10);
-    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.gold);
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.goldIcon);
     expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.line);
     expect(view.getByLabelText('Browse all 10 plans')).toBeTruthy();
     expect(view.queryByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeNull();
@@ -167,7 +167,7 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('NEXT LESSON')).toBeTruthy();
     expect(view.getByText('Say your name')).toBeTruthy();
     expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.brand);
-    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.gold);
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.goldIcon);
     await fireEvent.press(view.getByLabelText('Start lesson'));
 
     expect(mockRouterPush).toHaveBeenCalledWith({

@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, AppState, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { MotionReveal } from '@/components/motion';
@@ -30,6 +30,8 @@ import { shuffleChoices } from '@/lib/shuffle-choices';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { displayFont, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 
@@ -122,10 +124,11 @@ function SceneScreen() {
   const advancedBeatRef = useRef<number | null>(null);
   const autoPlayedBeatRef = useRef<string | null>(null);
 
+  const sceneExists = Boolean(sourceScene);
   useEffect(() => {
-    observe('scene_started');
+    if (sceneExists) observe('scene_started');
     return () => { void stopSpeaking(); };
-  }, []);
+  }, [sceneExists]);
 
   useEffect(() => {
     if (!sceneId || !sourceScene) return;
@@ -176,8 +179,9 @@ function SceneScreen() {
   if (!scene || !currentBeat || !currentTarget) {
     return (
       <View style={styles.center}>
-        <Text style={styles.finishTitle}>Scene not found</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to scenes</Text></Pressable>
+        <Text accessibilityRole="header" style={styles.finishTitle}>Lesson not found</Text>
+        <Text style={styles.notFoundBody}>This lesson may have moved or been removed. Your saved progress is unchanged.</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </View>
     );
   }
@@ -226,6 +230,18 @@ function SceneScreen() {
     checkpointScene?.(activeScene.id, beatIndex, attempt);
   }
 
+  function resultTitle(isCorrect: boolean) {
+    if (isCorrect) return 'Natural choice!';
+    if (effectiveMode === 'wordOrder') return 'Check the word order.';
+    if (effectiveMode === 'recallReveal') return 'Keep practicing this phrase.';
+    return 'Not quite—notice the pattern.';
+  }
+
+  function announceResult(isCorrect: boolean) {
+    // Android reads the new result via focus/live updates; iOS needs an explicit announcement.
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(resultTitle(isCorrect));
+  }
+
   function choose(index: number) {
     if (pickedRef.current !== null || pronunciationBusy || needsName) return;
     const choice = beat.choices[index];
@@ -234,6 +250,7 @@ function SceneScreen() {
     pickedRef.current = index;
     setPicked(index);
     recordAnswer(choice.correct);
+    announceResult(choice.correct);
     if (choice.correct) {
       hapticSuccess();
       setResolution('correct');
@@ -250,6 +267,7 @@ function SceneScreen() {
     pendingResolutionScrollRef.current = true;
     pickedRef.current = result === 'correct' ? 0 : -1;
     recordAnswer(result === 'correct');
+    announceResult(result === 'correct');
     if (result === 'correct') {
       setResolution('correct');
       play('बहुत अच्छा।');
@@ -438,7 +456,7 @@ function SceneScreen() {
       <Stack.Screen options={{ title: activeScene.title, headerTitle: '' }} />
       <View style={styles.header}>
         <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
-          <View accessibilityLabel={`Turn ${beatIndex + 1} of ${activeScene.beats.length}`} style={styles.beatSegments}>
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.beatSegments}>
             {activeScene.beats.map((_, index) => {
               const filled = index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
               return <View key={index} style={[styles.beatSegment, filled && styles.beatSegmentFilled]} testID={`scene-beat-segment-${index}`} />;
@@ -448,11 +466,11 @@ function SceneScreen() {
         </View>
         <View style={styles.titleBlock}>
           <Text style={styles.place}>{activeScene.place}</Text>
-          <Text style={styles.sceneTitle}>{activeScene.title}</Text>
+          <Text accessibilityRole="header" style={styles.sceneTitle}>{activeScene.title}</Text>
         </View>
         <View style={styles.hudRow}>
           <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
-          <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
+          <View accessible accessibilityLabel={`${score} points`} style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
         </View>
       </View>
 
@@ -525,7 +543,7 @@ function SceneScreen() {
               onPress={() => setShowHint((visible) => !visible)}
               style={[styles.hintButton, showHint && styles.hintButtonActive]}
             >
-              <Text style={styles.hintButtonText}>Hint</Text>
+              <Text style={[styles.hintButtonText, showHint && styles.hintButtonTextActive]}>Hint</Text>
             </Pressable>
           ) : null}
         </View>
@@ -537,10 +555,11 @@ function SceneScreen() {
               const selected = picked === sourceIndex;
               const revealed = picked !== null && choice.correct;
               const answered = picked !== null;
-              const accessibilityLabel = answered
-                ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}`
-                : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
               const wrong = selected && !choice.correct;
+              const answerStatus = revealed ? ', correct answer' : wrong ? ', your answer, incorrect' : '';
+              const accessibilityLabel = answered
+                ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}${answerStatus}`
+                : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
               return (
                 <Pressable
                   key={choice.hi}
@@ -588,26 +607,20 @@ function SceneScreen() {
           <View testID="scene-feedback">
             <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
               <View style={styles.resultCopy}>
-                <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{correct
-                  ? 'Natural choice!'
-                  : effectiveMode === 'wordOrder'
-                    ? 'Check the word order.'
-                    : effectiveMode === 'recallReveal'
-                      ? 'Keep practicing this phrase.'
-                      : 'Not quite—notice the pattern.'}</Text>
+                <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{resultTitle(correct)}</Text>
                 {englishMistakeFeedback ? <Text style={[styles.resultBody, styles.resultWrongText]} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
                 {englishMistakeFeedback ? <Text style={styles.resultTip}>Pattern: {effectiveTip}</Text> : null}
                 {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
                   <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
                     <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
-                    {scriptPreference !== 'latin' ? <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
+                    {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
                     {scriptPreference !== 'devanagari' ? <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text> : null}
                   </View>
                 ) : null}
                 {picked === null && resolution === 'incorrect' ? (
                   <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
                     <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
-                    {scriptPreference !== 'latin' ? <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
+                    {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
                     {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
                     <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
                   </View>
@@ -707,6 +720,7 @@ const useStyles = makeStyles((c) => ({
   hintButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
   hintButtonActive: { backgroundColor: c.gold },
   hintButtonText: { color: c.goldText, fontSize: 13, fontWeight: '600' },
+  hintButtonTextActive: { color: c.goldDeepText },
   choices: { gap: spacing.sm },
   choice: { minHeight: 64, backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
@@ -769,6 +783,7 @@ const useStyles = makeStyles((c) => ({
   finishHindi: { color: c.brandDark, fontFamily: displayFont, fontSize: 28, lineHeight: 36, fontWeight: '700', textAlign: 'center' },
   finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
   finishTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', textAlign: 'center' },
+  notFoundBody: { color: c.muted, fontSize: 16, lineHeight: 23, textAlign: 'center', maxWidth: 320 },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
   finishValue: { color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 30, fontWeight: '700', fontVariant: ['tabular-nums'] },
