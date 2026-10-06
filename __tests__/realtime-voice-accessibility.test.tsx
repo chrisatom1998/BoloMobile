@@ -1,5 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 
 jest.mock('lucide-react-native', () => ({
   Mic: () => null,
@@ -31,6 +31,7 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
 }));
 
 import { RealtimeVoiceButton } from '../src/components/realtime-voice-button';
+import { lightColors } from '../src/theme';
 
 const haptics = jest.requireMock('@/lib/haptics') as {
   hapticStartRecording: jest.Mock;
@@ -140,5 +141,53 @@ describe('realtime voice accessibility', () => {
 
     expect(stage.width).toBe('100%');
     expect(end).toMatchObject({ backgroundColor: '#FBEDEA', borderColor: '#E4B5AE', right: 0, top: 28 });
+  });
+  describe('portrait variant', () => {
+    const renderPortrait = (props: { compact?: boolean; disabled?: boolean } = {}) => render(
+      <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="portrait" tone="dark" {...props}>
+        <Text testID="portrait-face">Asha</Text>
+      </RealtimeVoiceButton>,
+    );
+
+    it('makes the portrait itself the start control with the orb accessibility contract', async () => {
+      mockVoiceStatus = 'disconnected';
+      const view = await renderPortrait();
+      const start = view.getByLabelText('Start a voice conversation');
+
+      expect(start.props.testID).toBe('realtime-voice-orb');
+      expect(view.getByTestId('portrait-face')).toBeTruthy();
+      expect(start.props.accessibilityHint).toBe('Starts live conversation with your microphone on.');
+      expect(StyleSheet.flatten(start.props.style)).toMatchObject({ width: 112, height: 112 });
+      expect(view.queryByText('आ')).toBeNull();
+      expect(view.queryByLabelText('End live voice session')).toBeNull();
+      await fireEvent.press(start);
+      expect(mockStartTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it('unmutes, mutes and ends the session from the portrait with status rings', async () => {
+      const ready = await renderPortrait();
+      expect(StyleSheet.flatten(ready.getByTestId('realtime-voice-portrait-ring').props.style).borderColor).toBe(lightColors.portraitRing);
+      await fireEvent.press(ready.getByLabelText('Unmute microphone'));
+      expect(mockStartTurn).toHaveBeenCalledTimes(1);
+      await fireEvent.press(ready.getByLabelText('End live voice session'));
+      expect(mockDisconnect).toHaveBeenCalledTimes(1);
+      await ready.unmount();
+
+      mockVoiceStatus = 'recording';
+      const recording = await renderPortrait();
+      expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-ring').props.style)).toMatchObject({ borderColor: lightColors.gold, borderWidth: 3 });
+      expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-badge').props.style).backgroundColor).toBe(lightColors.orbRecording);
+      await fireEvent.press(recording.getByLabelText('Mute microphone'));
+      expect(mockFinishTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it('shrinks with the compact layout and exposes disabled state', async () => {
+      const view = await renderPortrait({ compact: true, disabled: true });
+      const control = view.getByLabelText('Unmute microphone');
+
+      expect(StyleSheet.flatten(control.props.style)).toMatchObject({ width: 96, height: 96 });
+      expect(control.props.accessibilityState).toEqual({ disabled: true });
+      expect(StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style)).toMatchObject({ width: '100%', height: 124 });
+    });
   });
 });

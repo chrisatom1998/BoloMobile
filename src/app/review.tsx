@@ -10,7 +10,7 @@ import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -128,7 +128,7 @@ const useStyles = makeStyles((c) => ({
   card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 300, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   prompt: { color: c.ink, fontSize: 29, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
-  hindi: { color: c.ink, fontSize: 34, lineHeight: 44, fontWeight: '900', textAlign: 'center' },
+  hindi: { ...hindiType(34), color: c.ink, textAlign: 'center' },
   latin: { color: c.forestText, fontSize: 18, lineHeight: 25, fontWeight: '700', textAlign: 'center' },
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
   audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },

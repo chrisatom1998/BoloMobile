@@ -19,7 +19,7 @@ import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { displayFont, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 type Filter = 'All' | SceneCategory;
 
@@ -278,7 +278,7 @@ const useStyles = makeStyles((c) => ({
   listenButton: { width: 44, height: 44, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
   removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   copy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2 },
-  hindi: { color: c.ink, fontFamily: displayFont, fontSize: 19, lineHeight: 27, fontWeight: '600', textAlign: 'left' },
+  hindi: { ...hindiType(21), color: c.ink, textAlign: 'left' },
   latin: { color: c.brand, fontSize: 14, lineHeight: 20, fontWeight: '500', textAlign: 'left' },
   english: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
   masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: 6 },

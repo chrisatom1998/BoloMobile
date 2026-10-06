@@ -15,14 +15,17 @@ import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { hapticSelect } from '@/lib/haptics';
+import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 26;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
+/** Due phrases previewed on the review card; the last one fades to hint at the rest. */
+const reviewPreviewLimit = 3;
 
 /** First `count` grapheme clusters (base letter plus its marks), so Devanagari matras stay attached. */
 function leadingGraphemes(text: string, count: number) {
@@ -59,7 +62,13 @@ export default function HomeScreen() {
   // phrases can fall due overnight without their references changing.
   const calendarDay = useCalendarDay();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based due check.
-  const dueCount = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity).length, [phraseReviews, phrases, calendarDay]);
+  const duePhraseList = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases, calendarDay]);
+  const dueCount = duePhraseList.length;
+  const showLatinPreview = learnerProfile?.scriptPreference === 'latin';
+  const reviewPreview = useMemo(() => duePhraseList.slice(0, reviewPreviewLimit).map((phrase) => ({
+    key: phrase.hi,
+    text: showLatinPreview ? learnerPhraseLatin(phrase.hi, phrase.latin) : phrase.hi,
+  })), [duePhraseList, showLatinPreview]);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay is the only input to today's date line.
   const dateLine = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), [calendarDay]);
   const lessonSelection = useMemo(() => {
@@ -202,8 +211,28 @@ export default function HomeScreen() {
           style={styles.reviewCard}
           testID="today-language-garden"
         >
-          <Text style={styles.reviewLabel}>Ready to review</Text>
-          <Text style={styles.reviewCount}>{dueCount}</Text>
+          <View style={styles.reviewHeader}>
+            <Text style={styles.reviewLabel}>Ready to review</Text>
+            <Text style={styles.reviewCount}>{dueCount}</Text>
+          </View>
+          {reviewPreview.length > 0 ? (
+            <View style={styles.reviewPreview} testID="today-review-preview">
+              {reviewPreview.map((item, index) => (
+                <Text
+                  key={item.key}
+                  accessibilityLanguage={showLatinPreview ? undefined : 'hi-IN'}
+                  ellipsizeMode="tail"
+                  numberOfLines={1}
+                  style={[
+                    showLatinPreview ? styles.reviewPreviewLatin : styles.reviewPreviewHindi,
+                    index === reviewPreviewLimit - 1 && styles.reviewPreviewFaded,
+                  ]}
+                >
+                  {item.text}
+                </Text>
+              ))}
+            </View>
+          ) : null}
           <Text style={styles.reviewMeta}>{dueCount === 1 ? 'phrase due' : 'phrases due'}</Text>
         </PressableFeedback>
       </View>
@@ -217,7 +246,7 @@ export default function HomeScreen() {
         <View style={styles.ashaOrb}><AudioLines color={colors.ink} size={20} strokeWidth={2.2} /></View>
       </PressableFeedback>
     </View>
-  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, router, setGoal, stackedTopbarLayout, streak, styles, watermark]);
+  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedTopbarLayout, streak, styles, watermark]);
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
@@ -292,13 +321,13 @@ const useStyles = makeStyles((c) => ({
   dateLine: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '500' },
   greetingRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
   greeting: { fontSize: 30, lineHeight: 36, letterSpacing: -0.3 },
-  greetingHindi: { color: c.brand, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
+  greetingHindi: { ...hindiType(22), color: c.brand },
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: 10, paddingRight: spacing.md },
   streakText: { color: c.ink, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   settingsButton: { width: 48, height: 48, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
   hero: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: 22, gap: 14 },
-  heroWatermark: { position: 'absolute', right: -14, top: -38, color: 'rgba(255, 255, 255, 0.10)', fontFamily: displayFont, fontSize: 168, lineHeight: 190, fontWeight: '700' },
+  heroWatermark: { ...hindiType(168), position: 'absolute', right: -14, top: -50, color: 'rgba(255, 255, 255, 0.10)' },
   heroTopline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   heroChip: { borderRadius: radius.pill, backgroundColor: c.gold, paddingHorizontal: 9, paddingVertical: 4 },
   heroChipText: { color: c.ink, fontSize: 11, lineHeight: 15, fontWeight: '600', letterSpacing: 0.9 },
@@ -308,7 +337,7 @@ const useStyles = makeStyles((c) => ({
   heroSubtitle: { color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
   heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   heroWord: { borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.14)', paddingHorizontal: spacing.md, paddingVertical: 6 },
-  heroWordText: { color: c.white, fontFamily: displayFont, fontSize: 15, lineHeight: 22 },
+  heroWordText: { ...hindiType(16), color: c.white },
   heroFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: 4 },
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
   heroButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },
@@ -329,10 +358,15 @@ const useStyles = makeStyles((c) => ({
   goalChoiceActive: { backgroundColor: c.ink },
   goalChoiceText: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   goalChoiceTextActive: { color: c.white },
-  reviewCard: { minWidth: 0, flex: 1, justifyContent: 'space-between', gap: 6, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.goldSoft, padding: spacing.lg },
-  reviewLabel: { color: c.goldText, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  reviewCount: { color: c.ink, fontFamily: displayFont, fontSize: 40, lineHeight: 44, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  reviewMeta: { color: c.goldText, fontSize: 12, lineHeight: 16 },
+  reviewCard: { minWidth: 0, flex: 1, gap: spacing.sm, overflow: 'hidden', borderRadius: 22, borderCurve: 'continuous', borderTopColor: c.gold, borderTopWidth: 4, backgroundColor: c.paperRaised, padding: spacing.lg, paddingTop: spacing.lg - 4 },
+  reviewHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
+  reviewLabel: { minWidth: 0, flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  reviewCount: { color: c.ink, fontFamily: displayFont, fontSize: 28, lineHeight: 32, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  reviewPreview: { flex: 1, gap: 2 },
+  reviewPreviewHindi: { ...hindiType(18), color: c.ink },
+  reviewPreviewLatin: { color: c.ink, fontSize: 15, lineHeight: 24, fontWeight: '500' },
+  reviewPreviewFaded: { opacity: 0.4 },
+  reviewMeta: { marginTop: 'auto', color: c.muted, fontSize: 12, lineHeight: 16 },
   ashaRow: { width: '100%', minHeight: 80, flexDirection: 'row', alignItems: 'center', gap: 14, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.neutralSurface, paddingVertical: 14, paddingLeft: 14, paddingRight: spacing.lg },
   ashaRowLarge: { flexWrap: 'wrap' },
   ashaPortrait: { width: 52, height: 52, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },

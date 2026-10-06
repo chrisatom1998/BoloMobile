@@ -9,7 +9,7 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { alignedHindiWordLabels, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { getContextualWordDefinition } from '@/services/bolo-api';
 import type { ScriptPreference } from '@/state/app-state-types';
-import { makeStyles, radius, spacing } from '@/theme';
+import { hindiType, makeStyles, radius, spacing } from '@/theme';
 
 type DefinitionState = {
   explanation?: string;
@@ -136,7 +136,7 @@ export function WordDefinitionSheet({
         <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingBottom: insets.bottom + spacing.xxl }]}>
           <View style={styles.sourceCard}>
             <Text style={styles.sourceLabel}>Source phrase</Text>
-            <Text selectable style={styles.sourcePhrase}>{displaySource || (sourceLoading ? 'Preparing the Hindi words…' : sourceError ? 'Hindi words are not ready yet.' : 'No Hindi words were found in this message.')}</Text>
+            <Text selectable style={[styles.sourcePhrase, scriptPreference !== 'latin' && sourcePhrase ? styles.sourcePhraseHindi : null]}>{displaySource || (sourceLoading ? 'Preparing the Hindi words…' : sourceError ? 'Hindi words are not ready yet.' : 'No Hindi words were found in this message.')}</Text>
             {sourceError ? <>
               <Text accessibilityRole="alert" style={styles.error}>{sourceError}</Text>
               {!needsExcerpt ? <Pressable accessibilityLabel="Retry preparing Hindi words" accessibilityRole="button" onPress={retrySource} style={styles.retryButton}><Text style={styles.retryText}>Try again</Text></Pressable> : null}
@@ -165,7 +165,7 @@ export function WordDefinitionSheet({
                       onPress={() => void explain(word)}
                       style={[styles.token, selected && styles.tokenSelected]}
                     >
-                      <Text style={[styles.tokenText, selected && styles.tokenTextSelected]}>{displayWord(word)}</Text>
+                      <Text style={[styles.tokenText, scriptPreference !== 'latin' && styles.tokenHindi, selected && styles.tokenTextSelected]}>{displayWord(word)}</Text>
                     </Pressable>
                   );
                 })}
@@ -208,6 +208,7 @@ const useStyles = makeStyles((c) => ({
   excerptInput: { minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.line, borderRadius: radius.md, color: c.ink, padding: spacing.sm, fontSize: 16 },
   sourceLabel: { color: c.forestText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   sourcePhrase: { color: c.ink, fontSize: 24, lineHeight: 34, fontWeight: '800' },
+  sourcePhraseHindi: hindiType(26),
   romanization: { color: c.muted, fontSize: 16, lineHeight: 23, fontWeight: '700' },
   tray: { gap: spacing.sm },
   trayLabel: { color: c.ink, fontSize: 17, lineHeight: 24, fontWeight: '900' },
@@ -215,6 +216,7 @@ const useStyles = makeStyles((c) => ({
   token: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   tokenSelected: { backgroundColor: c.brand },
   tokenText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  tokenHindi: hindiType(19),
   tokenTextSelected: { color: c.white },
   definitionCard: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.forestSoft, borderColor: c.forest, borderWidth: 1, padding: spacing.lg },
   definitionLabel: { color: c.forestText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
