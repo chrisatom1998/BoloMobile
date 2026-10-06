@@ -3,7 +3,8 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { MotionReveal } from '@/components/motion';
@@ -114,6 +115,7 @@ function SceneScreen() {
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
 
   const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
+  const insets = useSafeAreaInsets();
   const sceneScrollRef = useRef<ScrollView>(null);
   const sceneViewportHeightRef = useRef(0);
   const sceneScrollYRef = useRef(0);
@@ -351,7 +353,7 @@ function SceneScreen() {
 
   if (done) {
     return (
-      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-completion-scroll">
+      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ title: activeScene.title }} />
         <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-complete`} style={styles.finishIntro} testID="scene-completion-motion">
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
@@ -509,7 +511,8 @@ function SceneScreen() {
         </View>
       ) : null}
 
-      <View style={styles.sheet}>
+      {/* Android draws under the gesture bar, so the tray adds the bottom inset itself. */}
+      <View style={[styles.sheet, Platform.OS === 'android' && { paddingBottom: 34 + insets.bottom }]}>
         {currentUsesName ? <View style={styles.hint}>
           <Text style={styles.hintTitle}>Practice with your name</Text>
           <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />

@@ -20,6 +20,7 @@ import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
 import { displayFont, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Filter = 'All' | SceneCategory;
 
@@ -166,68 +167,71 @@ export default function PhrasesScreen() {
   );
 
   return (
-    <FlatList
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[
-        styles.content,
-        Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
-      ]}
-      data={visible}
-      keyExtractor={(phrase) => phrase.hi}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      ListHeaderComponent={Header}
-      ListEmptyComponent={phrases.length === 0 ? (
-        <View style={styles.empty}>
-          <BookOpen color={colors.brand} size={32} strokeWidth={1.6} />
-          <Text style={styles.emptyBody}>Practice a lesson, then save any useful phrase you want to keep.</Text>
-          <PressableFeedback
-            accessibilityLabel={nextLesson.action}
-            accessibilityRole="button"
-            onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
-            style={styles.emptyAction}
-            testID="phrases-empty-lesson-action"
-          >
-            <Text style={styles.emptyActionText}>{nextLesson.action}</Text>
-          </PressableFeedback>
-        </View>
-      ) : <Text style={styles.noResults}>No phrases match this search and filter.</Text>}
-      renderItem={({ item }) => {
-        const offline = hasOfflineSpeech(item.hi);
-        const canListen = aiConsent || offline;
-        const review = reviews[item.hi];
-        const mastery = review?.mastery ?? 0;
-        const isDue = dueSet.has(item.hi);
-        return (
-          <View style={[styles.card, largeTextLayout && styles.cardLarge]}>
-            <View style={[styles.cardMain, largeTextLayout && styles.cardMainLarge]}>
-              <View style={styles.copy}>
-                {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{item.hi}</Text> : null}
-                <Text style={styles.latin}>{learnerPhraseLatin(item.hi, item.latin)}</Text>
-                <Text style={styles.english}>{item.en}</Text>
-                <View style={styles.masteryRow}>
-                  <MasteryMeter mastery={mastery} />
-                  <Text style={[styles.mastery, isDue && styles.masteryDue]}>{isDue ? 'Due now' : `${mastery}/5`}</Text>
+    <>
+      <FlatList
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[
+          styles.content,
+          Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        data={visible}
+        keyExtractor={(phrase) => phrase.hi}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListHeaderComponent={Header}
+        ListEmptyComponent={phrases.length === 0 ? (
+          <View style={styles.empty}>
+            <BookOpen color={colors.brand} size={32} strokeWidth={1.6} />
+            <Text style={styles.emptyBody}>Practice a lesson, then save any useful phrase you want to keep.</Text>
+            <PressableFeedback
+              accessibilityLabel={nextLesson.action}
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
+              style={styles.emptyAction}
+              testID="phrases-empty-lesson-action"
+            >
+              <Text style={styles.emptyActionText}>{nextLesson.action}</Text>
+            </PressableFeedback>
+          </View>
+        ) : <Text style={styles.noResults}>No phrases match this search and filter.</Text>}
+        renderItem={({ item }) => {
+          const offline = hasOfflineSpeech(item.hi);
+          const canListen = aiConsent || offline;
+          const review = reviews[item.hi];
+          const mastery = review?.mastery ?? 0;
+          const isDue = dueSet.has(item.hi);
+          return (
+            <View style={[styles.card, largeTextLayout && styles.cardLarge]}>
+              <View style={[styles.cardMain, largeTextLayout && styles.cardMainLarge]}>
+                <View style={styles.copy}>
+                  {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{item.hi}</Text> : null}
+                  <Text style={styles.latin}>{learnerPhraseLatin(item.hi, item.latin)}</Text>
+                  <Text style={styles.english}>{item.en}</Text>
+                  <View style={styles.masteryRow}>
+                    <MasteryMeter mastery={mastery} />
+                    <Text style={[styles.mastery, isDue && styles.masteryDue]}>{isDue ? 'Due now' : `${mastery}/5`}</Text>
+                  </View>
+                </View>
+                <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
+                  <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
+                    <Volume2 color={colors.brandText} size={18} />
+                  </PressableFeedback>
+                  <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
                 </View>
               </View>
-              <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
-                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
-                  <Volume2 color={colors.brandText} size={18} />
-                </PressableFeedback>
-                <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
+              <View style={styles.actions}>
+                {replaySpeeds.map(({ label, rate }) => (
+                  <PressableFeedback key={rate} accessibilityLabel={`Replay ${learnerPhraseLatin(item.hi, item.latin)} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen, selected: rate === (profile.phrasePlaybackRate ?? 1) }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedButtonSelected, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={[styles.speedText, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedTextSelected]}>{label}</Text></PressableFeedback>
+                ))}
               </View>
+              {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
             </View>
-            <View style={styles.actions}>
-              {replaySpeeds.map(({ label, rate }) => (
-                <PressableFeedback key={rate} accessibilityLabel={`Replay ${learnerPhraseLatin(item.hi, item.latin)} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen, selected: rate === (profile.phrasePlaybackRate ?? 1) }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedButtonSelected, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={[styles.speedText, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedTextSelected]}>{label}</Text></PressableFeedback>
-              ))}
-            </View>
-            {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
-          </View>
-        );
-      }}
-      style={sharedStyles.screen}
-      testID="saved-phrase-list"
-    />
+          );
+        }}
+        style={sharedStyles.screen}
+        testID="saved-phrase-list"
+      />
+      <StatusBarScrim />
+    </>
   );
 }
 

@@ -13,6 +13,7 @@ import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
 import { displayFont, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
   const router = useRouter();
@@ -104,86 +105,89 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
-      <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
-        <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
-          <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
-          <Text style={[styles.pageSubtitle, largeTextLayout && styles.pageSubtitleLarge]}>What is taking root.</Text>
-        </View>
-        <PressableFeedback accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}>
-          <Share2 color={colors.ink} size={18} />
-        </PressableFeedback>
-      </View>
-
-      <View style={styles.weekCard}>
-        <Text accessible={false} numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
-        <View style={styles.weekHeading}>
-          <Text style={styles.weekEyebrow}>Last 7 days</Text>
-          <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
-        </View>
-        <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
-          {week.map((day, index) => {
-            const minutes = Math.round(day.seconds / 60);
-            const today = index === week.length - 1;
-            return (
-              <View key={day.date} style={styles.barColumn}>
-                <Text style={styles.barValue}>{minutes}</Text>
-                <View style={styles.barTrack}><View style={[styles.bar, today && styles.barToday, { height: `${Math.max(6, minutes / maxMinutes * 100)}%` }]} /></View>
-                <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
-              </View>
-            );
-          })}
-        </View>
-        <Text style={styles.weekSummary}>{weekSummary}</Text>
-      </View>
-
-      <View style={styles.stats}>
-        <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>day practice streak</Text></View>
-        <View style={styles.stat}><Text style={styles.statValue}>{phrases.length}</Text><Text style={styles.statLabel}>phrases saved</Text></View>
-      </View>
-
-      <View style={styles.hero}>
-        <Text style={styles.heroEyebrow}>
-          {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
-        </Text>
-        <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
-        <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
-        <View style={styles.heroFootnotes}>
-          <Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text>
-          <Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text>
-        </View>
-        <PressableFeedback
-          accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
-          accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
-          style={styles.heroAction}
-        >
-          <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
-        </PressableFeedback>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.title}>Lesson plans</Text>
-          <PressableFeedback accessibilityLabel={`See all ${lessonPlans.length} lesson plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.seeAll}>
-            <Text style={styles.seeAllText}>See all</Text>
+    <>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
+        <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
+          <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
+            <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
+            <Text style={[styles.pageSubtitle, largeTextLayout && styles.pageSubtitleLarge]}>What is taking root.</Text>
+          </View>
+          <PressableFeedback accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}>
+            <Share2 color={colors.ink} size={18} />
           </PressableFeedback>
         </View>
-        {planProgress.map((plan) => (
-          <View key={plan.id} style={styles.planRow}>
-            <View style={styles.planCopy}>
-              <Text numberOfLines={1} style={styles.planTitle}>{plan.title}</Text>
-              <Text style={styles.planMeta}>{plan.completed === plan.total ? 'Complete' : `${plan.completed}/${plan.total}`}</Text>
-            </View>
-            <View accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`} style={styles.planTrack}>
-              <View style={[styles.planFill, plan.completed === plan.total && styles.planFillComplete, { width: `${Math.max(plan.percent, plan.completed > 0 ? 4 : 0)}%` }]} />
-            </View>
+
+        <View style={styles.weekCard}>
+          <Text accessible={false} numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
+          <View style={styles.weekHeading}>
+            <Text style={styles.weekEyebrow}>Last 7 days</Text>
+            <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
           </View>
-        ))}
-      </View>
-    </ScrollView>
+          <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
+            {week.map((day, index) => {
+              const minutes = Math.round(day.seconds / 60);
+              const today = index === week.length - 1;
+              return (
+                <View key={day.date} style={styles.barColumn}>
+                  <Text style={styles.barValue}>{minutes}</Text>
+                  <View style={styles.barTrack}><View style={[styles.bar, today && styles.barToday, { height: `${Math.max(6, minutes / maxMinutes * 100)}%` }]} /></View>
+                  <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.weekSummary}>{weekSummary}</Text>
+        </View>
+
+        <View style={styles.stats}>
+          <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
+          <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
+          <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>day practice streak</Text></View>
+          <View style={styles.stat}><Text style={styles.statValue}>{phrases.length}</Text><Text style={styles.statLabel}>phrases saved</Text></View>
+        </View>
+
+        <View style={styles.hero}>
+          <Text style={styles.heroEyebrow}>
+            {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
+          </Text>
+          <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
+          <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
+          <View style={styles.heroFootnotes}>
+            <Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text>
+            <Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text>
+          </View>
+          <PressableFeedback
+            accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
+            style={styles.heroAction}
+          >
+            <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
+          </PressableFeedback>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.title}>Lesson plans</Text>
+            <PressableFeedback accessibilityLabel={`See all ${lessonPlans.length} lesson plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.seeAll}>
+              <Text style={styles.seeAllText}>See all</Text>
+            </PressableFeedback>
+          </View>
+          {planProgress.map((plan) => (
+            <View key={plan.id} style={styles.planRow}>
+              <View style={styles.planCopy}>
+                <Text numberOfLines={1} style={styles.planTitle}>{plan.title}</Text>
+                <Text style={styles.planMeta}>{plan.completed === plan.total ? 'Complete' : `${plan.completed}/${plan.total}`}</Text>
+              </View>
+              <View accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`} style={styles.planTrack}>
+                <View style={[styles.planFill, plan.completed === plan.total && styles.planFillComplete, { width: `${Math.max(plan.percent, plan.completed > 0 ? 4 : 0)}%` }]} />
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+      <StatusBarScrim />
+    </>
   );
 }
 
@@ -198,7 +202,7 @@ export const createProgressStyles = (c: ThemeColors) => ({
   pageSubtitleLarge: { maxWidth: '100%' },
   shareButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: 20, gap: spacing.lg },
-  weekWatermark: { position: 'absolute', right: 8, bottom: -40, color: 'rgba(255, 255, 255, 0.10)', fontFamily: displayFont, fontSize: 150, lineHeight: 170, fontWeight: '700' },
+  weekWatermark: { position: 'absolute', right: 8, bottom: -40, color: 'rgba(255, 255, 255, 0.05)', fontFamily: displayFont, fontSize: 150, lineHeight: 170, fontWeight: '700' },
   weekHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   weekEyebrow: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
   weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', textAlign: 'right' },
