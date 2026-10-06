@@ -56,6 +56,8 @@ export const lightColors = {
   heroRaised: '#18201E',
   heroSubtle: '#BFC9C6',
   heroGlyph: 'rgba(255, 255, 255, 0.18)',
+  /** Faint decorative Devanagari watermark on brand (rust) surfaces. */
+  onBrandWatermark: 'rgba(255, 255, 255, 0.08)',
 
   orb: '#E76B48',
   orbActive: '#D85F3D',
