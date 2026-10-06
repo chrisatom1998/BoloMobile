@@ -16,7 +16,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 26;
@@ -290,13 +290,13 @@ const useStyles = makeStyles((c) => ({
   dateLine: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '500' },
   greetingRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
   greeting: { fontSize: 30, lineHeight: 36, letterSpacing: -0.3 },
-  greetingHindi: { color: c.brand, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
+  greetingHindi: { ...hindiType(22), color: c.brand },
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: 10, paddingRight: spacing.md },
   streakText: { color: c.ink, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   settingsButton: { width: 48, height: 48, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
   hero: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: 22, gap: 14 },
-  heroWatermark: { position: 'absolute', right: -14, top: -38, color: 'rgba(255, 255, 255, 0.10)', fontFamily: displayFont, fontSize: 168, lineHeight: 190, fontWeight: '700' },
+  heroWatermark: { ...hindiType(168), position: 'absolute', right: -14, top: -50, color: 'rgba(255, 255, 255, 0.10)' },
   heroTopline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   heroChip: { borderRadius: radius.pill, backgroundColor: c.gold, paddingHorizontal: 9, paddingVertical: 4 },
   heroChipText: { color: c.ink, fontSize: 11, lineHeight: 15, fontWeight: '600', letterSpacing: 0.9 },
@@ -306,7 +306,7 @@ const useStyles = makeStyles((c) => ({
   heroSubtitle: { color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
   heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   heroWord: { borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.14)', paddingHorizontal: spacing.md, paddingVertical: 6 },
-  heroWordText: { color: c.white, fontFamily: displayFont, fontSize: 15, lineHeight: 22 },
+  heroWordText: { ...hindiType(16), color: c.white },
   heroFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: 4 },
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
   heroButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },

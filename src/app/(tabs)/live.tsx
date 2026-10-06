@@ -28,7 +28,7 @@ import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
-import { displayFont, makeStyles, radius, spacing, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -722,7 +722,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioPhraseEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
   studioPhraseEnglish: { color: c.white, fontFamily: displayFont, fontSize: 19, lineHeight: 25, fontWeight: '600' },
   studioListenIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
-  studioPhraseHindi: { color: c.white, fontFamily: displayFont, fontSize: 24, lineHeight: 32, fontWeight: '600' },
+  studioPhraseHindi: { ...hindiType(24), color: c.white },
   studioPhraseLatin: { color: c.gold, fontSize: 14, fontWeight: '600' },
   studioPhraseFooter: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   studioPhraseCue: { minWidth: 0, flex: 1, color: c.heroSubtle, fontSize: 12, lineHeight: 17 },
