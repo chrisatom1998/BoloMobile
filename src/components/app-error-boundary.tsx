@@ -3,7 +3,7 @@ import { Component, type ErrorInfo, type PropsWithChildren } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import { observe } from '@/lib/observability';
-import { makeStyles, radius, spacing } from '@/theme';
+import { hindiType, makeStyles, radius, spacing } from '@/theme';
 
 type State = { failed: boolean };
 
@@ -64,7 +64,7 @@ function ErrorFallback({ onRetry, onHome }: { onRetry: () => void; onHome?: () =
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
   mark: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: c.white, fontSize: 32, fontWeight: '900' },
+  markText: { ...hindiType(32), color: c.white },
   title: { color: c.ink, fontSize: 25, lineHeight: 31, fontWeight: '900', textAlign: 'center' },
   body: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   button: { minHeight: 50, minWidth: 160, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },

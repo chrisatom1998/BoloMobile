@@ -1,7 +1,7 @@
 // Keep built-in journey fixtures independent of locally imported lessons.
 jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 
 import { getScene } from '../src/data/scenes';
@@ -228,6 +228,47 @@ describe('HomeScreen primary journey', () => {
     await fireEvent.press(view.getByLabelText('7 day practice streak'));
     expect(mockRouterPush).toHaveBeenCalledWith('/progress');
     expect(mockRouterPush).not.toHaveBeenCalledWith('/live');
+  });
+
+  it('previews up to three due phrases on a white review card, fading the last', async () => {
+    mockAppState.phrases = [
+      { en: 'Hello', hi: 'नमस्ते', latin: 'namaste' },
+      { en: 'Thank you', hi: 'धन्यवाद', latin: 'Dhanyavaad' },
+      { en: 'How much is it?', hi: 'कितने का है?', latin: 'Kitne ka hai?' },
+      { en: 'Water, please', hi: 'पानी, कृपया', latin: 'Paani, kripya' },
+    ];
+
+    const view = await render(<HomeScreen />);
+
+    const card = view.getByTestId('today-language-garden');
+    expect(StyleSheet.flatten(card.props.style)).toMatchObject({ backgroundColor: colors.paperRaised, borderTopColor: colors.gold });
+    expect(view.getByText('4')).toBeTruthy();
+    const preview = view.getByTestId('today-review-preview');
+    expect(preview.children).toHaveLength(3);
+    expect(within(preview).getByText('धन्यवाद')).toBeTruthy();
+    expect(within(preview).queryByText('पानी, कृपया')).toBeNull();
+    const faded = within(preview).getByText('कितने का है?');
+    expect(StyleSheet.flatten(faded.props.style).opacity).toBeLessThan(1);
+    expect(faded.props.numberOfLines).toBe(1);
+  });
+
+  it('previews romanized phrases for Latin-script learners and keeps the empty copy at zero', async () => {
+    Object.assign(mockAppState, { learnerProfile: { completed: true, scriptPreference: 'latin' } });
+    try {
+      const view = await render(<HomeScreen />);
+      const preview = view.getByTestId('today-review-preview');
+      expect(within(preview).getByText(/^namaste$/i)).toBeTruthy();
+      expect(within(preview).queryByText('नमस्ते')).toBeNull();
+
+      mockAppState.phrases = [];
+      await view.rerender(<HomeScreen />);
+      expect(view.queryByTestId('today-review-preview')).toBeNull();
+      expect(view.getByText('Saved phrases')).toBeTruthy();
+      expect(view.getByText('Save one from any lesson')).toBeTruthy();
+      expect(view.getByLabelText('Open saved phrases')).toBeTruthy();
+    } finally {
+      delete (mockAppState as { learnerProfile?: unknown }).learnerProfile;
+    }
   });
 
   it('updates the daily goal selection and renders progress from persisted practice', async () => {

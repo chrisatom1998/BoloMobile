@@ -29,7 +29,7 @@ import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { shuffleChoices } from '@/lib/shuffle-choices';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
@@ -375,7 +375,7 @@ function SceneScreen() {
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
           <Text style={sharedStyles.eyebrow}>Scene complete</Text>
           <View style={styles.finishHeading}>
-            <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : "hi-IN"} style={styles.finishHindi} testID="scene-completion-headline">{lessonHindiLabel('आपने कर दिखाया!', scriptPreference, 'Aapne kar dikhaya!')}</Text>
+            <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : "hi-IN"} style={[styles.finishHindi, scriptPreference !== 'latin' && styles.finishHindiScript]} testID="scene-completion-headline">{lessonHindiLabel('आपने कर दिखाया!', scriptPreference, 'Aapne kar dikhaya!')}</Text>
             <Text style={styles.finishGloss} testID="scene-completion-gloss">You did it!</Text>
           </View>
           <Text style={styles.finishTitle} testID="scene-completion-title">You navigated {activeScene.title} in Hindi.</Text>
@@ -494,7 +494,7 @@ function SceneScreen() {
         <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
         <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
           <Text style={styles.speakerName}>Asha</Text>
-          <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
+          <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, scriptPreference !== 'latin' && styles.npcHindi, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
             ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
             : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
           <Text style={styles.translation}>{beat.translation}</Text>
@@ -522,7 +522,7 @@ function SceneScreen() {
       {picked !== null && beat.choices[picked] ? (
         <View style={styles.learnerRow}>
           <View style={styles.learnerBubble}>
-            <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={styles.learnerText}>{lessonHindiLabel(beat.choices[picked].hi, scriptPreference, beat.choices[picked].latin)}</Text>
+            <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.learnerText, scriptPreference !== 'latin' && styles.learnerTextHindi]}>{lessonHindiLabel(beat.choices[picked].hi, scriptPreference, beat.choices[picked].latin)}</Text>
           </View>
         </View>
       ) : null}
@@ -624,7 +624,7 @@ function SceneScreen() {
                     {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
                     <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
                   </View>
-                ) : feedbackReply ? <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={styles.resultHindi}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
+                ) : feedbackReply ? <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.resultHindi, scriptPreference !== 'latin' && styles.resultHindiScript]}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
               </View>
             </MotionReveal>
           </View>
@@ -658,7 +658,7 @@ function SceneScreen() {
                       key={word}
                       onPress={() => setWordDefinitionWord(word)}
                       style={[styles.wordToken, !aiConsent && styles.disabled]}
-                    ><Text style={styles.wordTokenText}>{lessonHindiLabel(word, scriptPreference, romanizedWord)}</Text></Pressable>
+                    ><Text style={[styles.wordTokenText, scriptPreference !== 'latin' && styles.wordTokenHindi]}>{lessonHindiLabel(word, scriptPreference, romanizedWord)}</Text></Pressable>
                   );
                 })}
               </View>
@@ -695,13 +695,15 @@ const useStyles = makeStyles((c) => ({
   hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: 10 },
   hudText: { color: c.ink, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   resumeNotice: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '700', textAlign: 'center' },
-  ashaRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  // Asha's face sits at the top of her bubble; the tightened top-left corner reads as a chat tail.
+  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  asha: { width: 36, height: 36, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderBottomLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: 14, gap: spacing.xs },
+  asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: 14, gap: spacing.xs },
   bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
   speakerName: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },
   npc: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
+  npcHindi: hindiType(23),
   npcLarge: {},
   npcLatin: { color: c.brandText, fontFamily: 'System', fontSize: 15, lineHeight: 22, fontWeight: '500' },
   translation: { color: c.muted, fontSize: 13, lineHeight: 18 },
@@ -711,6 +713,7 @@ const useStyles = makeStyles((c) => ({
   learnerRow: { alignItems: 'flex-end' },
   learnerBubble: { maxWidth: '82%', backgroundColor: c.brand, borderRadius: 22, borderBottomRightRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   learnerText: { color: c.white, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
+  learnerTextHindi: hindiType(19),
   disabled: { opacity: 0.4 },
   audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
   sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
@@ -722,13 +725,13 @@ const useStyles = makeStyles((c) => ({
   hintButtonText: { color: c.goldText, fontSize: 13, fontWeight: '600' },
   hintButtonTextActive: { color: c.goldDeepText },
   choices: { gap: spacing.sm },
-  choice: { minHeight: 64, backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  choice: { minHeight: 64, backgroundColor: c.paperRaised, borderColor: c.lineStrong, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
   choiceCorrect: { borderColor: c.forest, backgroundColor: c.forest },
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
   choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 2 },
   choiceCopyLarge: { flex: 0, width: '100%' },
-  choiceHindi: { width: '100%', color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
+  choiceHindi: { ...hindiType(20), width: '100%', color: c.ink },
   choiceHindiCorrect: { color: c.white },
   choiceHindiWrong: { color: c.danger },
   choiceRomanized: { color: c.muted, fontSize: 13, lineHeight: 18 },
@@ -748,14 +751,15 @@ const useStyles = makeStyles((c) => ({
   resultTip: { color: c.muted, fontSize: 13, lineHeight: 19 },
   wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.dangerLine, borderTopWidth: 1, paddingTop: spacing.md, gap: 2 },
   wordOrderSolutionLabel: { color: c.muted, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  wordOrderSolutionHindi: { color: c.ink, fontFamily: displayFont, fontSize: 21, lineHeight: 29, fontWeight: '700' },
+  wordOrderSolutionHindi: { ...hindiType(22), color: c.ink },
   wordOrderSolutionLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
   alternateCoachNote: { marginTop: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: 2 },
   alternateCoachLabel: { color: c.ink, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  alternateCoachHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
+  alternateCoachHindi: { ...hindiType(19), color: c.ink },
   alternateCoachLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
   alternateCoachEnglish: { color: c.muted, fontSize: 14, lineHeight: 20 },
   resultHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
+  resultHindiScript: hindiType(19),
   answerActions: { gap: spacing.sm },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '600' },
@@ -776,11 +780,13 @@ const useStyles = makeStyles((c) => ({
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   wordTokenText: { color: c.brandText, fontFamily: displayFont, fontSize: 17, lineHeight: 24, fontWeight: '600' },
+  wordTokenHindi: hindiType(18),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
   finishBadge: { width: 74, height: 74, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   finishHeading: { alignItems: 'stretch', gap: spacing.xs },
   finishHindi: { color: c.brandDark, fontFamily: displayFont, fontSize: 28, lineHeight: 36, fontWeight: '700', textAlign: 'center' },
+  finishHindiScript: hindiType(30),
   finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
   finishTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', textAlign: 'center' },
   notFoundBody: { color: c.muted, fontSize: 16, lineHeight: 23, textAlign: 'center', maxWidth: 320 },

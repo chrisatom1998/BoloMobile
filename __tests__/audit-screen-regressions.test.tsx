@@ -251,6 +251,40 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('Last 7 days')).toBeTruthy();
   });
 
+  it('folds progress stats into one row and shows a dash for accuracy before any answers', async () => {
+    mockAppState.phrases = [];
+    const view = await render(<ProgressScreen />);
+
+    expect(view.getByTestId('progress-stats').children).toHaveLength(4);
+    expect(view.getByTestId('progress-stat-accuracy').props.accessibilityLabel).toBe('Answer accuracy, no answers yet');
+    expect(view.getByText('–')).toBeTruthy();
+    expect(view.queryByText('0%')).toBeNull();
+    expect(view.getByTestId('progress-week-total').props.accessibilityLabel).toBe('0 minutes practiced in the last 7 days');
+  });
+
+  it('shows answer accuracy once turns are answered and paints solid cream bars', async () => {
+    mockAppState.sceneProgress = {
+      'plan-essentials-01': {
+        bestAccuracy: 75,
+        bestScore: 30,
+        completions: 1,
+        lastBeatIndex: 0,
+        lastPracticedAt: '2026-07-28T12:00:00.000Z',
+        totalAnswers: 4,
+        totalCorrect: 3,
+        weakPhrases: [],
+      },
+    };
+    const view = await render(<ProgressScreen />);
+
+    expect(view.getByText('75%')).toBeTruthy();
+    expect(view.getByTestId('progress-stat-accuracy').props.accessibilityLabel).toBe('75 percent answer accuracy');
+    const styles = createProgressStyles(lightColors);
+    expect(styles.bar.backgroundColor).toBe(lightColors.backgroundWarm);
+    expect(styles.barToday.backgroundColor).toBe(lightColors.gold);
+    expect(styles.weekWatermark.fontSize).toBeLessThanOrEqual(72);
+  });
+
   it('shows an unfinished lesson and active streak as the first progress summary', async () => {
     mockAppState.sceneProgress = {
       'plan-essentials-02': {

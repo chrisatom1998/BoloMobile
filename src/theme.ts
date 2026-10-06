@@ -60,10 +60,15 @@ export const lightColors = {
   heroRaised: '#18201E',
   heroSubtle: '#BFC9C6',
   heroGlyph: 'rgba(255, 255, 255, 0.18)',
+  /** Faint decorative Devanagari watermark on brand (rust) surfaces. */
+  onBrandWatermark: 'rgba(255, 255, 255, 0.08)',
 
   orb: '#E76B48',
   orbActive: '#D85F3D',
   orbRecording: '#C95335',
+  /** Gold rings around Asha's tap-to-talk portrait on the night surface. */
+  portraitRing: 'rgba(231, 172, 61, 0.5)',
+  portraitRingFaint: 'rgba(231, 172, 61, 0.25)',
 } as const;
 
 export type ThemeColors = { [Key in keyof typeof lightColors]: typeof lightColors[Key] extends string ? string : number };
@@ -89,8 +94,30 @@ export const radius = {
   pill: 999,
 } as const;
 
-/** Serif display face shared by headings and Devanagari text (falls back to the system Devanagari serif). */
+/** Serif display face for Latin headings. Georgia has no Devanagari glyphs; use `hindiFont` for Hindi. */
 export const displayFont = 'Georgia';
+
+/**
+ * Bundled Devanagari serif (Tiro Devanagari Hindi, OFL). Embedded natively by the
+ * expo-font config plugin under this family name and loaded with `useFonts` on web.
+ */
+export const hindiFont = 'Tiro Devanagari Hindi';
+
+/** Tiro needs ~1.45x leading so matras above the shirorekha and below the baseline are not clipped. */
+export const hindiLineHeightRatio = 1.45;
+
+/**
+ * Type for rendered Devanagari. Tiro ships one weight, so this pins the regular
+ * weight; a bold `fontWeight` would make the platform synthesise a smeared bold.
+ */
+export function hindiType(fontSize: number) {
+  return {
+    fontFamily: hindiFont,
+    fontSize,
+    lineHeight: Math.round(fontSize * hindiLineHeightRatio),
+    fontWeight: '400',
+  } as const satisfies TextStyle;
+}
 
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;

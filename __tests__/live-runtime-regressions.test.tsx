@@ -71,6 +71,7 @@ jest.mock('@/components/ai-consent-gate', () => {
 jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
+      children,
       disabled,
       onError,
       onInputTranscriptComplete,
@@ -80,6 +81,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTranscriptSnapshot,
       responseLanguage,
     }: {
+      children?: import('react').ReactNode;
       disabled?: boolean;
       onError: (message: string) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
@@ -100,6 +102,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       return mockReact.createElement(
       mockReact.Fragment,
       null,
+      children,
       mockReact.createElement(MockText, { testID: 'mock-realtime-language' }, responseLanguage),
       mockReact.createElement(
         MockPressable,
@@ -435,8 +438,9 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
     expect(view.getByText('Ready when you are')).toBeTruthy();
-    expect(view.getByText('Tap the orb to start talking with Asha.')).toBeTruthy();
-    expect(view.getAllByText(/Tap the orb/u)).toHaveLength(1);
+    expect(view.getByText('Tap Asha to start talking with her.')).toBeTruthy();
+    expect(view.getAllByText(/Tap Asha/u)).toHaveLength(1);
+    expect(view.queryByText(/orb/u)).toBeNull();
     const captionBadge = view.getByTestId('live-caption-label-badge');
     expect(within(captionBadge).getByText('You')).toBeTruthy();
     expect(view.queryByText('LIVE')).toBeNull();
