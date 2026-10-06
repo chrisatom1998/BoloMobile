@@ -5,6 +5,7 @@ import { Dimensions, ScrollView, StyleSheet } from 'react-native';
 import { lessonHindiLabel } from '../src/lib/lesson-display';
 import type { SceneAttempt, ScriptPreference } from '../src/state/app-state-types';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
+import { lightColors } from '../src/theme';
 
 let mockSceneId = 'chai';
 const mockRouterReplace = jest.fn();
@@ -453,6 +454,38 @@ describe('SceneScreen primary journey', () => {
       expect(view.getByLabelText(choiceAccessibilityLabel(choice, true))).toBeTruthy();
       expect(view.queryByLabelText(choiceAccessibilityLabel(choice))).toBeNull();
     }
+  });
+
+  it('presents answers as outlined white cards with distinct correct and wrong states, beside Asha at the top of her bubble', async () => {
+    const beat = getScene('chai')!.beats[0]!;
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1 }, window: { ...window, fontScale: 1 } }));
+    try {
+      const view = await render(<SceneScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('scene-asha-row').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'row' });
+    } finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+
+    const view = await render(<SceneScreen />);
+    expect(StyleSheet.flatten(view.getByTestId('scene-asha-bubble').props.style).borderTopLeftRadius).toBeLessThan(10);
+    const wrongChoice = beat.choices.find((choice) => !choice.correct)!;
+    const correctChoice = beat.choices.find((choice) => choice.correct)!;
+    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(wrongChoice)).props.style)).toMatchObject({
+      backgroundColor: lightColors.paperRaised,
+      borderColor: lightColors.lineStrong,
+    });
+
+    await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrongChoice)));
+
+    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(wrongChoice, true)).props.style)).toMatchObject({
+      backgroundColor: lightColors.dangerSoft,
+      borderColor: lightColors.danger,
+    });
+    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(correctChoice, true)).props.style)).toMatchObject({
+      backgroundColor: lightColors.forest,
+    });
   });
 
   it('keeps a shuffled order stable and maps a displayed distractor back to its authored result', async () => {

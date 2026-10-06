@@ -6,7 +6,7 @@ import { deterministicallyShuffle, wordOrderTokens } from '@/components/practice
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type PracticeResult = 'correct' | 'incorrect';
 
@@ -52,6 +52,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
   const [status, setStatus] = useState<'building' | PracticeResult>('building');
 
   const latinTokens = wordOrderTokens(targetLatin);
+  const showsDevanagari = scriptPreference !== 'latin';
   const label = (index: number) => lessonHindiLabel(solution[index] ?? '', scriptPreference, latinTokens.length === solution.length ? latinTokens[index] : undefined);
   const placedTokens = placedIndexes.map(label);
   const ready = placedIndexes.length === solution.length;
@@ -104,7 +105,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
           <Text style={styles.trayPlaceholder}>Your sentence appears here</Text>
         ) : placedTokens.map((token, position) => (
           <View key={`placed-${position}-${token}`} style={styles.trayToken}>
-            <Text style={styles.trayTokenText}>{token}</Text>
+            <Text style={[styles.trayTokenText, showsDevanagari && styles.trayTokenHindi]}>{token}</Text>
           </View>
         ))}
       </View>
@@ -123,7 +124,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
               style={[styles.tile, used && styles.tileUsed, locked && styles.tileLocked]}
               testID={`scene-word-order-tile-${tile.index}`}
             >
-              <Text style={[styles.tileText, used && styles.tileUsedText]}>{label(tile.index)}</Text>
+              <Text style={[styles.tileText, showsDevanagari && styles.tileHindi, used && styles.tileUsedText]}>{label(tile.index)}</Text>
             </Pressable>
           );
         })}
@@ -178,9 +179,11 @@ const useStyles = makeStyles((c) => ({
   trayPlaceholder: { color: c.muted, fontSize: 14, fontStyle: 'italic' },
   trayToken: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: c.night },
   trayTokenText: { color: c.white, fontSize: 17, fontWeight: '800' },
+  trayTokenHindi: hindiType(17),
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' },
   tileText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  tileHindi: hindiType(18),
   tileUsed: { backgroundColor: c.background, borderStyle: 'dashed', opacity: 0.5 },
   tileUsedText: { color: c.muted },
   tileLocked: { opacity: 0.4 },

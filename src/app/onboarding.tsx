@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppState } from '@/state/app-state';
 import { observe } from '@/lib/observability';
 import type { LearnerLevel, LearningGoal, AshaResponseLanguage, ScriptPreference } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Choice<T extends string | number> = { label: string; value: T; detail?: string };
@@ -167,7 +167,7 @@ const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl },
   onboardingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   brandMark: { minHeight: 44, justifyContent: 'center' },
-  brandMarkText: { color: c.brand, fontFamily: 'Georgia', fontSize: 40, lineHeight: 48, fontWeight: '700' },
+  brandMarkText: { ...hindiType(40), color: c.brand },
   cancelButton: { width: 44, height: 44, borderRadius: radius.pill, borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
   intro: { gap: spacing.sm },
   heading: { color: c.ink, fontSize: 32, lineHeight: 38, fontWeight: '900' },

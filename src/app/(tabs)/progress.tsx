@@ -12,7 +12,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
-import { displayFont, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
@@ -27,8 +27,9 @@ export default function ProgressScreen() {
     const days = weeklyPractice(practiceHistory);
     return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.round(day.seconds / 60))) };
   }, [practiceHistory]);
-  const { accuracy, completedScenes, milestones } = useMemo(() => ({
+  const { accuracy, answeredTurns, completedScenes, milestones } = useMemo(() => ({
     accuracy: learningAccuracy(sceneProgress),
+    answeredTurns: Object.values(sceneProgress).reduce((total, item) => total + item.totalAnswers, 0),
     milestones: milestoneProgress(sceneProgress),
     completedScenes: Object.values(sceneProgress).filter((item) => item.completions > 0).length,
   }), [sceneProgress]);
@@ -94,6 +95,16 @@ export default function ProgressScreen() {
     ? `${minutesThisWeek} minute${minutesThisWeek === 1 ? '' : 's'} across ${activeDaysThisWeek} day${activeDaysThisWeek === 1 ? '' : 's'} this week.`
     : 'Your first practice minutes will show here.';
 
+  const stats = [
+    { accessibilityLabel: `${streak} day practice streak`, key: 'streak', label: 'day streak', value: String(streak) },
+    { accessibilityLabel: `${phrases.length} phrase${phrases.length === 1 ? '' : 's'} saved`, key: 'phrases', label: 'phrases', value: String(phrases.length) },
+    { accessibilityLabel: `${completedScenes} scene${completedScenes === 1 ? '' : 's'} learned`, key: 'scenes', label: 'scenes', value: String(completedScenes) },
+    // No answered turns yet: a dash, not a misleading 0%.
+    answeredTurns > 0
+      ? { accessibilityLabel: `${accuracy} percent answer accuracy`, key: 'accuracy', label: 'accuracy', value: `${accuracy}%` }
+      : { accessibilityLabel: 'Answer accuracy, no answers yet', key: 'accuracy', label: 'accuracy', value: '–' },
+  ];
+
   function shareMilestones() {
     const achieved = milestones.filter((item) => item.achieved).map((item) => item.title);
     const message = achieved.length
@@ -120,8 +131,17 @@ export default function ProgressScreen() {
         <View style={styles.weekCard}>
           <Text accessible={false} numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
           <View style={styles.weekHeading}>
-            <Text style={styles.weekEyebrow}>Last 7 days</Text>
-            <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
+            <View style={styles.weekHeadingCopy}>
+              <Text style={styles.weekEyebrow}>Last 7 days</Text>
+              <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
+            </View>
+            <Text
+              accessibilityLabel={`${minutesThisWeek} minute${minutesThisWeek === 1 ? '' : 's'} practiced in the last 7 days`}
+              style={styles.weekTotal}
+              testID="progress-week-total"
+            >
+              {minutesThisWeek}<Text style={styles.weekTotalUnit}> min</Text>
+            </Text>
           </View>
           <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
             {week.map((day, index) => {
@@ -129,7 +149,7 @@ export default function ProgressScreen() {
               const today = index === week.length - 1;
               return (
                 <View key={day.date} style={styles.barColumn}>
-                  <Text style={styles.barValue}>{minutes}</Text>
+                  <Text style={[styles.barValue, today && styles.barValueToday]}>{minutes}</Text>
                   <View style={styles.barTrack}><View style={[styles.bar, today && styles.barToday, { height: `${Math.max(6, minutes / maxMinutes * 100)}%` }]} /></View>
                   <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
                 </View>
@@ -139,11 +159,19 @@ export default function ProgressScreen() {
           <Text style={styles.weekSummary}>{weekSummary}</Text>
         </View>
 
-        <View style={styles.stats}>
-          <View style={styles.stat}><Text style={styles.statValue}>{completedScenes}</Text><Text style={styles.statLabel}>scenes learned</Text></View>
-          <View style={styles.stat}><Text style={styles.statValue}>{accuracy}%</Text><Text style={styles.statLabel}>answer accuracy</Text></View>
-          <View style={styles.stat}><Text style={styles.statValue}>{streak}</Text><Text style={styles.statLabel}>day practice streak</Text></View>
-          <View style={styles.stat}><Text style={styles.statValue}>{phrases.length}</Text><Text style={styles.statLabel}>phrases saved</Text></View>
+        <View style={[styles.stats, largeTextLayout && styles.statsLarge]} testID="progress-stats">
+          {stats.map((stat, index) => (
+            <View
+              key={stat.key}
+              accessible
+              accessibilityLabel={stat.accessibilityLabel}
+              style={[styles.stat, largeTextLayout && styles.statLarge, index > 0 && (largeTextLayout ? styles.statDividerLarge : styles.statDivider)]}
+              testID={`progress-stat-${stat.key}`}
+            >
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
         </View>
 
         <View style={styles.hero}>
@@ -202,23 +230,32 @@ export const createProgressStyles = (c: ThemeColors) => ({
   pageSubtitleLarge: { maxWidth: '100%' },
   shareButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: 20, gap: spacing.lg },
-  weekWatermark: { position: 'absolute', right: 8, bottom: -40, color: 'rgba(255, 255, 255, 0.05)', fontFamily: displayFont, fontSize: 150, lineHeight: 170, fontWeight: '700' },
-  weekHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  // Tucked into the top-right corner, small and faint, so it never sits behind the bars.
+  weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },
+  weekHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
+  weekHeadingCopy: { minWidth: 0, flexShrink: 1, gap: 4, paddingTop: 6 },
   weekEyebrow: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
-  weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', textAlign: 'right' },
-  chart: { height: 120, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600' },
+  weekTotal: { color: c.white, fontFamily: displayFont, fontSize: 36, lineHeight: 42, fontWeight: '700', fontVariant: ['tabular-nums'], textAlign: 'right' },
+  weekTotalUnit: { color: c.brandSoft, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
+  chart: { height: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   barColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   barValue: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
-  barTrack: { flex: 1, width: '100%', maxWidth: 28, justifyContent: 'flex-end' },
-  bar: { width: '100%', minHeight: 6, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.28)' },
+  barValueToday: { color: c.white, fontWeight: '700' },
+  barTrack: { flex: 1, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
+  bar: { width: '100%', minHeight: 8, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
   barToday: { backgroundColor: c.gold },
   day: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontWeight: '600' },
   dayToday: { color: c.white },
   weekSummary: { color: '#FBEFE8', fontSize: 14, lineHeight: 20 },
-  stats: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  stat: { minWidth: 140, minHeight: 84, flexGrow: 1, flexBasis: 140, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: 14, alignItems: 'flex-start', justifyContent: 'center', gap: 2 },
-  statValue: { color: c.ink, fontFamily: displayFont, fontSize: 30, lineHeight: 36, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  statLabel: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
+  stats: { width: '100%', flexDirection: 'row', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', paddingVertical: spacing.lg, paddingHorizontal: spacing.xs },
+  statsLarge: { flexDirection: 'column', paddingVertical: spacing.xs, paddingHorizontal: spacing.lg },
+  stat: { minWidth: 0, flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: spacing.xs },
+  statLarge: { flex: 0, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'flex-start', gap: spacing.sm, paddingVertical: spacing.md },
+  statDivider: { borderLeftColor: c.line, borderLeftWidth: 1 },
+  statDividerLarge: { borderTopColor: c.line, borderTopWidth: 1 },
+  statValue: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  statLabel: { color: c.muted, fontSize: 12, lineHeight: 16, textAlign: 'center' },
   hero: { width: '100%', alignItems: 'flex-start', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg, gap: spacing.sm },
   heroEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
   heroTitle: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 28, fontWeight: '600', textAlign: 'left' },
