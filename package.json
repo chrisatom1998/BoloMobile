@@ -139,7 +139,8 @@
     "brace-expansion": "^5.0.12",
     "minimatch@^3.0.0": {
       "brace-expansion": "1.1.21"
-    }
+    },
+    "source-map-js": "^1.2.2"
   },
   "private": true
 }
