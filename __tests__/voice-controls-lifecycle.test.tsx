@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
-import { Alert, AppState, type AppStateStatus } from 'react-native';
+import { Alert, AppState, StyleSheet, type AppStateStatus } from 'react-native';
 
 jest.mock('expo-audio', () => {
   const recorder = {
@@ -73,6 +73,7 @@ import { PronunciationRecorder } from '../src/components/pronunciation-recorder'
 import { VoiceTurnButton } from '../src/components/voice-turn-button';
 import { speakText, stopSpeaking } from '../src/lib/speech';
 import { checkPronunciation, reportGeneratedMessage } from '../src/services/bolo-api';
+import { lightColors } from '../src/theme';
 
 const requestPermissionMock = requestRecordingPermissionsAsync as jest.MockedFunction<typeof requestRecordingPermissionsAsync>;
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
@@ -117,6 +118,11 @@ describe('voice control lifecycle', () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('uses the brand colour for the idle record button', async () => {
+    const view = await render(<VoiceTurnButton idleLabel="Record pronunciation" onRecordingReady={jest.fn()} />);
+    expect(StyleSheet.flatten(view.getByLabelText('Record pronunciation').props.style).backgroundColor).toBe(lightColors.brand);
   });
 
   it('starts only one permission flow when the record button is tapped twice before permission resolves', async () => {
