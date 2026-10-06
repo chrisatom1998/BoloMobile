@@ -62,6 +62,9 @@ export const lightColors = {
   orb: '#E76B48',
   orbActive: '#D85F3D',
   orbRecording: '#C95335',
+  /** Gold rings around Asha's tap-to-talk portrait on the night surface. */
+  portraitRing: 'rgba(231, 172, 61, 0.5)',
+  portraitRingFaint: 'rgba(231, 172, 61, 0.25)',
 } as const;
 
 export type ThemeColors = { [Key in keyof typeof lightColors]: typeof lightColors[Key] extends string ? string : number };
