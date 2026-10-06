@@ -217,7 +217,7 @@ export default function HomeScreen() {
         <View style={styles.ashaOrb}><AudioLines color={colors.ink} size={20} strokeWidth={2.2} /></View>
       </PressableFeedback>
     </View>
-  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, router, setGoal, stackedTopbarLayout, streak, styles, watermark]);
+  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, router, setGoal, stackedStatLayout, stackedTopbarLayout, streak, styles, watermark]);
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
