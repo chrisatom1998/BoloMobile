@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
-import { Activity, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Sparkles, Trash2 } from 'lucide-react-native';
+import { Activity, ArchiveRestore, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileDown, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
@@ -10,11 +10,13 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
-import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
+import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
-import type { MotionPreference } from '@/state/app-state-types';
+import type { MotionPreference, ReminderSettings } from '@/state/app-state-types';
 import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
@@ -43,10 +45,12 @@ export default function SettingsScreen() {
   const reminder = state.reminder ?? defaultReminderSettings();
   const motionPreference = state.motionPreference ?? DEFAULT_MOTION_PREFERENCE;
   const stackMotionPreferences = fontScale >= 1.2 || windowWidth < 360;
-  const { setMotionPreference, setReminder, updateLearnerProfile } = state;
+  const { restoreProgress, setMotionPreference, setReminder, updateLearnerProfile } = state;
   const [deleting, setDeleting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [savingReminder, setSavingReminder] = useState(false);
+  const [backupBusy, setBackupBusy] = useState<'export' | 'restore' | null>(null);
+  const backupInFlightRef = useRef(false);
   const mountedRef = useRef(true);
   const deletionRef = useRef<AbortController | null>(null);
   const deletionInFlightRef = useRef(false);
@@ -143,6 +147,109 @@ export default function SettingsScreen() {
       showAppAlert('Could not update reminder', error instanceof Error ? error.message : 'Try again from system settings.');
     } finally {
       if (mountedRef.current) setSavingReminder(false);
+    }
+  }
+
+  function backupErrorMessage(error: unknown, fallback: string) {
+    return error instanceof ProgressBackupFileError ? error.message : fallback;
+  }
+
+  async function exportProgress() {
+    if (backupInFlightRef.current) return;
+    backupInFlightRef.current = true;
+    setBackupBusy('export');
+    try {
+      await shareProgressBackup(serializeProgressBackup({ ...state, reminder }), progressBackupFileName());
+    } catch (error) {
+      if (mountedRef.current) {
+        showAppAlert('Could not export progress', backupErrorMessage(error, 'Bolo could not open the share sheet. Try again in a moment.'));
+      }
+    } finally {
+      backupInFlightRef.current = false;
+      if (mountedRef.current) setBackupBusy(null);
+    }
+  }
+
+  async function chooseBackup() {
+    if (backupInFlightRef.current) return;
+    backupInFlightRef.current = true;
+    setBackupBusy('restore');
+    let backup: ProgressBackup | null = null;
+    try {
+      const text = await pickProgressBackupText();
+      if (text === null || !mountedRef.current) return;
+      const parsed = parseProgressBackup(text);
+      if (!parsed.ok) {
+        showAppAlert('Could not restore progress', parsed.error);
+        return;
+      }
+      backup = parsed.backup;
+    } catch (error) {
+      if (mountedRef.current) {
+        showAppAlert('Could not restore progress', backupErrorMessage(error, 'Bolo could not open that file. Try again or choose a different backup.'));
+      }
+    } finally {
+      backupInFlightRef.current = false;
+      if (mountedRef.current) setBackupBusy(null);
+    }
+    if (backup && mountedRef.current) confirmRestore(backup);
+  }
+
+  function confirmRestore(backup: ProgressBackup) {
+    // Shown after the picker guard is released: the web alert runs onPress synchronously.
+    const exported = new Date(backup.exportedAt).toLocaleDateString();
+    showAppAlert(
+      'Replace progress on this device?',
+      `Restoring the backup from ${exported} replaces the saved phrases, reviews, scene progress, streaks, goal, and learning preferences on this device. Your AI consent choice and Asha chat history are not changed.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Restore', style: 'destructive', onPress: () => void performRestore(backup) },
+      ],
+    );
+  }
+
+  // A failed reminder save rolls state back to the device's previous reminder, whose
+  // notification applyRestoredReminder may already have cancelled. Drop the replacement
+  // notification and reschedule the previous reminder so OS and saved state agree.
+  async function revertRestoredReminder(replacement: ReminderSettings) {
+    if (replacement.notificationId && replacement.notificationId !== reminder.notificationId) {
+      await cancelPracticeReminder(replacement).catch(() => undefined);
+    }
+    if (!reminder.enabled) return;
+    try {
+      const rescheduled = await schedulePracticeReminder({ ...reminder, notificationId: null }, reminder.hour, reminder.minute);
+      if (!(await setReminder(rescheduled))) await cancelPracticeReminder(rescheduled).catch(() => undefined);
+    } catch {
+      // Leave the reminder as it was saved; the alert asks the learner to check it.
+    }
+  }
+
+  async function performRestore(backup: ProgressBackup) {
+    if (backupInFlightRef.current) return;
+    backupInFlightRef.current = true;
+    setBackupBusy('restore');
+    try {
+      const { reminder: backupReminder, ...progress } = backup.data;
+      // restoreProgress reports and rolls back its own storage failures.
+      if (!(await restoreProgress(progress))) return;
+      const outcome = await applyRestoredReminder(reminder, backupReminder);
+      if (!(await setReminder(outcome.reminder))) {
+        await revertRestoredReminder(outcome.reminder);
+        if (mountedRef.current) {
+          showAppAlert('Progress restored', 'Your learning progress from the backup is now on this device, but Bolo could not save the practice reminder. Check your reminder below.');
+        }
+        return;
+      }
+      if (!mountedRef.current) return;
+      const reminderNote = outcome.status === 'not-scheduled'
+        ? ' Your practice reminder was restored as off because Bolo could not schedule it. Turn it on again below.'
+        : outcome.status === 'unchanged'
+          ? ' Your existing practice reminder was kept.'
+          : '';
+      showAppAlert('Progress restored', `Your learning progress from the backup is now on this device.${reminderNote}`);
+    } finally {
+      backupInFlightRef.current = false;
+      if (mountedRef.current) setBackupBusy(null);
     }
   }
 
@@ -272,6 +379,40 @@ export default function SettingsScreen() {
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
+      <View style={styles.card} testID="settings-progress-backup">
+        <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
+          <View style={styles.icon}><ArchiveRestore color={colors.forest} size={22} /></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Progress backup</Text><Text style={styles.body}>Keep your progress when you change phones</Text></View>
+        </View>
+        <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, scene progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
+        <View style={[styles.buttonRow, largeTextLayout && styles.buttonRowLarge]}>
+          <Pressable
+            accessibilityHint="Opens the share sheet to save a backup file"
+            accessibilityLabel="Export progress"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: backupBusy !== null, busy: backupBusy === 'export' }}
+            disabled={backupBusy !== null}
+            onPress={() => void exportProgress()}
+            style={[styles.secondaryButton, styles.backupButton, backupBusy !== null && styles.disabled]}
+            testID="settings-export-progress"
+          >
+            <FileDown color={colors.forestText} size={18} /><Text style={styles.secondaryText}>{backupBusy === 'export' ? 'Preparing…' : 'Export progress'}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityHint="Choose a backup file. You will confirm before progress is replaced."
+            accessibilityLabel="Restore from backup"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: backupBusy !== null, busy: backupBusy === 'restore' }}
+            disabled={backupBusy !== null}
+            onPress={() => void chooseBackup()}
+            style={[styles.secondaryButton, styles.backupButton, backupBusy !== null && styles.disabled]}
+            testID="settings-restore-progress"
+          >
+            <ArchiveRestore color={colors.forestText} size={18} /><Text style={styles.secondaryText}>{backupBusy === 'restore' ? 'Restoring…' : 'Restore from backup'}</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><DatabaseBackup color={colors.danger} size={22} /></View>
@@ -310,6 +451,9 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   choiceLabel: { color: c.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
   secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  buttonRowLarge: { flexDirection: 'column' },
+  backupButton: { flexGrow: 1, flexBasis: 160, flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
   secondaryText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
   about: { padding: spacing.lg, gap: spacing.sm },
   aboutText: { color: c.muted, fontSize: 13, lineHeight: 19 },
