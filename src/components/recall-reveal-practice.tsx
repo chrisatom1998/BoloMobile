@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type PracticeResult = 'correct' | 'incorrect';
 
@@ -135,7 +135,7 @@ const useStyles = makeStyles((c) => ({
   hiddenText: { color: c.muted, fontSize: 14, lineHeight: 20, fontStyle: 'italic', textAlign: 'center' },
   answerCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, gap: spacing.xs },
   answerEyebrow: { color: c.heroSubtle, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  answerHindi: { color: c.white, fontSize: 22, lineHeight: 29, fontWeight: '900' },
+  answerHindi: { ...hindiType(22), color: c.white },
   answerLatin: { color: c.heroSubtle, fontSize: 15, lineHeight: 20, fontWeight: '700' },
   primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   primaryText: { color: c.white, fontSize: 15, fontWeight: '900' },

@@ -9,12 +9,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppErrorBoundary } from '@/components/app-error-boundary';
+import { useHindiFont } from '@/hooks/use-hindi-font';
 import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
 import { observe } from '@/lib/observability';
 import { AppStateProvider, useAppState } from '@/state/app-state';
-import { makeStyles, spacing, useTheme } from '@/theme';
+import { hindiType, makeStyles, spacing, useTheme } from '@/theme';
 
 export default function RootLayout() {
+  useHindiFont();
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -81,8 +83,7 @@ const useStyles = makeStyles((c) => ({
     backgroundColor: c.background,
   },
   loadingMark: {
+    ...hindiType(48),
     color: c.brand,
-    fontSize: 48,
-    fontWeight: '900',
   },
 }));

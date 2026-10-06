@@ -29,7 +29,7 @@ import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
-import { displayFont, makeStyles, radius, spacing, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -137,11 +137,11 @@ export default function LiveScreen() {
     responding: 'Asha is speaking',
   }[realtimeStatus];
   const voiceHeroBody = {
-    disconnected: 'Tap the orb to start talking with Asha.',
+    disconnected: 'Tap Asha to start talking with her.',
     connecting: 'Opening a private live voice session…',
-    ready: 'Tap the orb to unmute and join the conversation.',
+    ready: 'Tap Asha to unmute and join the conversation.',
     recording: 'Speak naturally, even while Asha talks. Tap to mute.',
-    responding: 'Your mic is muted. Tap the orb to speak at any time.',
+    responding: 'Your mic is muted. Tap Asha to speak at any time.',
   }[realtimeStatus];
 
   const scrollToChat = useCallback(() => {
@@ -509,18 +509,24 @@ export default function LiveScreen() {
                   value={responseLanguage}
                 />
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}>
-                  <View style={[styles.portraitStage, compactVoiceLayout && styles.portraitStageCompact]}>
-                    <View pointerEvents="none" style={[styles.portraitRing, styles.portraitRingOuter, compactVoiceLayout && styles.portraitRingOuterCompact]} />
-                    <View pointerEvents="none" style={[styles.portraitRing, styles.portraitRingInner, compactVoiceLayout && styles.portraitRingInnerCompact]} />
-                    <Image
-                      accessible={false}
-                      cachePolicy="memory-disk"
-                      contentFit="cover"
-                      source={ashaPortrait}
-                      style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
-                      testID="asha-header-portrait"
-                      transition={0}
-                    />
+                  {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
+                  <View style={styles.portraitControl} testID="asha-portrait-control">
+                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} liveSession={liveSession} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark">
+                      <Image
+                        accessible={false}
+                        cachePolicy="memory-disk"
+                        contentFit="cover"
+                        source={ashaPortrait}
+                        style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
+                        testID="asha-header-portrait"
+                        transition={0}
+                      />
+                    </RealtimeVoiceButton>
+                    {aiConsent ? (
+                      <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                        <MessageCircle color={colors.white} size={20} />
+                      </Pressable>
+                    ) : null}
                   </View>
                   <View style={styles.heroCopy}>
                     <View style={styles.statusRow}>
@@ -529,14 +535,6 @@ export default function LiveScreen() {
                     </View>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
-                  </View>
-                  <View style={styles.orbRow}>
-                    {aiConsent ? (
-                      <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                        <MessageCircle color={colors.white} size={20} />
-                      </Pressable>
-                    ) : null}
-                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} liveSession={liveSession} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="minimal" tone="dark" />
                   </View>
                 </View>
                 <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
@@ -686,19 +684,13 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
   privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.nightLine, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
   privateText: { color: c.brandSoft, fontSize: 13, fontWeight: '600' },
-  chatButton: { position: 'absolute', left: 0, top: 26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { alignSelf: 'center' },
   heroConsent: { alignSelf: 'center' },
   liveControls: { alignSelf: 'center', alignItems: 'center', gap: 10 },
   voiceStage: { alignSelf: 'center', alignItems: 'center', gap: 10 },
   voiceStageCompact: { gap: spacing.sm },
-  portraitStage: { width: 144, height: 144, alignItems: 'center', justifyContent: 'center' },
-  portraitStageCompact: { width: 124, height: 124 },
-  portraitRing: { position: 'absolute', borderRadius: radius.pill, borderWidth: 2 },
-  portraitRingOuter: { width: 144, height: 144, borderColor: 'rgba(231, 172, 61, 0.25)' },
-  portraitRingOuterCompact: { width: 124, height: 124 },
-  portraitRingInner: { width: 128, height: 128, borderColor: 'rgba(231, 172, 61, 0.5)' },
-  portraitRingInnerCompact: { width: 110, height: 110 },
+  portraitControl: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface },
   ashaPortraitCompact: { width: 96, height: 96 },
   heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: 4 },
@@ -708,7 +700,6 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   liveVoiceText: { color: c.gold, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1 },
   heroTitle: { minWidth: 0, maxWidth: 300, flexShrink: 1, color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
   heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroSubtle, fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  orbRow: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   captionBlock: { alignSelf: 'center', gap: 10 },
   captionCard: { alignSelf: 'stretch', gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md },
   captionCardYou: { backgroundColor: c.nightSurface },
@@ -724,7 +715,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioPhraseEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
   studioPhraseEnglish: { color: c.white, fontFamily: displayFont, fontSize: 19, lineHeight: 25, fontWeight: '600' },
   studioListenIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
-  studioPhraseHindi: { color: c.white, fontFamily: displayFont, fontSize: 24, lineHeight: 32, fontWeight: '600' },
+  studioPhraseHindi: { ...hindiType(24), color: c.white },
   studioPhraseLatin: { color: c.gold, fontSize: 14, fontWeight: '600' },
   studioPhraseFooter: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   studioPhraseCue: { minWidth: 0, flex: 1, color: c.heroSubtle, fontSize: 12, lineHeight: 17 },
