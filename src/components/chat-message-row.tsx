@@ -1,8 +1,9 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
+import { Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
 import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';

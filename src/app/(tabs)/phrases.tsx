@@ -24,12 +24,13 @@ import { displayFont, makeStyles, maxContentWidth, radius, spacing, useSharedSty
 type Filter = 'All' | SceneCategory;
 
 const replaySpeeds = [
-  { label: '0.10×', rate: 0.1 },
+  { label: '0.1×', rate: 0.1 },
   { label: '0.25×', rate: 0.25 },
-  { label: '0.50×', rate: 0.5 },
+  { label: '0.5×', rate: 0.5 },
   { label: '0.75×', rate: 0.75 },
-  { label: 'Normal', rate: 1 },
+  { label: '1×', rate: 1 },
 ] as const;
+const speedOptions = replaySpeeds.map(({ label, rate }) => ({ accessibilityLabel: rate === 1 ? 'Normal' : label, label, value: String(rate) }));
 
 const phraseCategories = new Map<string, SceneCategory>();
 for (const scene of scenes) {
@@ -101,9 +102,10 @@ export default function PhrasesScreen() {
 
   useFocusEffect(useCallback(() => () => { void stopSpeaking(); }, []));
 
-  function playPhrase(text: string, playbackRate = profile.phrasePlaybackRate ?? 1) {
+  const playbackRate = profile.phrasePlaybackRate ?? 1;
+
+  function playPhrase(text: string) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
-    if (playbackRate !== (profile.phrasePlaybackRate ?? 1)) updateLearnerProfile({ phrasePlaybackRate: playbackRate });
     clearAudioError();
     setAudioPhrase(text);
     void speak(text, undefined, playbackRate);
@@ -160,6 +162,20 @@ export default function PhrasesScreen() {
             style={styles.segmentedControl}
             value={filter}
           />
+          <View style={styles.speedSetting}>
+            <Text style={styles.speedLabel}>Listen speed</Text>
+            {/* One shared speed, like a podcast player, instead of a row of speed chips on every card. */}
+            <SegmentedControl
+              accessibilityLabel="Playback speed"
+              compact
+              onValueChange={(value) => updateLearnerProfile({ phrasePlaybackRate: Number(value) })}
+              options={speedOptions}
+              stackedAtLargeText
+              style={styles.segmentedControl}
+              testID="phrases-playback-speed"
+              value={String(playbackRate)}
+            />
+          </View>
         </>
       ) : null}
     </View>
@@ -173,6 +189,8 @@ export default function PhrasesScreen() {
         Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
       ]}
       data={visible}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
       keyExtractor={(phrase) => phrase.hi}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       ListHeaderComponent={Header}
@@ -210,16 +228,11 @@ export default function PhrasesScreen() {
                 </View>
               </View>
               <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
-                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
+                <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: playbackRate === 1 ? 'Normal speed' : `${playbackRate}× speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
                   <Volume2 color={colors.brandText} size={18} />
                 </PressableFeedback>
                 <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
               </View>
-            </View>
-            <View style={styles.actions}>
-              {replaySpeeds.map(({ label, rate }) => (
-                <PressableFeedback key={rate} accessibilityLabel={`Replay ${learnerPhraseLatin(item.hi, item.latin)} at ${label} speed`} accessibilityRole="button" accessibilityState={{ disabled: !canListen, selected: rate === (profile.phrasePlaybackRate ?? 1) }} isDisabled={!canListen} onPress={() => playPhrase(item.hi, rate)} style={[styles.speedButton, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedButtonSelected, largeTextLayout && styles.speedButtonLarge, !canListen && styles.disabled]}><Text style={[styles.speedText, rate === (profile.phrasePlaybackRate ?? 1) && styles.speedTextSelected]}>{label}</Text></PressableFeedback>
-              ))}
             </View>
             {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
@@ -274,12 +287,8 @@ const useStyles = makeStyles((c) => ({
   masterySegmentFilled: { backgroundColor: c.forest },
   mastery: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   masteryDue: { color: c.brandText },
-  actions: { alignSelf: 'stretch', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  speedButton: { flexGrow: 1, minWidth: 52, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.track, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xs },
-  speedButtonSelected: { backgroundColor: c.ink },
-  speedButtonLarge: { minHeight: 44, paddingVertical: spacing.sm },
-  speedText: { color: c.muted, flexShrink: 1, fontSize: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  speedTextSelected: { color: c.white },
+  speedSetting: { width: '100%', gap: spacing.sm },
+  speedLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
   emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
