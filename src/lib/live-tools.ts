@@ -388,6 +388,8 @@ export function createLiveToolExecutor(environment: LiveToolEnvironment): LiveTo
       handledCallIds.add(call.callId);
       // Run calls one at a time so saves and progress updates never race.
       const work = queue.then(async (): Promise<LiveClientEvent[]> => {
+        // A call queued behind slower work is abandoned once the session ends.
+        if (controller.signal.aborted) return [];
         const output = boundedOutput(await execute(call), maximumBytes);
         if (controller.signal.aborted) return [];
         eventCount += 1;

@@ -302,6 +302,19 @@ describe('live tool executor', () => {
     expect(executor.handleEvent(envelope('get_learner_progress', '{}', 'call_2'))).toBeNull();
   });
 
+  it('abandons queued calls that had not started when the session ended', async () => {
+    let resolvePrepare!: (phrase: SavedPhrase) => void;
+    const { executor, environment } = setup(snapshot(), { preparePhrase: jest.fn(() => new Promise<SavedPhrase>((resolve) => { resolvePrepare = resolve; })) });
+    const first = executor.handleEvent(envelope('save_confirmed_phrase', JSON.stringify({ originalText: 'Bilkul naya', confirmed: true }), 'call_1'))!;
+    const queued = executor.handleEvent(envelope('update_completed_progress', JSON.stringify({ lessonId: 'chai', interactionCompleted: true, outcome: 'Ordered tea' }), 'call_2'))!;
+    await Promise.resolve();
+    executor.dispose();
+    resolvePrepare({ hi: 'बिल्कुल नया', latin: 'Bilkul naya', en: 'Brand new' });
+    expect(await first).toEqual([]);
+    expect(await queued).toEqual([]);
+    expect(environment.recordLessonPractice).not.toHaveBeenCalled();
+  });
+
   it('ignores non-tool events', () => {
     const { executor } = setup();
     expect(executor.handleEvent({ type: 'session.output_transcript.delta', delta: 'hi' })).toBeNull();
