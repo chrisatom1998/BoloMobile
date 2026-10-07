@@ -234,7 +234,8 @@ describe('GPT-Live conversation lifecycle', () => {
         duePhraseCount: 0,
       }),
       preparePhrase: jest.fn(),
-      savePhrase: jest.fn(),
+      confirmSave: jest.fn(async () => true),
+      savePhrase: jest.fn(async () => true),
       recordLessonPractice: jest.fn(),
     });
 

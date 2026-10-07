@@ -56,8 +56,14 @@ export type LiveToolEnvironment = {
   getSnapshot: () => LiveToolSnapshot;
   /** The app's existing saved-phrase preparation path, used when no local match exists. */
   preparePhrase: (input: { originalText: string; devanagari?: string }, signal: AbortSignal) => Promise<SavedPhrase>;
-  /** Adds a new saved phrase. Only called for phrases that are not already saved. */
-  savePhrase: (phrase: SavedPhrase) => void;
+  /**
+   * Asks the learner in the app to confirm saving a phrase. The model's
+   * `confirmed` argument is not proof of consent, so a save always waits for
+   * this app-held answer.
+   */
+  confirmSave: (phrase: SavedPhrase, signal: AbortSignal) => Promise<boolean>;
+  /** Adds a new saved phrase and resolves true once it is stored durably. Only called for phrases that are not already saved. */
+  savePhrase: (phrase: SavedPhrase) => Promise<boolean>;
   /** Records conversation practice for an existing lesson id. */
   recordLessonPractice: (lessonId: string) => void;
   maxOutputBytes?: number;
@@ -331,7 +337,11 @@ export function createLiveToolExecutor(environment: LiveToolEnvironment): LiveTo
       const key = normalizeKey(cleaned.hi);
       const known = [...environment.getSnapshot().phrases, ...savedThisSession].some((saved) => normalizeKey(saved.hi) === key);
       if (known) return { status: 'already_saved', phrase: phraseView(cleaned) };
-      environment.savePhrase(cleaned);
+      const approved = await environment.confirmSave(cleaned, controller.signal);
+      if (controller.signal.aborted) return { error: 'session_ended' };
+      if (!approved) return { status: 'not_saved', reason: 'learner_declined', phrase: phraseView(cleaned) };
+      if (savedThisSession.some((saved) => normalizeKey(saved.hi) === key)) return { status: 'already_saved', phrase: phraseView(cleaned) };
+      if (!(await environment.savePhrase(cleaned))) return { error: 'save_failed' };
       savedThisSession.push(cleaned);
       return { status: 'saved', phrase: phraseView(cleaned) };
     },

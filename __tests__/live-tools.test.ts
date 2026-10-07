@@ -33,7 +33,8 @@ function setup(state = snapshot(), extra: Partial<LiveToolEnvironment> = {}) {
   const environment = {
     getSnapshot: jest.fn(() => current),
     preparePhrase: jest.fn(async (): Promise<SavedPhrase> => ({ hi: 'मुझे हिंदी पसंद है।', latin: 'Mujhe Hindi pasand hai.', en: 'I like Hindi.' })),
-    savePhrase: jest.fn((phrase: SavedPhrase) => { current = { ...current, phrases: [...current.phrases, phrase] }; }),
+    confirmSave: jest.fn(async (_phrase: SavedPhrase, _signal: AbortSignal) => true),
+    savePhrase: jest.fn(async (phrase: SavedPhrase) => { current = { ...current, phrases: [...current.phrases, phrase] }; return true; }),
     recordLessonPractice: jest.fn(),
     ...extra,
   };
@@ -187,6 +188,21 @@ describe('live tool executor', () => {
       const { call, environment } = setup();
       expect((await call('save_confirmed_phrase', { originalText: 'One tea, please.', confirmed: false }))?.output).toEqual({ error: 'confirmation_required' });
       expect(environment.savePhrase).not.toHaveBeenCalled();
+    });
+
+    it('saves only after the learner approves in the app, whatever the model claims', async () => {
+      const { call, environment } = setup();
+      jest.mocked(environment.confirmSave).mockResolvedValueOnce(false);
+      expect((await call('save_confirmed_phrase', { originalText: 'Ek chai dijiye', devanagari: chaiPhrase.hi, confirmed: true }))?.output).toMatchObject({ status: 'not_saved', reason: 'learner_declined' });
+      expect(environment.confirmSave).toHaveBeenCalledWith(chaiPhrase, expect.any(AbortSignal));
+      expect(environment.savePhrase).not.toHaveBeenCalled();
+    });
+
+    it('reports an error when the save is not stored durably', async () => {
+      const { call, environment } = setup();
+      jest.mocked(environment.savePhrase).mockResolvedValueOnce(false);
+      expect((await call('save_confirmed_phrase', { originalText: 'Ek chai dijiye', devanagari: chaiPhrase.hi, confirmed: true }))?.output).toEqual({ error: 'save_failed' });
+      expect((await call('create_session_recap', { sessionId: 's' }))?.output).toMatchObject({ savedPhrases: [] });
     });
 
     it('saves known lesson phrases locally and dedupes against saved phrases', async () => {

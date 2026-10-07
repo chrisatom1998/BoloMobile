@@ -1,12 +1,14 @@
 import { renderHook } from '@testing-library/react-native';
 
-import { createAshaToolEnvironment, liveToolSnapshot, useAshaLiveSession } from '../src/hooks/use-asha-live-session';
+import { confirmPhraseSave, createAshaToolEnvironment, liveToolSnapshot, useAshaLiveSession } from '../src/hooks/use-asha-live-session';
+import { showAppAlert } from '../src/lib/app-alert';
 import { dateKey, defaultLearnerProfile, defaultSceneProgress, emptyPractice } from '../src/lib/storage';
 import { prepareSavedPhraseFromText } from '../src/services/bolo-api';
 import { useAppState } from '../src/state/app-state';
 
 jest.mock('@/services/bolo-api', () => ({ prepareSavedPhraseFromText: jest.fn() }));
 jest.mock('@/state/app-state', () => ({ useAppState: jest.fn() }));
+jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 
 type AppStateValue = ReturnType<typeof useAppState>;
 
@@ -63,5 +65,28 @@ describe('Asha live session setup', () => {
     await rerender({});
     expect(result.current).toBe(first);
     expect(setup.toolEnvironment?.getSnapshot().phrases).toHaveLength(0);
+  });
+
+  it('asks the learner in the app before saving and treats dismiss or session end as no', async () => {
+    const phrase = { hi: 'नया', latin: 'Naya', en: 'New' };
+    const buttons = () => jest.mocked(showAppAlert).mock.lastCall?.[2] ?? [];
+    const approved = confirmPhraseSave(phrase, new AbortController().signal);
+    expect(showAppAlert).toHaveBeenLastCalledWith('Save this phrase?', 'नया\nNaya\nNew', expect.any(Array), expect.objectContaining({ cancelable: true }));
+    buttons().find((button) => button.text === 'Save')?.onPress?.();
+    await expect(approved).resolves.toBe(true);
+
+    const declined = confirmPhraseSave(phrase, new AbortController().signal);
+    buttons().find((button) => button.style === 'cancel')?.onPress?.();
+    await expect(declined).resolves.toBe(false);
+
+    const dismissed = confirmPhraseSave(phrase, new AbortController().signal);
+    jest.mocked(showAppAlert).mock.lastCall?.[3]?.onDismiss?.();
+    await expect(dismissed).resolves.toBe(false);
+
+    const controller = new AbortController();
+    const ended = confirmPhraseSave(phrase, controller.signal);
+    controller.abort();
+    buttons().find((button) => button.text === 'Save')?.onPress?.();
+    await expect(ended).resolves.toBe(false);
   });
 });

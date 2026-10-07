@@ -63,7 +63,8 @@ type AppActions = {
   setGoal: (goal: 5 | 10 | 15) => void;
   completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
-  togglePhrase: (phrase: SavedPhrase) => void;
+  /** Resolves true once the change is stored, false if the write failed and was rolled back. */
+  togglePhrase: (phrase: SavedPhrase) => Promise<boolean>;
   removePhrase: (hi: string) => void;
   checkpointScene: (sceneId: string, nextBeatIndex: number, attempt?: SceneAttempt) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
@@ -314,7 +315,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [commit]);
 
   const togglePhrase = useCallback((phrase: SavedPhrase) => {
-    commit((current) => {
+    return commit((current) => {
       const exists = current.phrases.some((saved) => saved.hi === phrase.hi);
       const phrases = exists
         ? current.phrases.filter((saved) => saved.hi !== phrase.hi)

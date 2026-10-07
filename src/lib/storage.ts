@@ -28,7 +28,7 @@ export const storageKeys = {
   motionPreference: 'bolo-motion-preference',
 } as const;
 
-export const AI_CONSENT_VERSION = 9 as const;
+export const AI_CONSENT_VERSION = 10 as const;
 export const MAX_CHAT_HISTORY_MESSAGES = 100;
 export const MAX_CHAT_MESSAGE_CHARACTERS = 2_400;
 export const MAX_DAILY_PRACTICE_SECONDS = 24 * 60 * 60;

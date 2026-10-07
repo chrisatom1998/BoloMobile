@@ -65,7 +65,7 @@ export const BOLO_TOOLS = [
     },
   },
   {
-    type: 'function', name: 'save_confirmed_phrase', description: 'Save only a phrase that the learner explicitly confirmed.',
+    type: 'function', name: 'save_confirmed_phrase', description: 'Save a phrase the learner explicitly asked to keep. The app then asks the learner to approve the save; if the result is not_saved, accept that and move on.',
     parameters: {
       type: 'object',
       properties: { originalText: { type: 'string' }, devanagari: { type: 'string' }, confirmed: { type: 'boolean', const: true } },

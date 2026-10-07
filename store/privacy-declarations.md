@@ -1,6 +1,6 @@
 # Store privacy declarations
 
-Updated for the GPT-Live client migration on September 11, 2026. AI data-use consent notice version: 9. These declarations cover consent-gated AI speech, typed coaching, continuous GPT-Live conversation with bounded startup history, pronunciation checks, a random installation identifier, optional reports, and deletion. Production GPT-Live session and native device verification are separate rollout checks; this document does not claim those checks have passed.
+Updated for the GPT-Live client migration on September 11, 2026. AI data-use consent notice version: 10. Version 10 adds that live voice sends the learner level, suggested lesson and a few saved phrases at startup, and that Asha can read a lesson and progress summary, save a phrase only after the learner approves it in the app, and record lesson practice during the call. These declarations cover consent-gated AI speech, typed coaching, continuous GPT-Live conversation with bounded startup history, pronunciation checks, a random installation identifier, optional reports, and deletion. Production GPT-Live session and native device verification are separate rollout checks; this document does not claim those checks have passed.
 
 ## Apple App Privacy
 
