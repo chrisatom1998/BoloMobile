@@ -2,10 +2,11 @@ import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
 import { Activity, ArchiveRestore, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileDown, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Linking, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { SegmentedControl } from '@/components/segmented-control';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
@@ -26,7 +27,7 @@ export function formatReminderTime(hour: number, minute = 0) {
 }
 
 const motionDescriptions: Record<MotionPreference, string> = {
-  system: 'Follows your iPhone’s Reduce Motion setting.',
+  system: Platform.OS === 'android' ? 'Follows your phone’s Remove animations setting.' : 'Follows your iPhone’s Reduce Motion setting.',
   gentle: 'Uses calm, short transitions. This is Bolo’s default.',
   lively: 'Adds more movement to progress, feedback, captions, and the voice orb.',
   reduced: 'Turns off nonessential movement.',
@@ -316,7 +317,7 @@ export default function SettingsScreen() {
           value={motionPreference}
         />
         <Text accessibilityLiveRegion="polite" style={styles.detail}>{motionDescriptions[motionPreference]}</Text>
-        <Text style={styles.motionPriority}>Your iPhone’s Reduce Motion setting always takes priority.</Text>
+        <Text style={styles.motionPriority}>{Platform.OS === 'android' ? 'Your phone’s Remove animations setting always takes priority.' : 'Your iPhone’s Reduce Motion setting always takes priority.'}</Text>
       </View>
 
       <View style={styles.card}>
@@ -403,7 +404,7 @@ export default function SettingsScreen() {
             style={[styles.secondaryButton, styles.backupButton, backupBusy !== null && styles.disabled]}
             testID="settings-export-progress"
           >
-            <FileDown color={colors.forestText} size={18} /><Text style={styles.secondaryText}>{backupBusy === 'export' ? 'Preparing…' : 'Export progress'}</Text>
+            <FileDown color={colors.forestText} size={18} /><Text style={[styles.secondaryText, styles.backupText]}>{backupBusy === 'export' ? 'Preparing…' : 'Export progress'}</Text>
           </Pressable>
           <Pressable
             accessibilityHint="Choose a backup file. You will confirm before progress is replaced."
@@ -415,7 +416,7 @@ export default function SettingsScreen() {
             style={[styles.secondaryButton, styles.backupButton, backupBusy !== null && styles.disabled]}
             testID="settings-restore-progress"
           >
-            <ArchiveRestore color={colors.forestText} size={18} /><Text style={styles.secondaryText}>{backupBusy === 'restore' ? 'Restoring…' : 'Restore from backup'}</Text>
+            <ArchiveRestore color={colors.forestText} size={18} /><Text style={[styles.secondaryText, styles.backupText]}>{backupBusy === 'restore' ? 'Restoring…' : 'Restore from backup'}</Text>
           </Pressable>
         </View>
       </View>
@@ -462,6 +463,7 @@ const useStyles = makeStyles((c) => ({
   buttonRowLarge: { flexDirection: 'column' },
   backupButton: { flexGrow: 1, flexBasis: 160, flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
   secondaryText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  backupText: { flexShrink: 1 },
   about: { padding: spacing.lg, gap: spacing.sm },
   aboutText: { color: c.muted, fontSize: 13, lineHeight: 19 },
 }));

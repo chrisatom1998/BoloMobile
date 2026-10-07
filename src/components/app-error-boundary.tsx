@@ -1,7 +1,8 @@
 import { router, type ErrorBoundaryProps } from 'expo-router';
 import { Component, type ErrorInfo, type PropsWithChildren } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { observe } from '@/lib/observability';
 import { hindiType, makeStyles, radius, spacing } from '@/theme';
 

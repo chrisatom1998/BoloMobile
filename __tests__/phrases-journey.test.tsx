@@ -143,14 +143,15 @@ describe('PhrasesScreen primary journey', () => {
     expect(stopSpeakingMock).toHaveBeenCalled();
   });
 
-  it('replays a saved phrase at each requested slower speed', async () => {
+  it('sets one shared playback speed that Listen then uses', async () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    for (const [label, rate] of [['0.10×', 0.1], ['0.25×', 0.25], ['0.50×', 0.5], ['0.75×', 0.75], ['Normal', 1]] as const) {
-      await fireEvent.press(view.getByLabelText(`Replay ${learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin)} at ${label} speed`));
-      expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, rate);
+    for (const [label, rate] of [['0.1×', 0.1], ['0.25×', 0.25], ['0.5×', 0.5], ['0.75×', 0.75], ['Normal', 1]] as const) {
+      await fireEvent.press(view.getByLabelText(`Playback speed: ${label}`));
+      expect(mockUpdateLearnerProfile).toHaveBeenLastCalledWith({ phrasePlaybackRate: rate });
     }
+    expect(speakTextMock).not.toHaveBeenCalled();
   });
 
   it('removes a phrase only after destructive confirmation', async () => {
@@ -189,11 +190,9 @@ it('uses the remembered playback speed for Listen and highlights it', async () =
   mockAppState.phrases = [mockPhrase];
   mockAppState.learnerProfile.phrasePlaybackRate = 0.75;
   const view = await render(<PhrasesScreen />);
-  expect(view.getByLabelText(`Replay ${learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin)} at 0.75× speed`).props.accessibilityState.selected).toBe(true);
+  expect(view.getByLabelText('Playback speed: 0.75×').props.accessibilityState.selected).toBe(true);
   await fireEvent.press(view.getByLabelText(`Hear ${mockPhrase.hi}`));
   await waitFor(() => expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, 0.75));
-  await fireEvent.press(view.getByLabelText(`Replay ${learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin)} at Normal speed`));
-  expect(mockUpdateLearnerProfile).toHaveBeenCalledWith({ phrasePlaybackRate: 1 });
   mockAppState.learnerProfile.phrasePlaybackRate = 1;
 });
 

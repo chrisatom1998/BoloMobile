@@ -1,8 +1,9 @@
 import { Send } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useTheme } from '@/theme';
 
 type Props = {

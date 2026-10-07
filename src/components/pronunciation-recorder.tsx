@@ -1,7 +1,8 @@
 import { Flag, Sparkles } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Platform, Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Text, View } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { VoiceTurnButton } from '@/components/voice-turn-button';
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { showAppAlert } from '@/lib/app-alert';

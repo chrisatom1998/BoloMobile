@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { observe } from '@/lib/observability';
@@ -47,6 +48,12 @@ export default function ReviewScreen() {
     setIndex((value) => value + 1);
   }
 
+  /** Review opens as a sheet, so finishing dismisses it back to wherever it was opened from. */
+  function finishReview() {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
+
   function playPhrase(playbackRate = 1) {
     if (!phrase || (!aiConsent && !hasOfflineSpeech(phrase.hi))) return;
     void speak(phrase.hi, undefined, playbackRate);
@@ -69,7 +76,7 @@ export default function ReviewScreen() {
         <Text style={sharedStyles.eyebrow}>Review complete</Text>
         <Text accessibilityRole="header" style={styles.title}>{correct} of {session.length} remembered</Text>
         <Text style={styles.body}>Bolo scheduled each phrase based on how it felt today.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to today</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={finishReview} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Done</Text></Pressable>
       </ScrollView>
     );
   }

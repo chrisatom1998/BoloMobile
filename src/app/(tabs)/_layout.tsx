@@ -19,7 +19,9 @@ export default function PrimaryTabsLayout() {
       backgroundColor={colors.paperRaised}
       disableTransparentOnScrollEdge
       iconColor={{ default: colors.muted, selected: colors.brand }}
+      indicatorColor={colors.brandSoft}
       labelStyle={{ fontSize: 11, fontWeight: '600' }}
+      labelVisibilityMode="labeled"
       minimizeBehavior="onScrollDown"
       shadowColor={colors.line}
       tintColor={colors.brand}
