@@ -3,6 +3,8 @@ import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useAppState } from '@/state/app-state';
 import { useTheme } from '@/theme';
 
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
+
 /**
  * The learning loop is deliberately kept to four stable destinations. Keeping
  * the triggers static matters: native tabs remount if their route list changes.

@@ -62,7 +62,7 @@ export default function ReviewScreen() {
   if (session.length === 0) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
-        <Text style={styles.title}>Save a phrase to start reviewing</Text>
+        <Text accessibilityRole="header" style={styles.title}>Save a phrase to start reviewing</Text>
         <Text style={styles.body}>Natural answers saved from scenes will become quick recall cards here.</Text>
         <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose a scene</Text></Pressable>
       </ScrollView>
@@ -74,7 +74,7 @@ export default function ReviewScreen() {
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
         <View style={styles.doneMark}><Check color={colors.white} size={34} /></View>
         <Text style={sharedStyles.eyebrow}>Review complete</Text>
-        <Text style={styles.title}>{correct} of {session.length} remembered</Text>
+        <Text accessibilityRole="header" style={styles.title}>{correct} of {session.length} remembered</Text>
         <Text style={styles.body}>Bolo scheduled each phrase based on how it felt today.</Text>
         <Pressable accessibilityRole="button" onPress={finishReview} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Done</Text></Pressable>
       </ScrollView>
@@ -89,13 +89,13 @@ export default function ReviewScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.screen} testID="review-scroll">
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
-      <View style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
-      <View accessible accessibilityLabel={`Review phrase ${phrase.hi}`} style={styles.card}>
+      <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
+      <View style={styles.card}>
         <Text style={sharedStyles.eyebrow}>Say this naturally</Text>
         <Text style={styles.prompt}>{phrase.en}</Text>
         {revealed ? (
           <View style={styles.answer}>
-            {showHindi ? <Text style={styles.hindi}>{phrase.hi}</Text> : null}
+            {showHindi ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{phrase.hi}</Text> : null}
             {showLatin ? <Text style={styles.latin}>{learnerPhraseLatin(phrase.hi, phrase.latin)}</Text> : null}
             <View style={styles.audioRow}>
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase()} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>

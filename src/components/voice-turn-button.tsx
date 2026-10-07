@@ -6,7 +6,7 @@ import {
 } from 'expo-audio';
 import { Mic, Square } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, Text, View } from 'react-native';
+import { AppState, Linking, Platform, Pressable, Text, View } from 'react-native';
 
 import { hapticStartRecording, hapticTap, hapticWarning } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
@@ -38,6 +38,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [recording, setRecording] = useState(false);
   const [starting, setStarting] = useState(false);
 
@@ -125,7 +126,11 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       await stopSpeaking();
       if (!isCurrentAttempt()) return;
       const permission = await requestRecordingPermissionsAsync();
-      if (!permission.granted) throw new Error('Microphone access is required. Enable it in your device settings and try again.');
+      if (!permission.granted) {
+        setPermissionDenied(true);
+        throw new Error('Microphone access is required. Enable it in your device settings and try again.');
+      }
+      setPermissionDenied(false);
       if (!isCurrentAttempt() || !await waitForForeground(lifecycle)) return;
       await setVoiceAudioMode('recording');
       releaseRecordingMode = true;
@@ -226,15 +231,21 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={isRecording ? 'Stop recording' : idleLabel}
-        accessibilityState={{ disabled: unavailable }}
+        accessibilityState={busy || starting ? { disabled: unavailable, busy: true } : { disabled: unavailable }}
+        accessibilityValue={busy || starting ? { text: label } : undefined}
         disabled={unavailable}
         onPress={isRecording ? () => void finish() : () => void start()}
-        style={[styles.button, isRecording && styles.recording, unavailable && styles.disabled]}
+        style={[styles.button, isRecording && styles.recording, (busy || starting) && styles.working, disabled && styles.disabled]}
       >
         {isRecording ? <Square color={colors.white} fill={colors.white} size={17} /> : <Mic color={colors.white} size={19} />}
         <Text style={styles.label}>{label}</Text>
       </Pressable>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+      {error && permissionDenied && Platform.OS !== 'web' ? (
+        <Pressable accessibilityRole="link" accessibilityLabel="Open Settings to allow microphone access" hitSlop={8} onPress={() => void Linking.openSettings()} style={styles.settingsLink}>
+          <Text style={styles.settingsLinkText}>Open Settings</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -254,7 +265,10 @@ const useStyles = makeStyles((c) => ({
   },
   // Ink, not red: a red recording state would be hard to tell from the brand-coloured idle button.
   recording: { backgroundColor: c.neutralSurface },
+  working: { backgroundColor: c.forestDark },
   disabled: { opacity: 0.5 },
   label: { color: c.white, fontSize: 15, fontWeight: '800' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLinkText: { color: c.forestText, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 }));

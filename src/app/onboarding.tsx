@@ -2,7 +2,7 @@ import { AudioModule } from 'expo-audio';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BookOpenText, Check, Languages, Mic, Route, Sparkles, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Platform, ScrollView, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
@@ -29,7 +29,7 @@ function ChoiceRow<T extends string | number>({ choices, label, onChange, value 
         return (
           <Pressable
             key={choice.value}
-            accessibilityLabel={choice.label}
+            accessibilityLabel={choice.detail ? `${choice.label}, ${choice.detail}` : choice.label}
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
             onPress={() => onChange(choice.value)}
@@ -67,8 +67,11 @@ export default function OnboardingScreen() {
   async function testMicrophone() {
     const current = await AudioModule.getRecordingPermissionsAsync();
     const permission = current.granted ? current : await AudioModule.requestRecordingPermissionsAsync();
+    const status = permission.granted ? 'Microphone ready.' : 'Microphone access is off. Typed and written practice still work.';
     setMicrophoneTested(true);
-    setMicrophoneStatus(permission.granted ? 'Microphone ready.' : 'Microphone access is off. Typed and written practice still work.');
+    setMicrophoneStatus(status);
+    // Android announces the live region below; iOS ignores accessibilityLiveRegion.
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(status);
   }
 
   function finish() {
@@ -97,12 +100,12 @@ export default function OnboardingScreen() {
         </View>
         <View style={styles.intro}>
           <Text style={sharedStyles.eyebrow}>{recalibrating ? 'Tune your plan' : 'Welcome to Bolo'}</Text>
-          <Text style={styles.heading}>{recalibrating ? 'Recalibrate without losing your choices' : 'Your Hindi plan in one minute'}</Text>
+          <Text accessibilityRole="header" style={styles.heading}>{recalibrating ? 'Recalibrate without losing your choices' : 'Your Hindi plan in one minute'}</Text>
           <Text style={sharedStyles.body}>Choose how you want to learn. You can change these preferences later.</Text>
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionTitle}><Sparkles color={colors.brandDark} size={20} /><Text style={styles.title}>Where are you starting?</Text></View>
+          <View style={styles.sectionTitle}><Sparkles color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>Where are you starting?</Text></View>
           <ChoiceRow label="Hindi level" value={level} onChange={setLevel} choices={[
             { value: 'new', label: 'New to Hindi', detail: 'Start with essential patterns.' },
             { value: 'beginner', label: 'Beginner', detail: 'I know greetings and a few phrases.' },
@@ -111,7 +114,7 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionTitle}><BookOpenText color={colors.brandDark} size={20} /><Text style={styles.title}>How should Hindi appear?</Text></View>
+          <View style={styles.sectionTitle}><BookOpenText color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>How should Hindi appear?</Text></View>
           <ChoiceRow label="Hindi script preference" value={scriptPreference} onChange={setScriptPreference} choices={[
             { value: 'both', label: 'Hindi + transliteration' },
             { value: 'devanagari', label: 'Hindi script only' },
@@ -120,7 +123,7 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionTitle}><Route color={colors.brandDark} size={20} /><Text style={styles.title}>What matters most?</Text></View>
+          <View style={styles.sectionTitle}><Route color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>What matters most?</Text></View>
           <ChoiceRow label="Learning goal" value={primaryGoal} onChange={setPrimaryGoal} choices={[
             { value: 'conversation', label: 'Everyday conversation' },
             { value: 'travel', label: 'Travel' },
@@ -130,7 +133,7 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text style={styles.title}>Asha’s replies</Text></View>
+          <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>Asha’s replies</Text></View>
           <ChoiceRow label="Asha response language" value={responseLanguage} onChange={setResponseLanguage} choices={[
             { value: 'en', label: 'English first' },
             { value: 'hi', label: 'Hindi first' },
@@ -138,7 +141,7 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.title}>Daily practice target</Text>
+          <Text accessibilityRole="header" style={styles.title}>Daily practice target</Text>
           <ChoiceRow label="Daily practice target" value={goal} onChange={setGoal} choices={[
             { value: 5, label: '5 minutes' },
             { value: 10, label: '10 minutes' },
@@ -147,7 +150,7 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.section}>
-          <View style={styles.sectionTitle}><Mic color={colors.brandDark} size={20} /><Text style={styles.title}>Optional microphone check</Text></View>
+          <View style={styles.sectionTitle}><Mic color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>Optional microphone check</Text></View>
           <Text style={styles.detail}>Bolo only asks after you tap. Voice is optional, and no recording begins during this check.</Text>
           <Pressable accessibilityRole="button" onPress={() => void testMicrophone()} style={styles.secondaryButton}>
             <Text style={styles.secondaryText}>{microphoneTested ? 'Check again' : 'Check microphone access'}</Text>

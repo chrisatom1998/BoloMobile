@@ -39,7 +39,9 @@ describe('RootLayout hydration gate', () => {
     const screen = await render(<RootLayout />);
 
     expect(screen.getByTestId('app-hydration-loading')).toBeTruthy();
-    expect(screen.getByText('ब')).toBeTruthy();
+    // The brand glyph is decorative, so it stays out of the accessibility tree.
+    expect(screen.queryByText('ब')).toBeNull();
+    expect(screen.getByText('ब', { includeHiddenElements: true }).props.importantForAccessibility).toBe('no-hide-descendants');
     expect(screen.queryByTestId('app-stack')).toBeNull();
     expect(screen.queryByTestId('stack-screen-(tabs)')).toBeNull();
 

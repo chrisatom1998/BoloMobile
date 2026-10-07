@@ -143,7 +143,12 @@ export default function ProgressScreen() {
               {minutesThisWeek}<Text style={styles.weekTotalUnit}> min</Text>
             </Text>
           </View>
-          <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
+          <View
+            accessible
+            accessibilityLabel={`Practice minutes, last 7 days: ${week.map((day) => `${new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${Math.round(day.seconds / 60)}`).join(', ')}`}
+            accessibilityRole="image"
+            style={styles.chart}
+          >
             {week.map((day, index) => {
               const minutes = Math.round(day.seconds / 60);
               const today = index === week.length - 1;
@@ -204,10 +209,16 @@ export default function ProgressScreen() {
           {planProgress.map((plan) => (
             <View key={plan.id} style={styles.planRow}>
               <View style={styles.planCopy}>
-                <Text numberOfLines={1} style={styles.planTitle}>{plan.title}</Text>
+                <Text numberOfLines={largeTextLayout ? undefined : 1} style={styles.planTitle}>{plan.title}</Text>
                 <Text style={styles.planMeta}>{plan.completed === plan.total ? 'Complete' : `${plan.completed}/${plan.total}`}</Text>
               </View>
-              <View accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`} style={styles.planTrack}>
+              <View
+                accessible
+                accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`}
+                accessibilityRole="progressbar"
+                accessibilityValue={{ min: 0, max: plan.total, now: plan.completed }}
+                style={styles.planTrack}
+              >
                 <View style={[styles.planFill, plan.completed === plan.total && styles.planFillComplete, { width: `${Math.max(plan.percent, plan.completed > 0 ? 4 : 0)}%` }]} />
               </View>
             </View>
@@ -238,11 +249,11 @@ export const createProgressStyles = (c: ThemeColors) => ({
   weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600' },
   weekTotal: { color: c.white, fontFamily: displayFont, fontSize: 36, lineHeight: 42, fontWeight: '700', fontVariant: ['tabular-nums'], textAlign: 'right' },
   weekTotalUnit: { color: c.brandSoft, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
-  chart: { height: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  barColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   barValue: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
   barValueToday: { color: c.white, fontWeight: '700' },
-  barTrack: { flex: 1, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
+  barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
   bar: { width: '100%', minHeight: 8, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
   barToday: { backgroundColor: c.gold },
   day: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontWeight: '600' },

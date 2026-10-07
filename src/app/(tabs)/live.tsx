@@ -4,7 +4,7 @@ import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { Lock, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, AppState, FlatList, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, AppState, FlatList, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -23,6 +23,7 @@ import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus }
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
@@ -630,6 +631,11 @@ export default function LiveScreen() {
       {aiConsent ? <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + 52) }]}>
         {busy ? <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>{'Asha is thinking…'}</Text> : null}
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        {error === LIVE_MIC_PERMISSION_MESSAGE && Platform.OS !== 'web' ? (
+          <Pressable accessibilityRole="link" accessibilityLabel="Open Settings to allow microphone access" hitSlop={8} onPress={() => void Linking.openSettings()} style={styles.settingsLink}>
+            <Text style={styles.settingsLinkText}>Open Settings</Text>
+          </Pressable>
+        ) : null}
         {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
         <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
           {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
@@ -742,6 +748,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   messageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingTop: spacing.xs },
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
+  reportedText: { color: c.success },
   transcriptFooter: { backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },
   transcriptTurnCard: { borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, gap: spacing.sm, padding: spacing.md },
   transcriptTurnEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.75, textTransform: 'uppercase' },
@@ -758,6 +765,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   disabled: { opacity: 0.45 },
   requestStatus: { color: c.gold, fontSize: 13, fontWeight: '600', textAlign: 'center' },
   error: { color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
+  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLinkText: { color: c.white, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 } as const);
 
 const useStyles = makeStyles(createLiveStyles);

@@ -63,9 +63,9 @@ export function AiConsentGate({
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <ShieldCheck color={colors.forest} size={20} strokeWidth={2} />
-        <Text style={styles.title}>{title}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       </View>
-      <View accessibilityRole="list" style={styles.summary}>
+      <View style={styles.summary}>
         {consentSummary.map((line) => (
           <View key={line} style={styles.summaryItem}>
             <Text accessible={false} style={styles.bullet}>•</Text>

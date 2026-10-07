@@ -152,7 +152,7 @@ export function SegmentedControl<T extends string>({
             value={option.value}
           >
             {({ isSelected }) => (
-              <Tabs.Label numberOfLines={1} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
+              <Tabs.Label numberOfLines={2} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
                 {option.label}
               </Tabs.Label>
             )}
@@ -166,7 +166,7 @@ export function SegmentedControl<T extends string>({
 const useStyles = makeStyles((c) => ({
   list: {
     alignSelf: 'stretch',
-    minHeight: 48,
+    minHeight: 52,
     overflow: 'hidden',
     borderRadius: 16,
     borderCurve: 'continuous',
@@ -187,7 +187,7 @@ const useStyles = makeStyles((c) => ({
   trigger: {
     zIndex: 1,
     minWidth: 0,
-    minHeight: 40,
+    minHeight: 44,
     flex: 1,
     borderRadius: 12,
     borderCurve: 'continuous',

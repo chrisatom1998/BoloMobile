@@ -1,6 +1,6 @@
 import { Flag, Sparkles } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Text, View } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { VoiceTurnButton } from '@/components/voice-turn-button';
@@ -95,6 +95,8 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
               if (result.outcome !== 'no-speech' && result.understood !== false) hapticSuccess();
               setFeedback(result.feedback);
               setReported(false);
+              // Android reads the feedback via its live region; iOS needs an explicit announcement.
+              if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(result.feedback);
               // Feedback is ready as soon as the card appears. Playback should
               // not keep the recorder labelled "Asha is thinking…".
               void speakText(result.feedback, controller.signal).catch(() => undefined);

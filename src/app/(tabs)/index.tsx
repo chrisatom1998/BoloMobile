@@ -122,7 +122,7 @@ export default function HomeScreen() {
         </View>
         <View style={styles.topbarActions}>
           <Pressable accessibilityLabel={`${streak} day practice streak`} accessibilityRole="button" hitSlop={4} onPress={() => router.push('/progress' as Href)} style={styles.streakPill} testID="today-streak">
-            <Flame color={colors.gold} size={18} strokeWidth={2.2} />
+            <Flame color={colors.goldIcon} size={18} strokeWidth={2.2} />
             <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
           </Pressable>
           <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton}>
@@ -164,11 +164,14 @@ export default function HomeScreen() {
             <Text style={styles.cardMeta} testID="today-goal-value">{goal} min</Text>
           </View>
           <View
+            accessible
             accessibilityLabel={`${goalPercent} percent of daily goal complete`}
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 100, now: goalPercent }}
             style={[styles.goalDial, largeTextLayout && styles.goalDialLarge]}
             testID="today-goal-dial"
           >
-            <Svg accessibilityElementsHidden height={64} pointerEvents="none" viewBox="0 0 64 64" width={64}>
+            <Svg accessibilityElementsHidden importantForAccessibility="no-hide-descendants" height={64} pointerEvents="none" viewBox="0 0 64 64" width={64}>
               <Circle cx={32} cy={32} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={8} />
               {goalPercent > 0 ? (
                 <Circle
@@ -215,7 +218,7 @@ export default function HomeScreen() {
           testID="today-language-garden"
         >
           <View style={styles.reviewHeader}>
-            <Text style={styles.reviewLabel}>Ready to review</Text>
+            <Text style={styles.reviewLabel}>{phrases.length === 0 ? 'Saved phrases' : 'Ready to review'}</Text>
             <Text style={styles.reviewCount}>{dueCount}</Text>
           </View>
           {reviewPreview.length > 0 ? (
@@ -236,7 +239,7 @@ export default function HomeScreen() {
               ))}
             </View>
           ) : null}
-          <Text style={styles.reviewMeta}>{dueCount === 1 ? 'phrase due' : 'phrases due'}</Text>
+          <Text style={styles.reviewMeta}>{phrases.length === 0 ? 'Save one from any lesson' : dueCount === 1 ? 'phrase due' : 'phrases due'}</Text>
         </PressableFeedback>
       </View>
 
@@ -249,7 +252,7 @@ export default function HomeScreen() {
         <View style={styles.ashaOrb}><AudioLines color={colors.ink} size={20} strokeWidth={2.2} /></View>
       </PressableFeedback>
     </View>
-  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedStatLayout, stackedTopbarLayout, streak, styles, watermark]);
+  ), [colors, dateLine, dueCount, goal, goalPercent, phrases.length, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedStatLayout, stackedTopbarLayout, streak, styles, watermark]);
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
@@ -295,7 +298,7 @@ export default function HomeScreen() {
                   <Text style={styles.planTitle}>{plan.title}</Text>
                   <Text style={styles.planMeta}>{planMeta}</Text>
                 </View>
-                <View accessibilityLabel={`${completed} of ${plan.lessonIds.length} lessons complete`} style={styles.planSegments} testID="today-plan-segments">
+                <View style={styles.planSegments} testID="today-plan-segments">
                   {plan.lessonIds.map((lessonId, index) => {
                     const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
                     const current = !done && lessonId === lessonSelection.lessonId;
@@ -393,7 +396,7 @@ const useStyles = makeStyles((c) => ({
   planSegments: { flexDirection: 'row', gap: 6 },
   planSegment: { minWidth: 0, flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: c.line },
   planSegmentDone: { backgroundColor: c.brand },
-  planSegmentCurrent: { backgroundColor: c.gold },
+  planSegmentCurrent: { backgroundColor: c.goldIcon },
   lessonPlansLink: { width: '100%', minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xs },
   lessonPlansTitle: { color: c.brandText, fontSize: 14, lineHeight: 20, fontWeight: '600' },
 }));

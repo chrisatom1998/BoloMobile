@@ -2,7 +2,7 @@ import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
 import { Activity, ArchiveRestore, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileDown, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Linking, Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { SegmentedControl } from '@/components/segmented-control';
@@ -11,7 +11,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
-import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
 import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
@@ -145,7 +145,14 @@ export default function SettingsScreen() {
         : await schedulePracticeReminder(reminder, hour);
       setReminder(next);
     } catch (error) {
-      showAppAlert('Could not update reminder', error instanceof Error ? error.message : 'Try again from system settings.');
+      if (error instanceof NotificationPermissionError) {
+        showAppAlert('Could not update reminder', error.message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => { void Linking.openSettings(); } },
+        ]);
+      } else {
+        showAppAlert('Could not update reminder', error instanceof Error ? error.message : 'Try again from system settings.');
+      }
     } finally {
       if (mountedRef.current) setSavingReminder(false);
     }
@@ -259,7 +266,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]} testID="settings-learning-row">
           <View style={styles.icon}><Languages color={colors.ink} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]} testID="settings-learning-copy"><Text style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]} testID="settings-learning-copy"><Text accessibilityRole="header" style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Hindi display</Text>
         <SegmentedControl
@@ -267,7 +274,7 @@ export default function SettingsScreen() {
           onValueChange={(scriptPreference) => updateLearnerProfile({ scriptPreference })}
           options={[
             { label: 'Both', value: 'both' },
-            { label: 'हिन्दी', value: 'devanagari' },
+            { accessibilityLabel: 'Hindi script', label: 'हिन्दी', value: 'devanagari' },
             { label: 'Latin', value: 'latin' },
           ]}
           stackedAtLargeText
@@ -290,7 +297,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><Sparkles color={colors.forest} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Animation style</Text>
         <SegmentedControl
@@ -316,7 +323,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
         <View style={styles.icon}><Bell color={colors.brand} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Practice reminder</Text><Text style={styles.body}>{reminder.enabled ? `Daily at ${formatReminderTime(reminder.hour, reminder.minute)}` : 'Off · reminders stay on this device'}</Text></View>
         </View>
         <SegmentedControl
           accessibilityLabel="Practice reminder time"
@@ -341,7 +348,7 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
             <View style={styles.icon}><ShieldCheck color={colors.forest} size={22} /></View>
-            <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
+            <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
           </View>
           <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, or coaching.</Text>
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
@@ -383,7 +390,7 @@ export default function SettingsScreen() {
       <View style={styles.card} testID="settings-progress-backup">
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><ArchiveRestore color={colors.forest} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Progress backup</Text><Text style={styles.body}>Keep your progress when you change phones</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Progress backup</Text><Text style={styles.body}>Keep your progress when you change phones</Text></View>
         </View>
         <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, scene progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
         <View style={[styles.buttonRow, largeTextLayout && styles.buttonRowLarge]}>
@@ -417,7 +424,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><DatabaseBackup color={colors.danger} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
         </View>
         <Text style={styles.detail}>Bolo first deletes reports associated with your random app identifier. It then clears local data and rotates that identifier. If the request fails, the identifier is kept so you can retry.</Text>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: deleting }} disabled={deleting} onPress={confirmDeletion} style={[styles.destructiveButton, deleting && styles.disabled]}>

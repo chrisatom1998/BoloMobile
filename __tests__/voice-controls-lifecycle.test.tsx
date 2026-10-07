@@ -161,7 +161,8 @@ describe('voice control lifecycle', () => {
 
     await fireEvent.press(view.getByLabelText('Stop recording'));
     await waitFor(() => expect(onRecordingReady).toHaveBeenCalledTimes(1));
-    expect(view.getByLabelText('Record pronunciation').props.accessibilityState).toEqual({ disabled: true });
+    expect(view.getByLabelText('Record pronunciation').props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(view.getByLabelText('Record pronunciation').props.accessibilityValue).toEqual({ text: 'Asha is thinking…' });
     expect(onActivityChange).toHaveBeenLastCalledWith(true);
 
     submission.resolve();

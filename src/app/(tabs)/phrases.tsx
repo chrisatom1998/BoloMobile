@@ -7,6 +7,7 @@ import { FlatList, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { lessonPlans } from '@/data/lesson-plans';
 import { scenes, type SceneCategory } from '@/data/scenes';
@@ -43,7 +44,7 @@ for (const scene of scenes) {
 function MasteryMeter({ mastery }: { mastery: number }) {
   const styles = useStyles();
   return (
-    <View accessibilityLabel={`Mastery ${mastery} of 5`} style={styles.masteryMeter}>
+    <View accessible accessibilityLabel={`Mastery ${mastery} of 5`} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 5, now: mastery }} style={styles.masteryMeter}>
       {Array.from({ length: 5 }, (_, index) => <View key={index} style={[styles.masterySegment, index < mastery && styles.masterySegmentFilled]} />)}
     </View>
   );
@@ -134,7 +135,7 @@ export default function PhrasesScreen() {
       </View>
       {phrases.length > 0 ? (
         <>
-          <PressableFeedback accessibilityLabel={`Review ${due.length} phrases due today`} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
+          <PressableFeedback accessibilityLabel={due.length ? `Review ${due.length} phrase${due.length === 1 ? '' : 's'} due today` : 'All phrases reviewed for today. Practice them again'} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
             <Text style={styles.dueCount}>{due.length}</Text>
             <View style={styles.dueCopy}>
               <Text style={styles.dueTitle}>Ready for review</Text>
@@ -163,6 +164,11 @@ export default function PhrasesScreen() {
             style={styles.segmentedControl}
             value={filter}
           />
+          {!aiConsent && phrases.some((phrase) => !hasOfflineSpeech(phrase.hi)) ? (
+            <Pressable accessibilityHint="Opens Settings" accessibilityRole="link" onPress={() => router.push('/settings')} style={styles.consentNote} testID="phrases-consent-note">
+              <Text style={styles.consentNoteText}>Some phrases need Asha&apos;s voice to play. <Text style={styles.consentNoteLink}>Turn on AI coaching in Settings</Text></Text>
+            </Pressable>
+          ) : null}
           <View style={styles.speedSetting}>
             <Text style={styles.speedLabel}>Listen speed</Text>
             {/* One shared speed, like a podcast player, instead of a row of speed chips on every card. */}
@@ -210,7 +216,19 @@ export default function PhrasesScreen() {
               <Text style={styles.emptyActionText}>{nextLesson.action}</Text>
             </PressableFeedback>
           </View>
-        ) : <Text style={styles.noResults}>No phrases match this search and filter.</Text>}
+        ) : (
+          <View style={styles.noResultsBlock}>
+            <Text style={styles.noResults}>No phrases match this search and filter.</Text>
+            <PressableFeedback
+              accessibilityRole="button"
+              onPress={() => { setQuery(''); setFilter('All'); }}
+              style={styles.clearFilters}
+              testID="phrases-clear-filters"
+            >
+              <Text style={styles.clearFiltersText}>Show all phrases</Text>
+            </PressableFeedback>
+          </View>
+        )}
         renderItem={({ item }) => {
           const offline = hasOfflineSpeech(item.hi);
           const canListen = aiConsent || offline;
@@ -270,7 +288,7 @@ const useStyles = makeStyles((c) => ({
   dueActionText: { color: c.white, fontSize: 14, fontWeight: '600' },
   searchField: { width: '100%', alignSelf: 'stretch' },
   searchRow: { width: '100%', minHeight: 48 },
-  search: { minWidth: 0, flex: 1, minHeight: 48, borderRadius: 16, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paperRaised, color: c.ink, fontSize: 15, paddingVertical: spacing.sm },
+  search: { minWidth: 0, flex: 1, minHeight: 48, borderRadius: 16, borderCurve: 'continuous', borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.paperRaised, color: c.ink, fontSize: 15, paddingVertical: spacing.sm },
   segmentedControl: { width: '100%', alignSelf: 'stretch' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
   card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', gap: spacing.md, paddingVertical: 14, paddingLeft: spacing.lg, paddingRight: 14 },
@@ -298,5 +316,11 @@ const useStyles = makeStyles((c) => ({
   emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   emptyAction: { minWidth: 180, minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   emptyActionText: { color: c.white, fontSize: 14, fontWeight: '600', textAlign: 'center' },
-  noResults: { color: c.muted, fontSize: 15, textAlign: 'center', padding: spacing.xl },
+  consentNote: { minHeight: 44, justifyContent: 'center' },
+  consentNoteText: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  consentNoteLink: { color: c.forestText, fontWeight: '700', textDecorationLine: 'underline' },
+  noResultsBlock: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl },
+  noResults: { color: c.muted, fontSize: 15, textAlign: 'center' },
+  clearFilters: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  clearFiltersText: { color: c.forestText, fontSize: 15, fontWeight: '700' },
 }));

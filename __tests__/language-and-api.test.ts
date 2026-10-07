@@ -56,7 +56,7 @@ describe('connected coaching contract', () => {
       ];
       for (const value of invalidLiveUrls) {
         constants.expoConfig.extra.boloLiveApiUrl = value;
-        expect(getBoloLiveApiUrl).toThrow('Live voice is not configured');
+        expect(getBoloLiveApiUrl).toThrow('Live voice isn’t available right now');
       }
       constants.expoConfig.extra.boloLiveApiUrl = 'https://live.example.test/base/';
       expect(getBoloLiveApiUrl()).toBe('https://live.example.test/base');
