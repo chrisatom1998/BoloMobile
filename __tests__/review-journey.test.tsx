@@ -25,7 +25,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: mockRouterReplace }),
+  useRouter: () => ({ back: jest.fn(), canGoBack: () => false, replace: mockRouterReplace }),
 }));
 
 jest.mock('lucide-react-native', () => ({
@@ -148,7 +148,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     });
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.reviewStreakDays) ?? 'null')).toEqual([dateKey()]);
 
-    await fireEvent.press(view.getByRole('button', { name: 'Back to today' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Done' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 

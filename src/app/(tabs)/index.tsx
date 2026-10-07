@@ -3,21 +3,24 @@ import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ArrowRight, AudioLines, Flame, Settings } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Platform, Pressable, StatusBar, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { JournalDisplay } from '@/components/journal-chrome';
 import { MotionReveal } from '@/components/motion';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
+import { hapticSelect } from '@/lib/haptics';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 26;
@@ -46,6 +49,8 @@ export default function HomeScreen() {
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
+  // Below 380pt the goal card can't fit three 44pt goal buttons beside the review card.
+  const stackedStatLayout = largeTextLayout || windowWidth < 380;
   const { goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
@@ -117,7 +122,7 @@ export default function HomeScreen() {
         </View>
         <View style={styles.topbarActions}>
           <Pressable accessibilityLabel={`${streak} day practice streak`} accessibilityRole="button" hitSlop={4} onPress={() => router.push('/progress' as Href)} style={styles.streakPill} testID="today-streak">
-            <Flame color={colors.gold} size={18} strokeWidth={2.2} />
+            <Flame color={colors.goldIcon} size={18} strokeWidth={2.2} />
             <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
           </Pressable>
           <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton}>
@@ -152,18 +157,21 @@ export default function HomeScreen() {
         </View>
       </MotionReveal>
 
-      <View style={[styles.statRow, largeTextLayout && styles.statRowLarge]} testID="today-stat-row">
-        <View style={styles.goalCard} testID="today-daily-goal">
+      <View style={[styles.statRow, stackedStatLayout && styles.statRowLarge]} testID="today-stat-row">
+        <View style={[styles.goalCard, stackedStatLayout && styles.statCardStacked]} testID="today-daily-goal">
           <View style={styles.goalHeader}>
             <Text style={styles.cardLabel}>Daily goal</Text>
             <Text style={styles.cardMeta} testID="today-goal-value">{goal} min</Text>
           </View>
           <View
+            accessible
             accessibilityLabel={`${goalPercent} percent of daily goal complete`}
+            accessibilityRole="progressbar"
+            accessibilityValue={{ min: 0, max: 100, now: goalPercent }}
             style={[styles.goalDial, largeTextLayout && styles.goalDialLarge]}
             testID="today-goal-dial"
           >
-            <Svg accessibilityElementsHidden height={64} pointerEvents="none" viewBox="0 0 64 64" width={64}>
+            <Svg accessibilityElementsHidden importantForAccessibility="no-hide-descendants" height={64} pointerEvents="none" viewBox="0 0 64 64" width={64}>
               <Circle cx={32} cy={32} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={8} />
               {goalPercent > 0 ? (
                 <Circle
@@ -192,7 +200,7 @@ export default function HomeScreen() {
                 accessibilityLabel={`${minutes} minute daily goal`}
                 accessibilityRole="button"
                 accessibilityState={{ selected: goal === minutes }}
-                onPress={() => setGoal(minutes)}
+                onPress={() => { if (goal !== minutes) hapticSelect(); setGoal(minutes); }}
                 style={[styles.goalChoice, goal === minutes && styles.goalChoiceActive]}
                 testID={`today-goal-choice-${minutes}`}
               >
@@ -206,11 +214,11 @@ export default function HomeScreen() {
           accessibilityLabel={dueCount > 0 ? `Review ${dueCount} saved phrase${dueCount === 1 ? '' : 's'} due now` : 'Open saved phrases'}
           accessibilityRole="button"
           onPress={() => router.push((dueCount > 0 ? '/review' : '/phrases') as Href)}
-          style={styles.reviewCard}
+          style={[styles.reviewCard, stackedStatLayout && styles.statCardStacked]}
           testID="today-language-garden"
         >
           <View style={styles.reviewHeader}>
-            <Text style={styles.reviewLabel}>Ready to review</Text>
+            <Text style={styles.reviewLabel}>{phrases.length === 0 ? 'Saved phrases' : 'Ready to review'}</Text>
             <Text style={styles.reviewCount}>{dueCount}</Text>
           </View>
           {reviewPreview.length > 0 ? (
@@ -231,7 +239,7 @@ export default function HomeScreen() {
               ))}
             </View>
           ) : null}
-          <Text style={styles.reviewMeta}>{dueCount === 1 ? 'phrase due' : 'phrases due'}</Text>
+          <Text style={styles.reviewMeta}>{phrases.length === 0 ? 'Save one from any lesson' : dueCount === 1 ? 'phrase due' : 'phrases due'}</Text>
         </PressableFeedback>
       </View>
 
@@ -244,7 +252,7 @@ export default function HomeScreen() {
         <View style={styles.ashaOrb}><AudioLines color={colors.ink} size={20} strokeWidth={2.2} /></View>
       </PressableFeedback>
     </View>
-  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedTopbarLayout, streak, styles, watermark]);
+  ), [colors, dateLine, dueCount, goal, goalPercent, phrases.length, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedStatLayout, stackedTopbarLayout, streak, styles, watermark]);
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
@@ -258,53 +266,56 @@ export default function HomeScreen() {
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
   return (
-    <FlatList
-      contentInsetAdjustmentBehavior="never"
-      contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
-      data={currentPlan ? [currentPlan] : []}
-      keyExtractor={(plan) => plan.id}
-      renderItem={({ item: plan }) => {
-        const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-        const selectedLessonIndex = plan.lessonIds.indexOf(lessonSelection.lessonId);
-        const selectedProgress = sceneProgress[lessonSelection.lessonId];
-        const selectedLessonIsInProgress = selectedLessonIndex >= 0
-          && (selectedProgress?.completions ?? 0) === 0
-          && (selectedProgress?.lastBeatIndex ?? 0) > 0;
-        const planMeta = selectedLessonIsInProgress
-          ? `Lesson ${selectedLessonIndex + 1} in progress`
-          : `${completed} of ${plan.lessonIds.length} lessons`;
-        return (
-          <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
-            <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
-              <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-              <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
-            </View>
-            <PressableFeedback
-              accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
-              accessibilityRole="button"
-              onPress={() => openPlan(plan.id)}
-              style={styles.planCard}
-            >
-              <View style={[styles.planCopy, largeTextLayout && styles.planCopyLarge]}>
-                <Text style={styles.planTitle}>{plan.title}</Text>
-                <Text style={styles.planMeta}>{planMeta}</Text>
+    <>
+      <FlatList
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
+        data={currentPlan ? [currentPlan] : []}
+        keyExtractor={(plan) => plan.id}
+        renderItem={({ item: plan }) => {
+          const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+          const selectedLessonIndex = plan.lessonIds.indexOf(lessonSelection.lessonId);
+          const selectedProgress = sceneProgress[lessonSelection.lessonId];
+          const selectedLessonIsInProgress = selectedLessonIndex >= 0
+            && (selectedProgress?.completions ?? 0) === 0
+            && (selectedProgress?.lastBeatIndex ?? 0) > 0;
+          const planMeta = selectedLessonIsInProgress
+            ? `Lesson ${selectedLessonIndex + 1} in progress`
+            : `${completed} of ${plan.lessonIds.length} lessons`;
+          return (
+            <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
+              <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
+                <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
+                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
               </View>
-              <View accessibilityLabel={`${completed} of ${plan.lessonIds.length} lessons complete`} style={styles.planSegments} testID="today-plan-segments">
-                {plan.lessonIds.map((lessonId, index) => {
-                  const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
-                  const current = !done && lessonId === lessonSelection.lessonId;
-                  return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
-                })}
-              </View>
-            </PressableFeedback>
-          </MotionReveal>
-        );
-      }}
-      ListHeaderComponent={header}
-      ListFooterComponent={footer}
-      style={sharedStyles.screen}
-      testID="today-guided-plan-list"
-    />
+              <PressableFeedback
+                accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
+                accessibilityRole="button"
+                onPress={() => openPlan(plan.id)}
+                style={styles.planCard}
+              >
+                <View style={[styles.planCopy, largeTextLayout && styles.planCopyLarge]}>
+                  <Text style={styles.planTitle}>{plan.title}</Text>
+                  <Text style={styles.planMeta}>{planMeta}</Text>
+                </View>
+                <View style={styles.planSegments} testID="today-plan-segments">
+                  {plan.lessonIds.map((lessonId, index) => {
+                    const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
+                    const current = !done && lessonId === lessonSelection.lessonId;
+                    return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
+                  })}
+                </View>
+              </PressableFeedback>
+            </MotionReveal>
+          );
+        }}
+        ListHeaderComponent={header}
+        ListFooterComponent={footer}
+        style={sharedStyles.screen}
+        testID="today-guided-plan-list"
+      />
+      <StatusBarScrim />
+    </>
   );
 }
 
@@ -342,7 +353,8 @@ const useStyles = makeStyles((c) => ({
   heroButtonText: { color: c.ink, fontSize: 16, fontWeight: '600' },
   statRow: { width: '100%', flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
   statRowLarge: { flexDirection: 'column' },
-  goalCard: { minWidth: 0, flex: 1, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg, gap: 10 },
+  statCardStacked: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
+  goalCard: { minWidth: 0, flex: 1, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, paddingVertical: spacing.lg, paddingHorizontal: spacing.md, gap: 10 },
   goalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   cardLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   cardMeta: { color: c.muted, fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
@@ -351,8 +363,8 @@ const useStyles = makeStyles((c) => ({
   goalValue: { minWidth: 0, flex: 1, gap: 2 },
   goalMinutes: { color: c.ink, fontFamily: displayFont, fontSize: 28, lineHeight: 32, fontWeight: '700', fontVariant: ['tabular-nums'] },
   goalMinutesUnit: { color: c.muted, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
-  goalChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  goalChoice: { minWidth: 44, flexGrow: 1, flexBasis: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.track },
+  goalChoices: { flexDirection: 'row', gap: spacing.xs },
+  goalChoice: { minWidth: 44, flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.track },
   goalChoiceActive: { backgroundColor: c.ink },
   goalChoiceText: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   goalChoiceTextActive: { color: c.white },
@@ -384,7 +396,7 @@ const useStyles = makeStyles((c) => ({
   planSegments: { flexDirection: 'row', gap: 6 },
   planSegment: { minWidth: 0, flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: c.line },
   planSegmentDone: { backgroundColor: c.brand },
-  planSegmentCurrent: { backgroundColor: c.gold },
+  planSegmentCurrent: { backgroundColor: c.goldIcon },
   lessonPlansLink: { width: '100%', minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xs },
   lessonPlansTitle: { color: c.brandText, fontSize: 14, lineHeight: 20, fontWeight: '600' },
 }));

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useHindiWordSource } from '@/hooks/use-hindi-word-source';
 import { hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
@@ -126,9 +127,9 @@ export function WordDefinitionSheet({
         <View style={[styles.header, Platform.OS === 'android' && { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.headerCopy}>
             <Text style={styles.eyebrow}>Word by word</Text>
-            <Text style={styles.title}>Unpack the Hindi.</Text>
+            <Text accessibilityRole="header" style={styles.title}>Unpack the Hindi.</Text>
           </View>
-          <Pressable accessibilityLabel="Close word meanings" accessibilityRole="button" onPress={onClose} style={styles.closeButton}>
+          <Pressable accessibilityLabel="Done, close word meanings" accessibilityRole="button" onPress={onClose} style={styles.closeButton}>
             <Text style={styles.closeText}>Done</Text>
           </Pressable>
         </View>
@@ -204,7 +205,7 @@ const useStyles = makeStyles((c) => ({
   content: { gap: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xxl },
   sourceCard: { gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, padding: spacing.lg },
   excerptEditor: { gap: spacing.sm },
-  excerptInput: { minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.line, borderRadius: radius.md, color: c.ink, padding: spacing.sm, fontSize: 16 },
+  excerptInput: { minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.md, color: c.ink, padding: spacing.sm, fontSize: 16 },
   sourceLabel: { color: c.forestText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   sourcePhrase: { color: c.ink, fontSize: 24, lineHeight: 34, fontWeight: '800' },
   sourcePhraseHindi: hindiType(26),

@@ -1,7 +1,8 @@
 import { Check, Eye, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Text, View } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -37,11 +38,14 @@ export function RecallRevealPractice({ disabled = false, scriptPreference = 'bot
   const [status, setStatus] = useState<'building' | PracticeResult>('building');
 
   const locked = disabled || status !== 'building';
+  const answerLabel = `Answer revealed. ${lessonHindiLabel(targetHi, scriptPreference, targetLatin)}.`;
 
   function reveal() {
     if (locked || revealed) return;
     hapticSelect();
     setRevealed(true);
+    // Android reads the answer through its live region; iOS needs an explicit announcement.
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(answerLabel);
   }
 
   function grade(result: PracticeResult) {
@@ -54,7 +58,7 @@ export function RecallRevealPractice({ disabled = false, scriptPreference = 'bot
 
   return (
     <View testID="scene-recall-reveal" style={styles.container}>
-      <Text accessibilityRole="header" style={styles.instructions}>
+      <Text style={styles.instructions}>
         Silently rebuild the Hindi from memory, then tap Reveal to check yourself.
       </Text>
       <View style={styles.promptCard}>
@@ -63,13 +67,13 @@ export function RecallRevealPractice({ disabled = false, scriptPreference = 'bot
       </View>
       {revealed ? (
         <View
-          accessibilityLabel={`Answer revealed. ${lessonHindiLabel(targetHi, scriptPreference, targetLatin)}.`}
+          accessibilityLabel={answerLabel}
           accessibilityLiveRegion="polite"
           style={styles.answerCard}
           testID="scene-recall-reveal-answer"
         >
           <Text style={styles.answerEyebrow}>Hindi</Text>
-          {scriptPreference !== 'latin' ? <Text style={styles.answerHindi}>{targetHi}</Text> : null}
+          {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.answerHindi}>{targetHi}</Text> : null}
           {scriptPreference !== 'devanagari' ? <Text style={styles.answerLatin}>{targetLatin}</Text> : null}
         </View>
       ) : (

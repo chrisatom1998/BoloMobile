@@ -4,6 +4,14 @@ import type { ReminderSettings } from '@/state/app-state-types';
 
 const CHANNEL_ID = 'practice-reminders';
 
+/** Thrown when a reminder cannot be scheduled because notification permission is off. */
+export class NotificationPermissionError extends Error {
+  constructor(message = 'Notification permission is off. You can enable it in system settings.') {
+    super(message);
+    this.name = 'NotificationPermissionError';
+  }
+}
+
 function loadNotifications(): typeof import('expo-notifications') {
   // Metro evaluates this native module only when the reminder feature is used.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -23,7 +31,7 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
     ios: { allowAlert: true, allowBadge: false, allowSound: true },
   });
   if (!permission.granted && permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
-    throw new Error('Notification permission is off. You can enable it in system settings.');
+    throw new NotificationPermissionError();
   }
   if (current.notificationId) await Notifications.cancelScheduledNotificationAsync(current.notificationId);
   const notificationId = await Notifications.scheduleNotificationAsync({

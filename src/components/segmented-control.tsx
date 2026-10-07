@@ -2,6 +2,7 @@ import { Tabs } from 'heroui-native/tabs';
 import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
+import { hapticSelect } from '@/lib/haptics';
 import { makeStyles, spacing } from '@/theme';
 
 export type SegmentOption<T extends string> = {
@@ -56,6 +57,12 @@ export function SegmentedControl<T extends string>({
   const usesStackedLayout = stacked || columnCount === 1 || (stackedAtLargeText && largeTextLayout);
   const usesTwoColumnLayout = columnCount === 2 && !usesStackedLayout;
 
+  function select(nextValue: T) {
+    // A selection tick on change matches UISegmentedControl; re-tapping the current segment stays silent.
+    if (nextValue !== value) hapticSelect();
+    onValueChange(nextValue);
+  }
+
   if (usesStackedLayout) {
     return (
       <View accessibilityLabel={accessibilityLabel} accessibilityRole="tablist" style={[styles.stackedList, style]} testID={testID}>
@@ -69,7 +76,7 @@ export function SegmentedControl<T extends string>({
               accessibilityState={{ disabled, selected }}
               disabled={disabled}
               key={option.value}
-              onPress={() => onValueChange(option.value)}
+              onPress={() => select(option.value)}
               style={({ pressed }) => [styles.stackedTrigger, dark && styles.stackedTriggerDark, selected && (dark ? styles.stackedTriggerSelectedDark : styles.stackedTriggerSelected), disabled && styles.stackedTriggerDisabled, pressed && !disabled && styles.stackedTriggerPressed]}
             >
               <Text style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
@@ -104,7 +111,7 @@ export function SegmentedControl<T extends string>({
                   accessibilityState={{ disabled, selected }}
                   disabled={disabled}
                   key={option.value}
-                  onPress={() => onValueChange(option.value)}
+                  onPress={() => select(option.value)}
                   style={({ pressed }) => [
                     styles.stackedTrigger,
                     styles.twoColumnTrigger,
@@ -126,7 +133,7 @@ export function SegmentedControl<T extends string>({
 
   return (
     <Tabs
-      onValueChange={(nextValue) => onValueChange(nextValue as T)}
+      onValueChange={(nextValue) => select(nextValue as T)}
       style={style}
       testID={testID}
       value={value}
@@ -145,7 +152,7 @@ export function SegmentedControl<T extends string>({
             value={option.value}
           >
             {({ isSelected }) => (
-              <Tabs.Label numberOfLines={1} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
+              <Tabs.Label numberOfLines={2} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
                 {option.label}
               </Tabs.Label>
             )}
@@ -159,7 +166,7 @@ export function SegmentedControl<T extends string>({
 const useStyles = makeStyles((c) => ({
   list: {
     alignSelf: 'stretch',
-    minHeight: 48,
+    minHeight: 52,
     overflow: 'hidden',
     borderRadius: 16,
     borderCurve: 'continuous',
@@ -180,7 +187,7 @@ const useStyles = makeStyles((c) => ({
   trigger: {
     zIndex: 1,
     minWidth: 0,
-    minHeight: 40,
+    minHeight: 44,
     flex: 1,
     borderRadius: 12,
     borderCurve: 'continuous',

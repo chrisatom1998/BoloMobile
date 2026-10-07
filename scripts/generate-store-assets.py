@@ -87,6 +87,21 @@ def brand_tile(size: int, margin: int, radius: int, glyph_size: int, transparent
     return image
 
 
+def full_bleed_icon(size: int, glyph_size: int) -> Image.Image:
+    # Stores and launchers apply their own corner mask, so the icon fills the whole canvas.
+    image = Image.new("RGB", (size, size), BRAND)
+    draw = ImageDraw.Draw(image)
+    draw_centered_text(draw, (0, 0, size, size), "ब", font(DEVANAGARI_FONT, glyph_size), PAPER, y_adjust=-size // 50)
+    return image
+
+
+def glyph_only(size: int, glyph_size: int, fill: str) -> Image.Image:
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw_centered_text(draw, (0, 0, size, size), "ब", font(DEVANAGARI_FONT, glyph_size), fill, y_adjust=-size // 50)
+    return image
+
+
 def save_scaled(source: Image.Image, path: Path, size: tuple[int, int], mode: str | None = None) -> None:
     output = source.resize(size, Image.Resampling.LANCZOS)
     if mode:
@@ -96,13 +111,18 @@ def save_scaled(source: Image.Image, path: Path, size: tuple[int, int], mode: st
 
 
 def generate_icons() -> None:
-    master = brand_tile(2048, 312, 360, 860, transparent=False)
+    master = full_bleed_icon(2048, 1120)
     save_scaled(master, IMAGES / "icon.png", (1024, 1024), "RGB")
     save_scaled(master, STORE / "app-store-icon.png", (1024, 1024), "RGB")
     save_scaled(master.convert("RGBA"), STORE / "play-store-icon.png", (512, 512), "RGBA")
-    save_scaled(master.convert("RGBA"), IMAGES / "favicon.png", (64, 64), "RGBA")
 
-    adaptive = brand_tile(2048, 440, 320, 690, transparent=True)
+    # Browsers show the favicon unmasked, so it keeps the rounded tile on cream.
+    tile = brand_tile(2048, 312, 360, 860, transparent=False)
+    save_scaled(tile.convert("RGBA"), IMAGES / "favicon.png", (64, 64), "RGBA")
+
+    # Adaptive icon: glyph only, inside the 66% safe zone, over the brand
+    # backgroundColor declared in app.json.
+    adaptive = glyph_only(2048, 700, PAPER)
     save_scaled(adaptive, IMAGES / "android-icon-foreground.png", (1024, 1024), "RGBA")
 
     monochrome = Image.new("RGBA", (2048, 2048), (0, 0, 0, 0))

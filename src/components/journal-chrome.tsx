@@ -15,7 +15,7 @@ type DisplayProps = {
  */
 export function JournalDisplay({ children, numberOfLines, style }: DisplayProps) {
   const styles = useStyles();
-  return <Text numberOfLines={numberOfLines} style={[styles.display, style]}>{children}</Text>;
+  return <Text accessibilityRole="header" numberOfLines={numberOfLines} style={[styles.display, style]}>{children}</Text>;
 }
 
 export function JournalKicker({ children, style }: Pick<DisplayProps, 'children' | 'style'>) {

@@ -3,13 +3,15 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { isWordOrderPracticeable } from '@/components/practice-mode';
 import { RecallRevealPractice } from '@/components/recall-reveal-practice';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { WordOrderPractice } from '@/components/word-order-practice';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { buildAlternateFeedback } from '@/data/lesson-feedback';
@@ -31,6 +33,8 @@ import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
+export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
+
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 
 const ALTERNATE_INCORRECT_COACH = {
@@ -51,6 +55,7 @@ function SceneScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
+  const insets = useSafeAreaInsets();
   const sceneId = Array.isArray(id) ? id[0] : id;
   const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, sceneProgress, togglePhrase } = useAppState();
   const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
@@ -122,10 +127,11 @@ function SceneScreen() {
   const advancedBeatRef = useRef<number | null>(null);
   const autoPlayedBeatRef = useRef<string | null>(null);
 
+  const sceneExists = Boolean(sourceScene);
   useEffect(() => {
-    observe('scene_started');
+    if (sceneExists) observe('scene_started');
     return () => { void stopSpeaking(); };
-  }, []);
+  }, [sceneExists]);
 
   useEffect(() => {
     if (!sceneId || !sourceScene) return;
@@ -176,8 +182,9 @@ function SceneScreen() {
   if (!scene || !currentBeat || !currentTarget) {
     return (
       <View style={styles.center}>
-        <Text style={styles.finishTitle}>Scene not found</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to scenes</Text></Pressable>
+        <Text accessibilityRole="header" style={styles.finishTitle}>Lesson not found</Text>
+        <Text style={styles.notFoundBody}>This lesson may have moved or been removed. Your saved progress is unchanged.</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </View>
     );
   }
@@ -226,6 +233,18 @@ function SceneScreen() {
     checkpointScene?.(activeScene.id, beatIndex, attempt);
   }
 
+  function resultTitle(isCorrect: boolean) {
+    if (isCorrect) return 'Natural choice!';
+    if (effectiveMode === 'wordOrder') return 'Check the word order.';
+    if (effectiveMode === 'recallReveal') return 'Keep practicing this phrase.';
+    return 'Not quite—notice the pattern.';
+  }
+
+  function announceResult(isCorrect: boolean) {
+    // Android reads the new result via focus/live updates; iOS needs an explicit announcement.
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(resultTitle(isCorrect));
+  }
+
   function choose(index: number) {
     if (pickedRef.current !== null || pronunciationBusy || needsName) return;
     const choice = beat.choices[index];
@@ -234,6 +253,7 @@ function SceneScreen() {
     pickedRef.current = index;
     setPicked(index);
     recordAnswer(choice.correct);
+    announceResult(choice.correct);
     if (choice.correct) {
       hapticSuccess();
       setResolution('correct');
@@ -250,6 +270,7 @@ function SceneScreen() {
     pendingResolutionScrollRef.current = true;
     pickedRef.current = result === 'correct' ? 0 : -1;
     recordAnswer(result === 'correct');
+    announceResult(result === 'correct');
     if (result === 'correct') {
       setResolution('correct');
       play('बहुत अच्छा।');
@@ -343,6 +364,15 @@ function SceneScreen() {
     router.replace('/');
   }
 
+  function closeLesson() {
+    void stopSpeaking();
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/');
+  }
+
   const completionAction = guidedLesson?.nextLessonId
     ? 'Next lesson'
     : guidedLesson
@@ -351,8 +381,8 @@ function SceneScreen() {
 
   if (done) {
     return (
-      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-completion-scroll">
-        <Stack.Screen options={{ title: activeScene.title }} />
+      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
+        <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
         <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-complete`} style={styles.finishIntro} testID="scene-completion-motion">
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
           <Text style={sharedStyles.eyebrow}>Scene complete</Text>
@@ -421,8 +451,8 @@ function SceneScreen() {
     <ScrollView
       key="scene-run"
       ref={sceneScrollRef}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="never"
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm }]}
       keyboardShouldPersistTaps="handled"
       onLayout={(event) => {
         sceneViewportHeightRef.current = event.nativeEvent.layout.height;
@@ -434,11 +464,21 @@ function SceneScreen() {
       style={sharedStyles.screen}
       testID="scene-scroll"
     >
-      {/* The serif heading below names the scene, so the bar stays untitled. */}
-      <Stack.Screen options={{ title: activeScene.title, headerTitle: '' }} />
+      {/* The serif heading below names the scene, so the lesson draws its own close button instead of a nav bar. */}
+      <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
       <View style={styles.header}>
         <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
-          <View accessibilityLabel={`Turn ${beatIndex + 1} of ${activeScene.beats.length}`} style={styles.beatSegments}>
+          <Pressable
+            accessibilityHint="Leaves this lesson. Your progress is saved at the current turn."
+            accessibilityLabel="Close lesson"
+            accessibilityRole="button"
+            onPress={closeLesson}
+            style={styles.closeButton}
+            testID="scene-close"
+          >
+            <X color={colors.ink} size={18} strokeWidth={2.2} />
+          </Pressable>
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.beatSegments}>
             {activeScene.beats.map((_, index) => {
               const filled = index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
               return <View key={index} style={[styles.beatSegment, filled && styles.beatSegmentFilled]} testID={`scene-beat-segment-${index}`} />;
@@ -448,11 +488,11 @@ function SceneScreen() {
         </View>
         <View style={styles.titleBlock}>
           <Text style={styles.place}>{activeScene.place}</Text>
-          <Text style={styles.sceneTitle}>{activeScene.title}</Text>
+          <Text accessibilityRole="header" style={styles.sceneTitle}>{activeScene.title}</Text>
         </View>
         <View style={styles.hudRow}>
           <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
-          <View style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
+          <View accessible accessibilityLabel={`${score} points`} style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
         </View>
       </View>
 
@@ -509,7 +549,8 @@ function SceneScreen() {
         </View>
       ) : null}
 
-      <View style={styles.sheet}>
+      {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
+      <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
         {currentUsesName ? <View style={styles.hint}>
           <Text style={styles.hintTitle}>Practice with your name</Text>
           <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
@@ -525,7 +566,7 @@ function SceneScreen() {
               onPress={() => setShowHint((visible) => !visible)}
               style={[styles.hintButton, showHint && styles.hintButtonActive]}
             >
-              <Text style={styles.hintButtonText}>Hint</Text>
+              <Text style={[styles.hintButtonText, showHint && styles.hintButtonTextActive]}>Hint</Text>
             </Pressable>
           ) : null}
         </View>
@@ -537,10 +578,11 @@ function SceneScreen() {
               const selected = picked === sourceIndex;
               const revealed = picked !== null && choice.correct;
               const answered = picked !== null;
-              const accessibilityLabel = answered
-                ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}`
-                : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
               const wrong = selected && !choice.correct;
+              const answerStatus = revealed ? ', correct answer' : wrong ? ', your answer, incorrect' : '';
+              const accessibilityLabel = answered
+                ? `${lessonHindiLabel(choice.hi, scriptPreference, choice.latin)} ${choice.en}${answerStatus}`
+                : lessonHindiLabel(choice.hi, scriptPreference, choice.latin);
               return (
                 <Pressable
                   key={choice.hi}
@@ -588,26 +630,20 @@ function SceneScreen() {
           <View testID="scene-feedback">
             <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
               <View style={styles.resultCopy}>
-                <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{correct
-                  ? 'Natural choice!'
-                  : effectiveMode === 'wordOrder'
-                    ? 'Check the word order.'
-                    : effectiveMode === 'recallReveal'
-                      ? 'Keep practicing this phrase.'
-                      : 'Not quite—notice the pattern.'}</Text>
+                <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{resultTitle(correct)}</Text>
                 {englishMistakeFeedback ? <Text style={[styles.resultBody, styles.resultWrongText]} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
                 {englishMistakeFeedback ? <Text style={styles.resultTip}>Pattern: {effectiveTip}</Text> : null}
                 {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
                   <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
                     <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
-                    {scriptPreference !== 'latin' ? <Text style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
+                    {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.wordOrderSolutionHindi}>{target.hi}</Text> : null}
                     {scriptPreference !== 'devanagari' ? <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text> : null}
                   </View>
                 ) : null}
                 {picked === null && resolution === 'incorrect' ? (
                   <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
                     <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
-                    {scriptPreference !== 'latin' ? <Text style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
+                    {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
                     {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
                     <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
                   </View>
@@ -624,7 +660,7 @@ function SceneScreen() {
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
                 <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
+                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => { if (saved) hapticSelect(); else hapticSuccess(); togglePhrase(target); }} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
                   <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
                 </Pressable>
               </View>
@@ -670,6 +706,7 @@ const useStyles = makeStyles((c) => ({
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: 14 },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  closeButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
   progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
   beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6 },
   beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
@@ -710,6 +747,7 @@ const useStyles = makeStyles((c) => ({
   hintButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
   hintButtonActive: { backgroundColor: c.gold },
   hintButtonText: { color: c.goldText, fontSize: 13, fontWeight: '600' },
+  hintButtonTextActive: { color: c.goldDeepText },
   choices: { gap: spacing.sm },
   choice: { minHeight: 64, backgroundColor: c.paperRaised, borderColor: c.lineStrong, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
@@ -775,6 +813,7 @@ const useStyles = makeStyles((c) => ({
   finishHindiScript: hindiType(30),
   finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
   finishTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', textAlign: 'center' },
+  notFoundBody: { color: c.muted, fontSize: 16, lineHeight: 23, textAlign: 'center', maxWidth: 320 },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
   finishValue: { color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 30, fontWeight: '700', fontVariant: ['tabular-nums'] },

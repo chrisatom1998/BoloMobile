@@ -46,7 +46,7 @@ describe('home accessibility', () => {
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
     expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('0 percent of daily goal complete');
     expect(view.getByText('0 days')).toBeTruthy();
-    expect(view.getByText('phrases due')).toBeTruthy();
+    expect(view.getByText('Save one from any lesson')).toBeTruthy();
     expect(StyleSheet.flatten(startLesson.props.style).minHeight).toBeGreaterThanOrEqual(44);
     expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
@@ -55,6 +55,30 @@ describe('home accessibility', () => {
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
     expect(StyleSheet.flatten(list.props.contentContainerStyle).paddingTop).toBe(18);
     expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
+  });
+
+  it('keeps 44pt goal buttons by stacking the stat row on narrow phones', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 360 }, window: { ...window, fontScale: 1, width: 360 } }));
+
+    try {
+      const view = await render(<HomeScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('today-goal-choice-15').props.style)).toMatchObject({ minHeight: 44, minWidth: 44 });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 393 }, window: { ...window, fontScale: 1, width: 393 } }));
+    try {
+      const view = await render(<HomeScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'row' });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
   });
 
   it('reflows the Today header, hero footer, and stat row at accessibility text sizes', async () => {

@@ -107,7 +107,7 @@ export default function LessonPlansScreen() {
                 </View>
               </View>
               {isCurrent ? (
-                <View accessibilityLabel={`${percent} percent complete`} style={styles.track}>
+                <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}>
                   <View style={[styles.fill, { backgroundColor: plan.color, width: `${percent}%` }]} />
                 </View>
               ) : null}
@@ -171,7 +171,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
           <Text style={styles.detailSummaryLabel}>{completed}/{plan.lessonIds.length} lessons complete</Text>
           <Text style={styles.detailSummaryPercent}>{percent}%</Text>
         </View>
-        <View accessibilityLabel={`${percent} percent complete`} style={styles.track}>
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}>
           <View style={[styles.fill, { backgroundColor: plan.color, width: `${percent}%` }]} />
         </View>
         <Text style={styles.detailCue}>
@@ -240,7 +240,7 @@ const useStyles = makeStyles((c) => ({
   lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
   lessonCardCurrent: { borderColor: c.gold, backgroundColor: c.goldSoft },
   lessonCardLarge: { alignItems: 'flex-start', minHeight: 96, padding: spacing.lg },
-  lessonNumberText: { width: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontSize: 17, lineHeight: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  lessonNumberText: { minWidth: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontSize: 17, lineHeight: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
   lessonNumberTextComplete: { color: c.forestText },
   lessonNumberTextCurrent: { color: c.ink },
   lessonCopy: { minWidth: 0, flex: 1, gap: 2 },

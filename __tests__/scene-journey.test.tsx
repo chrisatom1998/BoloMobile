@@ -10,6 +10,8 @@ import { lightColors } from '../src/theme';
 let mockSceneId = 'chai';
 const mockRouterReplace = jest.fn();
 const mockRouterDismissTo = jest.fn();
+const mockRouterBack = jest.fn();
+const mockRouterCanGoBack = jest.fn(() => true);
 const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
@@ -29,12 +31,20 @@ const mockAppState = {
   togglePhrase: mockTogglePhrase,
 };
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => 'new-attempt') }));
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useLocalSearchParams: () => ({ id: mockSceneId }),
-  useRouter: () => ({ dismissTo: mockRouterDismissTo, replace: mockRouterReplace }),
+  useRouter: () => ({ back: mockRouterBack, canGoBack: mockRouterCanGoBack, dismissTo: mockRouterDismissTo, replace: mockRouterReplace }),
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
 }));
 
 jest.mock('lucide-react-native', () => ({
@@ -86,16 +96,21 @@ const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking
 const sceneScrollToMock = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => undefined);
 const ALTERNATE_COACH_HINDI = 'करीब है—फिर से कोशिश कीजिए।';
 
-function choiceAccessibilityLabel(choice: { en: string; hi: string; latin: string }, answered = false) {
-  return answered
-    ? `${lessonHindiLabel(choice.hi, mockAppState.learnerProfile.scriptPreference, choice.latin)} ${choice.en}`
-    : lessonHindiLabel(choice.hi, mockAppState.learnerProfile.scriptPreference, choice.latin);
+type ChoiceForLabel = { correct: boolean; en: string; hi: string; latin: string };
+
+/** Pass the learner's pick to get the post-answer label, which names the correct answer and a wrong pick. */
+function choiceAccessibilityLabel(choice: ChoiceForLabel, picked?: ChoiceForLabel) {
+  const hindiLabel = lessonHindiLabel(choice.hi, mockAppState.learnerProfile.scriptPreference, choice.latin);
+  if (!picked) return hindiLabel;
+  const status = choice.correct ? ', correct answer' : choice.hi === picked.hi ? ', your answer, incorrect' : '';
+  return `${hindiLabel} ${choice.en}${status}`;
 }
 
-function choiceLabel(sceneId: string, beatIndex: number, sourceIndex = 0, answered = false) {
-  const choice = getScene(sceneId)?.beats[beatIndex]?.choices[sourceIndex];
+function choiceLabel(sceneId: string, beatIndex: number, sourceIndex = 0, pickedIndex?: number) {
+  const choices = getScene(sceneId)?.beats[beatIndex]?.choices;
+  const choice = choices?.[sourceIndex];
   if (!choice) throw new Error(`No choice #${sourceIndex} for ${sceneId} beat ${beatIndex}.`);
-  return choiceAccessibilityLabel(choice, answered);
+  return choiceAccessibilityLabel(choice, pickedIndex === undefined ? undefined : choices[pickedIndex]);
 }
 
 function collectTestIds(node: unknown, ids: string[] = []) {
@@ -133,8 +148,8 @@ describe('SceneScreen primary journey', () => {
 
     await fireEvent.press(wrong);
     expect(view.getByText('Not quite—notice the pattern.')).toBeTruthy();
-    expect(view.getByLabelText(choiceLabel('chai', 0, 1, true)).props.accessibilityState).toEqual({ disabled: true, selected: true });
-    expect(view.getByLabelText(choiceLabel('chai', 0, 0, true)).props.accessibilityState).toEqual({ disabled: true, selected: false });
+    expect(view.getByLabelText(choiceLabel('chai', 0, 1, 1)).props.accessibilityState).toEqual({ disabled: true, selected: true });
+    expect(view.getByLabelText(choiceLabel('chai', 0, 0, 1)).props.accessibilityState).toEqual({ disabled: true, selected: false });
 
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
     expect(view.getByText('Turn 2 of 2')).toBeTruthy();
@@ -169,6 +184,19 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  it('closes the lesson from its own header button', async () => {
+    const view = await render(<SceneScreen />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Close lesson' }));
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+
+    mockRouterCanGoBack.mockReturnValueOnce(false);
+    await fireEvent.press(view.getByRole('button', { name: 'Close lesson' }));
+    expect(mockRouterBack).toHaveBeenCalledTimes(1);
+    expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
   it('integrates word-order and recall-reveal beats with the shared scene journey', async () => {
@@ -381,8 +409,8 @@ describe('SceneScreen primary journey', () => {
     mockSceneId = 'missing-scene';
     const view = await render(<SceneScreen />);
 
-    expect(view.getByText('Scene not found')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Back to scenes' }));
+    expect(view.getByText('Lesson not found')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Back to Today' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 
@@ -440,14 +468,14 @@ describe('SceneScreen primary journey', () => {
     expect(buttonsAfter.map((button) => String(button.props.accessibilityLabel))).toEqual(
       initialChoiceOrder.map((label) => {
         const choice = beat.choices.find((candidate) => choiceAccessibilityLabel(candidate) === label)!;
-        return choiceAccessibilityLabel(choice, true);
+        return choiceAccessibilityLabel(choice, beat.choices[1]);
       }),
     );
     for (const choice of beat.choices) {
       expect(within(choicesAfter).getAllByText(choice.hi)).toHaveLength(1);
       expect(within(choicesAfter).getAllByText(choice.latin)).toHaveLength(1);
       expect(within(choicesAfter).getAllByText(choice.en)).toHaveLength(1);
-      expect(view.getByLabelText(choiceAccessibilityLabel(choice, true))).toBeTruthy();
+      expect(view.getByLabelText(choiceAccessibilityLabel(choice, beat.choices[1]))).toBeTruthy();
       expect(view.queryByLabelText(choiceAccessibilityLabel(choice))).toBeNull();
     }
   });
@@ -475,11 +503,11 @@ describe('SceneScreen primary journey', () => {
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrongChoice)));
 
-    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(wrongChoice, true)).props.style)).toMatchObject({
+    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(wrongChoice, wrongChoice)).props.style)).toMatchObject({
       backgroundColor: lightColors.dangerSoft,
       borderColor: lightColors.danger,
     });
-    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(correctChoice, true)).props.style)).toMatchObject({
+    expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(correctChoice, wrongChoice)).props.style)).toMatchObject({
       backgroundColor: lightColors.forest,
     });
   });
@@ -506,9 +534,9 @@ describe('SceneScreen primary journey', () => {
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor)));
 
-    expect(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor, true)).props.accessibilityState)
+    expect(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor, selectedDistractor)).props.accessibilityState)
       .toEqual({ disabled: true, selected: true });
-    expect(view.getByLabelText(choiceAccessibilityLabel(target, true)).props.accessibilityState)
+    expect(view.getByLabelText(choiceAccessibilityLabel(target, selectedDistractor)).props.accessibilityState)
       .toEqual({ disabled: true, selected: false });
     expect(view.getByText('Not quite—notice the pattern.')).toBeTruthy();
     expect(view.getByText('0 correct')).toBeTruthy();

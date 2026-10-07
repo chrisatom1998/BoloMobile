@@ -1,7 +1,8 @@
 import { ShieldCheck } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage } from '@/lib/public-pages';
 import { observe, observeOncePerSession } from '@/lib/observability';
@@ -62,9 +63,9 @@ export function AiConsentGate({
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <ShieldCheck color={colors.forest} size={20} strokeWidth={2} />
-        <Text style={styles.title}>{title}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       </View>
-      <View accessibilityRole="list" style={styles.summary}>
+      <View style={styles.summary}>
         {consentSummary.map((line) => (
           <View key={line} style={styles.summaryItem}>
             <Text accessible={false} style={styles.bullet}>•</Text>

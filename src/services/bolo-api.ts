@@ -40,7 +40,8 @@ export function getBoloLiveApiUrl() {
       }
     } catch { /* Surface the same actionable configuration message. */ }
   }
-  throw new BoloApiError('Live voice is not configured in this build. Add a trusted GPT-Live server URL to enable it.');
+  if (__DEV__) console.warn('Live voice is not configured in this build. Set BOLO_LIVE_API_URL to a trusted HTTPS GPT-Live server.');
+  throw new BoloApiError('Live voice isn’t available right now. You can still type to Asha.');
 }
 
 export type AiVoiceAudio = {

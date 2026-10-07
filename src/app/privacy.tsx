@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react-native';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
@@ -55,7 +56,7 @@ export default function PrivacyScreen() {
 
 function Section({ children, title }: { children: string; title: string }) {
   const styles = useStyles();
-  return <View style={styles.section}><Text style={styles.title}>{title}</Text><Text style={styles.body}>{children}</Text></View>;
+  return <View style={styles.section}><Text accessibilityRole="header" style={styles.title}>{title}</Text><Text style={styles.body}>{children}</Text></View>;
 }
 
 function PolicyLink({ label, onPress }: { label: string; onPress: () => void }) {

@@ -1,8 +1,9 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
+import { Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
 import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
@@ -129,7 +130,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
         </View>
         <SelectableChatText
-          accessibilityLabel={`Selectable chat text: ${displayText}`}
+          accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${displayText}`}
           accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
           onSelectionCollapsed={selectionCollapsed}
           onSelectedText={selectedText}
@@ -144,7 +145,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             {message.role === 'asha' ? (
               <>
                 <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || playbackLocked }} disabled={!aiConsent || playbackLocked} onPress={playReply} style={[styles.smallAction, (!aiConsent || playbackLocked) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
-                {!isWelcome ? <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} onPress={report} style={[styles.smallAction, (reported || reporting) && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={styles.smallActionText}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable> : null}
+                {!isWelcome ? <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} onPress={report} style={[styles.smallAction, reporting && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable> : null}
               </>
             ) : null}
           </View>

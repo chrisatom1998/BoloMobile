@@ -1,8 +1,9 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { displayHindiTranscript } from '@/lib/learner-phrase-display';
@@ -100,7 +101,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
           <View style={styles.header}>
             <View style={styles.headerCopy}>
               <Text style={styles.eyebrow}>Saved phrases</Text>
-              <Text style={styles.title}>Choose a phrase</Text>
+              <Text accessibilityRole="header" style={styles.title}>Choose a phrase</Text>
             </View>
             <Pressable accessibilityLabel="Close phrase picker" accessibilityRole="button" onPress={close} style={styles.closeButton}>
               <X color={colors.ink} size={21} />
@@ -132,7 +133,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
             />
           </View>
 
-          <Pressable accessibilityRole="button" accessibilityState={{ disabled: !canPrepare }} disabled={!canPrepare} onPress={() => void preparePhrase()} style={[styles.prepareButton, !canPrepare && styles.disabled]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ busy, disabled: !canPrepare }} disabled={!canPrepare} onPress={() => void preparePhrase()} style={[styles.prepareButton, !canPrepare && styles.disabled]}>
             <Text style={styles.prepareButtonText}>{busy ? 'Preparing…' : 'Add Romanized + English'}</Text>
           </Pressable>
           {!aiConsent ? <Text style={styles.hint}>Connected AI consent is required to fill phrase details automatically.</Text> : null}
@@ -174,7 +175,7 @@ const useStyles = makeStyles((c) => ({
   instructions: { color: c.muted, fontSize: 15, lineHeight: 22 },
   fieldGroup: { gap: spacing.sm },
   label: { color: c.ink, fontSize: 13, fontWeight: '800' },
-  input: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, fontSize: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+  input: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.inputBorder, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, fontSize: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
   sourceInput: { minHeight: 112, textAlignVertical: 'top' },
   prepareButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   prepareButtonText: { color: c.white, fontSize: 15, fontWeight: '900' },

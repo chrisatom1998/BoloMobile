@@ -13,6 +13,7 @@ import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
   const router = useRouter();
@@ -115,103 +116,117 @@ export default function ProgressScreen() {
   }
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
-      <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
-        <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
-          <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
-          <Text style={[styles.pageSubtitle, largeTextLayout && styles.pageSubtitleLarge]}>What is taking root.</Text>
-        </View>
-        <PressableFeedback accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}>
-          <Share2 color={colors.ink} size={18} />
-        </PressableFeedback>
-      </View>
-
-      <View style={styles.weekCard}>
-        <Text accessible={false} numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
-        <View style={styles.weekHeading}>
-          <View style={styles.weekHeadingCopy}>
-            <Text style={styles.weekEyebrow}>Last 7 days</Text>
-            <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
+    <>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
+        <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
+          <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
+            <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
+            <Text style={[styles.pageSubtitle, largeTextLayout && styles.pageSubtitleLarge]}>What is taking root.</Text>
           </View>
-          <Text
-            accessibilityLabel={`${minutesThisWeek} minute${minutesThisWeek === 1 ? '' : 's'} practiced in the last 7 days`}
-            style={styles.weekTotal}
-            testID="progress-week-total"
-          >
-            {minutesThisWeek}<Text style={styles.weekTotalUnit}> min</Text>
-          </Text>
-        </View>
-        <View accessibilityLabel="Weekly practice minutes chart" style={styles.chart}>
-          {week.map((day, index) => {
-            const minutes = Math.round(day.seconds / 60);
-            const today = index === week.length - 1;
-            return (
-              <View key={day.date} style={styles.barColumn}>
-                <Text style={[styles.barValue, today && styles.barValueToday]}>{minutes}</Text>
-                <View style={styles.barTrack}><View style={[styles.bar, today && styles.barToday, { height: `${Math.max(6, minutes / maxMinutes * 100)}%` }]} /></View>
-                <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
-              </View>
-            );
-          })}
-        </View>
-        <Text style={styles.weekSummary}>{weekSummary}</Text>
-      </View>
-
-      <View style={[styles.stats, largeTextLayout && styles.statsLarge]} testID="progress-stats">
-        {stats.map((stat, index) => (
-          <View
-            key={stat.key}
-            accessible
-            accessibilityLabel={stat.accessibilityLabel}
-            style={[styles.stat, largeTextLayout && styles.statLarge, index > 0 && (largeTextLayout ? styles.statDividerLarge : styles.statDivider)]}
-            testID={`progress-stat-${stat.key}`}
-          >
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statLabel}>{stat.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.hero}>
-        <Text style={styles.heroEyebrow}>
-          {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
-        </Text>
-        <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
-        <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
-        <View style={styles.heroFootnotes}>
-          <Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text>
-          <Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text>
-        </View>
-        <PressableFeedback
-          accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
-          accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
-          style={styles.heroAction}
-        >
-          <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
-        </PressableFeedback>
-      </View>
-
-      <View style={styles.card}>
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.title}>Lesson plans</Text>
-          <PressableFeedback accessibilityLabel={`See all ${lessonPlans.length} lesson plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.seeAll}>
-            <Text style={styles.seeAllText}>See all</Text>
+          <PressableFeedback accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}>
+            <Share2 color={colors.ink} size={18} />
           </PressableFeedback>
         </View>
-        {planProgress.map((plan) => (
-          <View key={plan.id} style={styles.planRow}>
-            <View style={styles.planCopy}>
-              <Text numberOfLines={1} style={styles.planTitle}>{plan.title}</Text>
-              <Text style={styles.planMeta}>{plan.completed === plan.total ? 'Complete' : `${plan.completed}/${plan.total}`}</Text>
+
+        <View style={styles.weekCard}>
+          <Text accessible={false} numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
+          <View style={styles.weekHeading}>
+            <View style={styles.weekHeadingCopy}>
+              <Text style={styles.weekEyebrow}>Last 7 days</Text>
+              <Text style={styles.weekMeta}>{weekActivityLabel}</Text>
             </View>
-            <View accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`} style={styles.planTrack}>
-              <View style={[styles.planFill, plan.completed === plan.total && styles.planFillComplete, { width: `${Math.max(plan.percent, plan.completed > 0 ? 4 : 0)}%` }]} />
-            </View>
+            <Text
+              accessibilityLabel={`${minutesThisWeek} minute${minutesThisWeek === 1 ? '' : 's'} practiced in the last 7 days`}
+              style={styles.weekTotal}
+              testID="progress-week-total"
+            >
+              {minutesThisWeek}<Text style={styles.weekTotalUnit}> min</Text>
+            </Text>
           </View>
-        ))}
-      </View>
-    </ScrollView>
+          <View
+            accessible
+            accessibilityLabel={`Practice minutes, last 7 days: ${week.map((day) => `${new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${Math.round(day.seconds / 60)}`).join(', ')}`}
+            accessibilityRole="image"
+            style={styles.chart}
+          >
+            {week.map((day, index) => {
+              const minutes = Math.round(day.seconds / 60);
+              const today = index === week.length - 1;
+              return (
+                <View key={day.date} style={styles.barColumn}>
+                  <Text style={[styles.barValue, today && styles.barValueToday]}>{minutes}</Text>
+                  <View style={styles.barTrack}><View style={[styles.bar, today && styles.barToday, { height: `${Math.max(6, minutes / maxMinutes * 100)}%` }]} /></View>
+                  <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.weekSummary}>{weekSummary}</Text>
+        </View>
+
+        <View style={[styles.stats, largeTextLayout && styles.statsLarge]} testID="progress-stats">
+          {stats.map((stat, index) => (
+            <View
+              key={stat.key}
+              accessible
+              accessibilityLabel={stat.accessibilityLabel}
+              style={[styles.stat, largeTextLayout && styles.statLarge, index > 0 && (largeTextLayout ? styles.statDividerLarge : styles.statDivider)]}
+              testID={`progress-stat-${stat.key}`}
+            >
+              <Text style={styles.statValue}>{stat.value}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.hero}>
+          <Text style={styles.heroEyebrow}>
+            {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
+          </Text>
+          <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
+          <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
+          <View style={styles.heroFootnotes}>
+            <Text style={styles.heroFootnoteText}>{completedScenes} scene{completedScenes === 1 ? '' : 's'} learned · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text>
+            <Text style={[styles.heroFootnoteText, styles.heroFootnoteForestText]}>{streakLabel}</Text>
+          </View>
+          <PressableFeedback
+            accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
+            style={styles.heroAction}
+          >
+            <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
+          </PressableFeedback>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.title}>Lesson plans</Text>
+            <PressableFeedback accessibilityLabel={`See all ${lessonPlans.length} lesson plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.seeAll}>
+              <Text style={styles.seeAllText}>See all</Text>
+            </PressableFeedback>
+          </View>
+          {planProgress.map((plan) => (
+            <View key={plan.id} style={styles.planRow}>
+              <View style={styles.planCopy}>
+                <Text numberOfLines={largeTextLayout ? undefined : 1} style={styles.planTitle}>{plan.title}</Text>
+                <Text style={styles.planMeta}>{plan.completed === plan.total ? 'Complete' : `${plan.completed}/${plan.total}`}</Text>
+              </View>
+              <View
+                accessible
+                accessibilityLabel={`${plan.title}: ${plan.completed} of ${plan.total} lessons complete`}
+                accessibilityRole="progressbar"
+                accessibilityValue={{ min: 0, max: plan.total, now: plan.completed }}
+                style={styles.planTrack}
+              >
+                <View style={[styles.planFill, plan.completed === plan.total && styles.planFillComplete, { width: `${Math.max(plan.percent, plan.completed > 0 ? 4 : 0)}%` }]} />
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+      <StatusBarScrim />
+    </>
   );
 }
 
@@ -234,11 +249,11 @@ export const createProgressStyles = (c: ThemeColors) => ({
   weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600' },
   weekTotal: { color: c.white, fontFamily: displayFont, fontSize: 36, lineHeight: 42, fontWeight: '700', fontVariant: ['tabular-nums'], textAlign: 'right' },
   weekTotalUnit: { color: c.brandSoft, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
-  chart: { height: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  barColumn: { flex: 1, height: '100%', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
+  chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   barValue: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
   barValueToday: { color: c.white, fontWeight: '700' },
-  barTrack: { flex: 1, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
+  barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
   bar: { width: '100%', minHeight: 8, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
   barToday: { backgroundColor: c.gold },
   day: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontWeight: '600' },
