@@ -3,13 +3,14 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { createLiveToolExecutor, type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
 import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
 import { resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
-import { createLiveCall } from '@/services/bolo-api';
+import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
 
 
@@ -17,11 +18,19 @@ export type { LiveTranscriptRow } from '@/lib/live-transcripts';
 export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding';
 export type RealtimeTranscriptUpdate = { speaker: 'you' | 'asha'; text: string };
 export type RealtimeInputTranscript = { itemId: string; transcript: string };
+/** Startup-only session setup, read once when a live session connects. */
+export type LiveSessionSetup = {
+  mode?: LiveMode;
+  context?: LiveCallContext;
+  /** When present, the session requests Bolo tools and this client executes them. */
+  toolEnvironment?: LiveToolEnvironment;
+};
 type Options = {
   clientId: string;
   enabled?: boolean;
   responseLanguage?: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
+  liveSession?: () => LiveSessionSetup | null;
   onError: (message: string) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
@@ -66,6 +75,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   const pendingCommandRef = useRef<PendingCommand | null>(null);
   const startRef = useRef<Promise<void> | null>(null);
   const transcriptsRef = useRef(createLiveTranscriptStore('live'));
+  const toolExecutorRef = useRef<LiveToolExecutor | null>(null);
 
   const updateStatus = useCallback((next?: RealtimeVoiceStatus) => {
     const value = next ?? (microphoneRef.current ? 'recording' : playingRef.current ? 'responding' : 'ready');
@@ -81,6 +91,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       clearTimeout(pending.timer);
       pending.reject(new Error('The live voice session ended.'));
     }
+    toolExecutorRef.current?.dispose();
+    toolExecutorRef.current = null;
     // Request server finalization before AbortSignal releases the transport.
     // Background/unmount still release microphone and playback immediately.
     try { peerRef.current?.send({ type: 'session.close' }); } catch { /* Already closed. */ }
@@ -91,8 +103,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const peer = peerRef.current;
     peerRef.current = null;
     peer?.setMicrophoneEnabled(false);
-    // The app releases audio immediately on background/unmount. No backend tool
-    // work is launched by this client, and transport closure is not a turn end.
+    // The app releases audio immediately on background/unmount. Pending tool
+    // work is abandoned with the session, and transport closure is not a turn end.
     peer?.close();
     microphoneRef.current = false;
     playingRef.current = false;
@@ -107,6 +119,17 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     try { event = JSON.parse(raw) as LiveEvent; }
     catch { callbacksRef.current.onError('The live voice service returned an unreadable event.'); return; }
     if (!event || typeof event !== 'object') return;
+    const executor = toolExecutorRef.current;
+    const toolWork = executor?.handleEvent(event);
+    if (toolWork) {
+      void toolWork.then((outgoing) => {
+        if (toolExecutorRef.current !== executor) return;
+        for (const command of outgoing) peerRef.current?.send(command);
+      }).catch(() => {
+        if (toolExecutorRef.current === executor) callbacksRef.current.onError('Asha could not finish an app action. Start a new session to continue.');
+      });
+      return;
+    }
     if (event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta') {
       if (typeof event.delta !== 'string' || typeof event.start_ms !== 'number' || typeof event.end_ms !== 'number') return;
       const update = transcriptsRef.current.append(event.type === 'session.input_transcript.delta' ? 'you' : 'asha', {
@@ -155,6 +178,11 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     let live = false;
     updateStatus('connecting');
     transcriptsRef.current = createLiveTranscriptStore(`live-${Date.now()}-${lifecycle}`);
+    let setup: LiveSessionSetup | null = null;
+    try { setup = callbacksRef.current.liveSession?.() ?? null; } catch { setup = null; }
+    toolExecutorRef.current?.dispose();
+    const executor = setup?.toolEnvironment ? createLiveToolExecutor(setup.toolEnvironment) : null;
+    toolExecutorRef.current = executor;
     const promise = (async () => {
       if (Platform.OS === 'ios' && !Device.isDevice) {
         throw new Error('Live voice requires a physical iPhone because iOS Simulator cannot safely initialize microphone audio.');
@@ -170,7 +198,15 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (!current()) return;
       attemptPeer = await createRealtimePeerSession({
         exchangeSdp: async (offerSdp, signal) => {
-          const call = await createLiveCall({ clientId, offerSdp, responseLanguage, history: callbacksRef.current.history }, signal);
+          const call = await createLiveCall({
+            clientId,
+            offerSdp,
+            responseLanguage,
+            history: callbacksRef.current.history,
+            ...(setup?.mode ? { mode: setup.mode } : {}),
+            ...(setup?.context ? { context: setup.context } : {}),
+            ...(executor ? { clientTools: true } : {}),
+          }, signal);
           return call.answerSdp;
         },
         signal: controller.signal,

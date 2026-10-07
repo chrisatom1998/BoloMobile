@@ -215,4 +215,88 @@ describe('GPT-Live conversation lifecycle', () => {
     expect(peer.close).toHaveBeenCalled();
     await unmount();
   });
+
+  describe('client-executed Live tools', () => {
+    const toolCall = (callId: string, name = 'get_learner_progress', args = '{}') => ({
+      type: 'response.event',
+      event_id: `event-${callId}`,
+      delegation_id: 'delegation-1',
+      event: { type: 'response.output_item.done', item: { type: 'function_call', call_id: callId, name, arguments: args } },
+    });
+    const environment = () => ({
+      getSnapshot: () => ({
+        profile: { completed: true, level: 'beginner' as const, scriptPreference: 'both' as const, primaryGoal: 'travel' as const, responseLanguage: 'en' as const, microphoneTested: true },
+        phrases: [],
+        sceneProgress: {},
+        streak: 1,
+        practiceSecondsToday: 0,
+        liveDoneToday: false,
+        duePhraseCount: 0,
+      }),
+      preparePhrase: jest.fn(),
+      confirmSave: jest.fn(async () => true),
+      savePhrase: jest.fn(async () => true),
+      recordLessonPractice: jest.fn(),
+    });
+
+    it('requests tools with mode and context, answers completed calls once, then continues the response', async () => {
+      const context = { learnerLevel: 'beginner', lessonId: 'chai' };
+      const { result, unmount } = await mount({ liveSession: () => ({ mode: 'beginner', context, toolEnvironment: environment() }) });
+      await act(async () => { await result.current.connect(); });
+      await peerOptions.exchangeSdp('offer', new AbortController().signal);
+      expect(createLiveCall).toHaveBeenCalledWith({ clientId: 'client-12345678', offerSdp: 'offer', responseLanguage: 'en', history: undefined, mode: 'beginner', context, clientTools: true }, expect.anything());
+      await act(async () => { emit(toolCall('call_1')); emit(toolCall('call_1')); await flush(); });
+      const sent = jest.mocked(peer.send).mock.calls.map(([event]) => event);
+      expect(sent).toHaveLength(2);
+      expect(sent[0]).toMatchObject({ type: 'response.item.create', item: { type: 'function_call_output', call_id: 'call_1' } });
+      expect(JSON.parse((sent[0] as { item: { output: string } }).item.output)).toMatchObject({ learnerLevel: 'beginner', primaryGoal: 'travel' });
+      expect(sent[1]).toMatchObject({ type: 'response.create' });
+      await unmount();
+    });
+
+    it('does not declare tools without a tool environment and ignores function calls', async () => {
+      const { result, unmount } = await mount({ liveSession: () => ({ mode: 'conversation' }) });
+      await act(async () => { await result.current.connect(); });
+      await peerOptions.exchangeSdp('offer', new AbortController().signal);
+      expect(createLiveCall).toHaveBeenCalledWith({ clientId: 'client-12345678', offerSdp: 'offer', responseLanguage: 'en', history: undefined, mode: 'conversation' }, expect.anything());
+      await act(async () => { emit(toolCall('call_1')); await flush(); });
+      expect(peer.send).not.toHaveBeenCalled();
+      await unmount();
+    });
+
+    it('starts without session setup when building it fails', async () => {
+      const { result, unmount } = await mount({ liveSession: () => { throw new Error('state unavailable'); } });
+      await act(async () => { await result.current.connect(); });
+      await peerOptions.exchangeSdp('offer', new AbortController().signal);
+      expect(createLiveCall).toHaveBeenCalledWith({ clientId: 'client-12345678', offerSdp: 'offer', responseLanguage: 'en', history: undefined }, expect.anything());
+      expect(result.current.status).toBe('ready');
+      await unmount();
+    });
+
+    it('drops tool results that finish after the session ends', async () => {
+      let resolvePrepare!: (phrase: { hi: string; latin: string; en: string }) => void;
+      const tools = environment();
+      tools.preparePhrase.mockImplementation(() => new Promise((resolve) => { resolvePrepare = resolve; }));
+      const onError = jest.fn();
+      const { result, unmount } = await mount({ onError, liveSession: () => ({ toolEnvironment: tools }) });
+      await act(async () => { await result.current.connect(); });
+      await act(async () => { emit(toolCall('call_save', 'save_confirmed_phrase', JSON.stringify({ originalText: 'Bilkul naya shabd', confirmed: true }))); await flush(); });
+      await act(async () => { result.current.disconnect(); });
+      await act(async () => { resolvePrepare({ hi: 'बिल्कुल नया शब्द', latin: 'Bilkul naya shabd', en: 'A brand new word' }); await flush(); });
+      expect(jest.mocked(peer.send).mock.calls.map(([event]) => event.type)).toEqual(['session.close']);
+      expect(tools.savePhrase).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      await unmount();
+    });
+
+    it('reports an error when a tool result cannot be sent', async () => {
+      const onError = jest.fn();
+      const { result, unmount } = await mount({ onError, liveSession: () => ({ toolEnvironment: environment() }) });
+      await act(async () => { await result.current.connect(); });
+      jest.mocked(peer.send).mockImplementation(() => { throw new Error('closed'); });
+      await act(async () => { emit(toolCall('call_1')); await flush(); });
+      expect(onError).toHaveBeenCalledWith('Asha could not finish an app action. Start a new session to continue.');
+      await unmount();
+    });
+  });
 });

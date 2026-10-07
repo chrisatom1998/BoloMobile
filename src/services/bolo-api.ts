@@ -61,11 +61,28 @@ type VoiceCoachResponse = {
   understood?: boolean;
 };
 
+export const LIVE_MODES = ['hindi-immersion', 'hindi-english-help', 'beginner', 'conversation', 'lesson'] as const;
+export type LiveMode = (typeof LIVE_MODES)[number];
+export type LiveVocabularyItem = { devanagari: string; romanization?: string; meaning?: string };
+/** Mirrors the trusted live server's validated `context` body field and its limits. */
+export type LiveCallContext = {
+  learnerLevel?: string;
+  lessonId?: string;
+  lessonTitle?: string;
+  learningObjective?: string;
+  recentContext?: string[];
+  relevantVocabulary?: LiveVocabularyItem[];
+};
+
 export type LiveCallInput = {
   clientId: string;
   offerSdp: string;
   responseLanguage: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
+  mode?: LiveMode;
+  context?: LiveCallContext;
+  /** Declares that this client executes Bolo function tools on the data channel. */
+  clientTools?: boolean;
 };
 
 export type LiveCallResponse = { answerSdp: string; sessionId: string };
@@ -302,6 +319,56 @@ export async function prepareSavedPhraseFromText(input: SavedPhrasePreparationIn
   return phrase;
 }
 
+const LIVE_CONTEXT_MAX_BYTES = 24_000;
+
+function boundedLiveText(value: unknown, maximum: number) {
+  if (typeof value !== 'string') return undefined;
+  const text = value.replace(/\s+/gu, ' ').trim();
+  let bounded = '';
+  // Count UTF-16 units like the server, without splitting a surrogate pair.
+  for (const character of text) {
+    if (bounded.length + character.length > maximum) break;
+    bounded += character;
+  }
+  return bounded.trim() || undefined;
+}
+
+/**
+ * Bounds lesson context to the live server's limits so an oversized field is
+ * trimmed or dropped instead of rejecting the whole voice session.
+ */
+export function sanitizeLiveCallContext(value: LiveCallContext | undefined): LiveCallContext | undefined {
+  if (!isRecord(value)) return undefined;
+  const context: LiveCallContext = {};
+  const learnerLevel = boundedLiveText(value.learnerLevel, 100);
+  const lessonId = boundedLiveText(value.lessonId, 120);
+  const lessonTitle = boundedLiveText(value.lessonTitle, 200);
+  const learningObjective = boundedLiveText(value.learningObjective, 400);
+  if (learnerLevel) context.learnerLevel = learnerLevel;
+  if (lessonId) context.lessonId = lessonId;
+  if (lessonTitle) context.lessonTitle = lessonTitle;
+  if (learningObjective) context.learningObjective = learningObjective;
+  if (Array.isArray(value.recentContext)) {
+    const recentContext = value.recentContext.map((item) => boundedLiveText(item, 500)).filter((item): item is string => Boolean(item)).slice(-8);
+    if (recentContext.length) context.recentContext = recentContext;
+  }
+  if (Array.isArray(value.relevantVocabulary)) {
+    const relevantVocabulary = value.relevantVocabulary.flatMap((item): LiveVocabularyItem[] => {
+      if (!isRecord(item)) return [];
+      const devanagari = boundedLiveText(item.devanagari, 100);
+      if (!devanagari) return [];
+      const romanization = boundedLiveText(item.romanization, 100);
+      const meaning = boundedLiveText(item.meaning, 160);
+      return [{ devanagari, ...(romanization ? { romanization } : {}), ...(meaning ? { meaning } : {}) }];
+    }).slice(0, 30);
+    if (relevantVocabulary.length) context.relevantVocabulary = relevantVocabulary;
+  }
+  const bytes = (candidate: LiveCallContext) => new TextEncoder().encode(JSON.stringify(candidate)).byteLength;
+  if (bytes(context) > LIVE_CONTEXT_MAX_BYTES) delete context.recentContext;
+  if (bytes(context) > LIVE_CONTEXT_MAX_BYTES) delete context.relevantVocabulary;
+  return Object.keys(context).length ? context : undefined;
+}
+
 export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal) {
   if (!/^[A-Za-z0-9-]{8,64}$/u.test(input.clientId)
     || !isBoundedText(input.offerSdp, 64_000)
@@ -309,14 +376,20 @@ export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal)
     || !/(?:^|\r?\n)m=audio /u.test(input.offerSdp)
     || !['en', 'hi'].includes(input.responseLanguage)
     || (input.history !== undefined && (!Array.isArray(input.history)
-      || input.history.some((row) => !isRecord(row) || !['you', 'asha'].includes(row.role) || typeof row.text !== 'string')))) {
+      || input.history.some((row) => !isRecord(row) || !['you', 'asha'].includes(row.role) || typeof row.text !== 'string')))
+    || (input.mode !== undefined && !(LIVE_MODES as readonly string[]).includes(input.mode))
+    || (input.clientTools !== undefined && typeof input.clientTools !== 'boolean')) {
     return Promise.reject(new BoloApiError('Bolo could not start this live voice session.'));
   }
+  const context = sanitizeLiveCallContext(input.context);
   return post('/api/live-call', {
     clientId: input.clientId,
     offerSdp: input.offerSdp,
     responseLanguage: input.responseLanguage,
     history: input.history?.filter((row) => row.text.trim()).slice(-10).map(({ role, text }) => ({ role, text: text.trim().slice(0, 600) })),
+    ...(input.mode ? { mode: input.mode } : {}),
+    ...(context ? { context } : {}),
+    ...(input.clientTools === true ? { clientTools: true } : {}),
   }, isLiveCallResponse, signal, getBoloLiveApiUrl());
 }
 

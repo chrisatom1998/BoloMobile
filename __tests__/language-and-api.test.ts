@@ -13,6 +13,7 @@ import {
   OPENAI_LIVE_MODEL,
   prepareSavedPhraseFromText,
   requestAiVoiceAudio,
+  sanitizeLiveCallContext,
   sendMobileChat,
 } from '../src/services/bolo-api';
 import type { ChatMessage } from '../src/state/app-state-types';
@@ -470,6 +471,51 @@ describe('connected coaching contract', () => {
         body: JSON.stringify({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'hi', history: history.slice(-10).map((row) => ({ ...row, text: row.text.slice(0, 600) })) }),
       }));
     } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('sends learning mode, bounded lesson context, and the client tool declaration', async () => {
+    const originalFetch = globalThis.fetch;
+    const answerSdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
+    const fetchMock = jest.fn(async (_url: string, _init: RequestInit) => ({ ok: true, status: 200, json: async () => ({ answerSdp, sessionId: 'live-session-123' }) }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      const context = { learnerLevel: 'beginner', lessonId: 'chai', lessonTitle: 'The chai stop', learningObjective: 'Order tea', relevantVocabulary: [{ devanagari: 'चाय', romanization: 'chai', meaning: 'tea' }] };
+      await createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en', mode: 'beginner', context, clientTools: true });
+      expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).toEqual({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en', mode: 'beginner', context, clientTools: true });
+      await createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en', clientTools: false, context: {} });
+      expect(JSON.parse(fetchMock.mock.calls[1]![1].body as string)).toEqual({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en' });
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en', mode: 'freestyle' as never })).rejects.toThrow('could not start');
+      await expect(createLiveCall({ clientId: 'client-12345678', offerSdp: answerSdp, responseLanguage: 'en', clientTools: 'yes' as never })).rejects.toThrow('could not start');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally { globalThis.fetch = originalFetch; }
+  });
+
+  it('bounds lesson context to the live server limits instead of failing the session', () => {
+    const bounded = sanitizeLiveCallContext({
+      learnerLevel: ` ${'l'.repeat(150)} `,
+      lessonId: 'i'.repeat(200),
+      lessonTitle: 't'.repeat(300),
+      learningObjective: 'o'.repeat(500),
+      recentContext: [...Array.from({ length: 10 }, (_, index) => `${index} ${'र'.repeat(600)}`), '  '],
+      relevantVocabulary: [
+        ...Array.from({ length: 40 }, () => ({ devanagari: 'न'.repeat(150), romanization: 'n'.repeat(150), meaning: 'm'.repeat(200) })),
+        { devanagari: '  ', meaning: 'dropped' },
+      ],
+    })!;
+    expect(bounded.learnerLevel).toHaveLength(100);
+    expect(bounded.lessonId).toHaveLength(120);
+    expect(bounded.lessonTitle).toHaveLength(200);
+    expect(bounded.learningObjective).toHaveLength(400);
+    expect(bounded.recentContext).toBeUndefined();
+    expect(bounded.relevantVocabulary).toHaveLength(30);
+    expect(bounded.relevantVocabulary![0]).toEqual({ devanagari: 'न'.repeat(100), romanization: 'n'.repeat(100), meaning: 'm'.repeat(160) });
+    expect(new TextEncoder().encode(JSON.stringify(bounded)).byteLength).toBeLessThanOrEqual(24_000);
+    const small = sanitizeLiveCallContext({ recentContext: Array.from({ length: 10 }, (_, index) => `turn ${index}`) })!;
+    expect(small.recentContext).toEqual(Array.from({ length: 8 }, (_, index) => `turn ${index + 2}`));
+    expect(sanitizeLiveCallContext({ lessonTitle: '   ', relevantVocabulary: [] })).toBeUndefined();
+    expect(sanitizeLiveCallContext(undefined)).toBeUndefined();
+    expect(sanitizeLiveCallContext({ lessonTitle: 'a😀b' })!.lessonTitle).toBe('a😀b');
+    expect(sanitizeLiveCallContext({ lessonTitle: `${'a'.repeat(199)}😀` })!.lessonTitle).toBe('a'.repeat(199));
   });
 
   it.each([201, 256])('accepts a Live session identifier of %i characters from the backend', async (length) => {
