@@ -18,6 +18,7 @@ import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 26;
@@ -260,53 +261,56 @@ export default function HomeScreen() {
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
   return (
-    <FlatList
-      contentInsetAdjustmentBehavior="never"
-      contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
-      data={currentPlan ? [currentPlan] : []}
-      keyExtractor={(plan) => plan.id}
-      renderItem={({ item: plan }) => {
-        const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-        const selectedLessonIndex = plan.lessonIds.indexOf(lessonSelection.lessonId);
-        const selectedProgress = sceneProgress[lessonSelection.lessonId];
-        const selectedLessonIsInProgress = selectedLessonIndex >= 0
-          && (selectedProgress?.completions ?? 0) === 0
-          && (selectedProgress?.lastBeatIndex ?? 0) > 0;
-        const planMeta = selectedLessonIsInProgress
-          ? `Lesson ${selectedLessonIndex + 1} in progress`
-          : `${completed} of ${plan.lessonIds.length} lessons`;
-        return (
-          <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
-            <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
-              <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-              <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
-            </View>
-            <PressableFeedback
-              accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
-              accessibilityRole="button"
-              onPress={() => openPlan(plan.id)}
-              style={styles.planCard}
-            >
-              <View style={[styles.planCopy, largeTextLayout && styles.planCopyLarge]}>
-                <Text style={styles.planTitle}>{plan.title}</Text>
-                <Text style={styles.planMeta}>{planMeta}</Text>
+    <>
+      <FlatList
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
+        data={currentPlan ? [currentPlan] : []}
+        keyExtractor={(plan) => plan.id}
+        renderItem={({ item: plan }) => {
+          const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+          const selectedLessonIndex = plan.lessonIds.indexOf(lessonSelection.lessonId);
+          const selectedProgress = sceneProgress[lessonSelection.lessonId];
+          const selectedLessonIsInProgress = selectedLessonIndex >= 0
+            && (selectedProgress?.completions ?? 0) === 0
+            && (selectedProgress?.lastBeatIndex ?? 0) > 0;
+          const planMeta = selectedLessonIsInProgress
+            ? `Lesson ${selectedLessonIndex + 1} in progress`
+            : `${completed} of ${plan.lessonIds.length} lessons`;
+          return (
+            <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
+              <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
+                <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
+                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
               </View>
-              <View accessibilityLabel={`${completed} of ${plan.lessonIds.length} lessons complete`} style={styles.planSegments} testID="today-plan-segments">
-                {plan.lessonIds.map((lessonId, index) => {
-                  const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
-                  const current = !done && lessonId === lessonSelection.lessonId;
-                  return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
-                })}
-              </View>
-            </PressableFeedback>
-          </MotionReveal>
-        );
-      }}
-      ListHeaderComponent={header}
-      ListFooterComponent={footer}
-      style={sharedStyles.screen}
-      testID="today-guided-plan-list"
-    />
+              <PressableFeedback
+                accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
+                accessibilityRole="button"
+                onPress={() => openPlan(plan.id)}
+                style={styles.planCard}
+              >
+                <View style={[styles.planCopy, largeTextLayout && styles.planCopyLarge]}>
+                  <Text style={styles.planTitle}>{plan.title}</Text>
+                  <Text style={styles.planMeta}>{planMeta}</Text>
+                </View>
+                <View accessibilityLabel={`${completed} of ${plan.lessonIds.length} lessons complete`} style={styles.planSegments} testID="today-plan-segments">
+                  {plan.lessonIds.map((lessonId, index) => {
+                    const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
+                    const current = !done && lessonId === lessonSelection.lessonId;
+                    return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
+                  })}
+                </View>
+              </PressableFeedback>
+            </MotionReveal>
+          );
+        }}
+        ListHeaderComponent={header}
+        ListFooterComponent={footer}
+        style={sharedStyles.screen}
+        testID="today-guided-plan-list"
+      />
+      <StatusBarScrim />
+    </>
   );
 }
 

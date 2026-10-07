@@ -9,6 +9,7 @@ import { useAppState } from '@/state/app-state';
 import { observe } from '@/lib/observability';
 import type { LearnerLevel, LearningGoal, AshaResponseLanguage, ScriptPreference } from '@/state/app-state-types';
 import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Choice<T extends string | number> = { label: string; value: T; detail?: string };
 
@@ -76,86 +77,89 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[
-        styles.content,
-        Platform.OS === 'android' && { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl },
-      ]}
-      style={sharedStyles.screen}
-    >
-      <View style={styles.onboardingHeader}>
-        <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.brandMark}><Text style={styles.brandMarkText}>ब</Text></View>
-        {recalibrating ? (
-          <Pressable accessibilityLabel="Cancel recalibration" accessibilityRole="button" onPress={() => router.back()} style={styles.cancelButton}>
-            <X color={colors.ink} size={20} />
+    <>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[
+          styles.content,
+          Platform.OS === 'android' && { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl },
+        ]}
+        style={sharedStyles.screen}
+      >
+        <View style={styles.onboardingHeader}>
+          <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.brandMark}><Text style={styles.brandMarkText}>ब</Text></View>
+          {recalibrating ? (
+            <Pressable accessibilityLabel="Cancel recalibration" accessibilityRole="button" onPress={() => router.back()} style={styles.cancelButton}>
+              <X color={colors.ink} size={20} />
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={styles.intro}>
+          <Text style={sharedStyles.eyebrow}>{recalibrating ? 'Tune your plan' : 'Welcome to Bolo'}</Text>
+          <Text style={styles.heading}>{recalibrating ? 'Recalibrate without losing your choices' : 'Your Hindi plan in one minute'}</Text>
+          <Text style={sharedStyles.body}>Choose how you want to learn. You can change these preferences later.</Text>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionTitle}><Sparkles color={colors.brandDark} size={20} /><Text style={styles.title}>Where are you starting?</Text></View>
+          <ChoiceRow label="Hindi level" value={level} onChange={setLevel} choices={[
+            { value: 'new', label: 'New to Hindi', detail: 'Start with essential patterns.' },
+            { value: 'beginner', label: 'Beginner', detail: 'I know greetings and a few phrases.' },
+            { value: 'intermediate', label: 'Intermediate', detail: 'Give me richer real-life situations.' },
+          ]} />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionTitle}><BookOpenText color={colors.brandDark} size={20} /><Text style={styles.title}>How should Hindi appear?</Text></View>
+          <ChoiceRow label="Hindi script preference" value={scriptPreference} onChange={setScriptPreference} choices={[
+            { value: 'both', label: 'Hindi + transliteration' },
+            { value: 'devanagari', label: 'Hindi script only' },
+            { value: 'latin', label: 'Transliteration first' },
+          ]} />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionTitle}><Route color={colors.brandDark} size={20} /><Text style={styles.title}>What matters most?</Text></View>
+          <ChoiceRow label="Learning goal" value={primaryGoal} onChange={setPrimaryGoal} choices={[
+            { value: 'conversation', label: 'Everyday conversation' },
+            { value: 'travel', label: 'Travel' },
+            { value: 'family', label: 'Family and friends' },
+            { value: 'work', label: 'Work' },
+          ]} />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text style={styles.title}>Asha’s replies</Text></View>
+          <ChoiceRow label="Asha response language" value={responseLanguage} onChange={setResponseLanguage} choices={[
+            { value: 'en', label: 'English first' },
+            { value: 'hi', label: 'Hindi first' },
+          ]} />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.title}>Daily practice target</Text>
+          <ChoiceRow label="Daily practice target" value={goal} onChange={setGoal} choices={[
+            { value: 5, label: '5 minutes' },
+            { value: 10, label: '10 minutes' },
+            { value: 15, label: '15 minutes' },
+          ]} />
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionTitle}><Mic color={colors.brandDark} size={20} /><Text style={styles.title}>Optional microphone check</Text></View>
+          <Text style={styles.detail}>Bolo only asks after you tap. Voice is optional, and no recording begins during this check.</Text>
+          <Pressable accessibilityRole="button" onPress={() => void testMicrophone()} style={styles.secondaryButton}>
+            <Text style={styles.secondaryText}>{microphoneTested ? 'Check again' : 'Check microphone access'}</Text>
           </Pressable>
-        ) : null}
-      </View>
-      <View style={styles.intro}>
-        <Text style={sharedStyles.eyebrow}>{recalibrating ? 'Tune your plan' : 'Welcome to Bolo'}</Text>
-        <Text style={styles.heading}>{recalibrating ? 'Recalibrate without losing your choices' : 'Your Hindi plan in one minute'}</Text>
-        <Text style={sharedStyles.body}>Choose how you want to learn. You can change these preferences later.</Text>
-      </View>
+          <Text accessibilityLiveRegion="polite" style={styles.status}>{microphoneStatus}</Text>
+        </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionTitle}><Sparkles color={colors.brandDark} size={20} /><Text style={styles.title}>Where are you starting?</Text></View>
-        <ChoiceRow label="Hindi level" value={level} onChange={setLevel} choices={[
-          { value: 'new', label: 'New to Hindi', detail: 'Start with essential patterns.' },
-          { value: 'beginner', label: 'Beginner', detail: 'I know greetings and a few phrases.' },
-          { value: 'intermediate', label: 'Intermediate', detail: 'Give me richer real-life situations.' },
-        ]} />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionTitle}><BookOpenText color={colors.brandDark} size={20} /><Text style={styles.title}>How should Hindi appear?</Text></View>
-        <ChoiceRow label="Hindi script preference" value={scriptPreference} onChange={setScriptPreference} choices={[
-          { value: 'both', label: 'Hindi + transliteration' },
-          { value: 'devanagari', label: 'Hindi script only' },
-          { value: 'latin', label: 'Transliteration first' },
-        ]} />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionTitle}><Route color={colors.brandDark} size={20} /><Text style={styles.title}>What matters most?</Text></View>
-        <ChoiceRow label="Learning goal" value={primaryGoal} onChange={setPrimaryGoal} choices={[
-          { value: 'conversation', label: 'Everyday conversation' },
-          { value: 'travel', label: 'Travel' },
-          { value: 'family', label: 'Family and friends' },
-          { value: 'work', label: 'Work' },
-        ]} />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text style={styles.title}>Asha’s replies</Text></View>
-        <ChoiceRow label="Asha response language" value={responseLanguage} onChange={setResponseLanguage} choices={[
-          { value: 'en', label: 'English first' },
-          { value: 'hi', label: 'Hindi first' },
-        ]} />
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.title}>Daily practice target</Text>
-        <ChoiceRow label="Daily practice target" value={goal} onChange={setGoal} choices={[
-          { value: 5, label: '5 minutes' },
-          { value: 10, label: '10 minutes' },
-          { value: 15, label: '15 minutes' },
-        ]} />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionTitle}><Mic color={colors.brandDark} size={20} /><Text style={styles.title}>Optional microphone check</Text></View>
-        <Text style={styles.detail}>Bolo only asks after you tap. Voice is optional, and no recording begins during this check.</Text>
-        <Pressable accessibilityRole="button" onPress={() => void testMicrophone()} style={styles.secondaryButton}>
-          <Text style={styles.secondaryText}>{microphoneTested ? 'Check again' : 'Check microphone access'}</Text>
+        <Pressable accessibilityRole="button" onPress={finish} style={sharedStyles.primaryButton}>
+          <Text style={sharedStyles.primaryButtonText}>{recalibrating ? 'Save my practice plan' : 'Build my practice plan'}</Text>
         </Pressable>
-        <Text accessibilityLiveRegion="polite" style={styles.status}>{microphoneStatus}</Text>
-      </View>
-
-      <Pressable accessibilityRole="button" onPress={finish} style={sharedStyles.primaryButton}>
-        <Text style={sharedStyles.primaryButtonText}>{recalibrating ? 'Save my practice plan' : 'Build my practice plan'}</Text>
-      </Pressable>
-    </ScrollView>
+      </ScrollView>
+      <StatusBarScrim />
+    </>
   );
 }
 
