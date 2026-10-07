@@ -2,9 +2,10 @@ import { AudioModule } from 'expo-audio';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BookOpenText, Check, Languages, Mic, Route, Sparkles, X } from 'lucide-react-native';
 import { useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useAppState } from '@/state/app-state';
 import { observe } from '@/lib/observability';
 import type { LearnerLevel, LearningGoal, AshaResponseLanguage, ScriptPreference } from '@/state/app-state-types';

@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -11,6 +11,7 @@ import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { isWordOrderPracticeable } from '@/components/practice-mode';
 import { RecallRevealPractice } from '@/components/recall-reveal-practice';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { WordOrderPractice } from '@/components/word-order-practice';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { buildAlternateFeedback } from '@/data/lesson-feedback';
@@ -646,7 +647,7 @@ function SceneScreen() {
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
                 <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => togglePhrase(target)} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
+                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => { if (saved) hapticSelect(); else hapticSuccess(); togglePhrase(target); }} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
                   <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
                 </Pressable>
               </View>

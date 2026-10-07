@@ -3,16 +3,18 @@ import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ArrowRight, AudioLines, Flame, Settings } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Platform, Pressable, StatusBar, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { JournalDisplay } from '@/components/journal-chrome';
 import { MotionReveal } from '@/components/motion';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
+import { hapticSelect } from '@/lib/haptics';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
@@ -195,7 +197,7 @@ export default function HomeScreen() {
                 accessibilityLabel={`${minutes} minute daily goal`}
                 accessibilityRole="button"
                 accessibilityState={{ selected: goal === minutes }}
-                onPress={() => setGoal(minutes)}
+                onPress={() => { if (goal !== minutes) hapticSelect(); setGoal(minutes); }}
                 style={[styles.goalChoice, goal === minutes && styles.goalChoiceActive]}
                 testID={`today-goal-choice-${minutes}`}
               >

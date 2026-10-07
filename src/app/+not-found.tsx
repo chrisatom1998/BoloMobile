@@ -1,6 +1,7 @@
 import { Stack, useRouter } from 'expo-router';
-import { Pressable, ScrollView, Text } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { makeStyles, spacing, useSharedStyles } from '@/theme';
 
 export default function NotFoundScreen() {

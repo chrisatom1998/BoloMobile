@@ -2,10 +2,11 @@ import Constants from 'expo-constants';
 import { useRouter, type Href } from 'expo-router';
 import { Activity, ArchiveRestore, Bell, ChevronRight, DatabaseBackup, ExternalLink, FileDown, FileText, Languages, LifeBuoy, LockKeyhole, ShieldCheck, Sparkles, Trash2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, ScrollView, Text, useWindowDimensions, View } from 'react-native';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { SegmentedControl } from '@/components/segmented-control';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
