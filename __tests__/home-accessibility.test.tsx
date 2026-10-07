@@ -57,6 +57,30 @@ describe('home accessibility', () => {
     expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
   });
 
+  it('keeps 44pt goal buttons by stacking the stat row on narrow phones', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 360 }, window: { ...window, fontScale: 1, width: 360 } }));
+
+    try {
+      const view = await render(<HomeScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('today-goal-choice-15').props.style)).toMatchObject({ minHeight: 44, minWidth: 44 });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 393 }, window: { ...window, fontScale: 1, width: 393 } }));
+    try {
+      const view = await render(<HomeScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'row' });
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+  });
+
   it('reflows the Today header, hero footer, and stat row at accessibility text sizes', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');

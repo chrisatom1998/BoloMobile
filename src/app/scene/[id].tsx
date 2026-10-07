@@ -3,7 +3,8 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, ScrollView, Text, TextInput, View } from 'react-native';
+import { AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { MotionReveal } from '@/components/motion';
@@ -52,6 +53,7 @@ function SceneScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
+  const insets = useSafeAreaInsets();
   const sceneId = Array.isArray(id) ? id[0] : id;
   const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, sceneProgress, togglePhrase } = useAppState();
   const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
@@ -344,6 +346,15 @@ function SceneScreen() {
     router.replace('/');
   }
 
+  function closeLesson() {
+    void stopSpeaking();
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace('/');
+  }
+
   const completionAction = guidedLesson?.nextLessonId
     ? 'Next lesson'
     : guidedLesson
@@ -352,8 +363,8 @@ function SceneScreen() {
 
   if (done) {
     return (
-      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-completion-scroll">
-        <Stack.Screen options={{ title: activeScene.title }} />
+      <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
+        <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
         <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-complete`} style={styles.finishIntro} testID="scene-completion-motion">
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
           <Text style={sharedStyles.eyebrow}>Scene complete</Text>
@@ -422,8 +433,8 @@ function SceneScreen() {
     <ScrollView
       key="scene-run"
       ref={sceneScrollRef}
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
+      contentInsetAdjustmentBehavior="never"
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm }]}
       keyboardShouldPersistTaps="handled"
       onLayout={(event) => {
         sceneViewportHeightRef.current = event.nativeEvent.layout.height;
@@ -435,10 +446,20 @@ function SceneScreen() {
       style={sharedStyles.screen}
       testID="scene-scroll"
     >
-      {/* The serif heading below names the scene, so the bar stays untitled. */}
-      <Stack.Screen options={{ title: activeScene.title, headerTitle: '' }} />
+      {/* The serif heading below names the scene, so the lesson draws its own close button instead of a nav bar. */}
+      <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
       <View style={styles.header}>
         <View style={[styles.progressHeader, largeTextLayout && styles.progressHeaderLarge]} testID="scene-progress-header">
+          <Pressable
+            accessibilityHint="Leaves this lesson. Your progress is saved at the current turn."
+            accessibilityLabel="Close lesson"
+            accessibilityRole="button"
+            onPress={closeLesson}
+            style={styles.closeButton}
+            testID="scene-close"
+          >
+            <X color={colors.ink} size={18} strokeWidth={2.2} />
+          </Pressable>
           <View accessibilityLabel={`Turn ${beatIndex + 1} of ${activeScene.beats.length}`} style={styles.beatSegments}>
             {activeScene.beats.map((_, index) => {
               const filled = index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
@@ -510,7 +531,8 @@ function SceneScreen() {
         </View>
       ) : null}
 
-      <View style={styles.sheet}>
+      {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
+      <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
         {currentUsesName ? <View style={styles.hint}>
           <Text style={styles.hintTitle}>Practice with your name</Text>
           <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
@@ -671,6 +693,7 @@ const useStyles = makeStyles((c) => ({
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: 14 },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  closeButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
   progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
   beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6 },
   beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
