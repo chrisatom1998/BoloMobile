@@ -47,6 +47,8 @@ export default function HomeScreen() {
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
+  // Below 380pt the goal card can't fit three 44pt goal buttons beside the review card.
+  const stackedStatLayout = largeTextLayout || windowWidth < 380;
   const { goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, sceneProgress: savedSceneProgress, setGoal, streak } = state;
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
@@ -153,8 +155,8 @@ export default function HomeScreen() {
         </View>
       </MotionReveal>
 
-      <View style={[styles.statRow, largeTextLayout && styles.statRowLarge]} testID="today-stat-row">
-        <View style={styles.goalCard} testID="today-daily-goal">
+      <View style={[styles.statRow, stackedStatLayout && styles.statRowLarge]} testID="today-stat-row">
+        <View style={[styles.goalCard, stackedStatLayout && styles.statCardStacked]} testID="today-daily-goal">
           <View style={styles.goalHeader}>
             <Text style={styles.cardLabel}>Daily goal</Text>
             <Text style={styles.cardMeta} testID="today-goal-value">{goal} min</Text>
@@ -207,7 +209,7 @@ export default function HomeScreen() {
           accessibilityLabel={dueCount > 0 ? `Review ${dueCount} saved phrase${dueCount === 1 ? '' : 's'} due now` : 'Open saved phrases'}
           accessibilityRole="button"
           onPress={() => router.push((dueCount > 0 ? '/review' : '/phrases') as Href)}
-          style={styles.reviewCard}
+          style={[styles.reviewCard, stackedStatLayout && styles.statCardStacked]}
           testID="today-language-garden"
         >
           <View style={styles.reviewHeader}>
@@ -245,7 +247,7 @@ export default function HomeScreen() {
         <View style={styles.ashaOrb}><AudioLines color={colors.ink} size={20} strokeWidth={2.2} /></View>
       </PressableFeedback>
     </View>
-  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedTopbarLayout, streak, styles, watermark]);
+  ), [colors, dateLine, dueCount, goal, goalPercent, heroScene, largeTextLayout, lessonSelection, minutesToGo, minutesToday, motionMode, openLesson, reviewPreview, router, setGoal, showLatinPreview, stackedStatLayout, stackedTopbarLayout, streak, styles, watermark]);
 
   const footer = useMemo(() => (
     <View style={styles.footerContent}>
@@ -346,7 +348,8 @@ const useStyles = makeStyles((c) => ({
   heroButtonText: { color: c.ink, fontSize: 16, fontWeight: '600' },
   statRow: { width: '100%', flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
   statRowLarge: { flexDirection: 'column' },
-  goalCard: { minWidth: 0, flex: 1, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg, gap: 10 },
+  statCardStacked: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
+  goalCard: { minWidth: 0, flex: 1, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, paddingVertical: spacing.lg, paddingHorizontal: spacing.md, gap: 10 },
   goalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   cardLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   cardMeta: { color: c.muted, fontSize: 12, lineHeight: 16, fontVariant: ['tabular-nums'] },
@@ -355,8 +358,8 @@ const useStyles = makeStyles((c) => ({
   goalValue: { minWidth: 0, flex: 1, gap: 2 },
   goalMinutes: { color: c.ink, fontFamily: displayFont, fontSize: 28, lineHeight: 32, fontWeight: '700', fontVariant: ['tabular-nums'] },
   goalMinutesUnit: { color: c.muted, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
-  goalChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  goalChoice: { minWidth: 44, flexGrow: 1, flexBasis: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.track },
+  goalChoices: { flexDirection: 'row', gap: spacing.xs },
+  goalChoice: { minWidth: 44, flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.track },
   goalChoiceActive: { backgroundColor: c.ink },
   goalChoiceText: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
   goalChoiceTextActive: { color: c.white },
