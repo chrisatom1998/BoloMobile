@@ -551,9 +551,28 @@ function SceneScreen() {
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
       <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
-        {currentUsesName ? <View style={styles.hint}>
+        {currentUsesName ? <View style={[styles.hint, needsName && styles.hintNeedsName]}>
           <Text style={styles.hintTitle}>Practice with your name</Text>
-          <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
+          {/* The answers below stay locked until there is a name, so say so right where it is typed. */}
+          {needsName ? <Text style={styles.nameNeeded} testID="scene-practice-name-needed">Type your name to unlock the answers below.</Text> : null}
+          <TextInput
+            accessibilityHint="The answers unlock once you enter a name."
+            accessibilityLabel="Your name for Hindi practice"
+            autoCapitalize="words"
+            autoComplete="given-name"
+            autoCorrect={false}
+            editable={resolution === null && answeredBeatIndex !== beatIndex}
+            maxLength={40}
+            onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })}
+            onChangeText={setPracticeName}
+            placeholder="Your name"
+            placeholderTextColor={colors.muted}
+            returnKeyType="done"
+            style={styles.nameInput}
+            testID="scene-practice-name"
+            textContentType="givenName"
+            value={practiceName}
+          />
           <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
         </View> : null}
         <View style={[styles.answerHeader, largeTextLayout && styles.answerHeaderLarge]}>
@@ -764,6 +783,9 @@ const useStyles = makeStyles((c) => ({
   choiceMetaWrong: { color: c.danger, opacity: 0.85 },
   hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
+  hintNeedsName: { borderWidth: 1, borderColor: c.gold },
+  nameNeeded: { color: c.brandText, fontSize: 14, lineHeight: 20, fontWeight: '800', textAlign: 'center' },
+  nameInput: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.md, color: c.ink, fontSize: 17 },
   hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },

@@ -793,7 +793,10 @@ describe('lesson audit regressions', () => {
     mockSceneId = 'plan-essentials-02';
     const view = await render(<SceneScreen />);
     expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(true);
+    expect(view.getByText('Type your name to unlock the answers below.')).toBeTruthy();
     await fireEvent.changeText(view.getByTestId('scene-practice-name'), 'Chris');
+    expect(view.queryByTestId('scene-practice-name-needed')).toBeNull();
+    expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(false);
     for (const index of [0, 1, 2, 3]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     await fireEvent.press(view.getByTestId('scene-word-order-check'));
     await fireEvent.press(view.getByLabelText('Save phrase'));
