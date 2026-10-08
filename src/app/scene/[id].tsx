@@ -785,7 +785,7 @@ const useStyles = makeStyles((c) => ({
   hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
   hintNeedsName: { borderWidth: 1, borderColor: c.gold },
   nameNeeded: { color: c.brandText, fontSize: 14, lineHeight: 20, fontWeight: '800', textAlign: 'center' },
-  nameInput: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.md, color: c.ink, fontSize: 17 },
+  nameInput: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink, fontSize: 17 },
   hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },
