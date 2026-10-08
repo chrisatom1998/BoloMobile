@@ -367,11 +367,12 @@ export default function LiveScreen() {
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
       liveSnapshotIdsRef.current = [];
-      setLiveAshaTranscript('');
-      setLiveUserTranscript('');
+      // Each voice conversation starts with an empty transcript. The previous
+      // one stays readable until the learner starts the next call.
+      clearSavedChat();
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') observe('voice_connection_succeeded');
-  }, []);
+  }, [clearSavedChat]);
   const showRealtimeError = useCallback((message: string) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
     // count failures that happen while a connection attempt is in flight.

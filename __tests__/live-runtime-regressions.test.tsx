@@ -1085,6 +1085,25 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
+  it('starts each voice conversation with an empty transcript and keeps the last one until then', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(view.queryByLabelText('You: Namaste')).toBeNull();
+    expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('clears saved coaching history only after destructive confirmation', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
