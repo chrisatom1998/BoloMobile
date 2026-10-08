@@ -68,11 +68,14 @@ jest.mock('@/components/ai-consent-gate', () => {
   };
 });
 
+const mockVoiceButtonProps: { history?: unknown } = {};
+
 jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
       children,
       disabled,
+      history,
       onError,
       onInputTranscriptComplete,
       onStatusChange,
@@ -83,6 +86,7 @@ jest.mock('@/components/realtime-voice-button', () => {
     }: {
       children?: import('react').ReactNode;
       disabled?: boolean;
+      history?: unknown;
       onError: (message: string) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
@@ -91,6 +95,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string; startMs: number; endMs: number; fragments: never[] }[]) => void;
       responseLanguage: 'en' | 'hi';
     }) => {
+      mockVoiceButtonProps.history = history;
       const onTurnComplete = (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => onTranscriptSnapshot?.([
         { id: 'live-user', speaker: 'you', text: turn.transcript, startMs: 0, endMs: 1000, fragments: [] },
         { id: 'live-asha', speaker: 'asha', text: turn.reply, startMs: 500, endMs: 1500, fragments: [] },
@@ -1089,6 +1094,9 @@ describe('live coaching state', () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    // The saved chat is never sent as context, so a new call starts fresh
+    // even before the visible transcript clears.
+    expect(mockVoiceButtonProps.history).toBeUndefined();
 
     // A start that fails before connecting keeps the last conversation.
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
