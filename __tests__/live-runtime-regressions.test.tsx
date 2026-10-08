@@ -68,11 +68,14 @@ jest.mock('@/components/ai-consent-gate', () => {
   };
 });
 
+const mockVoiceButtonProps: { history?: unknown } = {};
+
 jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
       children,
       disabled,
+      history,
       onError,
       onInputTranscriptComplete,
       onStatusChange,
@@ -83,6 +86,7 @@ jest.mock('@/components/realtime-voice-button', () => {
     }: {
       children?: import('react').ReactNode;
       disabled?: boolean;
+      history?: unknown;
       onError: (message: string) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
@@ -91,6 +95,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string; startMs: number; endMs: number; fragments: never[] }[]) => void;
       responseLanguage: 'en' | 'hi';
     }) => {
+      mockVoiceButtonProps.history = history;
       const onTurnComplete = (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => onTranscriptSnapshot?.([
         { id: 'live-user', speaker: 'you', text: turn.transcript, startMs: 0, endMs: 1000, fragments: [] },
         { id: 'live-asha', speaker: 'asha', text: turn.reply, startMs: 500, endMs: 1500, fragments: [] },
@@ -1081,6 +1086,35 @@ describe('live coaching state', () => {
     await fireEvent.press(view.getByRole('tab', { name: 'Asha voice language: English' }));
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
 
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('starts each voice conversation with an empty transcript and keeps the last one until the next call connects', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    // The saved chat is never sent as context, so a new call starts fresh
+    // even before the visible transcript clears.
+    expect(mockVoiceButtonProps.history).toBeUndefined();
+
+    // A start that fails before connecting keeps the last conversation.
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(appState.__clearChatHistoryMock).not.toHaveBeenCalled();
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(view.queryByLabelText('You: Namaste')).toBeNull();
+    expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
     await view.unmount();
     await flushMicrotasks();
   });

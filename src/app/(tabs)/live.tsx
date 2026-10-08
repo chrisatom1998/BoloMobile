@@ -367,11 +367,15 @@ export default function LiveScreen() {
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
       liveSnapshotIdsRef.current = [];
-      setLiveAshaTranscript('');
-      setLiveUserTranscript('');
     }
-    if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') observe('voice_connection_succeeded');
-  }, []);
+    if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
+      observe('voice_connection_succeeded');
+      // Each voice conversation starts with an empty transcript. The previous
+      // one stays readable until the next call actually connects, so a failed
+      // start (no microphone, network error) never erases it.
+      clearSavedChat();
+    }
+  }, [clearSavedChat]);
   const showRealtimeError = useCallback((message: string) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
     // count failures that happen while a connection attempt is in flight.
@@ -513,7 +517,7 @@ export default function LiveScreen() {
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
-                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} history={chatHistory} liveSession={liveSession} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark">
+                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} liveSession={liveSession} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark">
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
