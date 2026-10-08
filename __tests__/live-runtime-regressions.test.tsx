@@ -1085,12 +1085,19 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
-  it('starts each voice conversation with an empty transcript and keeps the last one until then', async () => {
+  it('starts each voice conversation with an empty transcript and keeps the last one until the next call connects', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
 
+    // A start that fails before connecting keeps the last conversation.
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(appState.__clearChatHistoryMock).not.toHaveBeenCalled();
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
     expect(view.queryByLabelText('You: Namaste')).toBeNull();
