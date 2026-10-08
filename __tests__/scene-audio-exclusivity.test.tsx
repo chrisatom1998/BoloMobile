@@ -70,21 +70,20 @@ const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 describe('scene audio exclusivity', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('blocks scene playback and answer selection throughout pronunciation activity', async () => {
+  it('offers pronunciation practice after an answer and blocks scene playback while it runs', async () => {
     const view = await render(<SceneScreen />);
     const listen = view.getByLabelText('Hear Asha');
-    const answer = view.getByLabelText(/^एक चाय दीजिए/u);
 
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledTimes(1));
     expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?\nHello! What will you have?');
+    expect(view.queryByLabelText('Start pronunciation activity')).toBeNull();
+    await fireEvent.press(view.getByLabelText(/^एक चाय दीजिए/u));
     speakTextMock.mockClear();
 
     await fireEvent.press(view.getByLabelText('Start pronunciation activity'));
     await waitFor(() => expect(listen.props.accessibilityState).toEqual({ disabled: true }));
-    expect(answer.props.accessibilityState).toEqual({ disabled: true, selected: false });
 
     await fireEvent.press(listen);
-    await fireEvent.press(answer);
     expect(speakTextMock).not.toHaveBeenCalled();
 
     await fireEvent.press(view.getByLabelText('Finish pronunciation activity'));
