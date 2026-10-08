@@ -789,19 +789,33 @@ describe('lesson audit regressions', () => {
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 12, expect.objectContaining({ correct: 2, total: 2, score: 100 }));
   });
 
-  it('lets the learner replace the name placeholder and keeps their name in the answer', async () => {
+  it('asks for the name on its own step, then keeps it in the answer', async () => {
     mockSceneId = 'plan-essentials-02';
     const view = await render(<SceneScreen />);
-    expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(true);
-    expect(view.getByText('Type your name to unlock the answers below.')).toBeTruthy();
-    await fireEvent.changeText(view.getByTestId('scene-practice-name'), 'Chris');
-    expect(view.queryByTestId('scene-practice-name-needed')).toBeNull();
-    expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(false);
+    expect(view.queryByTestId('scene-word-order')).toBeNull();
+    expect(view.getByTestId('scene-name-continue').props.accessibilityState.disabled).toBe(true);
+    await fireEvent.changeText(view.getByTestId('scene-practice-name'), ' Chris ');
+    await fireEvent.press(view.getByTestId('scene-name-continue'));
+    expect(mockAppState.updateLearnerProfile).toHaveBeenCalledWith({ displayName: 'Chris' });
+    expect(view.queryByTestId('scene-name-step')).toBeNull();
+    expect(view.getByText('Practicing as Chris')).toBeTruthy();
     for (const index of [0, 1, 2, 3]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     await fireEvent.press(view.getByTestId('scene-word-order-check'));
     await fireEvent.press(view.getByLabelText('Save phrase'));
     expect(mockTogglePhrase).toHaveBeenCalledWith(expect.objectContaining({ hi: 'मेरा नाम Chris है।', latin: 'Mera naam Chris hai.', en: 'My name is Chris' }));
-    expect(mockAppState.updateLearnerProfile).toHaveBeenCalledWith({ displayName: 'Chris' });
+  });
+
+  it('skips the name step when a name is saved and lets the learner change it', async () => {
+    mockSceneId = 'plan-essentials-02';
+    mockAppState.learnerProfile = { ...mockAppState.learnerProfile, displayName: 'Asha' };
+    const view = await render(<SceneScreen />);
+    expect(view.queryByTestId('scene-name-step')).toBeNull();
+    expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(view.getByTestId('scene-change-name'));
+    expect(view.getByTestId('scene-practice-name').props.value).toBe('Asha');
+    await fireEvent.changeText(view.getByTestId('scene-practice-name'), 'Chris');
+    await fireEvent.press(view.getByTestId('scene-name-continue'));
+    expect(view.getByText('Practicing as Chris')).toBeTruthy();
   });
 
   it('offers an offline action and keeps the consent details optional', async () => {

@@ -62,6 +62,9 @@ function SceneScreen() {
   const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
   const sourceScene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
   const usesName = sourceScene?.beats.some((beat) => beat.choices.some((choice) => choice.correct && /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi))) ?? false;
+  // A turn that practices "My name is …" asks for the name on its own step first, so the lesson screen stays about Hindi.
+  const [nameStepOpen, setNameStepOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState(practiceName);
   const scene = useMemo(() => {
     if (!sourceScene || !usesName || !practiceName.trim()) return sourceScene;
     // Proper names are kept exactly as entered, never guessed by transliteration.
@@ -112,7 +115,6 @@ function SceneScreen() {
   const [score, setScore] = useState(initialAttempt?.score ?? 0);
   const [correctCount, setCorrectCount] = useState(initialAttempt?.correct ?? 0);
   const [answerCount, setAnswerCount] = useState(initialAttempt?.total ?? 0);
-  const [answeredBeatIndex, setAnsweredBeatIndex] = useState(initialAttempt?.answeredBeatIndex ?? null);
   const [done, setDone] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
@@ -229,7 +231,6 @@ function SceneScreen() {
     setScore(attempt.score);
     setCorrectCount(attempt.correct);
     setAnswerCount(attempt.total);
-    setAnsweredBeatIndex(beatIndex);
     checkpointScene?.(activeScene.id, beatIndex, attempt);
   }
 
@@ -340,7 +341,6 @@ function SceneScreen() {
     setScore(0);
     setCorrectCount(0);
     setAnswerCount(0);
-    setAnsweredBeatIndex(null);
     attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
     elapsedBeforeResumeRef.current = 0;
     progressBeatRef.current = 0;
@@ -405,6 +405,66 @@ function SceneScreen() {
             <Text style={styles.tertiaryText}>Back to Today</Text>
           </Pressable>
         ) : null}
+      </ScrollView>
+    );
+  }
+
+  if (nameStepOpen || needsName) {
+    const draft = nameDraft.trim();
+    const saveName = () => {
+      if (!draft) return;
+      hapticSelect();
+      setPracticeName(draft);
+      updateLearnerProfile?.({ displayName: draft });
+      setNameStepOpen(false);
+    };
+    return (
+      <ScrollView
+        key="scene-name-step"
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
+        keyboardShouldPersistTaps="handled"
+        style={sharedStyles.screen}
+        testID="scene-name-step"
+      >
+        <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
+        <Pressable accessibilityLabel="Close lesson" accessibilityRole="button" onPress={closeLesson} style={styles.closeButton} testID="scene-close">
+          <X color={colors.ink} size={18} strokeWidth={2.2} />
+        </Pressable>
+        <View style={styles.nameStepBody}>
+          <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.nameStepAsha} transition={0} />
+          <Text accessibilityRole="header" style={styles.nameStepTitle}>What’s your name?</Text>
+          <Text style={styles.nameStepBody2}>You’ll learn to say it in Hindi.</Text>
+          <TextInput
+            accessibilityLabel="Your name for Hindi practice"
+            autoCapitalize="words"
+            autoComplete="given-name"
+            autoCorrect={false}
+            autoFocus
+            maxLength={40}
+            onChangeText={setNameDraft}
+            onSubmitEditing={saveName}
+            placeholder="Your name"
+            placeholderTextColor={colors.muted}
+            returnKeyType="done"
+            style={styles.nameInput}
+            testID="scene-practice-name"
+            textContentType="givenName"
+            value={nameDraft}
+          />
+          <Text style={styles.nameStepNote}>Stays on this device.</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !draft }}
+          disabled={!draft}
+          onPress={saveName}
+          style={[sharedStyles.primaryButton, !draft && styles.disabled]}
+          testID="scene-name-continue"
+        >
+          <Text style={sharedStyles.primaryButtonText}>Continue</Text>
+          <ChevronRight color={colors.white} size={18} />
+        </Pressable>
       </ScrollView>
     );
   }
@@ -551,30 +611,14 @@ function SceneScreen() {
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
       <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
-        {currentUsesName ? <View style={[styles.hint, needsName && styles.hintNeedsName]}>
-          <Text style={styles.hintTitle}>Practice with your name</Text>
-          {/* The answers below stay locked until there is a name, so say so right where it is typed. */}
-          {needsName ? <Text style={styles.nameNeeded} testID="scene-practice-name-needed">Type your name to unlock the answers below.</Text> : null}
-          <TextInput
-            accessibilityHint="The answers unlock once you enter a name."
-            accessibilityLabel="Your name for Hindi practice"
-            autoCapitalize="words"
-            autoComplete="given-name"
-            autoCorrect={false}
-            editable={resolution === null && answeredBeatIndex !== beatIndex}
-            maxLength={40}
-            onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })}
-            onChangeText={setPracticeName}
-            placeholder="Your name"
-            placeholderTextColor={colors.muted}
-            returnKeyType="done"
-            style={styles.nameInput}
-            testID="scene-practice-name"
-            textContentType="givenName"
-            value={practiceName}
-          />
-          <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
-        </View> : null}
+        {currentUsesName && resolution === null && practiceName.trim() ? (
+          <View style={styles.nameRow}>
+            <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
+            <Pressable accessibilityLabel="Change your practice name" accessibilityRole="button" hitSlop={8} onPress={() => { setNameDraft(practiceName); setNameStepOpen(true); }} testID="scene-change-name">
+              <Text style={styles.nameRowLink}>Change</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <View style={[styles.answerHeader, largeTextLayout && styles.answerHeaderLarge]}>
           <Text style={styles.answerTitle}>{effectivePrompt}</Text>
           {resolution === null ? (
@@ -782,10 +826,16 @@ const useStyles = makeStyles((c) => ({
   choiceMetaCorrect: { color: c.white, opacity: 0.85 },
   choiceMetaWrong: { color: c.danger, opacity: 0.85 },
   hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
-  hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
-  hintNeedsName: { borderWidth: 1, borderColor: c.gold },
-  nameNeeded: { color: c.brandText, fontSize: 14, lineHeight: 20, fontWeight: '800', textAlign: 'center' },
-  nameInput: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink, fontSize: 17 },
+  nameStep: { flexGrow: 1 },
+  nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
+  nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  nameStepTitle: { color: c.ink, fontFamily: displayFont, fontSize: 30, lineHeight: 36, fontWeight: '700', letterSpacing: -0.3 },
+  nameStepBody2: { color: c.muted, fontSize: 16, lineHeight: 22 },
+  nameStepNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  nameRowText: { flexShrink: 1, color: c.muted, fontSize: 13, fontWeight: '600' },
+  nameRowLink: { color: c.brandText, fontSize: 13, fontWeight: '800' },
+  nameInput: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink, fontSize: 18 },
   hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },
