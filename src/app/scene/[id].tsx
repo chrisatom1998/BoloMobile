@@ -62,6 +62,9 @@ function SceneScreen() {
   const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
   const sourceScene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
   const usesName = sourceScene?.beats.some((beat) => beat.choices.some((choice) => choice.correct && /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi))) ?? false;
+  // A turn that practices "My name is …" asks for the name on its own step first, so the lesson screen stays about Hindi.
+  const [nameStepOpen, setNameStepOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState(practiceName);
   const scene = useMemo(() => {
     if (!sourceScene || !usesName || !practiceName.trim()) return sourceScene;
     // Proper names are kept exactly as entered, never guessed by transliteration.
@@ -112,7 +115,6 @@ function SceneScreen() {
   const [score, setScore] = useState(initialAttempt?.score ?? 0);
   const [correctCount, setCorrectCount] = useState(initialAttempt?.correct ?? 0);
   const [answerCount, setAnswerCount] = useState(initialAttempt?.total ?? 0);
-  const [answeredBeatIndex, setAnsweredBeatIndex] = useState(initialAttempt?.answeredBeatIndex ?? null);
   const [done, setDone] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
@@ -229,7 +231,6 @@ function SceneScreen() {
     setScore(attempt.score);
     setCorrectCount(attempt.correct);
     setAnswerCount(attempt.total);
-    setAnsweredBeatIndex(beatIndex);
     checkpointScene?.(activeScene.id, beatIndex, attempt);
   }
 
@@ -340,7 +341,6 @@ function SceneScreen() {
     setScore(0);
     setCorrectCount(0);
     setAnswerCount(0);
-    setAnsweredBeatIndex(null);
     attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
     elapsedBeforeResumeRef.current = 0;
     progressBeatRef.current = 0;
@@ -405,6 +405,66 @@ function SceneScreen() {
             <Text style={styles.tertiaryText}>Back to Today</Text>
           </Pressable>
         ) : null}
+      </ScrollView>
+    );
+  }
+
+  if (nameStepOpen || needsName) {
+    const draft = nameDraft.trim();
+    const saveName = () => {
+      if (!draft) return;
+      hapticSelect();
+      setPracticeName(draft);
+      updateLearnerProfile?.({ displayName: draft });
+      setNameStepOpen(false);
+    };
+    return (
+      <ScrollView
+        key="scene-name-step"
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
+        keyboardShouldPersistTaps="handled"
+        style={sharedStyles.screen}
+        testID="scene-name-step"
+      >
+        <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
+        <Pressable accessibilityLabel="Close lesson" accessibilityRole="button" onPress={closeLesson} style={styles.closeButton} testID="scene-close">
+          <X color={colors.ink} size={18} strokeWidth={2.2} />
+        </Pressable>
+        <View style={styles.nameStepBody}>
+          <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.nameStepAsha} transition={0} />
+          <Text accessibilityRole="header" style={styles.nameStepTitle}>What’s your name?</Text>
+          <Text style={styles.nameStepBody2}>You’ll learn to say it in Hindi.</Text>
+          <TextInput
+            accessibilityLabel="Your name for Hindi practice"
+            autoCapitalize="words"
+            autoComplete="given-name"
+            autoCorrect={false}
+            autoFocus
+            maxLength={40}
+            onChangeText={setNameDraft}
+            onSubmitEditing={saveName}
+            placeholder="Your name"
+            placeholderTextColor={colors.muted}
+            returnKeyType="done"
+            style={styles.nameInput}
+            testID="scene-practice-name"
+            textContentType="givenName"
+            value={nameDraft}
+          />
+          <Text style={styles.nameStepNote}>Stays on this device.</Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !draft }}
+          disabled={!draft}
+          onPress={saveName}
+          style={[sharedStyles.primaryButton, !draft && styles.disabled]}
+          testID="scene-name-continue"
+        >
+          <Text style={sharedStyles.primaryButtonText}>Continue</Text>
+          <ChevronRight color={colors.white} size={18} />
+        </Pressable>
       </ScrollView>
     );
   }
@@ -486,13 +546,13 @@ function SceneScreen() {
           </View>
           <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
         </View>
-        <View style={styles.titleBlock}>
-          <Text style={styles.place}>{activeScene.place}</Text>
+        {/* Title and score share one row so Asha's line and the answer fit on screen without scrolling. */}
+        <View style={styles.titleRow}>
           <Text accessibilityRole="header" style={styles.sceneTitle}>{activeScene.title}</Text>
-        </View>
-        <View style={styles.hudRow}>
-          <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
-          <View accessible accessibilityLabel={`${score} points`} style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
+          <View style={styles.hudRow}>
+            <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
+            <View accessible accessibilityLabel={`${score} points`} style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
+          </View>
         </View>
       </View>
 
@@ -515,29 +575,32 @@ function SceneScreen() {
       <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
         <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
         <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
-          <Text style={styles.speakerName}>Asha</Text>
+          <View style={styles.speakerRow}>
+            <Text style={styles.speakerName}>Asha</Text>
+            <Pressable
+              accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
+                ? 'Agree to connected AI processing to enable this voice.'
+                : pronunciationBusy
+                  ? 'Finish pronunciation practice before playing another voice.'
+                  : aiConsent
+                    ? 'Plays the Hindi situation, then its English translation.'
+                    : 'Plays bundled Hindi lesson audio offline.'}
+              accessibilityLabel="Hear Asha"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
+              disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
+              hitSlop={4}
+              onPress={() => play(situationPromptSpeech ?? beat.npc)}
+              style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
+            >
+              <Volume2 color={colors.brandText} size={16} />
+              <Text style={styles.speakerText}>Listen</Text>
+            </Pressable>
+          </View>
           <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, scriptPreference !== 'latin' && styles.npcHindi, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
             ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
             : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
           <Text style={styles.translation}>{beat.translation}</Text>
-          <Pressable
-            accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
-              ? 'Agree to connected AI processing to enable this voice.'
-              : pronunciationBusy
-                ? 'Finish pronunciation practice before playing another voice.'
-                : aiConsent
-                  ? 'Plays the Hindi situation, then its English translation.'
-                  : 'Plays bundled Hindi lesson audio offline.'}
-            accessibilityLabel="Hear Asha"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
-            disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
-            onPress={() => play(situationPromptSpeech ?? beat.npc)}
-            style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
-          >
-            <Volume2 color={colors.brandText} size={16} />
-            <Text style={styles.speakerText}>Listen</Text>
-          </Pressable>
         </View>
       </View>
 
@@ -551,11 +614,14 @@ function SceneScreen() {
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
       <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
-        {currentUsesName ? <View style={styles.hint}>
-          <Text style={styles.hintTitle}>Practice with your name</Text>
-          <TextInput accessibilityLabel="Your name for Hindi practice" value={practiceName} onChangeText={setPracticeName} onBlur={() => updateLearnerProfile?.({ displayName: practiceName.trim() })} maxLength={40} editable={resolution === null && answeredBeatIndex !== beatIndex} placeholder="Enter your name" style={[styles.hintBody, { minHeight: 48 }]} testID="scene-practice-name" />
-          <Text style={styles.hintBody}>Your name stays on this device unless you use connected coaching or speech.</Text>
-        </View> : null}
+        {currentUsesName && resolution === null && practiceName.trim() ? (
+          <View style={styles.nameRow}>
+            <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
+            <Pressable accessibilityLabel="Change your practice name" accessibilityRole="button" hitSlop={8} onPress={() => { setNameDraft(practiceName); setNameStepOpen(true); }} testID="scene-change-name">
+              <Text style={styles.nameRowLink}>Change</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <View style={[styles.answerHeader, largeTextLayout && styles.answerHeaderLarge]}>
           <Text style={styles.answerTitle}>{effectivePrompt}</Text>
           {resolution === null ? (
@@ -689,7 +755,7 @@ function SceneScreen() {
           </>
         ) : null}
 
-        {aiConsent && !needsName ? (
+        {aiConsent && !needsName && resolution !== null ? (
           <View testID="scene-pronunciation">
             <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
           </View>
@@ -704,7 +770,7 @@ function SceneScreen() {
 const useStyles = makeStyles((c) => ({
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: 14 },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
-  header: { gap: 14 },
+  header: { gap: spacing.md },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   closeButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
   progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
@@ -712,9 +778,8 @@ const useStyles = makeStyles((c) => ({
   beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
   beatSegmentFilled: { backgroundColor: c.brand },
   turn: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  titleBlock: { gap: 2 },
-  place: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
-  sceneTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 31, fontWeight: '700', letterSpacing: -0.3 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.xs },
+  sceneTitle: { flexShrink: 1, color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 29, fontWeight: '700', letterSpacing: -0.3 },
   hudRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: 10 },
   hudText: { color: c.ink, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
@@ -723,15 +788,16 @@ const useStyles = makeStyles((c) => ({
   ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
   asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: 14, gap: spacing.xs },
+  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
+  speakerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   speakerName: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },
   npc: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
-  npcHindi: hindiType(23),
+  npcHindi: hindiType(21),
   npcLarge: {},
   npcLatin: { color: c.brandText, fontFamily: 'System', fontSize: 15, lineHeight: 22, fontWeight: '500' },
   translation: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  speaker: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md, marginTop: 2 },
+  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { color: c.brandText, fontSize: 13, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },
@@ -740,7 +806,7 @@ const useStyles = makeStyles((c) => ({
   learnerTextHindi: hindiType(19),
   disabled: { opacity: 0.4 },
   audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: spacing.lg, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
   answerTitle: { minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },
@@ -763,7 +829,16 @@ const useStyles = makeStyles((c) => ({
   choiceMetaCorrect: { color: c.white, opacity: 0.85 },
   choiceMetaWrong: { color: c.danger, opacity: 0.85 },
   hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
-  hintTitle: { color: c.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
+  nameStep: { flexGrow: 1 },
+  nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
+  nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  nameStepTitle: { color: c.ink, fontFamily: displayFont, fontSize: 30, lineHeight: 36, fontWeight: '700', letterSpacing: -0.3 },
+  nameStepBody2: { color: c.muted, fontSize: 16, lineHeight: 22 },
+  nameStepNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  nameRowText: { flexShrink: 1, color: c.muted, fontSize: 13, fontWeight: '600' },
+  nameRowLink: { color: c.brandText, fontSize: 13, fontWeight: '800' },
+  nameInput: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink, fontSize: 18 },
   hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },

@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
 const mockAppState = {
@@ -72,8 +72,9 @@ describe('scene pronunciation consent gating', () => {
     mockAppState.phrases = [];
   });
 
-  it('mounts pronunciation practice only after connected AI processing is agreed to', async () => {
+  it('mounts pronunciation practice only after connected AI processing is agreed to and the turn is answered', async () => {
     const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(/^एक चाय दीजिए/u));
 
     expect(view.queryByTestId('pronunciation-recorder')).toBeNull();
 

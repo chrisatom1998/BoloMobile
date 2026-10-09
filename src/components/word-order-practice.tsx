@@ -177,7 +177,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
 const useStyles = makeStyles((c) => ({
   container: { gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
   instructions: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
-  tray: { minHeight: 60, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
+  tray: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
   trayPlaceholder: { color: c.muted, fontSize: 14, fontStyle: 'italic' },
   trayToken: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: c.night },
   trayTokenText: { color: c.white, fontSize: 17, fontWeight: '800' },
