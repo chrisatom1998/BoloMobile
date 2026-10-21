@@ -22,6 +22,8 @@ type Props = {
   history?: Pick<ChatMessage, 'role' | 'text'>[];
   /** Startup-only mode, lesson context, and client tools for each new session. */
   liveSession?: () => LiveSessionSetup | null;
+  /** Awaited once before a new connection; not called when muting or unmuting. */
+  onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
@@ -140,8 +142,8 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ children, clientId, history, liveSession, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', tone = 'light', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
-  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
+export function RealtimeVoiceButton({ children, clientId, history, liveSession, onConnectionStart, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', tone = 'light', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
+  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
