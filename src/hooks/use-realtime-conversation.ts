@@ -31,6 +31,8 @@ type Options = {
   responseLanguage?: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
   liveSession?: () => LiveSessionSetup | null;
+  /** Runs once per new connection, before any transport or transcript can arrive. */
+  onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
   onError: (message: string) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
@@ -184,6 +186,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const executor = setup?.toolEnvironment ? createLiveToolExecutor(setup.toolEnvironment) : null;
     toolExecutorRef.current = executor;
     const promise = (async () => {
+      await callbacksRef.current.onConnectionStart?.(controller.signal);
+      if (!current()) return;
       if (Platform.OS === 'ios' && !Device.isDevice) {
         throw new Error('Live voice requires a physical iPhone because iOS Simulator cannot safely initialize microphone audio.');
       }
