@@ -22,6 +22,8 @@ type Props = {
   history?: Pick<ChatMessage, 'role' | 'text'>[];
   /** Startup-only mode, lesson context, and client tools for each new session. */
   liveSession?: () => LiveSessionSetup | null;
+  /** Awaited once before a new connection; not called when muting or unmuting. */
+  onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
@@ -164,8 +166,8 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
 }
 
 function OwnedRealtimeVoiceButton(props: Props) {
-  const { clientId, enabled = true, history, liveSession, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
-  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
+  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
+  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
   return <RealtimeVoiceButtonView {...props} owned voice={voice} />;
 }
 

@@ -1,7 +1,8 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { storageKeys } from '../src/lib/storage';
+import { defaultSceneProgress, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
 jest.mock('@/lib/ai-voice-player', () => ({ clearAiVoicePlaybackCache: jest.fn() }));
@@ -35,10 +36,12 @@ const { observe } = jest.requireMock('../src/lib/observability') as { observe: j
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 function HistoryHarness() {
@@ -70,7 +73,7 @@ function HistoryHarness() {
           replaceLiveChatSnapshot(['live-1', 'live-2'], [{ id: 'live-1', role: 'you', text: `Hello there ${index}` }]);
         }
       }} />
-      <Pressable accessibilityLabel="Clear chat history" onPress={clearChatHistory} />
+      <Pressable accessibilityLabel="Clear chat history" onPress={() => { void clearChatHistory(); }} />
       <Pressable accessibilityLabel="Clear all data" onPress={() => void clearAllData()} />
     </View>
   );
@@ -138,6 +141,134 @@ describe('chat history provider persistence', () => {
     const restored = await render(<AppStateProvider><HistoryHarness /></AppStateProvider>);
     await waitFor(() => expect(restored.getByTestId('history').props.children).toBe('old:Previous session|live-1:Hello there 49'));
     await restored.unmount();
+  });
+
+  it('clears only the transcript and confirms persistence without touching saved learning data', async () => {
+    const savedPhrase = { hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' };
+    const sceneProgress = { chai: { ...defaultSceneProgress(), completions: 2, bestScore: 90, lastPracticedAt: '2026-10-20T12:00:00.000Z' } };
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([savedPhrase]));
+    asyncStorage.__store.set(storageKeys.sceneProgress, JSON.stringify(sceneProgress));
+    asyncStorage.__store.set(storageKeys.goal, JSON.stringify(15));
+    asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'asha', text: 'Old transcript' }]));
+    const before = new Map(asyncStorage.__store);
+    const { result, unmount } = await renderHook(() => useAppState(), {
+      wrapper: ({ children }: { children: ReactNode }) => <AppStateProvider>{children}</AppStateProvider>,
+    });
+    await waitFor(() => expect(result.current.hydrated).toBe(true));
+    expect(result.current.phrases).toContainEqual(savedPhrase);
+    expect(result.current.sceneProgress).toEqual(sceneProgress);
+    const learningBefore = {
+      phrases: result.current.phrases,
+      sceneProgress: result.current.sceneProgress,
+      goal: result.current.goal,
+      practice: result.current.practice,
+      phraseReviews: result.current.phraseReviews,
+    };
+
+    await act(async () => {
+      await expect(result.current.clearChatHistory()).resolves.toBe(true);
+    });
+    expect(result.current.chatHistory).toEqual([]);
+    expect({
+      phrases: result.current.phrases,
+      sceneProgress: result.current.sceneProgress,
+      goal: result.current.goal,
+      practice: result.current.practice,
+      phraseReviews: result.current.phraseReviews,
+    }).toEqual(learningBefore);
+    for (const [key, value] of before) {
+      if (key !== storageKeys.chatHistory) expect(asyncStorage.__store.get(key)).toBe(value);
+    }
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    await unmount();
+  });
+
+  it('reports a failed clear and restores the transcript instead of claiming a fresh persisted chat', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const oldHistory = [{ id: 'old', role: 'asha', text: 'Keep this if clearing fails' }];
+    asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify(oldHistory));
+    const { result, unmount } = await renderHook(() => useAppState(), {
+      wrapper: ({ children }: { children: ReactNode }) => <AppStateProvider>{children}</AppStateProvider>,
+    });
+    try {
+      await waitFor(() => expect(result.current.hydrated).toBe(true));
+      asyncStorage.multiSet.mockRejectedValueOnce(new Error('disk full'));
+      await act(async () => {
+        await expect(result.current.clearChatHistory()).resolves.toBe(false);
+      });
+      expect(result.current.chatHistory).toEqual(oldHistory);
+      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual(oldHistory);
+      expect(showAppAlert).toHaveBeenCalledWith('Could not save on this device', expect.any(String));
+    } finally {
+      await unmount();
+      warning.mockRestore();
+    }
+  });
+
+  it('coalesces clears across screen instances so an earlier failed reset cannot restore a successfully cleared transcript', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const oldHistory = [{ id: 'old', role: 'asha', text: 'Old chat' }];
+    asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify(oldHistory));
+    const firstWrite = deferred<void>();
+    const { result, unmount } = await renderHook(() => useAppState(), {
+      wrapper: ({ children }: { children: ReactNode }) => <AppStateProvider>{children}</AppStateProvider>,
+    });
+    try {
+      await waitFor(() => expect(result.current.hydrated).toBe(true));
+      asyncStorage.multiSet.mockImplementationOnce(() => firstWrite.promise);
+      let first!: Promise<boolean>;
+      let second!: Promise<boolean>;
+      await act(async () => {
+        first = result.current.clearChatHistory();
+        second = result.current.clearChatHistory();
+      });
+      expect(first).toBe(second);
+      expect(result.current.chatHistory).toEqual([]);
+      await act(async () => {
+        firstWrite.reject(new Error('disk full'));
+        expect(await Promise.all([first, second])).toEqual([false, false]);
+      });
+      expect(result.current.chatHistory).toEqual(oldHistory);
+      await act(async () => {
+        expect(await result.current.clearChatHistory()).toBe(true);
+      });
+      expect(result.current.chatHistory).toEqual([]);
+      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    } finally {
+      await unmount();
+      warning.mockRestore();
+    }
+  });
+
+  it('runs a fresh clear when a new screen adds messages while an earlier clear is pending', async () => {
+    asyncStorage.__store.set(storageKeys.chatHistory, JSON.stringify([{ id: 'old', role: 'asha', text: 'Old chat' }]));
+    const firstWrite = deferred<void>();
+    const { result, unmount } = await renderHook(() => useAppState(), {
+      wrapper: ({ children }: { children: ReactNode }) => <AppStateProvider>{children}</AppStateProvider>,
+    });
+    await waitFor(() => expect(result.current.hydrated).toBe(true));
+    asyncStorage.multiSet.mockImplementationOnce(async (entries: [string, string][]) => {
+      await firstWrite.promise;
+      entries.forEach(([key, value]) => asyncStorage.__store.set(key, value));
+    });
+    let first!: Promise<boolean>;
+    let second!: Promise<boolean>;
+    await act(async () => { first = result.current.clearChatHistory(); });
+    await act(async () => {
+      result.current.appendChatMessages([
+        { id: 'new-you', role: 'you', text: 'New typed question' },
+        { id: 'new-asha', role: 'asha', text: 'New typed answer' },
+      ]);
+    });
+    expect(result.current.chatHistory).toHaveLength(2);
+    await act(async () => { second = result.current.clearChatHistory(); });
+    await act(async () => {
+      firstWrite.resolve();
+      expect(await Promise.all([first, second])).toEqual([true, true]);
+    });
+    expect(result.current.chatHistory).toEqual([]);
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    await unmount();
   });
 
   it('rolls back an optimistic history append when device persistence fails', async () => {
