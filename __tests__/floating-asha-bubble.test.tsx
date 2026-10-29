@@ -76,7 +76,11 @@ describe('floating Asha controls', () => {
       fireEvent.press(view.getByLabelText('End live voice session'));
     });
     expect(onEnd).toHaveBeenCalledTimes(1);
-    expect(onExpand).not.toHaveBeenCalled();
+    expect(view.getByTestId('asha-bubble').props.accessible).toBe(true);
+    await act(async () => {
+      fireEvent(view.getByTestId('asha-bubble'), 'accessibilityTap');
+    });
+    expect(onExpand).toHaveBeenCalledTimes(1);
   });
 
   it('uses a quiet label when the session is not live', async () => {

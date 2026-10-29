@@ -1,5 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Pressable, Text } from 'react-native';
 
 import { AshaVoiceSessionProvider, isFloatingAshaMinimized, useAshaVoiceSession } from '../src/state/asha-voice-session';
@@ -139,5 +139,38 @@ describe('Asha voice session above the navigator', () => {
       { id: 'asha-1', role: 'asha', text: 'Hello', language: 'en' },
     ]);
     expect(mockMarkLiveTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps snapshot ids from the conversation screen so a later snapshot drops stale rows', async () => {
+    function ListeningScreen({ listen }: { listen: boolean }) {
+      const { setListeners, snapshotIds } = useAshaVoiceSession();
+      useEffect(() => {
+        if (!listen) return undefined;
+        setListeners({
+          onTranscriptSnapshot: (rows) => {
+            snapshotIds.current = rows.map((row) => row.id);
+          },
+        });
+        return () => setListeners(null);
+      }, [listen, setListeners, snapshotIds]);
+      return null;
+    }
+
+    const view = await renderSession(<ListeningScreen listen />);
+    mockTranscriptSnapshot?.([
+      { id: 'you-1', speaker: 'you', text: 'Namaste' },
+      { id: 'asha-1', speaker: 'asha', text: 'Hello' },
+    ]);
+    expect(mockReplaceLiveChatSnapshot).not.toHaveBeenCalled();
+
+    await act(async () => {
+      view.rerender(<AshaVoiceSessionProvider><ListeningScreen listen={false} /></AshaVoiceSessionProvider>);
+    });
+    mockTranscriptSnapshot?.([
+      { id: 'you-2', speaker: 'you', text: 'Phir se' },
+    ]);
+    expect(mockReplaceLiveChatSnapshot).toHaveBeenCalledWith(['you-1', 'asha-1'], [
+      { id: 'you-2', role: 'you', text: 'Phir se' },
+    ]);
   });
 });

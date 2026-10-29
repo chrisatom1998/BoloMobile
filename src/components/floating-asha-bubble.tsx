@@ -159,9 +159,11 @@ export function FloatingAshaBubble({ isPlaying, onEnd, onExpand, status }: Props
     <Animated.View pointerEvents="box-none" style={[styles.slot, position]}>
       <GestureDetector gesture={gesture}>
         <Animated.View
+          accessible
           accessibilityHint="Opens the conversation with Asha."
           accessibilityLabel={bubbleLabel(status, isPlaying)}
           accessibilityRole="button"
+          onAccessibilityTap={onExpand}
           style={styles.bubble}
           testID="asha-bubble"
         >

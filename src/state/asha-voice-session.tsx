@@ -30,11 +30,18 @@ export type AshaVoiceSession = {
   status: RealtimeVoiceStatus;
   isPlaying: boolean;
   voice: AshaVoiceControls | null;
+  /**
+   * IDs of the revisable live transcript rows. Owned here so leaving Asha's
+   * screen does not forget which rows a later snapshot must replace.
+   */
+  snapshotIds: MutableRefObject<string[]>;
   minimize: () => void;
   expand: () => void;
   endSession: () => void;
   setListeners: (listeners: AshaVoiceListeners | null) => void;
 };
+
+const inactiveSnapshotIds: MutableRefObject<string[]> = { current: [] };
 
 const inactiveSession: AshaVoiceSession = {
   available: false,
@@ -42,6 +49,7 @@ const inactiveSession: AshaVoiceSession = {
   status: 'disconnected',
   isPlaying: false,
   voice: null,
+  snapshotIds: inactiveSnapshotIds,
   minimize: () => {},
   expand: () => {},
   endSession: () => {},
@@ -90,9 +98,11 @@ function FloatingAshaRouter({ navigateRef }: { navigateRef: MutableRefObject<() 
 function AshaVoiceSessionHost({
   listenersRef,
   onVoice,
+  snapshotIds,
 }: {
   listenersRef: MutableRefObject<AshaVoiceListeners | null>;
   onVoice: (voice: AshaVoiceControls) => void;
+  snapshotIds: MutableRefObject<string[]>;
 }) {
   // Loaded inside the host so the root layout test never evaluates expo-audio.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -105,8 +115,10 @@ function AshaVoiceSessionHost({
   const { stopSpeaking } = require('@/lib/speech') as typeof import('@/lib/speech');
   const app = useAppState();
   const liveSession = useAshaLiveSession();
-  const snapshotIdsRef = useRef<string[]>([]);
   const previousStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
+  // The provider owns this ref for the life of the session. Keep a local Ref so
+  // transcript updates can write it without treating the prop as immutable.
+  const snapshotIdsRef = useRef(snapshotIds);
   const appRef = useRef(app);
   useEffect(() => {
     appRef.current = app;
@@ -115,8 +127,9 @@ function AshaVoiceSessionHost({
   const persistSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     const current = appRef.current;
     const messages = messagesFromRows(rows, current.learnerProfile.responseLanguage);
-    current.replaceLiveChatSnapshot(snapshotIdsRef.current, messages);
-    snapshotIdsRef.current = messages.map((message) => message.id);
+    const ids = snapshotIdsRef.current;
+    current.replaceLiveChatSnapshot(ids.current, messages);
+    ids.current = messages.map((message) => message.id);
     if (messages.some((message) => message.role === 'you')) current.markLiveTurn();
   }, []);
 
@@ -151,12 +164,13 @@ function AshaVoiceSessionHost({
     const previous = previousStatusRef.current;
     previousStatusRef.current = status;
     if (listenersRef.current) return;
-    if (status === 'connecting' && previous === 'disconnected') snapshotIdsRef.current = [];
+    const ids = snapshotIdsRef.current;
+    if (status === 'connecting' && previous === 'disconnected') ids.current = [];
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
       void stopSpeaking();
       appRef.current.clearChatHistory();
-      snapshotIdsRef.current = [];
+      ids.current = [];
     }
   }, [listenersRef, observe, stopSpeaking, voice.status]);
 
@@ -168,6 +182,7 @@ function EnabledAshaVoiceSession({ children }: PropsWithChildren) {
   const ready = Boolean(app.hydrated && app.clientId && app.clientId !== 'loading-client');
   const [minimized, setMinimized] = useState(false);
   const [voice, setVoice] = useState<AshaVoiceControls | null>(null);
+  const snapshotIds = useRef<string[]>([]);
   const listenersRef = useRef<AshaVoiceListeners | null>(null);
   const navigateRef = useRef<() => void>(() => {});
   const voiceRef = useRef(voice);
@@ -212,18 +227,19 @@ function EnabledAshaVoiceSession({ children }: PropsWithChildren) {
       status: voice?.status ?? 'disconnected',
       isPlaying: voice?.isPlaying ?? false,
       voice,
+      snapshotIds,
       minimize,
       expand,
       endSession,
       setListeners,
     };
-  }, [endSession, expand, minimized, minimize, ready, setListeners, voice]);
+  }, [endSession, expand, minimized, minimize, ready, setListeners, snapshotIds, voice]);
 
   return (
     <AshaVoiceSessionContext.Provider value={value}>
       <View style={{ flex: 1 }}>
         {children}
-        {ready ? <AshaVoiceSessionHost listenersRef={listenersRef} onVoice={setVoice} /> : null}
+        {ready ? <AshaVoiceSessionHost listenersRef={listenersRef} onVoice={setVoice} snapshotIds={snapshotIds} /> : null}
         {ready ? <FloatingAshaRouter navigateRef={navigateRef} /> : null}
         {ready && minimized ? (
           <FloatingAshaBubbleSlot

@@ -97,7 +97,8 @@ export default function LiveScreen() {
   const [error, setError] = useState('');
   const [liveAshaTranscript, setLiveAshaTranscript] = useState('');
   const [liveUserTranscript, setLiveUserTranscript] = useState('');
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
+  const resumedStatus = floatingAsha.available ? floatingAsha.status : 'disconnected';
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>(resumedStatus);
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
@@ -108,11 +109,13 @@ export default function LiveScreen() {
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
-  const liveSnapshotIdsRef = useRef<string[]>([]);
+  const ownedSnapshotIds = useRef<string[]>([]);
+  const snapshotIdsRef = useRef(ownedSnapshotIds);
+  const sharedSnapshotIds = floatingAsha.snapshotIds;
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
-  const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
+  const realtimeStatusRef = useRef<RealtimeVoiceStatus>(resumedStatus);
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
   const selectionClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -255,8 +258,9 @@ export default function LiveScreen() {
     }));
     // The whole snapshot is revisable: late timestamped deltas can merge two
     // provisional rows. Remove prior snapshot IDs so no stale row survives.
-    replaceLiveChatSnapshot(liveSnapshotIdsRef.current, messages);
-    liveSnapshotIdsRef.current = messages.map((message) => message.id);
+    const ids = snapshotIdsRef.current;
+    replaceLiveChatSnapshot(ids.current, messages);
+    ids.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
     setLiveUserTranscript([...messages].reverse().find((row) => row.role === 'you')?.text ?? '');
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
@@ -385,7 +389,7 @@ export default function LiveScreen() {
     if (status === 'recording') setError('');
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
-      liveSnapshotIdsRef.current = [];
+      snapshotIdsRef.current.current = [];
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
@@ -408,6 +412,11 @@ export default function LiveScreen() {
 
   const floatingAvailable = floatingAsha.available;
   const setFloatingListeners = floatingAsha.setListeners;
+  useEffect(() => {
+    // Point at the provider's id list before listeners are registered. Assigning
+    // during render trips the refs rule, and this effect runs before snapshots.
+    snapshotIdsRef.current = floatingAvailable ? sharedSnapshotIds : ownedSnapshotIds;
+  }, [floatingAvailable, sharedSnapshotIds]);
   useEffect(() => {
     if (!floatingAvailable) return undefined;
     setFloatingListeners({
