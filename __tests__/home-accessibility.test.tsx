@@ -45,6 +45,19 @@ describe('home accessibility', () => {
     expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(44);
     expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
     expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('0 percent of daily goal complete');
+    expect(view.getByText('नम', { includeHiddenElements: true }).props['aria-hidden']).toBe(true);
+    const leakedAccessibilityProps: string[] = [];
+    const visit = (node: { children?: unknown; props?: Record<string, unknown> }) => {
+      if (node.props?.accessibilityElementsHidden || node.props?.importantForAccessibility) {
+        leakedAccessibilityProps.push(String(node.props.accessibilityElementsHidden ?? node.props.importantForAccessibility));
+      }
+      if (!Array.isArray(node.children)) return;
+      for (const child of node.children) {
+        if (child && typeof child === 'object') visit(child as { children?: unknown; props?: Record<string, unknown> });
+      }
+    };
+    visit(view.getByTestId('today-goal-dial'));
+    expect(leakedAccessibilityProps).toEqual([]);
     expect(view.getByText('0 days')).toBeTruthy();
     expect(view.getByText('Save one from any lesson')).toBeTruthy();
     expect(StyleSheet.flatten(startLesson.props.style).minHeight).toBeGreaterThanOrEqual(44);

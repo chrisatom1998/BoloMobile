@@ -132,7 +132,7 @@ export default function HomeScreen() {
       </View>
 
       <MotionReveal mode={motionMode} motionKey={lessonSelection.lessonId} style={styles.hero} testID="today-primary-motion">
-        {watermark ? <Text accessible={false} ellipsizeMode="clip" numberOfLines={1} style={styles.heroWatermark}>{watermark}</Text> : null}
+        {watermark ? <Text accessibilityElementsHidden accessible={false} aria-hidden ellipsizeMode="clip" importantForAccessibility="no-hide-descendants" numberOfLines={1} style={styles.heroWatermark}>{watermark}</Text> : null}
         <View style={styles.heroTopline}>
           <View style={styles.heroChip}><Text style={styles.heroChipText}>{lessonSelection.kicker}</Text></View>
           {heroScene?.place ? <Text numberOfLines={1} style={styles.heroMeta}>{heroScene.place}</Text> : null}
@@ -171,7 +171,7 @@ export default function HomeScreen() {
             style={[styles.goalDial, largeTextLayout && styles.goalDialLarge]}
             testID="today-goal-dial"
           >
-            <Svg accessibilityElementsHidden importantForAccessibility="no-hide-descendants" height={64} pointerEvents="none" viewBox="0 0 64 64" width={64}>
+            <Svg aria-hidden height={64} pointerEvents="none" viewBox="0 0 64 64" width={64}>
               <Circle cx={32} cy={32} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={8} />
               {goalPercent > 0 ? (
                 <Circle
