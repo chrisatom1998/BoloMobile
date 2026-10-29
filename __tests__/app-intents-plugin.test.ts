@@ -58,6 +58,22 @@ describe('Bolo App Intents config plugin', () => {
     expect(() => applyBoloAppIntents(partial)).toThrow(/partial or duplicate generated Swift declarations/u);
   });
 
+  it('still applies after the SDK 57 scene-lifecycle AppDelegate edit', () => {
+    const sceneAppDelegate = expo57AppDelegate
+      .replace(
+        'public class AppDelegate: ExpoAppDelegate {',
+        'public class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {',
+      )
+      .replace('    window = UIWindow(frame: UIScreen.main.bounds)\n', '')
+      .replace('    factory.startReactNative(withModuleName: "main", in: window, launchOptions: launchOptions)\n', '');
+
+    const updated = applyBoloAppIntents(sceneAppDelegate);
+
+    expect(updated.match(/import AppIntents/gu)).toHaveLength(1);
+    expect(updated.match(/struct PracticeHindiIntent: AppIntent/gu)).toHaveLength(1);
+    expect(updated).not.toContain('factory.startReactNative');
+  });
+
   it('fails prebuild when the Expo Swift template no longer exposes the required anchors', () => {
     expect(() => applyBoloAppIntents('import Expo\nclass AppDelegate {}\n')).toThrow(
       /could not find the Expo AppDelegate anchors/u,

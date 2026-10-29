@@ -104,6 +104,13 @@ describe('Expo app configuration', () => {
     expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_PUBLIC_SITE_URL must be an absolute https URL/u);
   });
 
+  it('opts iOS into the UIKit scene lifecycle required by the iOS 27 SDK', () => {
+    const appJson = require('../app.json') as { expo: { plugins: unknown[] } };
+    const plugin = appJson.expo.plugins.find((entry) => Array.isArray(entry) && entry[0] === 'expo-build-properties');
+
+    expect(plugin).toEqual(['expo-build-properties', { ios: { enableSceneSupport: true } }]);
+  });
+
   it('declares the app-owned iOS data collection without tracking', () => {
     const appJson = require('../app.json') as {
       expo: {

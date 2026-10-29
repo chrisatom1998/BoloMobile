@@ -72,7 +72,20 @@ mustInclude(scheme, 'BlueprintName = "Bolo"', schemePath);
 mustOccurExactlyOnce(appDelegate, 'import AppIntents', appDelegatePath);
 mustOccurExactlyOnce(appDelegate, 'struct PracticeHindiIntent: AppIntent', appDelegatePath);
 mustOccurExactlyOnce(appDelegate, 'struct BoloAppShortcuts: AppShortcutsProvider', appDelegatePath);
+mustOccurExactlyOnce(
+  appDelegate,
+  'class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {',
+  appDelegatePath,
+);
+if (appDelegate.includes('factory.startReactNative(') || appDelegate.includes('UIScreen.main.bounds')) {
+  throw new Error(`${appDelegatePath} must leave window creation and React Native startup to the iOS scene delegate.`);
+}
 mustInclude(infoPlist, `<string>${urlScheme}</string>`, infoPlistPath);
+mustOccurExactlyOnce(infoPlist, '<key>UIApplicationSceneManifest</key>', infoPlistPath);
+mustOccurExactlyOnce(infoPlist, '<string>EXExpoAppSceneDelegate</string>', infoPlistPath);
+if (!/<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\s*\/>/.test(infoPlist)) {
+  throw new Error(`${infoPlistPath} must set UIApplicationSupportsMultipleScenes to false.`);
+}
 
 const microphoneUsageDescription = 'Allow Bolo to use your microphone for Hindi practice and conversations.';
 mustOccurExactlyOnce(infoPlist, '<key>NSMicrophoneUsageDescription</key>', infoPlistPath);
