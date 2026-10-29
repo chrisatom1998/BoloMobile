@@ -121,7 +121,7 @@ describe('fail-closed merge verification', () => {
     expect(manifest.scripts.verify).toContain('npm run e2e:validate');
   });
 
-  test('uses deliberate scrolling for every long iOS smoke section', () => {
+  test('scrolls to visible smoke targets without requiring bottom rows to be centered', () => {
     const smoke = read('.maestro/flows/00-ci-smoke.yaml');
     const scrolls = [...smoke.matchAll(/^- scrollUntilVisible:\n((?: {4,}[^\n]+\n?)*)/gmu)]
       .map((match) => match[1]);
@@ -131,7 +131,7 @@ describe('fail-closed merge verification', () => {
       expect(scroll).toContain('direction: DOWN');
       expect(scroll).toContain('speed: 60');
       expect(scroll).toContain('visibilityPercentage: 80');
-      expect(scroll).toContain('centerElement: true');
+      expect(scroll).toContain('centerElement: false');
       expect(scroll).toContain('timeout: 45000');
     }
   });
