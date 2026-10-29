@@ -30,7 +30,7 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
   }),
 }));
 
-import { RealtimeVoiceButton } from '../src/components/realtime-voice-button';
+import { RealtimeVoiceButton, reducedMotionRipple } from '../src/components/realtime-voice-button';
 import { lightColors } from '../src/theme';
 
 const haptics = jest.requireMock('@/lib/haptics') as {
@@ -38,6 +38,12 @@ const haptics = jest.requireMock('@/lib/haptics') as {
 };
 
 describe('realtime voice accessibility', () => {
+  it('keeps the reduced-motion listening ring at full rest opacity', () => {
+    expect(reducedMotionRipple('recording')).toBe(0);
+    expect(reducedMotionRipple('ready')).toBe(0);
+    expect(reducedMotionRipple('responding')).toBe(0);
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockVoiceStatus = 'ready';
