@@ -62,6 +62,16 @@ const RING_MS = 1_900;
 const THROB_MS = 700;
 
 /**
+ * Reduce Motion holds the listening ring at rest. Ring opacity is
+ * `0.85 * (1 - ripple)`, so any ripple above 0 makes the ring dimmer exactly
+ * when it should show that the microphone is on. The recording border carries
+ * that state instead.
+ */
+export function reducedMotionRipple(_status: RealtimeVoiceStatus) {
+  return 0;
+}
+
+/**
  * Animates the orb by status: a slow breath while ready, rings that ripple
  * outward while recording, and a quick throb while Asha responds. All motion
  * lives on wrapper views so the Pressable keeps its static hit-target styles.
@@ -75,7 +85,7 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
     cancelAnimation(ripple);
     if (motionMode === 'reduced') {
       breath.value = 1;
-      ripple.value = status === 'recording' ? 0.35 : 0;
+      ripple.value = reducedMotionRipple(status);
       return () => {
         cancelAnimation(breath);
         cancelAnimation(ripple);
