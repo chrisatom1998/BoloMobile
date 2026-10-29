@@ -6,7 +6,7 @@ appId: com.bolo.hindi
     direction: DOWN
     speed: 60
     visibilityPercentage: 80
-    centerElement: true
+    centerElement: false
     timeout: 45000
 - tapOn: "Build my practice plan"
 - extendedWaitUntil:

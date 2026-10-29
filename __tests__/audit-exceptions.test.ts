@@ -55,13 +55,7 @@ function emptyAcceptance(): AcceptanceRecord {
 }
 
 function activeAcceptance(): AcceptanceRecord {
-  return {
-    version: 1,
-    exceptions: [
-      { ghsa: 'GHSA-vfj7-8cjw-p6xm', module: 'braces', owner: 'chris johnson', acceptedOn: '2026-08-01', expires: '2027-01-01' },
-      { ghsa: 'GHSA-86w9-cpqp-85rv', module: 'node-forge', owner: 'chris johnson', acceptedOn: '2026-08-01', expires: '2027-01-01' },
-    ],
-  };
+  return emptyAcceptance();
 }
 
 function advisory(ghsa: string, title: string) {
@@ -128,14 +122,14 @@ describe('dependency audit exceptions', () => {
     expect(result.accepted).toEqual([]);
   });
 
-  it('requires every approved exception to stay in the record', () => {
+  it('accepts a clean audit when no high-severity exceptions are approved', () => {
     const result = evaluate(cleanAudit(), emptyAcceptance());
 
-    expect(result.ok).toBe(false);
-    expect(result.failures.join(' ')).toContain('must contain exactly 2 approved entries');
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
   });
 
-  it('accepts the approved braces and node-forge advisories on their reviewed modules', () => {
+  it('rejects the retired braces and node-forge advisories if they reappear', () => {
     const audit = {
       auditReportVersion: 2,
       vulnerabilities: {
@@ -144,10 +138,11 @@ describe('dependency audit exceptions', () => {
       },
       metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0, total: 2 } },
     };
-    const result = evaluate(audit, activeAcceptance());
+    const result = evaluate(audit, emptyAcceptance());
 
-    expect(result.ok).toBe(true);
-    expect(result.accepted.map((entry) => entry.module).sort()).toEqual(['braces', 'node-forge']);
+    expect(result.ok).toBe(false);
+    expect(result.failures.join(' ')).toContain('GHSA-vfj7-8cjw-p6xm');
+    expect(result.failures.join(' ')).toContain('GHSA-86w9-cpqp-85rv');
   });
 
   it('rejects the two retired image-size advisories if they reappear', () => {
