@@ -1130,7 +1130,7 @@ describe('live coaching state', () => {
     expect(StyleSheet.flatten(clear.props.style).minHeight).toBeGreaterThanOrEqual(44);
     await fireEvent.press(clear);
     expect(view.getByLabelText('You: Namaste')).toBeTruthy();
-    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    expect(view.getByLabelText('Asha: Hello there.').props.accessibilityHint).toBe('Read-only message. Highlight words, then use Save selection below.');
 
     const firstPrompt = alert.mock.calls.find(([title]) => title === 'Clear Asha chat?');
     const cancelAction = (firstPrompt?.[2] as { text?: string; style?: string; onPress?: () => void }[] | undefined)
@@ -1156,7 +1156,7 @@ describe('live coaching state', () => {
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
     expect(view.queryByLabelText('You: Namaste')).toBeNull();
     expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
-    expect(view.getByDisplayValue('Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
+    expect(view.getByDisplayValue('Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.').props.accessibilityHint).toBe('Read-only message.');
     expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
     await view.unmount();
     await flushMicrotasks();

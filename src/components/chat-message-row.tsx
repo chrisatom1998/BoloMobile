@@ -1,6 +1,6 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
+import { Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
@@ -12,6 +12,9 @@ import { useTheme } from '@/theme';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
 
+// Web textareas draw a resize grip, which makes a chat line look editable.
+const webChatText = { resize: 'none' } as TextStyle;
+
 function messageActionExcerpt(text: string) {
   const normalized = text.replace(/\s+/gu, ' ').trim();
   if (normalized.length <= MAX_ACCESSIBLE_REPLY_CHARACTERS) return normalized;
@@ -19,6 +22,7 @@ function messageActionExcerpt(text: string) {
 }
 
 function SelectableChatText({
+  accessibilityHint,
   accessibilityLabel,
   accessibilityLiveRegion,
   onSelectedText,
@@ -27,6 +31,7 @@ function SelectableChatText({
   style,
   text,
 }: {
+  accessibilityHint: string;
   accessibilityLabel: string;
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
   onSelectedText: (selection: { sourceText: string; text: string }) => void;
@@ -56,7 +61,7 @@ function SelectableChatText({
 
   return (
     <TextInput
-      accessibilityHint="Read-only message. Highlight words, then use Save selection below."
+      accessibilityHint={accessibilityHint}
       accessibilityLabel={accessibilityLabel}
       accessibilityLiveRegion={accessibilityLiveRegion}
       accessibilityRole="text"
@@ -69,7 +74,7 @@ function SelectableChatText({
       onSelectionChange={selectionChanged}
       readOnly
       scrollEnabled={false}
-      style={[style, { minHeight: 23 }, height === undefined ? undefined : { height }]}
+      style={[style, Platform.OS === 'web' ? webChatText : null, { minHeight: 23 }, height === undefined ? undefined : { height }]}
       value={text}
     />
   );
@@ -113,6 +118,9 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const sourcePhrase = useMemo(() => hindiSourcePhrase(selectionSource) || (message.language === 'hi' ? message.text : ''), [message.language, message.text, selectionSource]);
   const excerpt = useMemo(() => messageActionExcerpt(displayText), [displayText]);
   const isYou = message.role === 'you';
+  const messageHint = isWelcome
+    ? 'Read-only message.'
+    : 'Read-only message. Highlight words, then use Save selection below.';
 
   const selectedText = useCallback((selection: { sourceText: string; text: string }) => {
     onSelectedText(message.id, selection);
@@ -130,6 +138,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
           <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
         </View>
         <SelectableChatText
+          accessibilityHint={messageHint}
           accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${displayText}`}
           accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
           onSelectionCollapsed={selectionCollapsed}
