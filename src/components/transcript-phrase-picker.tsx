@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useSheetDismiss } from '@/components/sheet-exit';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
@@ -14,13 +15,16 @@ type TranscriptPhrasePickerProps = {
   clientId: string;
   message: ChatMessage;
   onClose: () => void;
+  /** Fires once the close animation has finished and the sheet can unmount. */
+  onDismissed?: () => void;
   onSave: (phrase: SavedPhrase) => void;
   reducedMotion?: boolean;
   selectedText?: string;
   sourceText?: string;
+  visible?: boolean;
 };
 
-export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
+export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onDismissed, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText, visible = true }: TranscriptPhrasePickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -34,7 +38,10 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
+  const savedRef = useRef(false);
   const scrollRef = useRef<ScrollView>(null);
+  const [saving, setSaving] = useState(false);
+  const finishDismiss = useSheetDismiss(visible, onDismissed);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -87,15 +94,17 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
     const normalizedLatin = latin.trim();
     const normalizedEnglish = english.trim();
     const normalizedHindi = hindi.trim();
-    if (!normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
+    if (savedRef.current || !normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
+    savedRef.current = true;
+    setSaving(true);
     onSave({ hi: normalizedHindi, latin: normalizedLatin, en: normalizedEnglish });
   }
 
   const canPrepare = aiConsent && selectedText.trim().length > 0 && !busy;
-  const canSave = hindi.trim().length > 0 && latin.trim().length > 0 && english.trim().length > 0 && !busy;
+  const canSave = !saving && hindi.trim().length > 0 && latin.trim().length > 0 && english.trim().length > 0 && !busy;
 
   return (
-    <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={close} presentationStyle="pageSheet" visible>
+    <Modal animationType={reducedMotion ? 'fade' : 'slide'} onDismiss={finishDismiss} onRequestClose={close} presentationStyle="pageSheet" visible={visible}>
       <View style={[styles.screen, Platform.OS === 'android' && { paddingTop: insets.top }]}>
         <ScrollView ref={scrollRef} automaticallyAdjustKeyboardInsets contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
           <View style={styles.header}>

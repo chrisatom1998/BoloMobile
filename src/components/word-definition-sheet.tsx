@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useSheetDismiss } from '@/components/sheet-exit';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useHindiWordSource } from '@/hooks/use-hindi-word-source';
 import { hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
@@ -21,6 +22,7 @@ export function WordDefinitionSheet({
   clientId,
   initialWord,
   onClose,
+  onDismissed,
   phrase,
   reducedMotion = false,
   scriptPreference = 'both',
@@ -29,6 +31,8 @@ export function WordDefinitionSheet({
   clientId: string;
   initialWord?: string | null;
   onClose: () => void;
+  /** Fires once the close animation has finished. */
+  onDismissed?: () => void;
   phrase: string;
   reducedMotion?: boolean;
   scriptPreference?: ScriptPreference;
@@ -36,6 +40,7 @@ export function WordDefinitionSheet({
 }) {
   const styles = useStyles();
   const insets = useSafeAreaInsets();
+  const finishDismiss = useSheetDismiss(visible, onDismissed);
   const [excerpt, setExcerpt] = useState({ original: '', draft: '', submitted: '' });
   const currentExcerpt = excerpt.original === phrase ? excerpt : { original: phrase, draft: phrase, submitted: '' };
   const resolutionPhrase = currentExcerpt.submitted || phrase;
@@ -58,6 +63,8 @@ export function WordDefinitionSheet({
     requestRef.current?.abort();
     requestRef.current = null;
     requestWordRef.current = null;
+    // Keep the explanation on screen while the sheet slides away.
+    if (!visible) return;
     requestIdRef.current += 1;
     autoExplainedRef.current = null;
     setSelectedWord(null);
@@ -122,7 +129,7 @@ export function WordDefinitionSheet({
   }, [explain, initialWord, visible, words]);
 
   return (
-    <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
+    <Modal animationType={reducedMotion ? 'fade' : 'slide'} onDismiss={finishDismiss} onRequestClose={onClose} presentationStyle="pageSheet" visible={visible}>
       <View style={styles.screen}>
         <View style={[styles.header, Platform.OS === 'android' && { paddingTop: insets.top + spacing.md }]}>
           <View style={styles.headerCopy}>
