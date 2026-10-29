@@ -166,6 +166,15 @@ describe('GPT-Live conversation lifecycle', () => {
     await unmount();
   });
 
+  it('does not reset the audio route when the app backgrounds with no live session', async () => {
+    let change!: (state: 'background') => void;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_name, handler) => { change = handler; return { remove: jest.fn() }; });
+    const { unmount } = await mount();
+    await act(async () => { change('background'); });
+    expect(setAudioModeAsync).not.toHaveBeenCalled();
+    await unmount();
+  });
+
   it('disconnects on background and ignores stale messages', async () => {
     let change!: (state: 'background') => void;
     jest.spyOn(AppState, 'addEventListener').mockImplementation((_name, handler) => { change = handler; return { remove: jest.fn() }; });

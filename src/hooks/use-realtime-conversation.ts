@@ -332,6 +332,9 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       appStateRef.current = next;
       // Permission dialogs can transiently make iOS inactive during connection.
       if (next === 'active' || (next === 'inactive' && statusRef.current === 'connecting')) return;
+      // An idle hook (the floating session stays mounted between calls) must not
+      // reset the shared audio route while another screen is playing.
+      if (statusRef.current === 'disconnected' && !peerRef.current) return;
       disconnect();
     });
     return () => subscription.remove();

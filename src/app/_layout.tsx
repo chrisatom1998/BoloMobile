@@ -13,6 +13,7 @@ import { TapPressable } from '@/components/tap-pressable';
 import { useHindiFont } from '@/hooks/use-hindi-font';
 import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
 import { observe } from '@/lib/observability';
+import { AshaVoiceSessionProvider } from '@/state/asha-voice-session';
 import { AppStateProvider, useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, spacing, useTheme } from '@/theme';
 
@@ -24,7 +25,9 @@ export default function RootLayout() {
         <HeroUINativeProvider>
           <AppErrorBoundary>
             <AppStateProvider>
-              <AppNavigator />
+              <AshaVoiceSessionProvider>
+                <AppNavigator />
+              </AshaVoiceSessionProvider>
             </AppStateProvider>
           </AppErrorBoundary>
         </HeroUINativeProvider>
