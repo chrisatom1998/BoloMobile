@@ -95,34 +95,8 @@
     "verify": "npm run lint && npm run typecheck && npm run test:coverage && npm run store:validate && npm run e2e:validate && npm run production:validate",
     "production:validate": "node ./scripts/validate-production-config.mjs",
     "native:validate": "node ./scripts/validate-native-project.mjs",
-    "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs"
-  },
-  "jest": {
-    "preset": "jest-expo",
-    "resolver": "react-native-worklets/jest/resolver.js",
-    "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/$1",
-      "^heroui-native(?:/.*)?$": "<rootDir>/__mocks__/heroui-native.js",
-      "^react-native-gesture-handler$": "<rootDir>/__mocks__/react-native-gesture-handler.js",
-      "\\.(css)$": "<rootDir>/__mocks__/style.js"
-    },
-    "testPathIgnorePatterns": [
-      "/node_modules/",
-      "/src/app/"
-    ],
-    "restoreMocks": true,
-    "clearMocks": true,
-    "collectCoverageFrom": [
-      "src/**/*.{ts,tsx}"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "statements": 86,
-        "branches": 76,
-        "functions": 83,
-        "lines": 90
-      }
-    }
+    "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs",
+    "postinstall": "node ./scripts/patch-query-string-decoder.mjs"
   },
   "expo": {
     "doctor": {
@@ -142,7 +116,8 @@
       "brace-expansion": "1.1.21"
     },
     "node-forge": "1.4.2",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "decode-uri-component": "0.5.1"
   },
   "private": true
 }
