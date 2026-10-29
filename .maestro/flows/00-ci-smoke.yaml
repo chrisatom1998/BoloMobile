@@ -24,6 +24,10 @@ tags:
     centerElement: false
     timeout: 45000
 - tapOn: "Check microphone access"
+# Fresh iOS simulators can still present the system prompt after preset permissions.
+- tapOn:
+    text: "Don.t Allow"
+    optional: true
 - scrollUntilVisible:
     element:
       text: "Microphone access is off. Typed and written practice still work."
@@ -60,6 +64,10 @@ tags:
       EXDevMenuShowsAtLaunch: false
       EXDevMenuShowFloatingActionButton: false
 - runFlow: ../subflows/dismiss-dev-menu.yaml
+# The onboarding heading is also absent while the launch screen is still showing.
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 60000
 - assertNotVisible: "Your Hindi plan in one minute"
 - tapOn: "Settings"
 - assertVisible: "Learning preferences"
