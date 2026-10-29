@@ -955,6 +955,28 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
+  it('keeps a newly opened phrase sheet when the previous close finishes late', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Namaste'));
+
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Namaste');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Namaste');
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('retains the original Hindi source behind a selected Romanized chat phrase', async () => {
     boloApi.prepareSavedPhraseFromText.mockResolvedValueOnce({
       hi: 'आप कैसे हैं?',

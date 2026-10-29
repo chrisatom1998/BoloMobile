@@ -38,10 +38,25 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
-  const savedRef = useRef(false);
+  const savedSessionRef = useRef(-1);
   const scrollRef = useRef<ScrollView>(null);
   const [saving, setSaving] = useState(false);
   const finishDismiss = useSheetDismiss(visible, onDismissed);
+  const openKey = `${message.id}\0${initialText}\0${initialSourceText ?? ''}`;
+  const [formSession, setFormSession] = useState({ key: openKey, open: visible, epoch: 0 });
+  if (visible && (formSession.key !== openKey || !formSession.open)) {
+    setFormSession({ key: openKey, open: true, epoch: formSession.epoch + 1 });
+    setSaving(false);
+    setBusy(false);
+    setError('');
+    setSelectedText(initialText);
+    setSourceText(initialSourceText?.trim() ?? '');
+    setHindi('');
+    setLatin('');
+    setEnglish('');
+  } else if (!visible && formSession.open) {
+    setFormSession({ ...formSession, open: false });
+  }
 
   useEffect(() => {
     mountedRef.current = true;
@@ -51,6 +66,11 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
       requestRef.current = null;
     };
   }, []);
+
+  useEffect(() => () => {
+    requestRef.current?.abort();
+    requestRef.current = null;
+  }, [formSession.epoch]);
 
   async function preparePhrase() {
     const text = selectedText.trim();
@@ -94,8 +114,8 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
     const normalizedLatin = latin.trim();
     const normalizedEnglish = english.trim();
     const normalizedHindi = hindi.trim();
-    if (savedRef.current || !normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
-    savedRef.current = true;
+    if (savedSessionRef.current === formSession.epoch || !normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
+    savedSessionRef.current = formSession.epoch;
     setSaving(true);
     onSave({ hi: normalizedHindi, latin: normalizedLatin, en: normalizedEnglish });
   }

@@ -120,7 +120,10 @@ function SceneScreen() {
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
 
-  const [wordDefinitionWord, setWordDefinitionWord] = useState<string | null>(null);
+  const [wordSheet, setWordSheet] = useState<{ word: string; phrase: string } | null>(null);
+  const [wordSheetVisible, setWordSheetVisible] = useState(false);
+  const wordSheetSessionRef = useRef(0);
+  const closingWordSessionRef = useRef(0);
   const sceneScrollRef = useRef<ScrollView>(null);
   const sceneViewportHeightRef = useRef(0);
   const sceneScrollYRef = useRef(0);
@@ -194,6 +197,20 @@ function SceneScreen() {
   const activeScene = scene;
   const beat = currentBeat;
   const target = currentTarget;
+  const openWordSheet = (word: string) => {
+    wordSheetSessionRef.current += 1;
+    setWordSheet({ word, phrase: target.hi });
+    setWordSheetVisible(true);
+  };
+  const closeWordSheet = () => {
+    closingWordSessionRef.current = wordSheetSessionRef.current;
+    setWordSheetVisible(false);
+  };
+  const finishWordSheet = () => {
+    if (closingWordSessionRef.current !== wordSheetSessionRef.current) return;
+    setWordSheet(null);
+    setWordSheetVisible(false);
+  };
   const effectivePrompt = wordOrderChoiceFallback
     ? `Choose the Hindi response that means “${target.en}”`
     : beat.prompt;
@@ -289,7 +306,7 @@ function SceneScreen() {
     setResolution(null);
     setAlreadyResolvedIncorrect(true);
     setShowHint(false);
-    setWordDefinitionWord(null);
+    closeWordSheet();
     if (effectiveMode === 'wordOrder') setWordOrderRetryNonce((value) => value + 1);
   }
 
@@ -321,7 +338,7 @@ function SceneScreen() {
     setResolution(null);
     setShowHint(false);
     setAlreadyResolvedIncorrect(false);
-    setWordDefinitionWord(null);
+    closeWordSheet();
     setChoiceNonce((value) => value + 1);
   }
 
@@ -337,7 +354,7 @@ function SceneScreen() {
     setResolution(null);
     setShowHint(false);
     setAlreadyResolvedIncorrect(false);
-    setWordDefinitionWord(null);
+    closeWordSheet();
     setScore(0);
     setCorrectCount(0);
     setAnswerCount(0);
@@ -745,7 +762,7 @@ function SceneScreen() {
                       accessibilityState={{ disabled: !aiConsent }}
                       disabled={!aiConsent}
                       key={word}
-                      onPress={() => setWordDefinitionWord(word)}
+                      onPress={() => openWordSheet(word)}
                       style={[styles.wordToken, !aiConsent && styles.disabled]}
                     ><Text style={[styles.wordTokenText, scriptPreference !== 'latin' && styles.wordTokenHindi]}>{lessonHindiLabel(word, scriptPreference, romanizedWord)}</Text></Pressable>
                   );
@@ -762,7 +779,7 @@ function SceneScreen() {
         ) : null}
         {!recoveryActionsFirst ? answerActions : null}
       </View>
-      <WordDefinitionSheet clientId={clientId} initialWord={wordDefinitionWord} onClose={() => setWordDefinitionWord(null)} phrase={target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordDefinitionWord !== null} />
+      <WordDefinitionSheet clientId={clientId} initialWord={wordSheet?.word ?? null} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordSheet?.phrase ?? target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && wordSheet !== null} />
     </ScrollView>
   );
 }

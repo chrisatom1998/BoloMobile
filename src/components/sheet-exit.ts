@@ -24,6 +24,9 @@ export function useSheetDismiss(visible: boolean, onDismissed?: () => void) {
 
   useEffect(() => {
     onDismissedRef.current = onDismissed;
+  }, [onDismissed]);
+
+  useEffect(() => {
     visibleRef.current = visible;
     if (visible) {
       openedRef.current = true;
@@ -33,7 +36,7 @@ export function useSheetDismiss(visible: boolean, onDismissed?: () => void) {
     if (!openedRef.current) return;
     const timer = setTimeout(finish, SHEET_EXIT_FALLBACK_MS);
     return () => clearTimeout(timer);
-  }, [finish, onDismissed, visible]);
+  }, [finish, visible]);
 
   return finish;
 }

@@ -95,7 +95,9 @@ export default function LiveScreen() {
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
   const [phraseSheetVisible, setPhraseSheetVisible] = useState(false);
-  const pendingPhraseAlertRef = useRef<{ title: string; message: string } | null>(null);
+  const pendingPhraseAlertRef = useRef<{ session: number; title: string; message: string } | null>(null);
+  const phraseSheetSessionRef = useRef(0);
+  const closingPhraseSessionRef = useRef(0);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
@@ -304,6 +306,8 @@ export default function LiveScreen() {
     if (pendingClear) clearTimeout(pendingClear);
     selectionClearTimersRef.current.delete(message.id);
     selectedChatTextRef.current.delete(message.id);
+    phraseSheetSessionRef.current += 1;
+    pendingPhraseAlertRef.current = null;
     setPhraseMessage({ message, selectedText: selection?.text, sourceText: selection?.sourceText || message.text });
     setPhraseSheetVisible(true);
   }, []);
@@ -428,19 +432,28 @@ export default function LiveScreen() {
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
     if (!alreadySaved) togglePhrase(phrase);
+    const session = phraseSheetSessionRef.current;
+    closingPhraseSessionRef.current = session;
     pendingPhraseAlertRef.current = {
+      session,
       title: alreadySaved ? 'Phrase already saved' : 'Phrase saved',
       message: `${phrase.latin} — ${phrase.en}`,
     };
     setPhraseSheetVisible(false);
   }, [phrases, togglePhrase]);
 
+  const closePhraseSheet = useCallback(() => {
+    closingPhraseSessionRef.current = phraseSheetSessionRef.current;
+    setPhraseSheetVisible(false);
+  }, []);
+
   const finishPhraseSheet = useCallback(() => {
+    if (closingPhraseSessionRef.current !== phraseSheetSessionRef.current) return;
     setPhraseSheetVisible(false);
     setPhraseMessage(null);
     const pending = pendingPhraseAlertRef.current;
     pendingPhraseAlertRef.current = null;
-    if (pending) showAppAlert(pending.title, pending.message);
+    if (pending && pending.session === phraseSheetSessionRef.current) showAppAlert(pending.title, pending.message);
   }, []);
   const closeWordSheet = useCallback(() => setWordSheetVisible(false), []);
   const finishWordSheet = useCallback(() => setWordDefinitionPhrase(null), []);
@@ -677,7 +690,7 @@ export default function LiveScreen() {
         </ScrollView>
         <LiveComposer disabled={busy || realtimeLocked} onSend={sendText} styles={styles} />
       </View> : null}
-      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseSheetVisible(false)} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
+      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
     </KeyboardAvoidingView>
   );
