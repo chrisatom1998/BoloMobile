@@ -84,6 +84,8 @@ module.exports = ({ config }) => {
       publicTermsUrl: `${publicSiteUrl}/?page=terms`,
       boloApiUrl,
       boloLiveApiUrl,
+      // Shows the live-voice debug line on the Asha screen in every build except production.
+      liveDiagnostics: !isProduction,
       ...(configuredProjectId ? { eas: { ...config.extra?.eas, projectId: configuredProjectId } } : {}),
     },
   };

@@ -3,12 +3,13 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import { createLiveToolExecutor, type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
+import { countLiveEvent, liveDiagnosticsEnabled, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
+import { createLiveToolExecutor,type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
 import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
-import { resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { getVoiceAudioMode, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
@@ -56,6 +57,18 @@ type PendingCommand = {
 };
 const START_TIMEOUT_MS = 15_000;
 const COMMAND_TIMEOUT_MS = 10_000;
+const DIAGNOSTICS_POLL_MS = 1_000;
+
+/** Applies the realtime audio mode and, in preview builds, records whether iOS accepted it. */
+async function applyRealtimeAudioMode() {
+  try {
+    await setVoiceAudioMode('realtime');
+    if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioMode: getVoiceAudioMode(), audioModeError: '' });
+  } catch (cause) {
+    if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioModeError: cause instanceof Error ? cause.message.slice(0, 80) : 'failed' });
+    throw cause;
+  }
+}
 
 export function useRealtimeConversation({ clientId, enabled = true, responseLanguage = 'en', ...options }: Options) {
   const [status, setStatus] = useState<RealtimeVoiceStatus>('disconnected');
@@ -177,6 +190,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const queued: string[] = [];
     let live = false;
     updateStatus('connecting');
+    resetLiveDiagnostics();
     transcriptsRef.current = createLiveTranscriptStore(`live-${Date.now()}-${lifecycle}`);
     let setup: LiveSessionSetup | null = null;
     try { setup = callbacksRef.current.liveSession?.() ?? null; } catch { setup = null; }
@@ -190,11 +204,12 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (Platform.OS !== 'web') {
         const permission = await requestRecordingPermissionsAsync();
         if (!current()) return;
+        updateLiveDiagnostics({ permission: permission.status });
         if (!permission.granted) throw new Error(LIVE_MIC_PERMISSION_MESSAGE);
       }
       await stopSpeaking();
       if (!current()) return;
-      await setVoiceAudioMode('realtime');
+      await applyRealtimeAudioMode();
       if (!current()) return;
       attemptPeer = await createRealtimePeerSession({
         exchangeSdp: async (offerSdp, signal) => {
@@ -212,6 +227,9 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
         signal: controller.signal,
         onMessage: (raw) => {
           if (!current()) return;
+          if (liveDiagnosticsEnabled) {
+            try { countLiveEvent((JSON.parse(raw) as LiveEvent | null)?.type); } catch { countLiveEvent('unreadable'); }
+          }
           if (live) { handleEvent(raw); return; }
           try {
             const event = JSON.parse(raw) as LiveEvent;
@@ -228,7 +246,11 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
           setIsPlaying(playing);
           if (live) updateStatus();
         },
-        onError: (message) => { if (current()) callbacksRef.current.onError(message); },
+        onError: (message) => {
+          if (!current()) return;
+          updateLiveDiagnostics({ lastError: message.slice(0, 80) });
+          callbacksRef.current.onError(message);
+        },
         onClose: () => {
           if (!current()) return;
           startupError = new Error('The live voice connection closed. Start a new session to continue.');
@@ -239,7 +261,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (!current()) { attemptPeer.close(); return; }
       peerRef.current = attemptPeer;
       // Reapply routing after native WebRTC initializes its audio session.
-      await setVoiceAudioMode('realtime');
+      await applyRealtimeAudioMode();
       if (!current()) return;
       if (startupError) throw startupError;
       if (!started) await new Promise<void>((resolve, reject) => {
@@ -329,6 +351,16 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   }, [connect, disconnect, setInputEnabled]);
 
   const finishTurn = useCallback(() => setInputEnabled(false), [setInputEnabled]);
+
+  // Preview builds only: sample the mic track and outbound audio so the Asha screen shows where audio stops.
+  useEffect(() => {
+    if (!liveDiagnosticsEnabled || status === 'disconnected') return undefined;
+    updateLiveDiagnostics({ peerState: status });
+    const timer = setInterval(() => {
+      void peerRef.current?.readMicStats?.().then((mic) => updateLiveDiagnostics({ mic }), () => undefined);
+    }, DIAGNOSTICS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [status]);
 
   useEffect(() => {
     // Catch up on any change that happened between render and subscribing.

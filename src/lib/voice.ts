@@ -60,6 +60,11 @@ export function resetVoiceAudioMode() {
   return setVoiceAudioMode('idle');
 }
 
+/** The last audio mode expo-audio accepted, for preview-build diagnostics. */
+export function getVoiceAudioMode(): VoiceAudioMode {
+  return currentVoiceAudioMode;
+}
+
 /** Whether a still-mounted live WebRTC call owns the iOS audio session. */
 export function isRealtimeVoiceSessionActive() {
   return currentVoiceAudioMode === 'realtime' || currentVoiceAudioMode === 'realtimePlayback';

@@ -13,6 +13,10 @@ export function resetVoiceAudioMode() {
   return setVoiceAudioMode('idle');
 }
 
+export function getVoiceAudioMode(): VoiceAudioMode {
+  return 'idle';
+}
+
 export function isRealtimeVoiceSessionActive() {
   return false;
 }

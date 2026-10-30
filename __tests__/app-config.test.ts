@@ -75,6 +75,20 @@ describe('Expo app configuration', () => {
     });
   });
 
+  it('turns the live voice debug line on for preview builds and off for production', () => {
+    delete process.env.EAS_BUILD_PROFILE;
+    expect(appConfig({ config: fixture() }).extra).toMatchObject({ liveDiagnostics: true });
+
+    process.env.EAS_BUILD_PROFILE = 'preview';
+    expect(appConfig({ config: fixture() }).extra).toMatchObject({ liveDiagnostics: true });
+
+    process.env.EAS_BUILD_PROFILE = 'production';
+    process.env.BOLO_EAS_PROJECT_ID = '573b5aad-b676-44aa-8ec4-34b831b6d5ff';
+    process.env.BOLO_EXPO_OWNER = 'appdevcmjatom';
+    process.env.BOLO_LIVE_API_URL = 'https://live.example.test';
+    expect(appConfig({ config: fixture() }).extra).toMatchObject({ liveDiagnostics: false });
+  });
+
   it('rebuilds every public page URL from an overridden public site', () => {
     process.env.BOLO_PUBLIC_SITE_URL = 'https://pages.example.test/';
     process.env.BOLO_API_URL = 'https://api.example.test/app/bolo/';
