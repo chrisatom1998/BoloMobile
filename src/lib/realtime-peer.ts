@@ -3,7 +3,7 @@ import {
   RTCPeerConnection,
 } from 'react-native-webrtc';
 
-import type { LiveMicStats } from '@/lib/live-diagnostics';
+import { type LiveMicStats, sdpAudioDirection, updateLiveDiagnostics } from '@/lib/live-diagnostics';
 import { waitForLiveIceGathering } from '@/lib/live-ice';
 import { observeLivePlayback } from '@/lib/live-playback';
 import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-peer.types';
@@ -148,6 +148,7 @@ export async function createRealtimePeerSession({
         if (closed || negotiation.signal.aborted) throw new Error('The live voice connection was canceled.');
         const answerSdp = await exchangeSdp(offerSdp, negotiation.signal);
         if (closed || negotiation.signal.aborted) throw new Error('The live voice connection was canceled.');
+        updateLiveDiagnostics({ sdpAudio: `${sdpAudioDirection(offerSdp)}/${sdpAudioDirection(answerSdp)}` });
         await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
       })().then(() => finish(), finish);
 

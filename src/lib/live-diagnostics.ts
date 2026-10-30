@@ -25,8 +25,16 @@ export type LiveDiagnostics = {
   inputDeltas: number;
   outputDeltas: number;
   lastEvent: string;
+  /** The last few server event types, oldest first; error events carry their message. */
+  recentEvents: string[];
   lastError: string;
+  /** Loudest mic level seen this call. Speech reads about 0.05 or more; a dead mic stays at 0. */
+  micPeak: number;
+  /** Audio direction in our SDP offer and the server's answer, e.g. "sendrecv/sendrecv". */
+  sdpAudio: string;
 };
+
+const RECENT_EVENT_LIMIT = 5;
 
 const EMPTY: LiveDiagnostics = {
   permission: '?',
@@ -39,7 +47,10 @@ const EMPTY: LiveDiagnostics = {
   inputDeltas: 0,
   outputDeltas: 0,
   lastEvent: '-',
+  recentEvents: [],
   lastError: '',
+  micPeak: 0,
+  sdpAudio: '',
 };
 
 /** Preview and development builds only; app.config.js leaves this off for production. */
@@ -61,14 +72,28 @@ export function resetLiveDiagnostics() {
   listeners.forEach((listener) => listener());
 }
 
-export function countLiveEvent(type: string | undefined) {
+export function countLiveEvent(type: string | undefined, errorMessage?: string) {
   if (!liveDiagnosticsEnabled) return;
+  const label = type === 'error' ? `error: ${(errorMessage || 'no message').slice(0, 80)}` : type ?? '?';
   updateLiveDiagnostics({
     events: current.events + 1,
     lastEvent: type ?? '?',
+    recentEvents: [...current.recentEvents, label].slice(-RECENT_EVENT_LIMIT),
     inputDeltas: current.inputDeltas + (type === 'session.input_transcript.delta' ? 1 : 0),
     outputDeltas: current.outputDeltas + (type === 'session.output_transcript.delta' ? 1 : 0),
   });
+}
+
+/** Stores a mic sample and keeps the loudest level seen since the call started. */
+export function recordLiveMicStats(mic: LiveMicStats) {
+  if (!liveDiagnosticsEnabled) return;
+  updateLiveDiagnostics({ mic, micPeak: Math.max(current.micPeak, mic.audioLevel ?? 0) });
+}
+
+/** The a= direction of the first audio m-section in an SDP, or '?' when it has none. */
+export function sdpAudioDirection(sdp: string | undefined) {
+  const section = sdp?.split(/\r?\nm=/).find((part) => /^(?:m=)?audio\s/.test(part));
+  return section?.match(/\na=(sendrecv|sendonly|recvonly|inactive)\b/)?.[1] ?? '?';
 }
 
 export function formatLiveDiagnostics(value: LiveDiagnostics) {
@@ -77,12 +102,13 @@ export function formatLiveDiagnostics(value: LiveDiagnostics) {
     ? `track ${mic.trackEnabled ? 'on' : 'off'}/${mic.trackState ?? '?'}${mic.trackMuted ? '/muted' : ''}`
     : 'track -';
   const sent = mic
-    ? `sent ${mic.packetsSent ?? '?'}pkt ${mic.bytesSent ?? '?'}B lvl ${mic.audioLevel === undefined ? '?' : mic.audioLevel.toFixed(3)} energy ${mic.totalAudioEnergy === undefined ? '?' : mic.totalAudioEnergy.toFixed(4)}`
+    ? `sent ${mic.packetsSent ?? '?'}pkt ${mic.bytesSent ?? '?'}B lvl ${mic.audioLevel === undefined ? '?' : mic.audioLevel.toFixed(3)} peak ${value.micPeak.toFixed(3)} energy ${mic.totalAudioEnergy === undefined ? '?' : mic.totalAudioEnergy.toFixed(6)}`
     : 'sent -';
   return [
-    `perm ${value.permission} | mode ${value.audioMode}${value.audioModeError ? ` (${value.audioModeError})` : ''}${value.audioSession ? ` | session ${value.audioSession}` : ''} | peer ${value.peerState}`,
+    `perm ${value.permission} | mode ${value.audioMode}${value.audioModeError ? ` (${value.audioModeError})` : ''}${value.audioSession ? ` | session ${value.audioSession}` : ''} | peer ${value.peerState}${value.sdpAudio ? ` | sdp ${value.sdpAudio}` : ''}`,
     `${track} | ${sent}`,
     `events ${value.events} (you ${value.inputDeltas} / asha ${value.outputDeltas}) last ${value.lastEvent}`,
+    ...(value.recentEvents.length ? [`recent ${value.recentEvents.join(' > ')}`] : []),
     ...(value.lastError ? [`error ${value.lastError}`] : []),
   ].join('\n');
 }

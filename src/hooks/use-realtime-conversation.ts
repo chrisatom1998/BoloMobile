@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import { countLiveEvent, liveDiagnosticsEnabled, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
+import { countLiveEvent, liveDiagnosticsEnabled, recordLiveMicStats, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
 import { createLiveToolExecutor,type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
 import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
@@ -234,7 +234,10 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
         onMessage: (raw) => {
           if (!current()) return;
           if (liveDiagnosticsEnabled) {
-            try { countLiveEvent((JSON.parse(raw) as LiveEvent | null)?.type); } catch { countLiveEvent('unreadable'); }
+            try {
+              const event = JSON.parse(raw) as LiveEvent | null;
+              countLiveEvent(event?.type, event?.error?.message);
+            } catch { countLiveEvent('unreadable'); }
           }
           if (live) { handleEvent(raw); return; }
           try {
@@ -366,7 +369,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     if (!liveDiagnosticsEnabled || status === 'disconnected') return undefined;
     updateLiveDiagnostics({ peerState: status });
     const timer = setInterval(() => {
-      void peerRef.current?.readMicStats?.().then((mic) => updateLiveDiagnostics({ mic }), () => undefined);
+      void peerRef.current?.readMicStats?.().then(recordLiveMicStats, () => undefined);
     }, DIAGNOSTICS_POLL_MS);
     return () => clearInterval(timer);
   }, [status]);
