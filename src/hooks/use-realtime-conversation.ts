@@ -317,6 +317,9 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const promise = (async () => {
       await connect();
       if (lifecycleRef.current !== lifecycle || !peerRef.current) return;
+      // Read the live value: this hook can mount at launch (floating Asha) before
+      // the iOS scene is active, and a missed 'change' event would leave the ref stale.
+      appStateRef.current = AppState.currentState;
       if (appStateRef.current !== 'active') { disconnect(); return; }
       await setInputEnabled(true);
     })();
@@ -328,6 +331,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   const finishTurn = useCallback(() => setInputEnabled(false), [setInputEnabled]);
 
   useEffect(() => {
+    // Catch up on any change that happened between render and subscribing.
+    appStateRef.current = AppState.currentState;
     const subscription = AppState.addEventListener('change', (next) => {
       appStateRef.current = next;
       // Permission dialogs can transiently make iOS inactive during connection.
