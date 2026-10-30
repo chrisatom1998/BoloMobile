@@ -40,6 +40,9 @@ export default function ReviewScreen() {
   function grade(remembered: boolean) {
     if (!phrase || gradedPhraseRef.current === phrase.hi) return;
     gradedPhraseRef.current = phrase.hi;
+    // The recorder clears its abort handle once feedback playback starts, so
+    // unmounting it does not stop coaching that is already speaking.
+    void stopSpeaking();
     if (!lockedSession) setLockedSession(session);
     clearAudioError();
     reviewPhrase(phrase.hi, remembered);
