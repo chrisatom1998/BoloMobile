@@ -47,6 +47,19 @@ type Props = {
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
   responseLanguage?: AshaResponseLanguage;
+  /**
+   * When set, this control renders an existing session instead of owning one.
+   * Floating Asha keeps that session above the navigator.
+   */
+  voice?: RealtimeVoiceControls;
+};
+
+export type RealtimeVoiceControls = {
+  disconnect: () => void;
+  finishTurn: () => void | Promise<void>;
+  startTurn: () => Promise<void>;
+  status: RealtimeVoiceStatus;
+  microphoneEnabled: boolean;
 };
 
 const labels = {
@@ -150,8 +163,18 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
-export function RealtimeVoiceButton({ children, clientId, history, liveSession, onTranscriptSnapshot, compact = false, disabled = false, enabled = true, motionMode = 'gentle', size = 'regular', tone = 'light', onError, onInputTranscriptComplete, onDisconnectReady, onTurnActionReady, onStatusChange, onTranscriptChange, onTurnComplete, responseLanguage = 'en' }: Props) {
-  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onTranscriptSnapshot, onError, onInputTranscriptComplete, onTranscriptChange, onTurnComplete, responseLanguage });
+function OwnedRealtimeVoiceButton(props: Props) {
+  const { clientId, enabled = true, history, liveSession, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
+  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
+  return <RealtimeVoiceButtonView {...props} owned voice={voice} />;
+}
+
+export function RealtimeVoiceButton(props: Props) {
+  if (props.voice) return <RealtimeVoiceButtonView {...props} owned={false} voice={props.voice} />;
+  return <OwnedRealtimeVoiceButton {...props} />;
+}
+
+function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
@@ -172,7 +195,10 @@ export function RealtimeVoiceButton({ children, clientId, history, liveSession, 
     onStatusChange?.(voice.status);
   }, [onStatusChange, voice.status]);
 
-  useEffect(() => () => onStatusChangeRef.current?.('disconnected'), []);
+  useEffect(() => {
+    if (!owned) return undefined;
+    return () => onStatusChangeRef.current?.('disconnected');
+  }, [owned]);
 
   const press = useCallback(() => {
     if (blocked) return;
