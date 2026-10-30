@@ -53,7 +53,6 @@ describe('Asha voice service', () => {
       [{ allowsRecording: false, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: true, playsInSilentMode: true }],
       [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
-      [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: false, playsInSilentMode: true }],
     ]);
   });
@@ -92,7 +91,7 @@ describe('Asha voice service', () => {
     expect(activateMock).toHaveBeenCalledTimes(3);
     await resetVoiceAudioMode();
     expect(restoreMock).toHaveBeenCalledTimes(1);
-    expect(restoreMock.mock.invocationCallOrder[0]).toBeLessThan(setAudioModeMock.mock.invocationCallOrder[2]!);
+    expect(restoreMock.mock.invocationCallOrder[0]).toBeLessThan(setAudioModeMock.mock.invocationCallOrder[1]!);
     await reactivateRealtimeVoiceSession();
     expect(activateMock).toHaveBeenCalledTimes(3);
   });

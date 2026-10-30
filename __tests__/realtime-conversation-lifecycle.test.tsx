@@ -67,7 +67,7 @@ describe('GPT-Live conversation lifecycle', () => {
     expect(peer.send).not.toHaveBeenCalled();
     expect(await peerOptions.exchangeSdp('offer', new AbortController().signal)).toBe('live-answer');
     expect(createLiveCall).toHaveBeenCalledWith({ clientId: 'client-12345678', offerSdp: 'offer', responseLanguage: 'hi', history: [{ role: 'you', text: 'Hello' }] }, expect.anything());
-    expect(setAudioModeAsync).toHaveBeenCalledTimes(2);
+    expect(setAudioModeAsync).toHaveBeenCalledTimes(1);
     await unmount();
   });
 
@@ -187,7 +187,7 @@ describe('GPT-Live conversation lifecycle', () => {
     const lastActivation = Math.max(...jest.mocked(activateVoiceChatSession).mock.invocationCallOrder);
     expect(lastActivation).toBeLessThan(jest.mocked(peer.send).mock.invocationCallOrder[0]!);
     await act(async () => { acknowledge(true); await start; });
-    expect(setAudioModeAsync).toHaveBeenCalledTimes(2);
+    expect(setAudioModeAsync).toHaveBeenCalledTimes(1);
     await unmount();
   });
 

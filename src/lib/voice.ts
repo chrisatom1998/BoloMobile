@@ -71,6 +71,14 @@ export function setVoiceAudioMode(mode: VoiceAudioMode) {
     if (!realtime && isRealtimeMode(currentVoiceAudioMode)) {
       await restoreDefaultAudioSessionMode().catch(() => undefined);
     }
+    // realtime and realtimePlayback configure the same session. expo-audio's setCategory
+    // resets the mode to default, so repeating it under a running WebRTC audio unit
+    // knocks voiceChat off and can leave the microphone delivering silence.
+    if (realtime && isRealtimeMode(currentVoiceAudioMode)) {
+      await assertVoiceChatSession();
+      currentVoiceAudioMode = mode;
+      return;
+    }
     await setAudioModeAsync(VOICE_AUDIO_MODES[mode]);
     // expo-audio just rewrote the category; take the session back for the call.
     if (realtime) await assertVoiceChatSession();
