@@ -80,7 +80,7 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
 
   function checkAnswer() {
     if (locked || !ready) return;
-    const isCorrect = placedIndexes.every((placed, position) => placed === position);
+    const isCorrect = placedIndexes.every((placed, position) => solution[placed] === solution[position]);
     const nextStatus: PracticeResult = isCorrect ? 'correct' : 'incorrect';
     if (isCorrect) hapticSuccess();
     else hapticWarning();
