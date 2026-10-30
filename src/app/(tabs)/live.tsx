@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { AlertCircle, Lock, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -180,7 +180,8 @@ export default function LiveScreen() {
   const messageCount = chatHistory.length + (pendingUserMessage ? 1 : 0);
   const messageCountRef = useRef(0);
   const aiConsentRef = useRef(aiConsent);
-  useEffect(() => {
+  // Sync before paint so the first native content-size event sees the new count.
+  useLayoutEffect(() => {
     messageCountRef.current = messageCount;
     aiConsentRef.current = aiConsent;
   }, [aiConsent, messageCount]);
