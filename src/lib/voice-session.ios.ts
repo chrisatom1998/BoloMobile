@@ -76,6 +76,22 @@ export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolea
   return 'native session module missing';
 }
 
+/**
+ * Turns the audio session off before a call configures it. A typed reply leaves it this way
+ * (expo-audio deactivates after playback), and only then did Asha hear the first call; a session
+ * still active from launch or an earlier call gave WebRTC a mic that sent silence.
+ * Returns a short tag for the debug line.
+ */
+export async function releaseAudioSessionBeforeCall(): Promise<string> {
+  if (typeof ExpoAudio.setIsAudioActiveAsync !== 'function') return 'none';
+  try {
+    await ExpoAudio.setIsAudioActiveAsync(false);
+    return 'ok';
+  } catch (cause) {
+    return `failed: ${cause instanceof Error ? cause.message.slice(0, 40) : 'unknown'}`;
+  }
+}
+
 /** The audio session right now (category/mode, input, app state, input mute), for the debug line. */
 export async function readAudioSessionState(): Promise<string> {
   if (!session || typeof session.readSessionState !== 'function') return 'native session module missing';
