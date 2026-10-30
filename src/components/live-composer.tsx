@@ -68,18 +68,17 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
       ) : null}
       <View style={styles.inputRow}>
         <TextInput
-          accessibilityHint="Type in English or Hindi. The return key sends."
+          accessibilityHint="Type in English or Hindi. Return starts a new line; use Send to send."
           accessibilityLabel="Message Asha"
           editable={!locked}
-          enterKeyHint="send"
+          enterKeyHint="enter"
           maxLength={500}
           multiline
           onChangeText={changeInput}
-          onSubmitEditing={submit}
           placeholder="Ask in English or Hindi…"
           placeholderTextColor={colors.heroSubtle}
           style={[styles.input, locked && styles.inputDisabled]}
-          submitBehavior="submit"
+          submitBehavior="newline"
           testID="message-asha-input"
           value={input}
         />

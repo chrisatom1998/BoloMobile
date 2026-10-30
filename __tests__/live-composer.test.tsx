@@ -42,15 +42,28 @@ describe('typed message draft acknowledgement', () => {
     expect(view.getByLabelText('Message Asha').props.value).toBe('');
   });
 
-  it('blocks rapid duplicate native submits before state updates', async () => {
+  it('lets Return add a new line instead of sending', async () => {
+    const onSend = jest.fn(async () => true);
+    const view = await render(<LiveComposer disabled={false} onSend={onSend} styles={styles} />);
+    const input = view.getByLabelText('Message Asha');
+    expect(input.props.multiline).toBe(true);
+    expect(input.props.submitBehavior).toBe('newline');
+    expect(input.props.onSubmitEditing).toBeUndefined();
+    await fireEvent.changeText(input, 'First line\nSecond line');
+    expect(onSend).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Send message'));
+    expect(onSend).toHaveBeenCalledWith('First line\nSecond line');
+  });
+
+  it('blocks rapid duplicate sends before state updates', async () => {
     const request = deferred();
     const onSend = jest.fn(() => request.promise);
     const view = await render(<LiveComposer disabled={false} onSend={onSend} styles={styles} />);
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Send once.');
-    const submit = view.getByLabelText('Message Asha').props.onSubmitEditing;
+    const sendButton = view.getByLabelText('Send message');
     await act(async () => {
-      void submit();
-      void submit();
+      void fireEvent.press(sendButton);
+      void fireEvent.press(sendButton);
     });
     expect(onSend).toHaveBeenCalledTimes(1);
     await act(async () => { request.resolve(true); });
