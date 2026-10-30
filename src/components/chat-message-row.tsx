@@ -1,5 +1,5 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Animated, Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
@@ -195,7 +195,7 @@ export function AshaTypingRow({ reducedMotion, styles }: { reducedMotion: boolea
 }
 
 function TypingDot({ delay, reducedMotion, style }: { delay: number; reducedMotion: boolean; style: StyleProp<ViewStyle> }) {
-  const opacity = useRef(new Animated.Value(reducedMotion ? 0.85 : 0.35)).current;
+  const [opacity] = useState(() => new Animated.Value(reducedMotion ? 0.85 : 0.35));
 
   useEffect(() => {
     if (reducedMotion) {
