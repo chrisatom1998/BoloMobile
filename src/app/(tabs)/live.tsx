@@ -93,6 +93,7 @@ export default function LiveScreen() {
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
   const [busy, setBusy] = useState(false);
+  const [clearingChat, setClearingChat] = useState(false);
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [error, setError] = useState('');
   const [liveAshaTranscript, setLiveAshaTranscript] = useState('');
@@ -115,6 +116,8 @@ export default function LiveScreen() {
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
+  const chatResetRef = useRef<Promise<boolean> | null>(null);
+  const chatActivityRef = useRef(0);
   const realtimeStatusRef = useRef<RealtimeVoiceStatus>(resumedStatus);
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
@@ -124,16 +127,16 @@ export default function LiveScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
   const visibleMessages = useMemo(
-    () => pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
-    [chatHistory, pendingUserMessage],
+    () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
+    [chatHistory, clearingChat, pendingUserMessage],
   );
   const realtimeLocked = realtimeStatus !== 'disconnected';
   const realtimeOwnsAudio = realtimeLocked;
-  const replyPlaybackLocked = busy || realtimeOwnsAudio;
-  const hasTranscriptMessages = chatHistory.length > 0 || pendingUserMessage !== null;
+  const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
+  const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
-  const transcriptTurnDisabled = !aiConsent || !screenFocused || busy || realtimeStatus === 'connecting';
+  const transcriptTurnDisabled = !aiConsent || !screenFocused || busy || clearingChat || realtimeStatus === 'connecting';
   const transcriptTurnLabel = {
     disconnected: 'Connect with Asha',
     connecting: 'Connecting to Asha…',
@@ -145,7 +148,8 @@ export default function LiveScreen() {
     ? 'Mutes your microphone. Asha can continue speaking.'
     : 'Opens your microphone for continuous conversation. You can speak while Asha is speaking.';
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
-  const languageControlLocked = busy || realtimeOwnsAudio;
+  const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
+  const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
   const voiceHeroTitle = {
     disconnected: 'Ready when you are',
     connecting: 'Connecting to Asha',
@@ -287,15 +291,51 @@ export default function LiveScreen() {
     updateLearnerProfile({ responseLanguage: nextLanguage });
   }, [clearAudioError, languageControlLocked, responseLanguage, updateLearnerProfile]);
 
-  const clearSavedChat = useCallback(() => {
+  const resetChat = useCallback((): Promise<boolean> => {
+    if (chatResetRef.current) return chatResetRef.current;
+    // Invalidate a pending typed request before clearing, even if its network
+    // response arrives after abort. No old turn may repopulate the new chat.
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setBusy(false);
+    setPendingUserMessage(null);
+    setClearingChat(true);
     void stopSpeaking();
+    snapshotIdsRef.current.current = [];
+    scrollAfterContentChangeRef.current = false;
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
+    selectionClearTimersRef.current.forEach(clearTimeout);
+    selectionClearTimersRef.current.clear();
     selectedChatTextRef.current.clear();
+    phraseSheetSessionRef.current += 1;
+    closingPhraseSessionRef.current = phraseSheetSessionRef.current;
+    pendingPhraseAlertRef.current = null;
+    setPhraseSheetVisible(false);
+    setPhraseMessage(null);
     setWordSheetVisible(false);
     setWordDefinitionPhrase(null);
-    clearChatHistory();
-  }, [clearChatHistory]);
+    setError('');
+    clearAudioError();
+    const pending = clearChatHistory().finally(() => {
+      if (chatResetRef.current !== pending) return;
+      chatResetRef.current = null;
+      if (mountedRef.current) setClearingChat(false);
+    });
+    chatResetRef.current = pending;
+    return pending;
+  }, [clearAudioError, clearChatHistory]);
+
+  const clearSavedChat = useCallback(async () => {
+    // The confirmation can remain open while new work starts. Read refs here,
+    // not the state captured when the alert was originally displayed.
+    if (!mountedRef.current || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return;
+    const activity = ++chatActivityRef.current;
+    const cleared = await resetChat();
+    if (mountedRef.current && chatActivityRef.current === activity && !cleared) {
+      setError('The chat could not be cleared. Please try again.');
+    }
+  }, [resetChat]);
 
   const rememberSelectedChatText = useCallback((messageId: string, selection: { sourceText: string; text: string }) => {
     const pendingClear = selectionClearTimersRef.current.get(messageId);
@@ -327,20 +367,24 @@ export default function LiveScreen() {
   }, []);
 
   const confirmClearChat = useCallback(() => {
-    if (busy || realtimeLocked || chatHistory.length === 0) return;
+    if (clearChatDisabled) return;
+    const activity = chatActivityRef.current;
     showAppAlert(
       'Clear Asha chat?',
-      'This removes the saved typed and voice chat from this device. Reports you already submitted are not deleted.',
+      'This removes the saved typed and voice chat from this device. Saved phrases, lesson progress, and reports you already submitted are not deleted.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear chat', style: 'destructive', onPress: clearSavedChat },
+        { text: 'Clear chat', style: 'destructive', onPress: () => {
+          if (chatActivityRef.current === activity) void clearSavedChat();
+        } },
       ],
     );
-  }, [busy, chatHistory.length, clearSavedChat, realtimeLocked]);
+  }, [clearChatDisabled, clearSavedChat]);
 
   const sendText = useCallback(async (raw: string): Promise<boolean> => {
     const text = raw.trim().slice(0, 500);
-    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current) return false;
+    if (!aiConsent || !text || busy || realtimeLocked || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return false;
+    chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     scrollAfterContentChangeRef.current = true;
     setPendingUserMessage(userMessage);
@@ -393,12 +437,18 @@ export default function LiveScreen() {
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
-      // Each voice conversation starts with an empty transcript. The previous
-      // one stays readable until the next call actually connects, so a failed
-      // start (no microphone, network error) never erases it.
-      clearSavedChat();
     }
-  }, [clearSavedChat]);
+  }, []);
+  const startNewConversation = useCallback(async (signal: AbortSignal) => {
+    if (!mountedRef.current || signal.aborted) return;
+    chatActivityRef.current += 1;
+    // Claim the screen synchronously rather than waiting for the button's
+    // status effect, so a stale text/clear action cannot race connection start.
+    updateRealtimeStatus('connecting');
+    const cleared = await resetChat();
+    if (!mountedRef.current || signal.aborted) return;
+    if (!cleared) throw new Error('The previous chat could not be cleared. Please try starting a new conversation again.');
+  }, [resetChat, updateRealtimeStatus]);
   const showRealtimeError = useCallback((message: string) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
     // count failures that happen while a connection attempt is in flight.
@@ -421,11 +471,12 @@ export default function LiveScreen() {
     if (!floatingAvailable) return undefined;
     setFloatingListeners({
       onError: showRealtimeError,
+      onConnectionStart: startNewConversation,
       onTranscriptChange: updateLiveTranscript,
       onTranscriptSnapshot: recordLiveSnapshot,
     });
     return () => setFloatingListeners(null);
-  }, [floatingAvailable, recordLiveSnapshot, setFloatingListeners, showRealtimeError, updateLiveTranscript]);
+  }, [floatingAvailable, recordLiveSnapshot, setFloatingListeners, showRealtimeError, startNewConversation, updateLiveTranscript]);
   const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
       // The controller map is the in-flight record, so it also guards against a
@@ -600,7 +651,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -646,22 +697,23 @@ export default function LiveScreen() {
 
             {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact]} testID="ask-asha-sheet">
                 <View style={styles.sheetHandle} testID="ask-asha-sheet-handle" />
-                <View style={styles.askHeadingRow}>
+                <View style={[styles.askHeadingRow, largeTextLayout && styles.askHeadingRowLarge]}>
                   <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
                     <Text style={styles.askEyebrow}>Ask Asha</Text>
                     <Text style={styles.askTitle}>How do I say…?</Text>
                   </View>
                   {chatHistory.length > 0 ? (
                     <Pressable
-                      accessibilityHint="Removes typed and voice chat saved on this device."
+                      accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases or lesson progress."
                       accessibilityLabel="Clear Asha chat history"
                       accessibilityRole="button"
-                      accessibilityState={{ disabled: busy || realtimeLocked }}
-                      disabled={busy || realtimeLocked}
+                      accessibilityState={{ disabled: clearChatDisabled }}
+                      disabled={clearChatDisabled}
                       onPress={confirmClearChat}
-                      style={[styles.clearChatButton, (busy || realtimeLocked) && styles.disabled]}
+                      style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
                     >
                       <Trash2 color={colors.dangerSoft} size={17} />
+                      <Text style={styles.clearChatText}>Clear chat</Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -731,17 +783,17 @@ export default function LiveScreen() {
           {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
             <PressableFeedback
               accessibilityRole="button"
-              accessibilityState={{ disabled: busy || realtimeLocked }}
-              isDisabled={busy || realtimeLocked}
+              accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
+              isDisabled={busy || clearingChat || realtimeLocked}
               key={example}
               onPress={() => { void sendText(example); }}
-              style={[styles.example, (busy || realtimeLocked) && styles.disabled]}
+              style={[styles.example, (busy || clearingChat || realtimeLocked) && styles.disabled]}
             >
               <Text style={styles.exampleText}>{example}</Text>
             </PressableFeedback>
           ))}
         </ScrollView>
-        <LiveComposer disabled={busy || realtimeLocked} onSend={sendText} styles={styles} />
+        <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
       </View> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
@@ -821,12 +873,14 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askSection: { minHeight: 116, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.nightLine },
-  askHeadingRow: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', position: 'relative', gap: spacing.md },
-  askHeadingCopy: { minWidth: 0, alignItems: 'center', gap: 3 },
+  askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  askHeadingRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
+  askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: 3 },
   askHeadingCopyCompact: { gap: 0 },
   askEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
   askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
-  clearChatButton: { position: 'absolute', right: 0, width: 44, height: 44, minHeight: 44, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
+  clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
+  clearChatText: { flexShrink: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
   messageRow: { alignItems: 'flex-start', backgroundColor: c.night, paddingHorizontal: 20, marginBottom: spacing.sm },
   messageRowYou: { alignItems: 'flex-end' },
   message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md, gap: spacing.xs },

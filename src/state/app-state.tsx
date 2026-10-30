@@ -73,7 +73,8 @@ type AppActions = {
   addPracticeSeconds: (seconds: number) => void;
   appendChatMessages: (messages: ChatMessage[]) => void;
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
-  clearChatHistory: () => void;
+  /** Resolves true only once the cleared history is stored on this device. */
+  clearChatHistory: () => Promise<boolean>;
   setAiConsent: (consent: boolean) => Promise<boolean>;
   setReminder: (reminder: ReminderSettings) => Promise<boolean>;
   setMotionPreference: (preference: MotionPreference) => void;
@@ -184,6 +185,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const persistenceTailRef = useRef<Promise<void>>(Promise.resolve());
   const clearingAllDataRef = useRef(false);
   const liveSnapshotWriteQueuedRef = useRef(false);
+  const chatClearRef = useRef<Promise<boolean> | null>(null);
 
   const replaceState = useCallback((next: PersistedState) => {
     stateRef.current = next;
@@ -463,8 +465,25 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     });
   }, [enqueuePersistence, replaceState]);
 
-  const clearChatHistory = useCallback(() => {
-    commit((current) => current.chatHistory.length === 0 ? current : { ...current, chatHistory: [] }, ['chatHistory']);
+  const clearChatHistory = useCallback(function clearHistory(): Promise<boolean> {
+    // Screens can remount while a clear is persisting. Share its result so a
+    // second optimistic empty snapshot cannot race the first clear's rollback.
+    // If a newer turn arrived meanwhile, clear it in a separate transaction
+    // after this one settles rather than reporting an older clear as success.
+    if (chatClearRef.current) {
+      return stateRef.current.chatHistory.length === 0
+        ? chatClearRef.current
+        : chatClearRef.current.then(clearHistory);
+    }
+    const pending = commit(
+      (current) => current.chatHistory.length === 0 ? current : { ...current, chatHistory: [] },
+      ['chatHistory'],
+      'Bolo could not clear the saved chat. Check available storage and try again.',
+    ).finally(() => {
+      if (chatClearRef.current === pending) chatClearRef.current = null;
+    });
+    chatClearRef.current = pending;
+    return pending;
   }, [commit]);
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
