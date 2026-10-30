@@ -1,2 +1,2 @@
 - Expo has changed: read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
-- Use Fable as orchestrator: planning, code review, delegation, final synthesis.
+- Use grok-4.7 (fast off, medium effort) for all work. Use a pricier model only if Grok truly cannot do it, and ask Chris first.
