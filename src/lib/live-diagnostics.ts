@@ -17,6 +17,8 @@ export type LiveDiagnostics = {
   permission: string;
   audioMode: string;
   audioModeError: string;
+  /** What the native audio session reported when the call last activated it. */
+  audioSession: string;
   peerState: string;
   mic: LiveMicStats | null;
   events: number;
@@ -30,6 +32,7 @@ const EMPTY: LiveDiagnostics = {
   permission: '?',
   audioMode: '?',
   audioModeError: '',
+  audioSession: '',
   peerState: '-',
   mic: null,
   events: 0,
@@ -77,7 +80,7 @@ export function formatLiveDiagnostics(value: LiveDiagnostics) {
     ? `sent ${mic.packetsSent ?? '?'}pkt ${mic.bytesSent ?? '?'}B lvl ${mic.audioLevel === undefined ? '?' : mic.audioLevel.toFixed(3)} energy ${mic.totalAudioEnergy === undefined ? '?' : mic.totalAudioEnergy.toFixed(4)}`
     : 'sent -';
   return [
-    `perm ${value.permission} | mode ${value.audioMode}${value.audioModeError ? ` (${value.audioModeError})` : ''} | peer ${value.peerState}`,
+    `perm ${value.permission} | mode ${value.audioMode}${value.audioModeError ? ` (${value.audioModeError})` : ''}${value.audioSession ? ` | session ${value.audioSession}` : ''} | peer ${value.peerState}`,
     `${track} | ${sent}`,
     `events ${value.events} (you ${value.inputDeltas} / asha ${value.outputDeltas}) last ${value.lastEvent}`,
     ...(value.lastError ? [`error ${value.lastError}`] : []),

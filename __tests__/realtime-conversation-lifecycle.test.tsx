@@ -5,11 +5,13 @@ import { useRealtimeConversation } from '../src/hooks/use-realtime-conversation'
 import { createRealtimePeerSession } from '../src/lib/realtime-peer';
 import type { RealtimePeerOptions, RealtimePeerSession } from '../src/lib/realtime-peer.types';
 import { speakText, stopSpeaking } from '../src/lib/speech';
+import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '../src/lib/voice-session';
 import { createLiveCall } from '../src/services/bolo-api';
 
 let mockIsDevice = true;
 jest.mock('expo-audio', () => ({ requestRecordingPermissionsAsync: jest.fn(), setAudioModeAsync: jest.fn() }));
-jest.mock('expo-device', () => ({ get isDevice() { return mockIsDevice; } }));
+jest.mock('@/lib/voice-session', () => ({ activateVoiceChatSession: jest.fn(), restoreDefaultAudioSessionMode: jest.fn() }));
+jest.mock('expo-device',() => ({ get isDevice() { return mockIsDevice; } }));
 jest.mock('@/lib/realtime-peer', () => ({ createRealtimePeerSession: jest.fn() }));
 jest.mock('@/lib/speech', () => ({ speakText: jest.fn(), stopSpeaking: jest.fn(async () => undefined) }));
 jest.mock('@/services/bolo-api', () => ({ createLiveCall: jest.fn() }));
@@ -18,7 +20,7 @@ let peer: RealtimePeerSession;
 let peerOptions: RealtimePeerOptions;
 let autoStart = true;
 const emit = (event: Record<string, unknown>) => peerOptions.onMessage(JSON.stringify(event));
-async function flush() { for (let i = 0; i < 20; i++) await Promise.resolve(); }
+async function flush() { for (let i = 0; i < 60; i++) await Promise.resolve(); }
 function mount(options: Partial<Parameters<typeof useRealtimeConversation>[0]> = {}) {
   return renderHook(() => useRealtimeConversation({ clientId: 'client-12345678', onError: jest.fn(), onTurnComplete: jest.fn(), ...options }));
 }
@@ -35,6 +37,8 @@ beforeEach(() => {
   jest.mocked(requestRecordingPermissionsAsync).mockResolvedValue({ granted: true } as Awaited<ReturnType<typeof requestRecordingPermissionsAsync>>);
   jest.mocked(setAudioModeAsync).mockResolvedValue(undefined);
   jest.mocked(stopSpeaking).mockResolvedValue(undefined);
+  jest.mocked(activateVoiceChatSession).mockResolvedValue('PlayAndRecord/VoiceChat active in:iPhone Microphone');
+  jest.mocked(restoreDefaultAudioSessionMode).mockResolvedValue(undefined);
   jest.mocked(createLiveCall).mockResolvedValue({ answerSdp: 'live-answer', sessionId: 'live-session' });
   peer = { close: jest.fn(), send: jest.fn(), setMicrophoneEnabled: jest.fn() };
   createPeerMock.mockImplementation(async (options) => {
@@ -172,6 +176,39 @@ describe('GPT-Live conversation lifecycle', () => {
     const { unmount } = await mount();
     await act(async () => { change('background'); });
     expect(setAudioModeAsync).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('activates the voiceChat session during connect and again just before the unmute command', async () => {
+    const { result, unmount } = await mount();
+    let start!: Promise<void>;
+    await act(async () => { start = result.current.startTurn(); await flush(); });
+    expect(activateVoiceChatSession).toHaveBeenCalledTimes(3);
+    const lastActivation = Math.max(...jest.mocked(activateVoiceChatSession).mock.invocationCallOrder);
+    expect(lastActivation).toBeLessThan(jest.mocked(peer.send).mock.invocationCallOrder[0]!);
+    await act(async () => { acknowledge(true); await start; });
+    expect(setAudioModeAsync).toHaveBeenCalledTimes(2);
+    await unmount();
+  });
+
+  it('activates the session again when the scene becomes active during a call', async () => {
+    let change!: (state: 'active') => void;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_name, handler) => { change = handler; return { remove: jest.fn() }; });
+    const { result, unmount } = await mount();
+    await act(async () => { await result.current.connect(); });
+    const before = jest.mocked(activateVoiceChatSession).mock.calls.length;
+    await act(async () => { change('active'); await flush(); });
+    expect(activateVoiceChatSession).toHaveBeenCalledTimes(before + 1);
+    expect(result.current.status).toBe('ready');
+    await unmount();
+  });
+
+  it('does not touch the session when the scene becomes active with no call', async () => {
+    let change!: (state: 'active') => void;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_name, handler) => { change = handler; return { remove: jest.fn() }; });
+    const { unmount } = await mount();
+    await act(async () => { change('active'); await flush(); });
+    expect(activateVoiceChatSession).not.toHaveBeenCalled();
     await unmount();
   });
 

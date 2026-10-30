@@ -1,0 +1,6 @@
+// Only iOS needs the voiceChat session; Android and web route audio on their own.
+export async function activateVoiceChatSession(): Promise<string> {
+  return 'n/a';
+}
+
+export async function restoreDefaultAudioSessionMode(): Promise<void> {}

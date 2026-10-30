@@ -26,6 +26,8 @@ describe('live voice diagnostics', () => {
 
     const text = formatLiveDiagnostics(diagnostics.getLiveDiagnostics());
     expect(text).toContain('perm granted | mode realtime | peer recording');
+    diagnostics.updateLiveDiagnostics({ audioSession: 'PlayAndRecord/VoiceChat active in:iPhone Microphone' });
+    expect(formatLiveDiagnostics(diagnostics.getLiveDiagnostics())).toContain('mode realtime | session PlayAndRecord/VoiceChat active in:iPhone Microphone | peer recording');
     expect(text).toContain('track on/live | sent 12pkt 900B lvl 0.042 energy 0.5000');
     expect(text).toContain('events 4 (you 1 / asha 2) last session.output_transcript.delta');
   });
@@ -51,7 +53,7 @@ describe('live voice diagnostics', () => {
 
   it('reports a muted or ended track and an error', () => {
     const text = formatLiveDiagnostics({
-      permission: 'granted', audioMode: 'realtime', audioModeError: '', peerState: 'recording',
+      permission: 'granted', audioMode: 'realtime', audioModeError: '', audioSession: '', peerState: 'recording',
       mic: { trackEnabled: false, trackMuted: true, trackState: 'ended' }, events: 0, inputDeltas: 0, outputDeltas: 0,
       lastEvent: '-', lastError: 'boom',
     });

@@ -17,6 +17,12 @@ export function getVoiceAudioMode(): VoiceAudioMode {
   return 'idle';
 }
 
+export async function reactivateRealtimeVoiceSession() {}
+
+export function getVoiceSessionStatus() {
+  return '';
+}
+
 export function isRealtimeVoiceSessionActive() {
   return false;
 }

@@ -9,7 +9,7 @@ import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-tr
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
-import { getVoiceAudioMode, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
@@ -63,11 +63,17 @@ const DIAGNOSTICS_POLL_MS = 1_000;
 async function applyRealtimeAudioMode() {
   try {
     await setVoiceAudioMode('realtime');
-    if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioMode: getVoiceAudioMode(), audioModeError: '' });
+    if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioMode: getVoiceAudioMode(), audioModeError: '', audioSession: getVoiceSessionStatus() });
   } catch (cause) {
     if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioModeError: cause instanceof Error ? cause.message.slice(0, 80) : 'failed' });
     throw cause;
   }
+}
+
+/** Turns the call's iOS audio session back on and, in preview builds, shows what iOS reported. */
+async function reactivateRealtimeAudio() {
+  await reactivateRealtimeVoiceSession();
+  if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioSession: getVoiceSessionStatus() });
 }
 
 export function useRealtimeConversation({ clientId, enabled = true, responseLanguage = 'en', ...options }: Options) {
@@ -343,6 +349,9 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       // the iOS scene is active, and a missed 'change' event would leave the ref stale.
       appStateRef.current = AppState.currentState;
       if (appStateRef.current !== 'active') { disconnect(); return; }
+      // Another player's deferred deactivate may have switched the session off since the call began.
+      await reactivateRealtimeAudio().catch(() => undefined);
+      if (lifecycleRef.current !== lifecycle || !peerRef.current) return;
       await setInputEnabled(true);
     })();
     const tracked = promise.finally(() => { if (startRef.current === tracked) startRef.current = null; });
@@ -367,6 +376,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     appStateRef.current = AppState.currentState;
     const subscription = AppState.addEventListener('change', (next) => {
       appStateRef.current = next;
+      // A scene that became active after the call started may not have had audio allowed yet.
+      if (next === 'active' && peerRef.current) void reactivateRealtimeAudio().catch(() => undefined);
       // Permission dialogs can transiently make iOS inactive during connection.
       if (next === 'active' || (next === 'inactive' && statusRef.current === 'connecting')) return;
       // An idle hook (the floating session stays mounted between calls) must not
