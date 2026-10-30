@@ -30,13 +30,18 @@ jest.mock('expo-router', () => ({
 
 jest.mock('lucide-react-native', () => ({
   Check: () => null,
+  Flag: () => null,
   RotateCcw: () => null,
+  ShieldCheck: () => null,
+  Sparkles: () => null,
   Volume2: () => null,
 }));
 
+jest.mock('@/components/voice-turn-button', () => ({ VoiceTurnButton: () => null }));
+
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 jest.mock('@/lib/haptics', () => ({ hapticSuccess: jest.fn(), hapticWarning: jest.fn() }));
-jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
+jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn(), observeOncePerSession: jest.fn() }));
 jest.mock('@/lib/speech', () => ({
   hasOfflineSpeech: jest.fn(() => true),
   speakText: jest.fn(async () => undefined),
