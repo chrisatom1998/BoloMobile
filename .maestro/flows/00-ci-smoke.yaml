@@ -29,11 +29,15 @@ tags:
     text: "Check microphone access"
     retryTapIfNoChange: true
     waitToSettleTimeoutMs: 30000
-# Preset microphone: deny usually skips the prompt. A fresh simulator can still
-# show it a moment later, which covers the denied copy until Don't Allow is tapped.
+# Preset microphone: deny usually skips the prompt. The denied copy is below
+# the button, and the scroll above only requires that button to be 80% visible,
+# so the copy can still be off-screen. Wait for the system prompt or for the
+# same button to read "Check again". Either one is optional: the scroll below
+# is what requires the denied copy.
 - extendedWaitUntil:
-    visible: "Don.t Allow|Microphone access is off.*"
+    visible: "Don.t Allow|Check again"
     timeout: 20000
+    optional: true
 - runFlow:
     label: Dismiss the microphone prompt when iOS shows it
     when:

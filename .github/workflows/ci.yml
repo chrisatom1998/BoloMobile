@@ -250,26 +250,16 @@ jobs:
               --debug-output maestro-artifacts/driver-logs \
               --test-output-dir maestro-artifacts
           }
-          preserve_failed_attempt() {
-            local stash="$RUNNER_TEMP/maestro-attempt-1"
-            rm -rf "$stash"
-            mkdir -p "$stash"
+          stash_failed_attempt() {
+            # Workspace path, not RUNNER_TEMP. The upload step includes it, so a
+            # later timeout of this step still leaves the first attempt's logs.
+            rm -rf maestro-attempt-1
+            mkdir -p maestro-attempt-1
             if [[ -f maestro-junit.xml ]]; then
-              mv maestro-junit.xml "$stash/maestro-junit.xml"
+              mv maestro-junit.xml maestro-attempt-1/maestro-junit.xml
             fi
             if [[ -d maestro-artifacts ]]; then
-              mv maestro-artifacts "$stash/maestro-artifacts"
-            fi
-          }
-          attach_failed_attempt() {
-            local stash="$RUNNER_TEMP/maestro-attempt-1"
-            if [[ ! -d "$stash" ]]; then
-              return 0
-            fi
-            mkdir -p maestro-artifacts/attempt-1
-            cp -R "$stash/." maestro-artifacts/attempt-1/
-            if [[ ! -f maestro-junit.xml && -f "$stash/maestro-junit.xml" ]]; then
-              cp "$stash/maestro-junit.xml" maestro-junit.xml
+              mv maestro-artifacts maestro-attempt-1/maestro-artifacts
             fi
           }
           reboot_simulator() {
@@ -279,21 +269,15 @@ jobs:
             xcrun simctl bootstatus "$SIMULATOR_UDID" -b
             xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
           }
-          preserved=0
-          cleanup() {
-            local status=$?
-            if [[ "$preserved" -eq 1 ]]; then
-              attach_failed_attempt || true
-            fi
-            exit "$status"
-          }
-          trap cleanup EXIT
           if smoke; then
             exit 0
           fi
           echo "::warning::iOS smoke flow failed; rebooting the simulator and retrying once."
-          preserve_failed_attempt
-          preserved=1
+          {
+            echo "### Maestro smoke retry"
+            echo "The first \`e2e:ios\` attempt failed. Its logs are in \`maestro-attempt-1/\` and are not copied over the second attempt's JUnit. The simulator was rebooted and the flow ran once more."
+          } >> "$GITHUB_STEP_SUMMARY"
+          stash_failed_attempt
           reboot_simulator
           smoke
       - if: always()
@@ -303,6 +287,7 @@ jobs:
           path: |
             maestro-junit.xml
             maestro-artifacts
+            maestro-attempt-1
           if-no-files-found: warn
           retention-days: 7
       - name: Remove simulator

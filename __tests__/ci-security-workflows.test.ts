@@ -199,8 +199,13 @@ describe('fail-closed merge verification', () => {
     expect(smokeStep).toContain('timeout-minutes: 15');
     expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
     expect(smokeStep).toContain('rebooting the simulator and retrying once');
+    expect(smokeStep).toContain('GITHUB_STEP_SUMMARY');
+    expect(smokeStep).toContain('maestro-attempt-1');
+    expect(smokeStep).not.toContain('trap ');
+    expect(smokeStep).not.toContain('cp ');
     expect(smokeStep.trimEnd().endsWith('smoke')).toBe(true);
     expect(artifactStep).toContain('maestro-artifacts');
+    expect(artifactStep).toContain('maestro-attempt-1');
     expect(smokeStep).not.toContain('continue-on-error');
   });
 });
