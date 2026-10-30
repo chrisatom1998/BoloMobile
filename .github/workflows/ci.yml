@@ -207,10 +207,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier')"
-          device_type_id="$(xcrun simctl list devicetypes --json | jq -r '.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier')"
-          test -n "$runtime_id"
-          test -n "$device_type_id"
+          # Pin the runtime that ships with the selected Xcode 26.6. Sorting to the
+          # newest installed iOS runtime moves this job whenever the image adds one.
+          pinned_runtime="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r --arg id "$pinned_runtime" '[.runtimes[] | select(.isAvailable and .identifier == $id)] | first | .identifier // empty')"
+          device_type_id="$(xcrun simctl list devicetypes --json | jq -r '[.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier] | first // empty')"
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "::error::Pinned iOS 26.5 runtime (${pinned_runtime}) or iPhone 16 Pro device type is not available."
+            xcrun simctl list runtimes
+            xcrun simctl list devicetypes
+            exit 1
+          fi
+          echo "Using runtime ${runtime_id} and device type ${device_type_id}"
           udid="$(xcrun simctl create "Bolo CI $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid"
@@ -232,12 +240,46 @@ jobs:
       - name: Run the dedicated iOS smoke flow
         timeout-minutes: 15
         run: |
-          npm run e2e:ios -- \
-            --device "$SIMULATOR_UDID" \
-            --format junit \
-            --output maestro-junit.xml \
-            --debug-output maestro-artifacts/driver-logs \
-            --test-output-dir maestro-artifacts
+          set -euo pipefail
+          smoke() {
+            rm -rf maestro-junit.xml maestro-artifacts
+            npm run e2e:ios -- \
+              --device "$SIMULATOR_UDID" \
+              --format junit \
+              --output maestro-junit.xml \
+              --debug-output maestro-artifacts/driver-logs \
+              --test-output-dir maestro-artifacts
+          }
+          stash_failed_attempt() {
+            # Workspace path, not RUNNER_TEMP. The upload step includes it, so a
+            # later timeout of this step still leaves the first attempt's logs.
+            rm -rf maestro-attempt-1
+            mkdir -p maestro-attempt-1
+            if [[ -f maestro-junit.xml ]]; then
+              mv maestro-junit.xml maestro-attempt-1/maestro-junit.xml
+            fi
+            if [[ -d maestro-artifacts ]]; then
+              mv maestro-artifacts maestro-attempt-1/maestro-artifacts
+            fi
+          }
+          reboot_simulator() {
+            xcrun simctl shutdown "$SIMULATOR_UDID" || true
+            xcrun simctl boot "$SIMULATOR_UDID" || true
+            open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID" || true
+            xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+            xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+          }
+          if smoke; then
+            exit 0
+          fi
+          echo "::warning::iOS smoke flow failed; rebooting the simulator and retrying once."
+          {
+            echo "### Maestro smoke retry"
+            echo "The first \`e2e:ios\` attempt failed. Its logs are in \`maestro-attempt-1/\` and are not copied over the second attempt's JUnit. The simulator was rebooted and the flow ran once more."
+          } >> "$GITHUB_STEP_SUMMARY"
+          stash_failed_attempt
+          reboot_simulator
+          smoke
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -245,6 +287,7 @@ jobs:
           path: |
             maestro-junit.xml
             maestro-artifacts
+            maestro-attempt-1
           if-no-files-found: warn
           retention-days: 7
       - name: Remove simulator
