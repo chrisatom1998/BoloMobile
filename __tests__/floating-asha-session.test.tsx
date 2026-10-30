@@ -13,6 +13,7 @@ const mockMarkLiveTurn = jest.fn();
 const mockClearChatHistory = jest.fn();
 let mockStatus: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding' = 'disconnected';
 let mockTranscriptSnapshot: ((rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void) | undefined;
+let mockConnectionStart: ((signal: AbortSignal) => void | Promise<void>) | undefined;
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockNavigate }),
@@ -37,7 +38,11 @@ jest.mock('@/hooks/use-asha-live-session', () => ({
 }));
 
 jest.mock('@/hooks/use-realtime-conversation', () => ({
-  useRealtimeConversation: (options: { onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void }) => {
+  useRealtimeConversation: (options: {
+    onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
+    onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void;
+  }) => {
+    mockConnectionStart = options.onConnectionStart;
     mockTranscriptSnapshot = options.onTranscriptSnapshot;
     return {
       disconnect: mockDisconnect,
@@ -90,6 +95,7 @@ describe('Asha voice session above the navigator', () => {
     mockReplaceLiveChatSnapshot.mockClear();
     mockMarkLiveTurn.mockClear();
     mockClearChatHistory.mockClear();
+    mockConnectionStart = undefined;
     mockTranscriptSnapshot = undefined;
   });
 
@@ -139,6 +145,23 @@ describe('Asha voice session above the navigator', () => {
       { id: 'asha-1', role: 'asha', text: 'Hello', language: 'en' },
     ]);
     expect(mockMarkLiveTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the conversation screen reset before the shared voice session connects', async () => {
+    const resetConversation = jest.fn(async () => undefined);
+    function ListeningScreen() {
+      const { setListeners } = useAshaVoiceSession();
+      useEffect(() => {
+        setListeners({ onConnectionStart: resetConversation });
+        return () => setListeners(null);
+      }, [setListeners]);
+      return null;
+    }
+
+    await renderSession(<ListeningScreen />);
+    const signal = new AbortController().signal;
+    await mockConnectionStart?.(signal);
+    expect(resetConversation).toHaveBeenCalledWith(signal);
   });
 
   it('keeps snapshot ids from the conversation screen so a later snapshot drops stale rows', async () => {

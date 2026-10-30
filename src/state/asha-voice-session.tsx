@@ -21,6 +21,7 @@ export type AshaVoiceControls = {
 
 export type AshaVoiceListeners = {
   onError?: (message: string) => void;
+  onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
 };
@@ -153,6 +154,7 @@ function AshaVoiceSessionHost({
     enabled: app.aiConsent,
     responseLanguage: app.learnerProfile.responseLanguage,
     liveSession,
+    onConnectionStart: (signal) => listenersRef.current?.onConnectionStart?.(signal),
     onError: (message) => listenersRef.current?.onError?.(message),
     onTranscriptChange: (update) => listenersRef.current?.onTranscriptChange?.(update),
     onTranscriptSnapshot: (rows) => {

@@ -71,6 +71,84 @@ describe('GPT-Live conversation lifecycle', () => {
     await unmount();
   });
 
+  it('awaits the fresh-chat boundary before permissions, peer creation, and any queued captions', async () => {
+    let finishReset!: () => void;
+    const onConnectionStart = jest.fn(() => new Promise<void>((resolve) => { finishReset = resolve; }));
+    const onTranscriptSnapshot = jest.fn();
+    createPeerMock.mockImplementation(async (options) => {
+      peerOptions = options;
+      emit({ type: 'session.output_transcript.delta', delta: 'New greeting', start_ms: 0, end_ms: 100 });
+      emit({ type: 'session.started' });
+      return peer;
+    });
+    const { result, unmount } = await mount({ onConnectionStart, onTranscriptSnapshot });
+    let connection!: Promise<void>;
+    await act(async () => { connection = result.current.connect(); await flush(); });
+    expect(onConnectionStart).toHaveBeenCalledTimes(1);
+    expect(onConnectionStart).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(requestRecordingPermissionsAsync).not.toHaveBeenCalled();
+    expect(createPeerMock).not.toHaveBeenCalled();
+    expect(onTranscriptSnapshot).not.toHaveBeenCalled();
+    await act(async () => { finishReset(); await connection; });
+    expect(result.current.status).toBe('ready');
+    expect(onTranscriptSnapshot.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({ text: 'New greeting', speaker: 'asha' }),
+    ]);
+    await unmount();
+  });
+
+  it('stops startup when the previous chat cannot be cleared', async () => {
+    const onConnectionStart = jest.fn(async () => { throw new Error('Could not clear chat'); });
+    const { result, unmount } = await mount({ onConnectionStart });
+    await act(async () => { await expect(result.current.connect()).rejects.toThrow('Could not clear chat'); });
+    expect(result.current.status).toBe('disconnected');
+    expect(requestRecordingPermissionsAsync).not.toHaveBeenCalled();
+    expect(createPeerMock).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('cancels a pending chat reset without letting a late completion start audio', async () => {
+    let finishReset!: () => void;
+    const onConnectionStart = jest.fn((_signal: AbortSignal) => new Promise<void>((resolve) => { finishReset = resolve; }));
+    const { result, unmount } = await mount({ onConnectionStart });
+    let connection!: Promise<void>;
+    await act(async () => { connection = result.current.connect(); await flush(); });
+    await act(async () => { result.current.disconnect(); finishReset(); await connection; });
+    expect(onConnectionStart.mock.calls[0]?.[0].aborted).toBe(true);
+    expect(result.current.status).toBe('disconnected');
+    expect(requestRecordingPermissionsAsync).not.toHaveBeenCalled();
+    expect(createPeerMock).not.toHaveBeenCalled();
+    await unmount();
+  });
+
+  it('resets once per new conversation, not mute/unmute, and ignores prior-session callbacks', async () => {
+    const onConnectionStart = jest.fn(async () => undefined);
+    const onTranscriptSnapshot = jest.fn();
+    const { result, unmount } = await mount({ onConnectionStart, onTranscriptSnapshot });
+    await act(async () => { await result.current.connect(); });
+    const oldPeerOptions = peerOptions;
+    let start!: Promise<void>;
+    await act(async () => { start = result.current.startTurn(); await flush(); acknowledge(true); await start; });
+    let finish!: Promise<void>;
+    await act(async () => { finish = result.current.finishTurn(); acknowledge(false); await finish; });
+    await act(async () => { start = result.current.startTurn(); await flush(); acknowledge(true); await start; });
+    expect(onConnectionStart).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      result.current.disconnect();
+      await result.current.connect();
+    });
+    expect(onConnectionStart).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      oldPeerOptions.onMessage(JSON.stringify({ type: 'session.output_transcript.delta', delta: 'Old late reply', start_ms: 0, end_ms: 100 }));
+      oldPeerOptions.onPlaybackChange?.(true);
+      emit({ type: 'session.output_transcript.delta', delta: 'Fresh reply', start_ms: 0, end_ms: 100 });
+    });
+    expect(result.current.isPlaying).toBe(false);
+    expect(onTranscriptSnapshot).toHaveBeenCalledTimes(1);
+    expect(onTranscriptSnapshot.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ text: 'Fresh reply' })]);
+    await unmount();
+  });
+
   it('waits for Live startup rather than accepting Realtime session events', async () => {
     autoStart = false;
     const { result, unmount } = await mount();
