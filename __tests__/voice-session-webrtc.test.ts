@@ -1,0 +1,50 @@
+jest.mock('expo', () => {
+  const session = {
+    activateVoiceChat: jest.fn(async () => 'PlayAndRecord/VoiceChat active'),
+    restoreDefaultMode: jest.fn(async () => undefined),
+    readSessionState: jest.fn(),
+    drainSessionEvents: jest.fn(),
+  };
+  return { requireOptionalNativeModule: () => session };
+});
+jest.mock('expo-audio', () => ({}));
+jest.mock('react-native-webrtc', () => ({
+  RTCAudioSession: { audioSessionDidActivate: jest.fn(), audioSessionDidDeactivate: jest.fn() },
+}));
+
+import { RTCAudioSession } from 'react-native-webrtc';
+
+import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '../src/lib/voice-session.ios';
+
+const didActivate = jest.mocked(RTCAudioSession.audioSessionDidActivate);
+const didDeactivate = jest.mocked(RTCAudioSession.audioSessionDidDeactivate);
+
+describe('WebRTC audio-session notifications', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('tells WebRTC once per call that the session is active, and once that it ended', async () => {
+    await expect(activateVoiceChatSession()).resolves.toBe('PlayAndRecord/VoiceChat active rtc:ok');
+    // Reactivation during the same call (foreground, before unmute) must not stack activations.
+    await expect(activateVoiceChatSession()).resolves.toBe('PlayAndRecord/VoiceChat active rtc:held');
+    await restoreDefaultAudioSessionMode();
+    await restoreDefaultAudioSessionMode();
+
+    expect(didActivate).toHaveBeenCalledTimes(1);
+    expect(didDeactivate).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts fresh for the next call', async () => {
+    await activateVoiceChatSession();
+    await restoreDefaultAudioSessionMode();
+    await activateVoiceChatSession();
+    await restoreDefaultAudioSessionMode();
+
+    expect(didActivate).toHaveBeenCalledTimes(2);
+    expect(didDeactivate).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not tell WebRTC a session ended that it never heard start', async () => {
+    await restoreDefaultAudioSessionMode();
+    expect(didDeactivate).not.toHaveBeenCalled();
+  });
+});
