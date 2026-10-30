@@ -1,6 +1,8 @@
 import { useRouter, type Href } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type PropsWithChildren } from 'react';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { FullWindowOverlay } from 'react-native-screens';
 
 import type { FloatingAshaBubble } from '@/components/floating-asha-bubble';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
@@ -242,12 +244,18 @@ function EnabledAshaVoiceSession({ children }: PropsWithChildren) {
         {ready ? <AshaVoiceSessionHost listenersRef={listenersRef} onVoice={setVoice} snapshotIds={snapshotIds} /> : null}
         {ready ? <FloatingAshaRouter navigateRef={navigateRef} /> : null}
         {ready && minimized ? (
-          <FloatingAshaBubbleSlot
-            isPlaying={voice?.isPlaying ?? false}
-            onEnd={endSession}
-            onExpand={expand}
-            status={voice?.status ?? 'disconnected'}
-          />
+          // iOS: a separate window above the native tab bar and stack, so the bubble stays on top
+          // across tab switches and receives its own touches. It needs its own gesture root.
+          <FullWindowOverlay>
+            <GestureHandlerRootView pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+              <FloatingAshaBubbleSlot
+                isPlaying={voice?.isPlaying ?? false}
+                onEnd={endSession}
+                onExpand={expand}
+                status={voice?.status ?? 'disconnected'}
+              />
+            </GestureHandlerRootView>
+          </FullWindowOverlay>
         ) : null}
       </View>
     </AshaVoiceSessionContext.Provider>

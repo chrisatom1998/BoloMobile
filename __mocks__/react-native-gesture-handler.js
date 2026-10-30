@@ -5,6 +5,8 @@ function chain() {
     activeOffsetY: () => gesture,
     enabled: () => gesture,
     failOffsetX: () => gesture,
+    hitSlop: () => gesture,
+    maxDistance: () => gesture,
     minDistance: () => gesture,
     onBegin: () => gesture,
     onEnd: () => gesture,
@@ -12,6 +14,7 @@ function chain() {
     onStart: () => gesture,
     onUpdate: () => gesture,
     runOnJS: () => gesture,
+    shouldCancelWhenOutside: () => gesture,
   };
   return gesture;
 }
