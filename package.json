@@ -107,6 +107,23 @@
         ],
         "listUnknownPackages": true
       }
+    },
+    "install": {
+      "exclude": [
+        "@expo/ui",
+        "expo",
+        "expo-asset",
+        "expo-constants",
+        "expo-crypto",
+        "expo-linking",
+        "expo-notifications",
+        "expo-router",
+        "expo-sharing",
+        "expo-splash-screen",
+        "expo-widgets",
+        "expo-dev-client",
+        "jest-expo"
+      ]
     }
   },
   "overrides": {
@@ -127,7 +144,8 @@
     "@expo/metro-runtime": "57.0.16",
     "expo-dev-launcher": "57.0.20",
     "expo-dev-menu": "57.0.18",
-    "@expo/inline-modules": "0.1.7"
+    "@expo/inline-modules": "0.1.7",
+    "expo-constants": "57.0.21"
   },
   "private": true
 }

@@ -7,14 +7,15 @@ jest.mock('expo', () => {
   };
   return { requireOptionalNativeModule: () => session };
 });
-jest.mock('expo-audio', () => ({}));
+jest.mock('expo-audio', () => ({ setIsAudioActiveAsync: jest.fn(async () => undefined) }));
 jest.mock('react-native-webrtc', () => ({
   RTCAudioSession: { audioSessionDidActivate: jest.fn(), audioSessionDidDeactivate: jest.fn() },
 }));
 
+import { setIsAudioActiveAsync } from 'expo-audio';
 import { RTCAudioSession } from 'react-native-webrtc';
 
-import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '../src/lib/voice-session.ios';
+import { activateVoiceChatSession, releaseAudioSessionBeforeCall, restoreDefaultAudioSessionMode } from '../src/lib/voice-session.ios';
 
 const didActivate = jest.mocked(RTCAudioSession.audioSessionDidActivate);
 const didDeactivate = jest.mocked(RTCAudioSession.audioSessionDidDeactivate);
@@ -56,5 +57,11 @@ describe('WebRTC audio-session notifications', () => {
 
     expect(didActivate).toHaveBeenCalledTimes(1);
     expect(didDeactivate).toHaveBeenCalledTimes(1);
+  });
+
+  it('cycles the session off before a call but leaves expo-audio enabled for later playback', async () => {
+    await expect(releaseAudioSessionBeforeCall()).resolves.toBe('ok');
+
+    expect(jest.mocked(setIsAudioActiveAsync).mock.calls).toEqual([[false], [true]]);
   });
 });
