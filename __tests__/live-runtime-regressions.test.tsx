@@ -38,6 +38,7 @@ jest.mock('expo-image', () => ({
 }));
 
 jest.mock('lucide-react-native', () => ({
+  AlertCircle: () => null,
   ArrowDown: () => null,
   BookmarkPlus: () => null,
   Flag: () => null,
@@ -1325,8 +1326,8 @@ describe('live coaching state', () => {
     const listenLabels = actionLabels.filter((label) => label.startsWith('Read reply aloud:'));
     const reportLabels = actionLabels.filter((label) => label.startsWith('Report reply:'));
 
-    expect(listenLabels).toHaveLength(2);
-    expect(new Set(listenLabels).size).toBe(2);
+    expect(listenLabels).toHaveLength(1);
+    expect(new Set(listenLabels).size).toBe(1);
     expect(listenLabels.every((label) => label.length <= 96)).toBe(true);
     expect(listenLabels.some((label) => label.includes('Hello there.'))).toBe(true);
     expect(reportLabels).toEqual(['Report reply: Hello there.']);
@@ -1417,15 +1418,19 @@ describe('live audio control exclusion', () => {
     await view.unmount();
   });
 
-  it('keeps live coaching actions accessible and at least 44 points tall', async () => {
+  it('keeps live coaching actions accessible and easy to tap', async () => {
     const view = await render(<LiveScreen />);
-    const listen = view.getByLabelText(/Read reply aloud:/u);
+    expect(view.queryByLabelText(/Read reply aloud:/u)).toBeNull();
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    const listen = view.getByLabelText('Read reply aloud: Hello there.');
     const example = view.getByRole('button', { name: 'Correct my Hindi' });
     const send = view.getByLabelText('Send message');
+    const listenStyle = StyleSheet.flatten(listen.props.style);
+    const listenSlop = listen.props.hitSlop as { bottom: number; top: number };
 
     expect(listen.props.accessibilityRole).toBe('button');
     expect(listen.props.accessibilityState).toEqual({ disabled: false });
-    expect(StyleSheet.flatten(listen.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(listenStyle.minHeight + listenSlop.top + listenSlop.bottom).toBeGreaterThanOrEqual(44);
     expect(example.props.accessibilityState).toEqual({ disabled: false });
     expect(StyleSheet.flatten(example.props.style).minHeight).toBeGreaterThanOrEqual(44);
     expect(send.props.accessibilityState).toEqual({ disabled: true });

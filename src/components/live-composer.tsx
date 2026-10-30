@@ -1,6 +1,6 @@
 import { Send } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
@@ -57,22 +57,44 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
 
   const submit = useCallback(() => { void send(); }, [send]);
 
+  const nearLimit = input.length >= 420;
+
   return (
-    <View style={styles.inputRow}>
-      <TextInput
-        accessibilityLabel="Message Asha"
-        testID="message-asha-input"
-        editable={!locked}
-        maxLength={500}
-        multiline
-        onChangeText={changeInput}
-        onSubmitEditing={submit}
-        placeholder="Ask in English or Hindi…"
-        placeholderTextColor={colors.heroSubtle}
-        style={[styles.input, locked && styles.inputDisabled]}
-        value={input}
-      />
-      <Pressable accessibilityLabel="Send message" accessibilityRole="button" testID="send-asha-message" accessibilityState={{ disabled: sendDisabled }} disabled={sendDisabled} onPress={submit} style={[styles.sendButton, sendDisabled && styles.disabled]}><Send color={colors.ink} size={20} /></Pressable>
+    <View style={styles.composerField}>
+      {nearLimit ? (
+        <Text accessibilityLabel={`${input.length} of 500 characters`} style={[styles.charCount, input.length >= 500 && styles.charCountLimit]}>
+          {input.length}/500
+        </Text>
+      ) : null}
+      <View style={styles.inputRow}>
+        <TextInput
+          accessibilityHint="Type in English or Hindi. The return key sends."
+          accessibilityLabel="Message Asha"
+          editable={!locked}
+          enterKeyHint="send"
+          maxLength={500}
+          multiline
+          onChangeText={changeInput}
+          onSubmitEditing={submit}
+          placeholder="Ask in English or Hindi…"
+          placeholderTextColor={colors.heroSubtle}
+          style={[styles.input, locked && styles.inputDisabled]}
+          submitBehavior="submit"
+          testID="message-asha-input"
+          value={input}
+        />
+        <Pressable
+          accessibilityLabel="Send message"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: sendDisabled, ...(sending ? { busy: true } : {}) }}
+          disabled={sendDisabled}
+          onPress={submit}
+          style={[styles.sendButton, sendDisabled && !sending && styles.disabled]}
+          testID="send-asha-message"
+        >
+          {sending ? <ActivityIndicator color={colors.ink} size="small" /> : <Send color={colors.ink} size={20} />}
+        </Pressable>
+      </View>
     </View>
   );
 });
