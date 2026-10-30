@@ -446,6 +446,52 @@ describe('immersive live conversation design', () => {
     mockReducedMotion = false;
   });
 
+  it('does not auto-scroll when the voice header grows during a live session', async () => {
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const view = await render(<LiveScreen />);
+    const scrollList = (offsetY: number) => {
+      view.getByTestId('live-chat-list').props.onScroll({
+        nativeEvent: {
+          contentOffset: { x: 0, y: offsetY },
+          contentSize: { height: 2000, width: 390 },
+          layoutMeasurement: { height: 800, width: 390 },
+        },
+      });
+    };
+    try {
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(scrollToEnd.mock.calls.length).toBeGreaterThan(0);
+      scrollToEnd.mockClear();
+
+      await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+      await act(async () => {
+        view.getByTestId('live-chat-list').props.onContentSizeChange();
+      });
+      expect(scrollToEnd).not.toHaveBeenCalled();
+
+      scrollList(0);
+      await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+      scrollToEnd.mockClear();
+      await act(async () => {
+        view.getByTestId('live-chat-list').props.onContentSizeChange();
+      });
+      expect(scrollToEnd).not.toHaveBeenCalled();
+
+      scrollList(1160);
+      await act(async () => {
+        view.getByTestId('live-chat-list').props.onContentSizeChange();
+      });
+      expect(scrollToEnd).toHaveBeenCalled();
+    } finally {
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
   it('uses the voice-first hierarchy from the supplied design without hiding typed coaching', async () => {
     const view = await render(<LiveScreen />);
     const hero = view.getByTestId('voice-conversation-hero');

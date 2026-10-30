@@ -8,10 +8,11 @@ import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
 import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
 import type { ChatMessage } from '@/state/app-state-types';
-import { useTheme } from '@/theme';
+import { spacing, useTheme } from '@/theme';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
-const actionHitSlop = { bottom: 8, left: 6, right: 6, top: 8 };
+// Half the action-row gap, so neighboring targets do not overlap. The row is 44pt tall, so no vertical slop.
+const actionHitSlop = { bottom: 0, left: spacing.xs / 2, right: spacing.xs / 2, top: 0 };
 
 // Web textareas draw a resize grip, which makes a chat line look editable.
 const webChatText = { resize: 'none' } as TextStyle;

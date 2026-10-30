@@ -43,6 +43,7 @@ const welcome: ChatMessage = {
 };
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
+const tailFollowThreshold = 48;
 
 function sharesSpeaker(left: ChatMessage | undefined, right: ChatMessage | undefined) {
   if (!left || !right || left.id === welcome.id || right.id === welcome.id) return false;
@@ -133,8 +134,8 @@ export default function LiveScreen() {
   const transcriptTurnActionRef = useRef<(() => void) | null>(null);
   const backgroundCheckpointedRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
-  const scrollAfterContentChangeRef = useRef(false);
-  const userHasScrolledRef = useRef(false);
+  const nearBottomRef = useRef(true);
+  const followedMessageCountRef = useRef(0);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, clearingChat, pendingUserMessage],
@@ -176,9 +177,29 @@ export default function LiveScreen() {
   const restingVoiceLayout = !compactVoiceLayout && realtimeStatus === 'disconnected';
   const captionsAtRest = realtimeStatus === 'disconnected' && liveUserTranscript.trim().length === 0 && liveAshaTranscript.trim().length === 0;
 
+  const messageCount = chatHistory.length + (pendingUserMessage ? 1 : 0);
+  const messageCountRef = useRef(0);
+  const aiConsentRef = useRef(aiConsent);
+  useEffect(() => {
+    messageCountRef.current = messageCount;
+    aiConsentRef.current = aiConsent;
+  }, [aiConsent, messageCount]);
+  const scrollTailIntoView = useCallback((animated: boolean) => {
+    nearBottomRef.current = true;
+    listRef.current?.scrollToEnd({ animated });
+  }, []);
+  // Resting content-size changes follow only when the reader is already near the bottom.
+  // Voice status and live captions grow the header and must not pull the portrait away.
+  // Refs keep a list callback from the first render aligned with the latest chat.
+  const followTail = useCallback((animated: boolean) => {
+    if (!aiConsentRef.current || messageCountRef.current === 0) return;
+    if (realtimeStatusRef.current !== 'disconnected') return;
+    if (!nearBottomRef.current) return;
+    listRef.current?.scrollToEnd({ animated });
+  }, []);
   const scrollToChat = useCallback(() => {
-    listRef.current?.scrollToOffset({ animated: !reducedMotion, offset: 1_000_000 });
-  }, [reducedMotion]);
+    scrollTailIntoView(!reducedMotion);
+  }, [reducedMotion, scrollTailIntoView]);
 
   const bindTranscriptTurnAction = useCallback((action: (() => void) | null) => {
     transcriptTurnActionRef.current = action;
@@ -238,7 +259,7 @@ export default function LiveScreen() {
     const showSubscription = Keyboard.addListener(showEvent, () => {
       if (!mountedRef.current) return;
       setKeyboardVisible(true);
-      listRef.current?.scrollToOffset({ animated: !reducedMotion, offset: 1_000_000 });
+      scrollTailIntoView(!reducedMotion);
     });
     const hideSubscription = Keyboard.addListener(hideEvent, () => {
       if (mountedRef.current) setKeyboardVisible(false);
@@ -247,25 +268,26 @@ export default function LiveScreen() {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [reducedMotion]);
+  }, [reducedMotion, scrollTailIntoView]);
 
-  // Open on the latest message. scrollToEnd during the first content-size
-  // event is a no-op, so retry after layout. Empty chats stay at the top so
-  // the intro card is not pushed under the featured phrase.
+  // A new message follows the tail when the reader is already near it. The first
+  // scrollToEnd can run before layout, so retry once on the next frame.
   useEffect(() => {
-    if (!aiConsent || chatHistory.length === 0) return;
+    const countChanged = messageCount !== followedMessageCountRef.current;
+    followedMessageCountRef.current = messageCount;
+    if (!aiConsent || messageCount === 0 || !countChanged || !nearBottomRef.current) return;
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
-      listRef.current?.scrollToOffset({ animated: false, offset: 1_000_000 });
+      listRef.current?.scrollToEnd({ animated: false });
       secondFrame = requestAnimationFrame(() => {
-        listRef.current?.scrollToOffset({ animated: false, offset: 1_000_000 });
+        listRef.current?.scrollToEnd({ animated: false });
       });
     });
     return () => {
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
     };
-  }, [aiConsent, chatHistory.length]);
+  }, [aiConsent, messageCount]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -285,7 +307,6 @@ export default function LiveScreen() {
 
   const recordTurn = useCallback((result: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
     if (!mountedRef.current) return;
-    scrollAfterContentChangeRef.current = true;
     const now = Date.now();
     void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     const additions: ChatMessage[] = [];
@@ -311,7 +332,6 @@ export default function LiveScreen() {
     const ids = snapshotIdsRef.current;
     replaceLiveChatSnapshot(ids.current, messages);
     ids.current = messages.map((message) => message.id);
-    scrollAfterContentChangeRef.current = true;
     setLiveUserTranscript([...messages].reverse().find((row) => row.role === 'you')?.text ?? '');
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
     if (messages.some((row) => row.role === 'you') && !practiced.current) {
@@ -348,8 +368,6 @@ export default function LiveScreen() {
     setClearingChat(true);
     void stopSpeaking();
     snapshotIdsRef.current.current = [];
-    scrollAfterContentChangeRef.current = false;
-    userHasScrolledRef.current = false;
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
     selectionClearTimersRef.current.forEach(clearTimeout);
@@ -434,7 +452,6 @@ export default function LiveScreen() {
     hapticTap();
     chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
-    scrollAfterContentChangeRef.current = true;
     setPendingUserMessage(userMessage);
     setBusy(true);
     setError('');
@@ -630,7 +647,12 @@ export default function LiveScreen() {
         ref={listRef}
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={styles.listContent}
-        onScrollBeginDrag={() => { userHasScrolledRef.current = true; }}
+        onScroll={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const distanceFromEnd = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+          nearBottomRef.current = distanceFromEnd <= tailFollowThreshold;
+        }}
+        scrollEventThrottle={16}
         data={aiConsent ? visibleMessages : []}
         keyExtractor={(message) => message.id}
         keyboardDismissMode="interactive"
@@ -770,17 +792,7 @@ export default function LiveScreen() {
           </View>
         )}
         onContentSizeChange={() => {
-          if (!aiConsent) return;
-          if (scrollAfterContentChangeRef.current) {
-            scrollAfterContentChangeRef.current = false;
-            userHasScrolledRef.current = false;
-            listRef.current?.scrollToOffset({ animated: !reducedMotion, offset: 1_000_000 });
-            return;
-          }
-          // Keep following the tail until the person scrolls. The first
-          // content-size event is often short of the microphone card.
-          if (userHasScrolledRef.current || chatHistory.length === 0) return;
-          listRef.current?.scrollToOffset({ animated: false, offset: 1_000_000 });
+          followTail(false);
         }}
         initialNumToRender={8}
         windowSize={7}
@@ -810,8 +822,7 @@ export default function LiveScreen() {
             {hasTranscriptMessages ? (
               <View
                 onLayout={() => {
-                  if (userHasScrolledRef.current || chatHistory.length === 0) return;
-                  listRef.current?.scrollToOffset({ animated: false, offset: 1_000_000 });
+                  followTail(false);
                 }}
                 style={styles.transcriptFooter}
               >
@@ -1000,7 +1011,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   typingBubble: { minWidth: 84, paddingVertical: spacing.md },
   typingDots: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 10, paddingVertical: spacing.xs },
   typingDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: c.brand },
-  smallAction: { minHeight: 32, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
+  smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
   reportedText: { color: c.success },
   transcriptFooter: { backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },
