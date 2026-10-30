@@ -193,8 +193,13 @@ describe('fail-closed merge verification', () => {
     const artifactStep = matchingBlock(smokeJob, '      - if: always()', '      - name: Remove simulator');
 
     expect(smokeJob).toContain('MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000');
+    expect(smokeJob).toContain('timeout-minutes: 30');
+    expect(smokeJob).toContain('com.apple.CoreSimulator.SimRuntime.iOS-26-5');
+    expect(smokeJob).not.toContain('sort_by(.version');
     expect(smokeStep).toContain('timeout-minutes: 15');
     expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
+    expect(smokeStep).toContain('rebooting the simulator and retrying once');
+    expect(smokeStep.trimEnd().endsWith('smoke')).toBe(true);
     expect(artifactStep).toContain('maestro-artifacts');
     expect(smokeStep).not.toContain('continue-on-error');
   });

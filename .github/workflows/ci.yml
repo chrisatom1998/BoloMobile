@@ -174,8 +174,7 @@ jobs:
   maestro-smoke:
     needs: ios-native-build
     runs-on: macos-26
-    # Setup plus two smoke attempts. The driver startup timeout is unchanged.
-    timeout-minutes: 40
+    timeout-minutes: 30
     env:
       CI: 1
       MAESTRO_CLI_NO_ANALYTICS: 1
@@ -239,7 +238,7 @@ jobs:
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
           echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
       - name: Run the dedicated iOS smoke flow
-        timeout-minutes: 20
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           smoke() {
