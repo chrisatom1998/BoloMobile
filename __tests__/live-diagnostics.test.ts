@@ -22,11 +22,11 @@ describe('live voice diagnostics', () => {
     diagnostics.countLiveEvent('session.output_transcript.delta');
     diagnostics.countLiveEvent('session.output_transcript.delta');
     diagnostics.updateLiveDiagnostics({ permission: 'granted', audioMode: 'realtime', peerState: 'recording' });
-    diagnostics.updateLiveDiagnostics({ mic: { trackEnabled: true, trackState: 'live', packetsSent: 12, bytesSent: 900, audioLevel: 0.0421 } });
+    diagnostics.updateLiveDiagnostics({ mic: { trackEnabled: true, trackState: 'live', packetsSent: 12, bytesSent: 900, audioLevel: 0.0421, totalAudioEnergy: 0.5 } });
 
     const text = formatLiveDiagnostics(diagnostics.getLiveDiagnostics());
     expect(text).toContain('perm granted | mode realtime | peer recording');
-    expect(text).toContain('track on/live | sent 12pkt 900B lvl 0.042');
+    expect(text).toContain('track on/live | sent 12pkt 900B lvl 0.042 energy 0.5000');
     expect(text).toContain('events 4 (you 1 / asha 2) last session.output_transcript.delta');
   });
 
@@ -55,7 +55,7 @@ describe('live voice diagnostics', () => {
       mic: { trackEnabled: false, trackMuted: true, trackState: 'ended' }, events: 0, inputDeltas: 0, outputDeltas: 0,
       lastEvent: '-', lastError: 'boom',
     });
-    expect(text).toContain('track off/ended/muted | sent ?pkt ?B lvl ?');
+    expect(text).toContain('track off/ended/muted | sent ?pkt ?B lvl ? energy ?');
     expect(text).toContain('error boom');
   });
 });

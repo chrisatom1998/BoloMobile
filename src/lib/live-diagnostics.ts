@@ -9,6 +9,8 @@ export type LiveMicStats = {
   packetsSent?: number;
   bytesSent?: number;
   audioLevel?: number;
+  /** Fallback when audioLevel is missing: rises only while the mic hears sound. */
+  totalAudioEnergy?: number;
 };
 
 export type LiveDiagnostics = {
@@ -72,7 +74,7 @@ export function formatLiveDiagnostics(value: LiveDiagnostics) {
     ? `track ${mic.trackEnabled ? 'on' : 'off'}/${mic.trackState ?? '?'}${mic.trackMuted ? '/muted' : ''}`
     : 'track -';
   const sent = mic
-    ? `sent ${mic.packetsSent ?? '?'}pkt ${mic.bytesSent ?? '?'}B lvl ${mic.audioLevel === undefined ? '?' : mic.audioLevel.toFixed(3)}`
+    ? `sent ${mic.packetsSent ?? '?'}pkt ${mic.bytesSent ?? '?'}B lvl ${mic.audioLevel === undefined ? '?' : mic.audioLevel.toFixed(3)} energy ${mic.totalAudioEnergy === undefined ? '?' : mic.totalAudioEnergy.toFixed(4)}`
     : 'sent -';
   return [
     `perm ${value.permission} | mode ${value.audioMode}${value.audioModeError ? ` (${value.audioModeError})` : ''} | peer ${value.peerState}`,

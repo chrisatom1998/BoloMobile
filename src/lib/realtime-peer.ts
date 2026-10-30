@@ -21,7 +21,7 @@ type NativeEventTarget = {
   ): void;
 };
 
-type MicStatsEntry = { type?: string; kind?: string; mediaType?: string; packetsSent?: number; bytesSent?: number; audioLevel?: number };
+type MicStatsEntry = { type?: string; kind?: string; mediaType?: string; packetsSent?: number; bytesSent?: number; audioLevel?: number; totalAudioEnergy?: number };
 
 // react-native-webrtc inherits these methods at runtime, but its public class
 // declarations currently omit them from the TypeScript surface.
@@ -198,7 +198,10 @@ export async function createRealtimePeerSession({
         report.forEach((entry: MicStatsEntry) => {
           if ((entry.kind ?? entry.mediaType) !== 'audio') return;
           if (entry.type === 'outbound-rtp') { stats.packetsSent = entry.packetsSent; stats.bytesSent = entry.bytesSent; }
-          else if (entry.type === 'media-source' && typeof entry.audioLevel === 'number') stats.audioLevel = entry.audioLevel;
+          else if (entry.type === 'media-source') {
+            if (typeof entry.audioLevel === 'number') stats.audioLevel = entry.audioLevel;
+            if (typeof entry.totalAudioEnergy === 'number') stats.totalAudioEnergy = entry.totalAudioEnergy;
+          }
         });
         return stats;
       },
