@@ -9,7 +9,7 @@ import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-tr
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
-import { drainAudioSessionEvents, getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, readAudioSessionState, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { drainAudioSessionEvents, getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, readAudioSessionState, registerRealtimeVoiceOwner, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
@@ -367,6 +367,11 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   }, [connect, disconnect, setInputEnabled]);
 
   const finishTurn = useCallback(() => setInputEnabled(false), [setInputEnabled]);
+
+  // While connected, this call owns the shared audio session. Another recorder (a lesson's
+  // pronunciation check while Asha is minimized) ends the call through this before recording.
+  const connected = status !== 'disconnected';
+  useEffect(() => (connected ? registerRealtimeVoiceOwner(disconnect) : undefined), [connected, disconnect]);
 
   // Preview builds only: sample the mic track and outbound audio so the Asha screen shows where audio stops.
   useEffect(() => {

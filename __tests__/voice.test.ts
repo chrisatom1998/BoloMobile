@@ -10,7 +10,9 @@ import {
   ASHA_VOICE_PROFILE,
   getVoiceSessionStatus,
   isRealtimeVoiceSessionActive,
+  endRealtimeVoiceSession,
   reactivateRealtimeVoiceSession,
+  registerRealtimeVoiceOwner,
   resetVoiceAudioMode,
   setVoiceAudioMode,
 } from '../src/lib/voice';
@@ -76,6 +78,22 @@ describe('Asha voice service', () => {
       'activate PlayAndRecord/VoiceChat',
       'mode:playback (under live call)',
     ]);
+  });
+
+  it('lets a recorder end the live call that owns the session, once', () => {
+    const endFirst = jest.fn();
+    const endSecond = jest.fn();
+    const unregisterFirst = registerRealtimeVoiceOwner(endFirst);
+    const unregisterSecond = registerRealtimeVoiceOwner(endSecond);
+    // A stale call's cleanup must not clear the newer call's registration.
+    unregisterFirst();
+    endRealtimeVoiceSession();
+    endRealtimeVoiceSession();
+
+    expect(endFirst).not.toHaveBeenCalled();
+    expect(endSecond).toHaveBeenCalledTimes(1);
+    expect(noteAudioEventMock).toHaveBeenCalledWith('ended by another recorder');
+    unregisterSecond();
   });
 
   it('orders a delayed native setup before teardown and the next connection', async () => {

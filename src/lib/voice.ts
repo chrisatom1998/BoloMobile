@@ -127,3 +127,27 @@ export function getVoiceAudioMode(): VoiceAudioMode {
 export function isRealtimeVoiceSessionActive() {
   return isRealtimeMode(currentVoiceAudioMode);
 }
+
+let realtimeVoiceOwner: (() => void) | null = null;
+
+/**
+ * A live call that may outlive its screen (the floating Asha bubble) registers how to end
+ * itself, so another surface that needs the microphone can hand-off cleanly instead of
+ * silently switching the shared session out from under a call that still looks connected.
+ * Returns an unregister function that only clears this owner.
+ */
+export function registerRealtimeVoiceOwner(end: () => void) {
+  realtimeVoiceOwner = end;
+  return () => {
+    if (realtimeVoiceOwner === end) realtimeVoiceOwner = null;
+  };
+}
+
+/** Ends the live call that owns the audio session, if any, before another surface records. */
+export function endRealtimeVoiceSession() {
+  const end = realtimeVoiceOwner;
+  realtimeVoiceOwner = null;
+  if (!end) return;
+  noteLiveAudioEvent('ended by another recorder');
+  end();
+}

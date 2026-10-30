@@ -34,3 +34,18 @@ export async function drainAudioSessionEvents(): Promise<string[]> {
 export function isRealtimeVoiceSessionActive() {
   return false;
 }
+
+let realtimeVoiceOwner: (() => void) | null = null;
+
+export function registerRealtimeVoiceOwner(end: () => void) {
+  realtimeVoiceOwner = end;
+  return () => {
+    if (realtimeVoiceOwner === end) realtimeVoiceOwner = null;
+  };
+}
+
+export function endRealtimeVoiceSession() {
+  const end = realtimeVoiceOwner;
+  realtimeVoiceOwner = null;
+  end?.();
+}
