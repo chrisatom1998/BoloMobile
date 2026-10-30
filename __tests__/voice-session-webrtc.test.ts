@@ -47,4 +47,14 @@ describe('WebRTC audio-session notifications', () => {
     await restoreDefaultAudioSessionMode();
     expect(didDeactivate).not.toHaveBeenCalled();
   });
+
+  it('does not spend the one activate on the session turned on before the peer exists', async () => {
+    await expect(activateVoiceChatSession({ notifyWebRtc: false })).resolves.toBe('PlayAndRecord/VoiceChat active rtc:skip');
+    await expect(activateVoiceChatSession()).resolves.toBe('PlayAndRecord/VoiceChat active rtc:ok');
+    await expect(activateVoiceChatSession()).resolves.toBe('PlayAndRecord/VoiceChat active rtc:held');
+    await restoreDefaultAudioSessionMode();
+
+    expect(didActivate).toHaveBeenCalledTimes(1);
+    expect(didDeactivate).toHaveBeenCalledTimes(1);
+  });
 });

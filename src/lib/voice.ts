@@ -57,9 +57,9 @@ function isRealtimeMode(mode: VoiceAudioMode) {
  * Without both, iOS can hand WebRTC a silent microphone. A failure here is recorded
  * rather than thrown so a scene that is not yet active cannot abort the call.
  */
-async function assertVoiceChatSession() {
+async function assertVoiceChatSession(options?: { notifyWebRtc?: boolean }) {
   try {
-    voiceSessionStatus = await activateVoiceChatSession();
+    voiceSessionStatus = await activateVoiceChatSession(options);
   } catch (cause) {
     voiceSessionStatus = `failed: ${cause instanceof Error ? cause.message.slice(0, 60) : 'unknown'}`;
   }
@@ -87,7 +87,8 @@ export function setVoiceAudioMode(mode: VoiceAudioMode) {
     }
     await setAudioModeAsync(VOICE_AUDIO_MODES[mode]);
     // expo-audio just rewrote the category; take the session back for the call.
-    if (realtime) await assertVoiceChatSession();
+    // This transition is before the peer exists, so do not tell WebRTC yet.
+    if (realtime) await assertVoiceChatSession({ notifyWebRtc: false });
     currentVoiceAudioMode = mode;
   });
   // Propagate this transition's error to its caller while allowing later resets.

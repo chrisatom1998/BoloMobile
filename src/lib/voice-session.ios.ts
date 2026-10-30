@@ -59,15 +59,19 @@ function notifyWebRtcSessionDeactivated() {
  * Puts the iOS audio session in PlayAndRecord + voiceChat and makes it active.
  * Resolves with a short description of the session for the preview debug line.
  * Builds without the native module can only activate the session, not set voiceChat.
+ * notifyWebRtc is false for the activation before the peer exists: reporting that one
+ * marks the session active before getUserMedia builds the audio unit.
  */
-export async function activateVoiceChatSession(): Promise<string> {
+export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolean }): Promise<string> {
+  const reportToWebRtc = options?.notifyWebRtc !== false;
   if (session) {
     const status = await session.activateVoiceChat();
-    return `${status} ${notifyWebRtcSessionActivated()}`;
+    return reportToWebRtc ? `${status} ${notifyWebRtcSessionActivated()}` : `${status} rtc:skip`;
   }
   if (typeof ExpoAudio.setIsAudioActiveAsync === 'function') {
     await ExpoAudio.setIsAudioActiveAsync(true);
-    return `active (no voiceChat module) ${notifyWebRtcSessionActivated()}`;
+    const tag = reportToWebRtc ? notifyWebRtcSessionActivated() : 'rtc:skip';
+    return `active (no voiceChat module) ${tag}`;
   }
   return 'native session module missing';
 }
