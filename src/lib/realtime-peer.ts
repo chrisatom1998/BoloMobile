@@ -3,6 +3,7 @@ import {
   RTCPeerConnection,
 } from 'react-native-webrtc';
 
+import { type LiveMicStats, sdpAudioDirection, updateLiveDiagnostics } from '@/lib/live-diagnostics';
 import { waitForLiveIceGathering } from '@/lib/live-ice';
 import { observeLivePlayback } from '@/lib/live-playback';
 import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-peer.types';
@@ -19,6 +20,8 @@ type NativeEventTarget = {
     options?: { once?: boolean },
   ): void;
 };
+
+type MicStatsEntry = { type?: string; kind?: string; mediaType?: string; packetsSent?: number; bytesSent?: number; audioLevel?: number; totalAudioEnergy?: number };
 
 // react-native-webrtc inherits these methods at runtime, but its public class
 // declarations currently omit them from the TypeScript surface.
@@ -145,6 +148,7 @@ export async function createRealtimePeerSession({
         if (closed || negotiation.signal.aborted) throw new Error('The live voice connection was canceled.');
         const answerSdp = await exchangeSdp(offerSdp, negotiation.signal);
         if (closed || negotiation.signal.aborted) throw new Error('The live voice connection was canceled.');
+        updateLiveDiagnostics({ sdpAudio: `${sdpAudioDirection(offerSdp)}/${sdpAudioDirection(answerSdp)}` });
         await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
       })().then(() => finish(), finish);
 
@@ -186,6 +190,21 @@ export async function createRealtimePeerSession({
       },
       setMicrophoneEnabled(enabled) {
         if (!closed) microphone.enabled = enabled;
+      },
+      async readMicStats() {
+        const track = microphone as typeof microphone & { muted?: boolean; readyState?: string };
+        const stats: LiveMicStats = { trackEnabled: microphone.enabled, trackMuted: track.muted, trackState: track.readyState };
+        if (closed || typeof peer.getStats !== 'function') return stats;
+        const report = await peer.getStats();
+        report.forEach((entry: MicStatsEntry) => {
+          if ((entry.kind ?? entry.mediaType) !== 'audio') return;
+          if (entry.type === 'outbound-rtp') { stats.packetsSent = entry.packetsSent; stats.bytesSent = entry.bytesSent; }
+          else if (entry.type === 'media-source') {
+            if (typeof entry.audioLevel === 'number') stats.audioLevel = entry.audioLevel;
+            if (typeof entry.totalAudioEnergy === 'number') stats.totalAudioEnergy = entry.totalAudioEnergy;
+          }
+        });
+        return stats;
       },
     };
   } catch (cause) {

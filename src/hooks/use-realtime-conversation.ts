@@ -3,12 +3,13 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import { createLiveToolExecutor, type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
+import { countLiveEvent, liveDiagnosticsEnabled, noteLiveAudioEvent, recordLiveMicStats, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
+import { createLiveToolExecutor,type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
 import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
-import { resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { drainAudioSessionEvents, getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, readAudioSessionState, registerRealtimeVoiceOwner, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
@@ -58,6 +59,24 @@ type PendingCommand = {
 };
 const START_TIMEOUT_MS = 15_000;
 const COMMAND_TIMEOUT_MS = 10_000;
+const DIAGNOSTICS_POLL_MS = 1_000;
+
+/** Applies the realtime audio mode and, in preview builds, records whether iOS accepted it. */
+async function applyRealtimeAudioMode() {
+  try {
+    await setVoiceAudioMode('realtime');
+    if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioMode: getVoiceAudioMode(), audioModeError: '', audioSession: getVoiceSessionStatus() });
+  } catch (cause) {
+    if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioModeError: cause instanceof Error ? cause.message.slice(0, 80) : 'failed' });
+    throw cause;
+  }
+}
+
+/** Turns the call's iOS audio session back on and, in preview builds, shows what iOS reported. */
+async function reactivateRealtimeAudio() {
+  await reactivateRealtimeVoiceSession();
+  if (liveDiagnosticsEnabled) updateLiveDiagnostics({ audioSession: getVoiceSessionStatus() });
+}
 
 export function useRealtimeConversation({ clientId, enabled = true, responseLanguage = 'en', ...options }: Options) {
   const [status, setStatus] = useState<RealtimeVoiceStatus>('disconnected');
@@ -179,6 +198,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const queued: string[] = [];
     let live = false;
     updateStatus('connecting');
+    resetLiveDiagnostics();
     transcriptsRef.current = createLiveTranscriptStore(`live-${Date.now()}-${lifecycle}`);
     let setup: LiveSessionSetup | null = null;
     try { setup = callbacksRef.current.liveSession?.() ?? null; } catch { setup = null; }
@@ -194,11 +214,12 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (Platform.OS !== 'web') {
         const permission = await requestRecordingPermissionsAsync();
         if (!current()) return;
+        updateLiveDiagnostics({ permission: permission.status });
         if (!permission.granted) throw new Error(LIVE_MIC_PERMISSION_MESSAGE);
       }
       await stopSpeaking();
       if (!current()) return;
-      await setVoiceAudioMode('realtime');
+      await applyRealtimeAudioMode();
       if (!current()) return;
       attemptPeer = await createRealtimePeerSession({
         exchangeSdp: async (offerSdp, signal) => {
@@ -216,6 +237,12 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
         signal: controller.signal,
         onMessage: (raw) => {
           if (!current()) return;
+          if (liveDiagnosticsEnabled) {
+            try {
+              const event = JSON.parse(raw) as LiveEvent | null;
+              countLiveEvent(event?.type, event?.error?.message);
+            } catch { countLiveEvent('unreadable'); }
+          }
           if (live) { handleEvent(raw); return; }
           try {
             const event = JSON.parse(raw) as LiveEvent;
@@ -232,7 +259,11 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
           setIsPlaying(playing);
           if (live) updateStatus();
         },
-        onError: (message) => { if (current()) callbacksRef.current.onError(message); },
+        onError: (message) => {
+          if (!current()) return;
+          updateLiveDiagnostics({ lastError: message.slice(0, 80) });
+          callbacksRef.current.onError(message);
+        },
         onClose: () => {
           if (!current()) return;
           startupError = new Error('The live voice connection closed. Start a new session to continue.');
@@ -243,7 +274,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (!current()) { attemptPeer.close(); return; }
       peerRef.current = attemptPeer;
       // Reapply routing after native WebRTC initializes its audio session.
-      await setVoiceAudioMode('realtime');
+      await applyRealtimeAudioMode();
       if (!current()) return;
       if (startupError) throw startupError;
       if (!started) await new Promise<void>((resolve, reject) => {
@@ -321,7 +352,13 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const promise = (async () => {
       await connect();
       if (lifecycleRef.current !== lifecycle || !peerRef.current) return;
+      // Read the live value: this hook can mount at launch (floating Asha) before
+      // the iOS scene is active, and a missed 'change' event would leave the ref stale.
+      appStateRef.current = AppState.currentState;
       if (appStateRef.current !== 'active') { disconnect(); return; }
+      // Another player's deferred deactivate may have switched the session off since the call began.
+      await reactivateRealtimeAudio().catch(() => undefined);
+      if (lifecycleRef.current !== lifecycle || !peerRef.current) return;
       await setInputEnabled(true);
     })();
     const tracked = promise.finally(() => { if (startRef.current === tracked) startRef.current = null; });
@@ -331,9 +368,32 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
 
   const finishTurn = useCallback(() => setInputEnabled(false), [setInputEnabled]);
 
+  // While connected, this call owns the shared audio session. Another recorder (a lesson's
+  // pronunciation check while Asha is minimized) ends the call through this before recording.
+  const connected = status !== 'disconnected';
+  useEffect(() => (connected ? registerRealtimeVoiceOwner(disconnect) : undefined), [connected, disconnect]);
+
+  // Preview builds only: sample the mic track and outbound audio so the Asha screen shows where audio stops.
   useEffect(() => {
+    if (!liveDiagnosticsEnabled || status === 'disconnected') return undefined;
+    updateLiveDiagnostics({ peerState: status });
+    const timer = setInterval(() => {
+      void peerRef.current?.readMicStats?.().then(recordLiveMicStats, () => undefined);
+      // Sample the iOS audio session next to the mic level, and pick up any route change,
+      // interruption or media reset iOS posted since the last tick.
+      void readAudioSessionState().then((sessionNow) => updateLiveDiagnostics({ sessionNow }), () => undefined);
+      void drainAudioSessionEvents().then((events) => events.forEach(noteLiveAudioEvent), () => undefined);
+    }, DIAGNOSTICS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [status]);
+
+  useEffect(() => {
+    // Catch up on any change that happened between render and subscribing.
+    appStateRef.current = AppState.currentState;
     const subscription = AppState.addEventListener('change', (next) => {
       appStateRef.current = next;
+      // A scene that became active after the call started may not have had audio allowed yet.
+      if (next === 'active' && peerRef.current) void reactivateRealtimeAudio().catch(() => undefined);
       // Permission dialogs can transiently make iOS inactive during connection.
       if (next === 'active' || (next === 'inactive' && statusRef.current === 'connecting')) return;
       // An idle hook (the floating session stays mounted between calls) must not

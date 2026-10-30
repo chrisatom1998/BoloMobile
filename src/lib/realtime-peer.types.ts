@@ -1,7 +1,11 @@
+import type { LiveMicStats } from '@/lib/live-diagnostics';
+
 export type RealtimePeerSession = {
   close: () => void;
   send: (event: Record<string, unknown>) => void;
   setMicrophoneEnabled: (enabled: boolean) => void;
+  /** Preview-build diagnostics: what the microphone track and outbound RTP are doing right now. */
+  readMicStats?: () => Promise<LiveMicStats>;
 };
 
 export type RealtimePeerOptions = {

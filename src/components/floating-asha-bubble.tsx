@@ -33,6 +33,10 @@ import { makeStyles, radius, useTheme } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const SPRING = { damping: 22, stiffness: 240, mass: 0.8 };
+/** Room around the bubble so the end control sits inside the touchable frame (iOS ignores touches outside a parent). */
+const SLOT_PAD = 8;
+const SLOT_SIZE = FLOATING_ASHA_BUBBLE_SIZE + SLOT_PAD * 2;
+const DRAG_HIT_SLOP = 12;
 
 type DragCells = {
   maxX: SharedValue<number>;
@@ -48,22 +52,26 @@ type DragCells = {
 
 function createDragGesture(cells: DragCells) {
   return Gesture.Pan()
-    .minDistance(8)
+    .minDistance(6)
+    .hitSlop(DRAG_HIT_SLOP)
+    .shouldCancelWhenOutside(false)
     .onStart(() => {
-      cells.startX.value = cells.x.value;
-      cells.startY.value = cells.y.value;
+      cancelAnimation(cells.x);
+      cancelAnimation(cells.y);
+      cells.startX.set(cells.x.get());
+      cells.startY.set(cells.y.get());
     })
     .onUpdate((event) => {
-      cells.x.value = cells.startX.value + event.translationX;
-      cells.y.value = cells.startY.value + event.translationY;
+      cells.x.set(cells.startX.get() + event.translationX);
+      cells.y.set(cells.startY.get() + event.translationY);
     })
     .onEnd(() => {
       // Same edge snap as snapFloatingAshaPosition, inlined so the UI thread does not call JS.
-      const center = cells.x.value + FLOATING_ASHA_BUBBLE_SIZE / 2;
-      const snappedX = center < cells.screenWidth.value / 2 ? cells.minX.value : cells.maxX.value;
-      const snappedY = Math.min(cells.maxY.value, Math.max(cells.minY.value, cells.y.value));
-      cells.x.value = withSpring(snappedX, SPRING);
-      cells.y.value = withSpring(snappedY, SPRING);
+      const center = cells.x.get() + FLOATING_ASHA_BUBBLE_SIZE / 2;
+      const snappedX = center < cells.screenWidth.get() / 2 ? cells.minX.get() : cells.maxX.get();
+      const snappedY = Math.min(cells.maxY.get(), Math.max(cells.minY.get(), cells.y.get()));
+      cells.x.set(withSpring(snappedX, SPRING));
+      cells.y.set(withSpring(snappedY, SPRING));
     });
 }
 
@@ -116,44 +124,47 @@ export function FloatingAshaBubble({ isPlaying, onEnd, onExpand, status }: Props
 
   const { maxX: boundMaxX, maxY: boundMaxY, minX: boundMinX, minY: boundMinY } = bounds;
   useEffect(() => {
-    minX.value = boundMinX;
-    maxX.value = boundMaxX;
-    minY.value = boundMinY;
-    maxY.value = boundMaxY;
-    screenWidth.value = width;
-    const snapped = snapFloatingAshaPosition(x.value, y.value, width, {
+    minX.set(boundMinX);
+    maxX.set(boundMaxX);
+    minY.set(boundMinY);
+    maxY.set(boundMaxY);
+    screenWidth.set(width);
+    const snapped = snapFloatingAshaPosition(x.get(), y.get(), width, {
       maxX: boundMaxX,
       maxY: boundMaxY,
       minX: boundMinX,
       minY: boundMinY,
     });
-    x.value = snapped.x;
-    y.value = snapped.y;
+    x.set(withSpring(snapped.x, SPRING));
+    y.set(withSpring(snapped.y, SPRING));
   }, [boundMaxX, boundMaxY, boundMinX, boundMinY, maxX, maxY, minX, minY, screenWidth, width, x, y]);
 
   useEffect(() => {
     cancelAnimation(pulse);
     if (!speaking || reducedMotion) {
-      pulse.value = withTiming(1, { duration: 180 });
+      pulse.set(withTiming(1, { duration: 180 }));
       return () => cancelAnimation(pulse);
     }
-    pulse.value = withRepeat(
+    pulse.set(withRepeat(
       withSequence(
         withTiming(1.08, { duration: 700, easing: Easing.inOut(Easing.sin) }),
         withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }),
       ),
       -1,
-    );
+    ));
     return () => cancelAnimation(pulse);
   }, [pulse, reducedMotion, speaking]);
 
   const pan = useMemo(() => createDragGesture({
     maxX, maxY, minX, minY, screenWidth, startX, startY, x, y,
   }), [maxX, maxY, minX, minY, screenWidth, startX, startY, x, y]);
-  const tap = useMemo(() => Gesture.Tap().runOnJS(true).onEnd(() => onExpand()), [onExpand]);
+  const tap = useMemo(() => Gesture.Tap().runOnJS(true).maxDistance(10).hitSlop(DRAG_HIT_SLOP).onEnd((_event, success) => {
+    if (success) onExpand();
+  }), [onExpand]);
   const gesture = useMemo(() => Gesture.Exclusive(pan, tap), [pan, tap]);
-  const position = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }, { translateY: y.value }] }));
-  const ringStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+  // The slot is padded, so shift it back by SLOT_PAD to keep x/y as the bubble's own top-left corner.
+  const position = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() - SLOT_PAD }, { translateY: y.get() - SLOT_PAD }] }));
+  const ringStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.get() }] }));
 
   return (
     <Animated.View pointerEvents="box-none" style={[styles.slot, position]}>
@@ -204,8 +215,9 @@ const useStyles = makeStyles((c) => ({
     left: 0,
     zIndex: 40,
     elevation: 40,
-    width: FLOATING_ASHA_BUBBLE_SIZE,
-    height: FLOATING_ASHA_BUBBLE_SIZE,
+    width: SLOT_SIZE,
+    height: SLOT_SIZE,
+    padding: SLOT_PAD,
   },
   bubble: {
     width: FLOATING_ASHA_BUBBLE_SIZE,
@@ -253,8 +265,8 @@ const useStyles = makeStyles((c) => ({
   },
   end: {
     position: 'absolute',
-    top: -6,
-    right: -6,
+    top: 0,
+    right: 0,
     width: 28,
     height: 28,
     borderRadius: radius.pill,

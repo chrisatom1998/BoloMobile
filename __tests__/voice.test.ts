@@ -4,12 +4,34 @@ jest.mock('expo-audio', () => ({
 
 import { setAudioModeAsync } from 'expo-audio';
 
-import { ASHA_VOICE_PROFILE, isRealtimeVoiceSessionActive, resetVoiceAudioMode, setVoiceAudioMode } from '../src/lib/voice';
+import { noteLiveAudioEvent } from '@/lib/live-diagnostics';
+
+import {
+  ASHA_VOICE_PROFILE,
+  getVoiceSessionStatus,
+  isRealtimeVoiceSessionActive,
+  endRealtimeVoiceSession,
+  reactivateRealtimeVoiceSession,
+  registerRealtimeVoiceOwner,
+  resetVoiceAudioMode,
+  setVoiceAudioMode,
+} from '../src/lib/voice';
+import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '../src/lib/voice-session';
+
+jest.mock('@/lib/voice-session', () => ({ activateVoiceChatSession: jest.fn(), restoreDefaultAudioSessionMode: jest.fn() }));
+jest.mock('@/lib/live-diagnostics', () => ({ noteLiveAudioEvent: jest.fn() }));
 
 const setAudioModeMock = setAudioModeAsync as jest.MockedFunction<typeof setAudioModeAsync>;
+const activateMock = jest.mocked(activateVoiceChatSession);
+const restoreMock = jest.mocked(restoreDefaultAudioSessionMode);
+const noteAudioEventMock = jest.mocked(noteLiveAudioEvent);
 
 describe('Asha voice service', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    activateMock.mockResolvedValue('PlayAndRecord/VoiceChat active');
+    restoreMock.mockResolvedValue(undefined);
+  });
 
   it('keeps the configured Asha generated-speech voice profile', () => {
     expect(ASHA_VOICE_PROFILE).toEqual({
@@ -37,9 +59,41 @@ describe('Asha voice service', () => {
       [{ allowsRecording: false, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: true, playsInSilentMode: true }],
       [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
-      [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: false, playsInSilentMode: true }],
     ]);
+  });
+
+  it('stamps every audio-mode transition, flagging one applied under a live call', async () => {
+    await setVoiceAudioMode('realtime');
+    await setVoiceAudioMode('realtimePlayback');
+    await reactivateRealtimeVoiceSession();
+    await setVoiceAudioMode('playback');
+
+    expect(noteAudioEventMock.mock.calls.map(([label]) => label)).toEqual([
+      'mode:realtime',
+      'activate PlayAndRecord/VoiceChat',
+      'mode:realtimePlayback',
+      'activate PlayAndRecord/VoiceChat',
+      'reactivate',
+      'activate PlayAndRecord/VoiceChat',
+      'mode:playback (under live call)',
+    ]);
+  });
+
+  it('lets a recorder end the live call that owns the session, once', () => {
+    const endFirst = jest.fn();
+    const endSecond = jest.fn();
+    const unregisterFirst = registerRealtimeVoiceOwner(endFirst);
+    const unregisterSecond = registerRealtimeVoiceOwner(endSecond);
+    // A stale call's cleanup must not clear the newer call's registration.
+    unregisterFirst();
+    endRealtimeVoiceSession();
+    endRealtimeVoiceSession();
+
+    expect(endFirst).not.toHaveBeenCalled();
+    expect(endSecond).toHaveBeenCalledTimes(1);
+    expect(noteAudioEventMock).toHaveBeenCalledWith('ended by another recorder');
+    unregisterSecond();
   });
 
   it('orders a delayed native setup before teardown and the next connection', async () => {
@@ -63,6 +117,36 @@ describe('Asha voice service', () => {
     await next;
     expect(isRealtimeVoiceSessionActive()).toBe(true);
     setAudioModeMock.mockResolvedValue(undefined);
+    await resetVoiceAudioMode();
+  });
+
+  it('activates voiceChat after every live-call route change and releases it when the call ends', async () => {
+    await setVoiceAudioMode('realtime');
+    await setVoiceAudioMode('realtimePlayback');
+    expect(activateMock).toHaveBeenCalledTimes(2);
+    expect(activateMock.mock.invocationCallOrder[0]).toBeGreaterThan(setAudioModeMock.mock.invocationCallOrder[0]!);
+    expect(getVoiceSessionStatus()).toBe('PlayAndRecord/VoiceChat active');
+    await reactivateRealtimeVoiceSession();
+    expect(activateMock).toHaveBeenCalledTimes(3);
+    await resetVoiceAudioMode();
+    expect(restoreMock).toHaveBeenCalledTimes(1);
+    expect(restoreMock.mock.invocationCallOrder[0]).toBeLessThan(setAudioModeMock.mock.invocationCallOrder[1]!);
+    await reactivateRealtimeVoiceSession();
+    expect(activateMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('never activates voiceChat for playback or recording', async () => {
+    await setVoiceAudioMode('playback');
+    await setVoiceAudioMode('recording');
+    expect(activateMock).not.toHaveBeenCalled();
+    expect(restoreMock).not.toHaveBeenCalled();
+  });
+
+  it('records an activation failure instead of aborting the call', async () => {
+    activateMock.mockRejectedValueOnce(new Error('cannot activate while inactive'));
+    await expect(setVoiceAudioMode('realtime')).resolves.toBeUndefined();
+    expect(isRealtimeVoiceSessionActive()).toBe(true);
+    expect(getVoiceSessionStatus()).toBe('failed: cannot activate while inactive');
     await resetVoiceAudioMode();
   });
 

@@ -1,6 +1,6 @@
 {
   "platforms": ["apple"],
   "apple": {
-    "modules": ["BoloAudioNormalizerModule"]
+    "modules": ["BoloAudioNormalizerModule", "BoloAudioSessionModule"]
   }
 }

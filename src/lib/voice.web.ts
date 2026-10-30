@@ -13,6 +13,39 @@ export function resetVoiceAudioMode() {
   return setVoiceAudioMode('idle');
 }
 
+export function getVoiceAudioMode(): VoiceAudioMode {
+  return 'idle';
+}
+
+export async function reactivateRealtimeVoiceSession() {}
+
+export function getVoiceSessionStatus() {
+  return '';
+}
+
+export async function readAudioSessionState() {
+  return 'n/a';
+}
+
+export async function drainAudioSessionEvents(): Promise<string[]> {
+  return [];
+}
+
 export function isRealtimeVoiceSessionActive() {
   return false;
+}
+
+let realtimeVoiceOwner: (() => void) | null = null;
+
+export function registerRealtimeVoiceOwner(end: () => void) {
+  realtimeVoiceOwner = end;
+  return () => {
+    if (realtimeVoiceOwner === end) realtimeVoiceOwner = null;
+  };
+}
+
+export function endRealtimeVoiceSession() {
+  const end = realtimeVoiceOwner;
+  realtimeVoiceOwner = null;
+  end?.();
 }

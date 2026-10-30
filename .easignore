@@ -41,7 +41,8 @@ __tests__/
 .maestro/
 design-system/
 store/
-scripts/
+scripts/*
+!scripts/patch-query-string-decoder.mjs
 website/
 README.md
 LICENSE

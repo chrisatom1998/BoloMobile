@@ -72,6 +72,7 @@ import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { PronunciationRecorder } from '../src/components/pronunciation-recorder';
 import { VoiceTurnButton } from '../src/components/voice-turn-button';
 import { speakText, stopSpeaking } from '../src/lib/speech';
+import { isRealtimeVoiceSessionActive, registerRealtimeVoiceOwner, resetVoiceAudioMode, setVoiceAudioMode } from '../src/lib/voice';
 import { checkPronunciation, reportGeneratedMessage } from '../src/services/bolo-api';
 import { lightColors } from '../src/theme';
 
@@ -167,6 +168,59 @@ describe('voice control lifecycle', () => {
 
     submission.resolve();
     await waitFor(() => expect(onActivityChange).toHaveBeenLastCalledWith(false));
+  });
+
+  describe('with a minimized live call holding the audio session', () => {
+    afterEach(async () => {
+      await resetVoiceAudioMode();
+    });
+
+    it('leaves the call alone when a lesson recorder mounts and unmounts without recording', async () => {
+      await setVoiceAudioMode('realtime');
+      const endCall = jest.fn();
+      const unregister = registerRealtimeVoiceOwner(endCall);
+      const view = await render(<VoiceTurnButton idleLabel="Record pronunciation" onRecordingReady={jest.fn()} />);
+      await view.unmount();
+      await act(async () => {
+        for (let index = 0; index < 6; index += 1) await Promise.resolve();
+      });
+
+      expect(endCall).not.toHaveBeenCalled();
+      expect(isRealtimeVoiceSessionActive()).toBe(true);
+      unregister();
+    });
+
+    it('leaves the call alone when microphone permission is denied', async () => {
+      requestPermissionMock.mockResolvedValue({ granted: false } as Awaited<ReturnType<typeof requestRecordingPermissionsAsync>>);
+      await setVoiceAudioMode('realtime');
+      const endCall = jest.fn();
+      const unregister = registerRealtimeVoiceOwner(endCall);
+      const view = await render(<VoiceTurnButton idleLabel="Record pronunciation" onRecordingReady={jest.fn()} />);
+      await fireEvent.press(view.getByLabelText('Record pronunciation'));
+      await waitFor(() => expect(view.getByText(/Microphone access is required/u)).toBeTruthy());
+
+      expect(endCall).not.toHaveBeenCalled();
+      expect(isRealtimeVoiceSessionActive()).toBe(true);
+      unregister();
+      await view.unmount();
+    });
+
+    it('ends the call before taking the microphone for a pronunciation recording', async () => {
+      await setVoiceAudioMode('realtime');
+      const order: string[] = [];
+      const endCall = jest.fn(() => { order.push('end call'); });
+      const unregister = registerRealtimeVoiceOwner(endCall);
+      expoAudio.setAudioModeAsync.mockImplementation(async (mode: { allowsRecording?: boolean; interruptionMode?: string }) => {
+        if (mode.allowsRecording && !mode.interruptionMode) order.push('recording mode');
+      });
+      const view = await render(<VoiceTurnButton idleLabel="Record pronunciation" onRecordingReady={jest.fn()} />);
+      await fireEvent.press(view.getByLabelText('Record pronunciation'));
+      await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
+
+      expect(order).toEqual(['end call', 'recording mode']);
+      unregister();
+      await view.unmount();
+    });
   });
 
   it('discards an active recording without submission when the app leaves the foreground', async () => {

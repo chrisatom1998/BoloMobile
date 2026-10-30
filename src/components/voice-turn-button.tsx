@@ -10,7 +10,7 @@ import { AppState, Linking, Platform, Pressable, Text, View } from 'react-native
 
 import { hapticStartRecording, hapticTap, hapticWarning } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
-import { resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { endRealtimeVoiceSession, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { deleteRecordingUri, readRecordingUri } from '@/lib/recording-file';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
@@ -34,6 +34,9 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
   const lifecycleRef = useRef(0);
   const foregroundWaiterRef = useRef<((active: boolean) => void) | null>(null);
   const recordingRef = useRef(false);
+  // True only while this recorder has put the shared session in recording mode, so it never
+  // resets a session another surface (a minimized live call) still owns.
+  const ownsAudioRef = useRef(false);
   const startingRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,6 +55,12 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
     });
   }, []);
 
+  const releaseAudio = useCallback(async () => {
+    if (!ownsAudioRef.current) return;
+    ownsAudioRef.current = false;
+    await resetVoiceAudioMode().catch(() => undefined);
+  }, []);
+
   const discardActiveRecording = useCallback(async () => {
     if (!recordingRef.current) return;
     recordingRef.current = false;
@@ -68,14 +77,14 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       } catch {
         // Cache cleanup is best-effort while the app is transitioning state.
       } finally {
-        await resetVoiceAudioMode().catch(() => undefined);
+        await releaseAudio();
         if (mountedRef.current) {
           setRecording(false);
           setError(FOREGROUND_EXIT_MESSAGE);
         }
       }
     }
-  }, [recorder]);
+  }, [recorder, releaseAudio]);
 
   const finish = useCallback(async () => {
     if (!recordingRef.current) return;
@@ -91,7 +100,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       try {
         await recorder.stop();
       } finally {
-        await resetVoiceAudioMode().catch(() => undefined);
+        await releaseAudio();
       }
       const uri = recorder.uri;
       if (!uri) throw new Error('The recording did not produce an audio file.');
@@ -112,7 +121,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
         if (mountedRef.current) setBusy(false);
       }
     }
-  }, [onRecordingReady, recorder]);
+  }, [onRecordingReady, recorder, releaseAudio]);
 
   const start = useCallback(async () => {
     if (disabled || busy || recordingRef.current || startingRef.current) return;
@@ -132,6 +141,10 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
       }
       setPermissionDenied(false);
       if (!isCurrentAttempt() || !await waitForForeground(lifecycle)) return;
+      // A minimized live call still holds the microphone. End it cleanly first, rather than
+      // switching the shared session under a call whose UI would still look connected.
+      endRealtimeVoiceSession();
+      ownsAudioRef.current = true;
       await setVoiceAudioMode('recording');
       releaseRecordingMode = true;
       if (!isCurrentAttempt() || !await waitForForeground(lifecycle)) return;
@@ -146,19 +159,19 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
     } catch (cause) {
       recordingRef.current = false;
       if (mountedRef.current) setRecording(false);
-      await resetVoiceAudioMode().catch(() => undefined);
+      await releaseAudio();
       if (mountedRef.current) {
         hapticWarning();
         setError(cause instanceof Error ? cause.message : 'Recording could not start.');
       }
     } finally {
       if (releaseRecordingMode) {
-        await resetVoiceAudioMode().catch(() => undefined);
+        await releaseAudio();
       }
       startingRef.current = false;
       if (mountedRef.current) setStarting(false);
     }
-  }, [busy, disabled, finish, recorder, waitForForeground]);
+  }, [busy, disabled, finish, recorder, releaseAudio, waitForForeground]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -180,11 +193,11 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
         } catch {
           // Native cleanup is best-effort during unmount.
         } finally {
-          await resetVoiceAudioMode().catch(() => undefined);
+          await releaseAudio();
         }
       })();
     };
-  }, [recorder]);
+  }, [recorder, releaseAudio]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {

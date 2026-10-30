@@ -25,6 +25,7 @@ import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus }
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { formatLiveDiagnostics, liveDiagnosticsEnabled, useLiveDiagnostics } from '@/lib/live-diagnostics';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
@@ -84,6 +85,7 @@ export default function LiveScreen() {
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
+  const liveDiagnostics = useLiveDiagnostics();
   const floatingAsha = useAshaVoiceSession();
   const floatingAshaRef = useRef(floatingAsha);
   useEffect(() => {
@@ -676,6 +678,7 @@ export default function LiveScreen() {
                     </View>
                     <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                     <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
+                    {liveDiagnosticsEnabled ? <Text selectable style={styles.diagnosticsLine} testID="live-diagnostics">{formatLiveDiagnostics(liveDiagnostics)}</Text> : null}
                   </View>
                 </View>
                 <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
@@ -847,6 +850,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   statusDotLive: { opacity: 1 },
   liveVoiceText: { color: c.gold, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1 },
   heroTitle: { minWidth: 0, maxWidth: 300, flexShrink: 1, color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
+  diagnosticsLine: { marginTop: 8, color: c.heroSubtle, fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }), fontSize: 10, lineHeight: 14, textAlign: 'center' },
   heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroSubtle, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   captionBlock: { alignSelf: 'center', gap: 10 },
   captionCard: { alignSelf: 'stretch', gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md },
