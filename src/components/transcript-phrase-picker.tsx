@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useSheetDismiss } from '@/components/sheet-exit';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
@@ -14,13 +15,16 @@ type TranscriptPhrasePickerProps = {
   clientId: string;
   message: ChatMessage;
   onClose: () => void;
+  /** Fires once the close animation has finished and the sheet can unmount. */
+  onDismissed?: () => void;
   onSave: (phrase: SavedPhrase) => void;
   reducedMotion?: boolean;
   selectedText?: string;
   sourceText?: string;
+  visible?: boolean;
 };
 
-export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText }: TranscriptPhrasePickerProps) {
+export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onDismissed, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText, visible = true }: TranscriptPhrasePickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
@@ -34,7 +38,25 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
+  const savedSessionRef = useRef(-1);
   const scrollRef = useRef<ScrollView>(null);
+  const [saving, setSaving] = useState(false);
+  const finishDismiss = useSheetDismiss(visible, onDismissed);
+  const openKey = `${message.id}\0${initialText}\0${initialSourceText ?? ''}`;
+  const [formSession, setFormSession] = useState({ key: openKey, open: visible, epoch: 0 });
+  if (visible && (formSession.key !== openKey || !formSession.open)) {
+    setFormSession({ key: openKey, open: true, epoch: formSession.epoch + 1 });
+    setSaving(false);
+    setBusy(false);
+    setError('');
+    setSelectedText(initialText);
+    setSourceText(initialSourceText?.trim() ?? '');
+    setHindi('');
+    setLatin('');
+    setEnglish('');
+  } else if (!visible && formSession.open) {
+    setFormSession({ ...formSession, open: false });
+  }
 
   useEffect(() => {
     mountedRef.current = true;
@@ -44,6 +66,11 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
       requestRef.current = null;
     };
   }, []);
+
+  useEffect(() => () => {
+    requestRef.current?.abort();
+    requestRef.current = null;
+  }, [formSession.epoch]);
 
   async function preparePhrase() {
     const text = selectedText.trim();
@@ -87,15 +114,17 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
     const normalizedLatin = latin.trim();
     const normalizedEnglish = english.trim();
     const normalizedHindi = hindi.trim();
-    if (!normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
+    if (savedSessionRef.current === formSession.epoch || !normalizedHindi || !normalizedLatin || !normalizedEnglish || busy) return;
+    savedSessionRef.current = formSession.epoch;
+    setSaving(true);
     onSave({ hi: normalizedHindi, latin: normalizedLatin, en: normalizedEnglish });
   }
 
   const canPrepare = aiConsent && selectedText.trim().length > 0 && !busy;
-  const canSave = hindi.trim().length > 0 && latin.trim().length > 0 && english.trim().length > 0 && !busy;
+  const canSave = !saving && hindi.trim().length > 0 && latin.trim().length > 0 && english.trim().length > 0 && !busy;
 
   return (
-    <Modal animationType={reducedMotion ? 'none' : 'slide'} onRequestClose={close} presentationStyle="pageSheet" visible>
+    <Modal animationType={reducedMotion ? 'fade' : 'slide'} onDismiss={finishDismiss} onRequestClose={close} presentationStyle="pageSheet" visible={visible}>
       <View style={[styles.screen, Platform.OS === 'android' && { paddingTop: insets.top }]}>
         <ScrollView ref={scrollRef} automaticallyAdjustKeyboardInsets contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
           <View style={styles.header}>

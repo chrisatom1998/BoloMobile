@@ -94,7 +94,12 @@ export default function LiveScreen() {
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
+  const [phraseSheetVisible, setPhraseSheetVisible] = useState(false);
+  const pendingPhraseAlertRef = useRef<{ session: number; title: string; message: string } | null>(null);
+  const phraseSheetSessionRef = useRef(0);
+  const closingPhraseSessionRef = useRef(0);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
+  const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
   const liveSnapshotIdsRef = useRef<string[]>([]);
   const practiced = useRef(false);
@@ -273,6 +278,7 @@ export default function LiveScreen() {
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
     selectedChatTextRef.current.clear();
+    setWordSheetVisible(false);
     setWordDefinitionPhrase(null);
     clearChatHistory();
   }, [clearChatHistory]);
@@ -300,7 +306,10 @@ export default function LiveScreen() {
     if (pendingClear) clearTimeout(pendingClear);
     selectionClearTimersRef.current.delete(message.id);
     selectedChatTextRef.current.delete(message.id);
+    phraseSheetSessionRef.current += 1;
+    pendingPhraseAlertRef.current = null;
     setPhraseMessage({ message, selectedText: selection?.text, sourceText: selection?.sourceText || message.text });
+    setPhraseSheetVisible(true);
   }, []);
 
   const confirmClearChat = useCallback(() => {
@@ -423,9 +432,31 @@ export default function LiveScreen() {
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
     if (!alreadySaved) togglePhrase(phrase);
-    setPhraseMessage(null);
-    setTimeout(() => showAppAlert(alreadySaved ? 'Phrase already saved' : 'Phrase saved', `${phrase.latin} — ${phrase.en}`), 0);
+    const session = phraseSheetSessionRef.current;
+    closingPhraseSessionRef.current = session;
+    pendingPhraseAlertRef.current = {
+      session,
+      title: alreadySaved ? 'Phrase already saved' : 'Phrase saved',
+      message: `${phrase.latin} — ${phrase.en}`,
+    };
+    setPhraseSheetVisible(false);
   }, [phrases, togglePhrase]);
+
+  const closePhraseSheet = useCallback(() => {
+    closingPhraseSessionRef.current = phraseSheetSessionRef.current;
+    setPhraseSheetVisible(false);
+  }, []);
+
+  const finishPhraseSheet = useCallback(() => {
+    if (closingPhraseSessionRef.current !== phraseSheetSessionRef.current) return;
+    setPhraseSheetVisible(false);
+    setPhraseMessage(null);
+    const pending = pendingPhraseAlertRef.current;
+    pendingPhraseAlertRef.current = null;
+    if (pending && pending.session === phraseSheetSessionRef.current) showAppAlert(pending.title, pending.message);
+  }, []);
+  const closeWordSheet = useCallback(() => setWordSheetVisible(false), []);
+  const finishWordSheet = useCallback(() => setWordDefinitionPhrase(null), []);
 
   const featuredPhrase = realtimeStatus === 'disconnected' && !hasTranscriptMessages ? (
     <View style={styles.featuredPhraseSection} testID="featured-phrase-section">
@@ -598,7 +629,7 @@ export default function LiveScreen() {
             isWelcome={item.id === welcome.id}
             message={item}
             onOpenPhrasePicker={openPhrasePicker}
-            onOpenWordDefinition={setWordDefinitionPhrase}
+            onOpenWordDefinition={(phrase) => { setWordDefinitionPhrase(phrase); setWordSheetVisible(true); }}
             onPlayReply={playReply}
             onReport={report}
             onSelectedText={rememberSelectedChatText}
@@ -659,8 +690,8 @@ export default function LiveScreen() {
         </ScrollView>
         <LiveComposer disabled={busy || realtimeLocked} onSend={sendText} styles={styles} />
       </View> : null}
-      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={() => setPhraseMessage(null)} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} /> : null}
-      {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={() => setWordDefinitionPhrase(null)} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={!!wordDefinitionPhrase} /> : null}
+      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
+      {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
     </KeyboardAvoidingView>
   );
 }

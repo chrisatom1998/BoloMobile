@@ -659,6 +659,19 @@ describe('SceneScreen primary journey', () => {
       phrase: 'एक चाय दीजिए।',
       visible: true,
     }));
+    const opened = mockWordDefinitionSheet.mock.calls.at(-1)?.[0] as { onClose: () => void; onDismissed: () => void };
+    await act(async () => opened.onClose());
+    expect(mockWordDefinitionSheet).toHaveBeenLastCalledWith(expect.objectContaining({
+      initialWord: 'एक',
+      phrase: 'एक चाय दीजिए।',
+      visible: false,
+    }));
+    const closing = mockWordDefinitionSheet.mock.calls.at(-1)?.[0] as { onDismissed: () => void };
+    await act(async () => closing.onDismissed());
+    expect(mockWordDefinitionSheet).toHaveBeenLastCalledWith(expect.objectContaining({
+      initialWord: null,
+      visible: false,
+    }));
   });
 
   it('renders AI playback failures as alerts and stops playback on unmount', async () => {

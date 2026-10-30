@@ -936,14 +936,43 @@ describe('live coaching state', () => {
     expect(view.getByLabelText('Romanized Hindi phrase').props.value).toBe('Aap kaise hain?');
     expect(view.getByLabelText('Hindi phrase').props.value).toBe('आप कैसे हैं?');
     expect(view.getByLabelText('English phrase meaning').props.value).toBe('How are you?');
-    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const save = view.getByRole('button', { name: 'Save phrase' });
+    await fireEvent.press(save);
+    await fireEvent.press(save);
 
     expect(appState.__togglePhraseMock).toHaveBeenCalledWith({
       hi: 'आप कैसे हैं?',
       latin: 'Aap kaise hain?',
       en: 'How are you?',
     });
+    expect(appState.__togglePhraseMock).toHaveBeenCalledTimes(1);
+    expect(alert).not.toHaveBeenCalled();
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Phrase saved', 'Aap kaise hain? — How are you?'));
     expect(view.queryByLabelText('Selected transcript text')).toBeNull();
+    alert.mockRestore();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('keeps a newly opened phrase sheet when the previous close finishes late', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Hello there.'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    await fireEvent.press(view.getByLabelText('Save transcript phrase: Namaste'));
+
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Namaste');
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Namaste');
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
     await view.unmount();
     await flushMicrotasks();
   });

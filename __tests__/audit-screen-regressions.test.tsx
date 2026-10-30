@@ -131,6 +131,44 @@ describe('previously uncovered audit screens', () => {
     expect(onSave).toHaveBeenCalledWith(phrase);
   });
 
+  it('resets a saved phrase sheet when another message opens it', async () => {
+    const onSave = jest.fn();
+    const view = await render(
+      <TranscriptPhrasePicker
+        aiConsent
+        clientId="client-12345678"
+        message={{ id: 'message-1', role: 'asha', text: 'First phrase' }}
+        onClose={jest.fn()}
+        onSave={onSave}
+        visible
+      />,
+    );
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    await view.rerender(
+      <TranscriptPhrasePicker
+        aiConsent
+        clientId="client-12345678"
+        message={{ id: 'message-2', role: 'asha', text: 'Second phrase' }}
+        onClose={jest.fn()}
+        onSave={onSave}
+        visible
+      />,
+    );
+
+    expect(view.getByLabelText('Selected transcript text').props.value).toBe('Second phrase');
+    expect(view.getByLabelText('Hindi phrase').props.value).toBe('');
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'धन्यवाद');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Dhanyavaad');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Thanks');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    expect(onSave).toHaveBeenCalledTimes(2);
+  });
+
   it('starts from only the excerpt highlighted in the chat message', async () => {
     const view = await render(
       <TranscriptPhrasePicker
