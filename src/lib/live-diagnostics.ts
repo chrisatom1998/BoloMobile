@@ -32,9 +32,17 @@ export type LiveDiagnostics = {
   micPeak: number;
   /** Audio direction in our SDP offer and the server's answer, e.g. "sendrecv/sendrecv". */
   sdpAudio: string;
+  /** The iOS audio session as sampled beside the mic level each second, not only at activation. */
+  sessionNow: string;
+  /**
+   * Audio-session changes since the call started, oldest first, each stamped "+Ns": every JS
+   * audio-mode transition and activation, and native route changes, interruptions and resets.
+   */
+  audioEvents: string[];
 };
 
 const RECENT_EVENT_LIMIT = 5;
+const AUDIO_EVENT_LIMIT = 8;
 
 const EMPTY: LiveDiagnostics = {
   permission: '?',
@@ -51,12 +59,15 @@ const EMPTY: LiveDiagnostics = {
   lastError: '',
   micPeak: 0,
   sdpAudio: '',
+  sessionNow: '',
+  audioEvents: [],
 };
 
 /** Preview and development builds only; app.config.js leaves this off for production. */
 export const liveDiagnosticsEnabled = Constants.expoConfig?.extra?.liveDiagnostics === true;
 
 let current: LiveDiagnostics = EMPTY;
+let startedAt = Date.now();
 const listeners = new Set<() => void>();
 
 export function updateLiveDiagnostics(patch: Partial<LiveDiagnostics>) {
@@ -69,7 +80,15 @@ export function updateLiveDiagnostics(patch: Partial<LiveDiagnostics>) {
 export function resetLiveDiagnostics() {
   if (!liveDiagnosticsEnabled) return;
   current = EMPTY;
+  startedAt = Date.now();
   listeners.forEach((listener) => listener());
+}
+
+/** Stamps an audio-session change with seconds since the call started, so it lines up with the mic level. */
+export function noteLiveAudioEvent(label: string) {
+  if (!liveDiagnosticsEnabled) return;
+  const seconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  updateLiveDiagnostics({ audioEvents: [...current.audioEvents, `+${seconds}s ${label}`].slice(-AUDIO_EVENT_LIMIT) });
 }
 
 export function countLiveEvent(type: string | undefined, errorMessage?: string) {
@@ -107,8 +126,10 @@ export function formatLiveDiagnostics(value: LiveDiagnostics) {
   return [
     `perm ${value.permission} | mode ${value.audioMode}${value.audioModeError ? ` (${value.audioModeError})` : ''}${value.audioSession ? ` | session ${value.audioSession}` : ''} | peer ${value.peerState}${value.sdpAudio ? ` | sdp ${value.sdpAudio}` : ''}`,
     `${track} | ${sent}`,
+    ...(value.sessionNow ? [`now ${value.sessionNow}`] : []),
     `events ${value.events} (you ${value.inputDeltas} / asha ${value.outputDeltas}) last ${value.lastEvent}`,
     ...(value.recentEvents.length ? [`recent ${value.recentEvents.join(' > ')}`] : []),
+    ...(value.audioEvents.length ? [`audio ${value.audioEvents.join(' > ')}`] : []),
     ...(value.lastError ? [`error ${value.lastError}`] : []),
   ].join('\n');
 }

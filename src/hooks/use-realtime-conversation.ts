@@ -3,13 +3,13 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
-import { countLiveEvent, liveDiagnosticsEnabled, recordLiveMicStats, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
+import { countLiveEvent, liveDiagnosticsEnabled, noteLiveAudioEvent, recordLiveMicStats, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
 import { createLiveToolExecutor,type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
 import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
 import { createRealtimePeerSession } from '@/lib/realtime-peer';
 import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
-import { getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
+import { drainAudioSessionEvents, getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, readAudioSessionState, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
@@ -370,6 +370,10 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     updateLiveDiagnostics({ peerState: status });
     const timer = setInterval(() => {
       void peerRef.current?.readMicStats?.().then(recordLiveMicStats, () => undefined);
+      // Sample the iOS audio session next to the mic level, and pick up any route change,
+      // interruption or media reset iOS posted since the last tick.
+      void readAudioSessionState().then((sessionNow) => updateLiveDiagnostics({ sessionNow }), () => undefined);
+      void drainAudioSessionEvents().then((events) => events.forEach(noteLiveAudioEvent), () => undefined);
     }, DIAGNOSTICS_POLL_MS);
     return () => clearInterval(timer);
   }, [status]);

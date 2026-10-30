@@ -83,10 +83,50 @@ describe('live voice diagnostics', () => {
     const text = formatLiveDiagnostics({
       permission: 'granted', audioMode: 'realtime', audioModeError: '', audioSession: '', peerState: 'recording',
       mic: { trackEnabled: false, trackMuted: true, trackState: 'ended' }, events: 0, inputDeltas: 0, outputDeltas: 0,
-      lastEvent: '-', recentEvents: [], lastError: 'boom', micPeak: 0, sdpAudio: 'sendrecv/sendrecv',
+      lastEvent: '-', recentEvents: [], lastError: 'boom', micPeak: 0, sdpAudio: 'sendrecv/sendrecv', sessionNow: '', audioEvents: [],
     });
     expect(text).toContain('peer recording | sdp sendrecv/sendrecv');
     expect(text).toContain('track off/ended/muted | sent ?pkt ?B lvl ? peak 0.000 energy ?');
     expect(text).toContain('error boom');
+  });
+
+  it('shows the audio session sampled now, apart from the activation reading', () => {
+    const diagnostics = load(true);
+    diagnostics.updateLiveDiagnostics({ audioSession: 'PlayAndRecord/VoiceChat active in:iPhone Microphone' });
+    diagnostics.updateLiveDiagnostics({ sessionNow: 'Playback/Default in:no input app:active inMute:no 0ch' });
+
+    const text = formatLiveDiagnostics(diagnostics.getLiveDiagnostics());
+    expect(text).toContain('session PlayAndRecord/VoiceChat active in:iPhone Microphone');
+    expect(text).toContain('\nnow Playback/Default in:no input app:active inMute:no 0ch\n');
+  });
+
+  it('stamps audio-session changes with seconds since the call started and keeps the last eight', () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    const diagnostics = load(true);
+    diagnostics.resetLiveDiagnostics();
+    diagnostics.noteLiveAudioEvent('mode:realtime');
+    jest.setSystemTime(1_000_000 + 12_400);
+    diagnostics.noteLiveAudioEvent('route:categoryChange -> Playback/Default in:no input');
+
+    expect(formatLiveDiagnostics(diagnostics.getLiveDiagnostics()))
+      .toContain('audio +0s mode:realtime > +12s route:categoryChange -> Playback/Default in:no input');
+
+    for (let index = 0; index < 8; index += 1) diagnostics.noteLiveAudioEvent(`e${index}`);
+    const events = diagnostics.getLiveDiagnostics().audioEvents;
+    expect(events).toHaveLength(8);
+    expect(events[0]).toBe('+12s e0');
+    jest.useRealTimers();
+  });
+
+  it('starts the audio-event clock over for each new connection', () => {
+    jest.useFakeTimers({ now: 5_000 });
+    const diagnostics = load(true);
+    diagnostics.noteLiveAudioEvent('old');
+    jest.setSystemTime(65_000);
+    diagnostics.resetLiveDiagnostics();
+    diagnostics.noteLiveAudioEvent('mode:realtime');
+
+    expect(diagnostics.getLiveDiagnostics().audioEvents).toEqual(['+0s mode:realtime']);
+    jest.useRealTimers();
   });
 });

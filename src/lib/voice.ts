@@ -1,9 +1,11 @@
 import { setAudioModeAsync } from 'expo-audio';
 
+import { noteLiveAudioEvent } from '@/lib/live-diagnostics';
 import type { VoiceAudioMode } from '@/lib/voice-profile';
 import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '@/lib/voice-session';
 
 export { ASHA_VOICE_PROFILE, type VoiceAudioMode } from '@/lib/voice-profile';
+export { drainAudioSessionEvents, readAudioSessionState } from '@/lib/voice-session';
 
 /**
  * Audio routing has to be app-wide: Expo configures the native audio session,
@@ -61,6 +63,7 @@ async function assertVoiceChatSession() {
   } catch (cause) {
     voiceSessionStatus = `failed: ${cause instanceof Error ? cause.message.slice(0, 60) : 'unknown'}`;
   }
+  noteLiveAudioEvent(`activate ${voiceSessionStatus.split(' ')[0] ?? ''}`);
 }
 
 export function setVoiceAudioMode(mode: VoiceAudioMode) {
@@ -68,6 +71,9 @@ export function setVoiceAudioMode(mode: VoiceAudioMode) {
   // and a subsequent connection so an old setup cannot re-enable a closed call.
   const transition = audioModeTail.then(async () => {
     const realtime = isRealtimeMode(mode);
+    // Preview builds: a non-realtime mode applied under a live call is the prime suspect
+    // for a microphone that goes silent while packets keep flowing. Stamp every transition.
+    noteLiveAudioEvent(`mode:${mode}${isRealtimeMode(currentVoiceAudioMode) && !realtime ? ' (under live call)' : ''}`);
     if (!realtime && isRealtimeMode(currentVoiceAudioMode)) {
       await restoreDefaultAudioSessionMode().catch(() => undefined);
     }
@@ -100,6 +106,7 @@ export function resetVoiceAudioMode() {
  */
 export function reactivateRealtimeVoiceSession() {
   const transition = audioModeTail.then(async () => {
+    noteLiveAudioEvent('reactivate');
     if (isRealtimeMode(currentVoiceAudioMode)) await assertVoiceChatSession();
   });
   audioModeTail = transition.catch(() => undefined);

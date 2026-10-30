@@ -4,6 +4,8 @@ jest.mock('expo-audio', () => ({
 
 import { setAudioModeAsync } from 'expo-audio';
 
+import { noteLiveAudioEvent } from '@/lib/live-diagnostics';
+
 import {
   ASHA_VOICE_PROFILE,
   getVoiceSessionStatus,
@@ -15,10 +17,12 @@ import {
 import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '../src/lib/voice-session';
 
 jest.mock('@/lib/voice-session', () => ({ activateVoiceChatSession: jest.fn(), restoreDefaultAudioSessionMode: jest.fn() }));
+jest.mock('@/lib/live-diagnostics', () => ({ noteLiveAudioEvent: jest.fn() }));
 
 const setAudioModeMock = setAudioModeAsync as jest.MockedFunction<typeof setAudioModeAsync>;
 const activateMock = jest.mocked(activateVoiceChatSession);
 const restoreMock = jest.mocked(restoreDefaultAudioSessionMode);
+const noteAudioEventMock = jest.mocked(noteLiveAudioEvent);
 
 describe('Asha voice service', () => {
   beforeEach(() => {
@@ -54,6 +58,23 @@ describe('Asha voice service', () => {
       [{ allowsRecording: true, playsInSilentMode: true }],
       [{ allowsRecording: true, interruptionMode: 'doNotMix', playsInSilentMode: true, shouldRouteThroughEarpiece: false }],
       [{ allowsRecording: false, playsInSilentMode: true }],
+    ]);
+  });
+
+  it('stamps every audio-mode transition, flagging one applied under a live call', async () => {
+    await setVoiceAudioMode('realtime');
+    await setVoiceAudioMode('realtimePlayback');
+    await reactivateRealtimeVoiceSession();
+    await setVoiceAudioMode('playback');
+
+    expect(noteAudioEventMock.mock.calls.map(([label]) => label)).toEqual([
+      'mode:realtime',
+      'activate PlayAndRecord/VoiceChat',
+      'mode:realtimePlayback',
+      'activate PlayAndRecord/VoiceChat',
+      'reactivate',
+      'activate PlayAndRecord/VoiceChat',
+      'mode:playback (under live call)',
     ]);
   });
 

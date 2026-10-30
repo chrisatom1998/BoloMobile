@@ -4,3 +4,11 @@ export async function activateVoiceChatSession(): Promise<string> {
 }
 
 export async function restoreDefaultAudioSessionMode(): Promise<void> {}
+
+export async function readAudioSessionState(): Promise<string> {
+  return 'n/a';
+}
+
+export async function drainAudioSessionEvents(): Promise<string[]> {
+  return [];
+}

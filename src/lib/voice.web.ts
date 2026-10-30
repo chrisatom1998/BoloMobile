@@ -23,6 +23,14 @@ export function getVoiceSessionStatus() {
   return '';
 }
 
+export async function readAudioSessionState() {
+  return 'n/a';
+}
+
+export async function drainAudioSessionEvents(): Promise<string[]> {
+  return [];
+}
+
 export function isRealtimeVoiceSessionActive() {
   return false;
 }

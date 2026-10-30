@@ -4,6 +4,8 @@ import * as ExpoAudio from 'expo-audio';
 type BoloAudioSessionModule = {
   activateVoiceChat(): Promise<string>;
   restoreDefaultMode(): Promise<void>;
+  readSessionState(): Promise<string>;
+  drainSessionEvents(): Promise<string[]>;
 };
 
 const session = requireOptionalNativeModule<BoloAudioSessionModule>('BoloAudioSession');
@@ -40,6 +42,18 @@ export async function activateVoiceChatSession(): Promise<string> {
     return `active (no voiceChat module) ${notifyWebRtcSessionActivated()}`;
   }
   return 'native session module missing';
+}
+
+/** The audio session right now (category/mode, input, app state, input mute), for the debug line. */
+export async function readAudioSessionState(): Promise<string> {
+  if (!session || typeof session.readSessionState !== 'function') return 'native session module missing';
+  return session.readSessionState();
+}
+
+/** Route changes, interruptions and media resets since the last call, oldest first. */
+export async function drainAudioSessionEvents(): Promise<string[]> {
+  if (!session || typeof session.drainSessionEvents !== 'function') return [];
+  return session.drainSessionEvents();
 }
 
 /** Drops the voiceChat mode once the live call ends so later recording is not stuck in it. */
