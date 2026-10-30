@@ -3,6 +3,7 @@ import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
+import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
@@ -28,6 +29,7 @@ export default function ReviewScreen() {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
+  const [recorderBusy, setRecorderBusy] = useState(false);
   const phrase = session[index];
 
   useEffect(() => () => { void stopSpeaking(); }, []);
@@ -38,6 +40,9 @@ export default function ReviewScreen() {
   function grade(remembered: boolean) {
     if (!phrase || gradedPhraseRef.current === phrase.hi) return;
     gradedPhraseRef.current = phrase.hi;
+    // The recorder clears its abort handle once feedback playback starts, so
+    // unmounting it does not stop coaching that is already speaking.
+    void stopSpeaking();
     if (!lockedSession) setLockedSession(session);
     clearAudioError();
     reviewPhrase(phrase.hi, remembered);
@@ -85,6 +90,8 @@ export default function ReviewScreen() {
   const showLatin = learnerProfile.scriptPreference !== 'devanagari';
   const mastery = phraseReviews[phrase.hi]?.mastery ?? 0;
   const canListen = aiConsent || hasOfflineSpeech(phrase.hi);
+  // Keep reference audio out of the microphone while a practice clip is recording or being checked.
+  const listenEnabled = canListen && !recorderBusy;
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.screen} testID="review-scroll">
@@ -98,8 +105,8 @@ export default function ReviewScreen() {
             {showHindi ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{phrase.hi}</Text> : null}
             {showLatin ? <Text style={styles.latin}>{learnerPhraseLatin(phrase.hi, phrase.latin)}</Text> : null}
             <View style={styles.audioRow}>
-              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase()} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
-              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} disabled={!canListen} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !canListen && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
             {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
@@ -107,6 +114,11 @@ export default function ReviewScreen() {
           <Pressable accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
         )}
       </View>
+      {revealed ? (
+        // Optional practice: grading never waits on a recording. Keying by card
+        // remounts the recorder so feedback never carries over to the next phrase.
+        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
+      ) : null}
       {revealed ? (
         <View style={styles.grades}>
           <Pressable accessibilityRole="button" onPress={() => grade(false)} style={[styles.gradeButton, styles.againButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
