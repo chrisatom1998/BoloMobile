@@ -56,6 +56,7 @@ public final class BoloAudioSessionModule: Module {
         try session.setCategory(.playAndRecord, mode: .voiceChat, options: options)
       }
       try session.setActive(true)
+      self.preferMonoBuiltInMic(session)
       return BoloAudioSessionModule.describe(session, activated: true)
     }
 
@@ -83,6 +84,38 @@ public final class BoloAudioSessionModule: Module {
     sessionEvents.append(event)
   }
 
+  /// The debug line showed the iPhone mic arriving as 4 channels with every sample at zero.
+  /// WebRTC captures mono, so ask for one channel from a single omnidirectional built-in mic
+  /// rather than the multi-mic array. Failures are recorded for the debug line, not thrown.
+  private func preferMonoBuiltInMic(_ session: AVAudioSession) {
+    // Only steer the built-in mic when it is already the input, so a headset keeps its mic.
+    if session.currentRoute.inputs.first?.portType == .builtInMic,
+      let builtIn = session.availableInputs?.first(where: { $0.portType == .builtInMic }) {
+      let sources = builtIn.dataSources ?? []
+      let source = sources.first(where: { $0.orientation == .front })
+        ?? sources.first(where: { $0.orientation == .bottom })
+      do {
+        if let source {
+          if source.supportedPolarPatterns?.contains(.omnidirectional) == true {
+            try source.setPreferredPolarPattern(.omnidirectional)
+          }
+          try builtIn.setPreferredDataSource(source)
+        }
+        try session.setPreferredInput(builtIn)
+      } catch {
+        record("audio:micSource failed \(error.localizedDescription)")
+      }
+    }
+    if session.maximumInputNumberOfChannels >= 1 {
+      do {
+        try session.setPreferredInputNumberOfChannels(1)
+      } catch {
+        record("audio:chans failed \(error.localizedDescription)")
+      }
+    }
+    record("audio:chans:\(session.isInputAvailable ? session.inputNumberOfChannels : 0)")
+  }
+
   /// A category change, interruption or media-server reset under a running WebRTC call is the
   /// usual way an iPhone microphone goes silent while packets keep flowing. Record each one.
   private func observeSessionNotifications() {
@@ -105,6 +138,11 @@ public final class BoloAudioSessionModule: Module {
       let category = session.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")
       let mode = session.mode.rawValue.replacingOccurrences(of: "AVAudioSessionMode", with: "")
       self?.record("route:\(reason) -> \(category)/\(mode) in:\(input)")
+      // A new route can bring back the multi-channel mic. Our own preference change reports
+      // as a configuration change, so skip that one to avoid re-applying in a loop.
+      if reason != "configChange" && session.isInputAvailable && session.inputNumberOfChannels > 1 {
+        self?.preferMonoBuiltInMic(session)
+      }
     })
     observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { [weak self] notification in
       let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt ?? 0
