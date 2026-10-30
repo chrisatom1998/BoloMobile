@@ -23,11 +23,23 @@ tags:
     visibilityPercentage: 80
     centerElement: false
     timeout: 45000
-- tapOn: "Check microphone access"
-# Fresh iOS simulators can still present the system prompt after preset permissions.
+# The row can be on screen before it accepts a tap. Retry until the hierarchy
+# changes, and give the permission sheet up to 30s to settle.
 - tapOn:
-    text: "Don.t Allow"
-    optional: true
+    text: "Check microphone access"
+    retryTapIfNoChange: true
+    waitToSettleTimeoutMs: 30000
+# Preset microphone: deny usually skips the prompt. A fresh simulator can still
+# show it a moment later, which covers the denied copy until Don't Allow is tapped.
+- extendedWaitUntil:
+    visible: "Don.t Allow|Microphone access is off.*"
+    timeout: 20000
+- runFlow:
+    label: Dismiss the microphone prompt when iOS shows it
+    when:
+      visible: "Don.t Allow"
+    commands:
+      - tapOn: "Don.t Allow"
 - scrollUntilVisible:
     element:
       text: "Microphone access is off. Typed and written practice still work."

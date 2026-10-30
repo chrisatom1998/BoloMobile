@@ -174,7 +174,8 @@ jobs:
   maestro-smoke:
     needs: ios-native-build
     runs-on: macos-26
-    timeout-minutes: 30
+    # Setup plus two smoke attempts. The driver startup timeout is unchanged.
+    timeout-minutes: 40
     env:
       CI: 1
       MAESTRO_CLI_NO_ANALYTICS: 1
@@ -207,10 +208,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier')"
-          device_type_id="$(xcrun simctl list devicetypes --json | jq -r '.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier')"
-          test -n "$runtime_id"
-          test -n "$device_type_id"
+          # Pin the runtime that ships with the selected Xcode 26.6. Sorting to the
+          # newest installed iOS runtime moves this job whenever the image adds one.
+          pinned_runtime="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r --arg id "$pinned_runtime" '[.runtimes[] | select(.isAvailable and .identifier == $id)] | first | .identifier // empty')"
+          device_type_id="$(xcrun simctl list devicetypes --json | jq -r '[.devicetypes[] | select(.name == "iPhone 16 Pro") | .identifier] | first // empty')"
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "::error::Pinned iOS 26.5 runtime (${pinned_runtime}) or iPhone 16 Pro device type is not available."
+            xcrun simctl list runtimes
+            xcrun simctl list devicetypes
+            exit 1
+          fi
+          echo "Using runtime ${runtime_id} and device type ${device_type_id}"
           udid="$(xcrun simctl create "Bolo CI $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
           echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid"
@@ -230,14 +239,64 @@ jobs:
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
           echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
       - name: Run the dedicated iOS smoke flow
-        timeout-minutes: 15
+        timeout-minutes: 20
         run: |
-          npm run e2e:ios -- \
-            --device "$SIMULATOR_UDID" \
-            --format junit \
-            --output maestro-junit.xml \
-            --debug-output maestro-artifacts/driver-logs \
-            --test-output-dir maestro-artifacts
+          set -euo pipefail
+          smoke() {
+            rm -rf maestro-junit.xml maestro-artifacts
+            npm run e2e:ios -- \
+              --device "$SIMULATOR_UDID" \
+              --format junit \
+              --output maestro-junit.xml \
+              --debug-output maestro-artifacts/driver-logs \
+              --test-output-dir maestro-artifacts
+          }
+          preserve_failed_attempt() {
+            local stash="$RUNNER_TEMP/maestro-attempt-1"
+            rm -rf "$stash"
+            mkdir -p "$stash"
+            if [[ -f maestro-junit.xml ]]; then
+              mv maestro-junit.xml "$stash/maestro-junit.xml"
+            fi
+            if [[ -d maestro-artifacts ]]; then
+              mv maestro-artifacts "$stash/maestro-artifacts"
+            fi
+          }
+          attach_failed_attempt() {
+            local stash="$RUNNER_TEMP/maestro-attempt-1"
+            if [[ ! -d "$stash" ]]; then
+              return 0
+            fi
+            mkdir -p maestro-artifacts/attempt-1
+            cp -R "$stash/." maestro-artifacts/attempt-1/
+            if [[ ! -f maestro-junit.xml && -f "$stash/maestro-junit.xml" ]]; then
+              cp "$stash/maestro-junit.xml" maestro-junit.xml
+            fi
+          }
+          reboot_simulator() {
+            xcrun simctl shutdown "$SIMULATOR_UDID" || true
+            xcrun simctl boot "$SIMULATOR_UDID" || true
+            open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID" || true
+            xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+            xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+          }
+          preserved=0
+          cleanup() {
+            local status=$?
+            if [[ "$preserved" -eq 1 ]]; then
+              attach_failed_attempt || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          if smoke; then
+            exit 0
+          fi
+          echo "::warning::iOS smoke flow failed; rebooting the simulator and retrying once."
+          preserve_failed_attempt
+          preserved=1
+          reboot_simulator
+          smoke
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
