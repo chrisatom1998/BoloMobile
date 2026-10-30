@@ -34,7 +34,15 @@ export default function ReviewScreen() {
   const phraseHi = phrase?.hi;
   const mastery = phraseHi ? (phraseReviews[phraseHi]?.mastery ?? 0) : 0;
   const canListen = !!phraseHi && (aiConsent || hasOfflineSpeech(phraseHi));
-  const listenFirst = mastery >= 3 && canListen;
+  const phraseListenFirst = mastery >= 3 && canListen;
+  // Lock listen-first to the phrase as it was presented. Consent from the
+  // recorder gate must not flip a fallback English card into listen-first.
+  const [presentedPhraseHi, setPresentedPhraseHi] = useState(phraseHi);
+  const [listenFirst, setListenFirst] = useState(phraseListenFirst);
+  if (phraseHi !== presentedPhraseHi) {
+    setPresentedPhraseHi(phraseHi);
+    setListenFirst(phraseListenFirst);
+  }
 
   useEffect(() => () => { void stopSpeaking(); }, []);
   useEffect(() => {

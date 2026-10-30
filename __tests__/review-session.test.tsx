@@ -220,6 +220,35 @@ describe('ReviewScreen session stability', () => {
     await gradeCurrentPhrase(view, false);
     expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, false);
   });
+
+  it('keeps a high-mastery fallback card in place when consent is granted mid-review', async () => {
+    mockAppState.aiConsent = false;
+    mockAppState.duePhrases = [phraseA, phraseB];
+    mockAppState.phraseReviews = {
+      [phraseA.hi]: { mastery: 3 },
+      [phraseB.hi]: { mastery: 3 },
+    };
+    const view = await render(<ReviewScreen />);
+
+    expect(view.getByText('Say this naturally')).toBeTruthy();
+    expect(view.getByText(phraseA.en)).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+
+    mockAppState.aiConsent = true;
+    await view.rerender(<ReviewScreen />);
+
+    expect(view.getByText('Say this naturally')).toBeTruthy();
+    expect(view.getByText(phraseA.en)).toBeTruthy();
+    expect(view.queryByText('Listen, then say what it means')).toBeNull();
+    expect(speakTextMock).not.toHaveBeenCalled();
+    expect(view.getByLabelText(`Hear ${phraseA.hi}`).props.accessibilityState).toEqual({ disabled: false });
+
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(view.getByText('Listen, then say what it means')).toBeTruthy();
+    expect(view.queryByText(phraseB.en)).toBeNull();
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseB.hi, undefined, 1);
+  });
 });
 
 describe('ReviewScreen say it aloud', () => {
