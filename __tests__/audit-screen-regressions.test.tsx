@@ -50,6 +50,7 @@ jest.mock('@/lib/speech', () => ({
 jest.mock('@/lib/observability', () => ({
   getObservabilitySnapshot: jest.fn(async () => mockDiagnosticsSnapshot),
   observe: jest.fn(),
+  observeOncePerSession: jest.fn(),
 }));
 
 jest.mock('@/services/bolo-api', () => ({
