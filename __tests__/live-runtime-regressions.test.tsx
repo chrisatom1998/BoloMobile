@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
-import { Alert, Animated, AppState, Dimensions, FlatList, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
+import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
@@ -28,8 +28,14 @@ const longDevanagariReply = 'आप कैसे हैं? धन्यवा�
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
-  useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(effect, [effect]),
+  useFocusEffect: (effect: () => void | (() => void)) => mockReact.useEffect(() => {
+    const cleanup = effect();
+    mockBlurScreen = cleanup ?? (() => {});
+    return cleanup;
+  }, [effect]),
 }));
+
+let mockBlurScreen = () => {};
 
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null, setStatusBarStyle: jest.fn() }));
 
@@ -401,7 +407,9 @@ describe('live consent layout', () => {
     languageTabs.forEach((tab) => expect(tab.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true })));
     expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
     expect(view.getByText('Live voice unlocks here')).toBeTruthy();
-    expect(view.getAllByText('Enable live practice to see captions.')).toHaveLength(2);
+    // Resting captions are collapsed, so screen readers skip them too.
+    expect(view.getAllByText('Enable live practice to see captions.', { includeHiddenElements: true })).toHaveLength(2);
+    expect(view.queryAllByText('Enable live practice to see captions.')).toHaveLength(0);
     expect(view.queryByLabelText('Open chat history')).toBeNull();
     expect(view.queryByText('Ask Asha')).toBeNull();
     expect(view.queryByLabelText('Message Asha')).toBeNull();
@@ -444,6 +452,37 @@ describe('immersive live conversation design', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockReducedMotion = false;
+  });
+
+  it('ignores a keyboard opened on another tab', async () => {
+    const listeners = new Map<string, () => void>();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: () => void) => {
+      listeners.set(event, listener);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const view = await render(<LiveScreen />);
+    try {
+      await act(async () => { mockBlurScreen(); });
+      scrollToEnd.mockClear();
+      await act(async () => {
+        expectDefined(listeners.get('keyboardWillShow'))();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    } finally {
+      jest.restoreAllMocks();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('hides resting caption placeholders from screen readers', async () => {
+    const view = await render(<LiveScreen />);
+    expect(view.getByTestId('live-input-caption', { includeHiddenElements: true }).props.children).toBe('Your words appear here as you speak.');
+    expect(view.queryByTestId('live-input-caption', { includeHiddenElements: false })).toBeNull();
+    expect(view.queryByTestId('live-output-caption', { includeHiddenElements: false })).toBeNull();
+    await view.unmount();
   });
 
   it('does not auto-scroll when the voice header grows during a live session', async () => {
@@ -503,10 +542,10 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('Tap Asha to start talking with her.')).toBeTruthy();
     expect(view.getAllByText(/Tap Asha/u)).toHaveLength(1);
     expect(view.queryByText(/orb/u)).toBeNull();
-    const captionBadge = view.getByTestId('live-caption-label-badge');
-    expect(within(captionBadge).getByText('You')).toBeTruthy();
+    const captionBadge = view.getByTestId('live-caption-label-badge', { includeHiddenElements: true });
+    expect(within(captionBadge).getByText('You', { includeHiddenElements: true })).toBeTruthy();
     expect(view.queryByText('LIVE')).toBeNull();
-    expect(view.getByText('Your words appear here as you speak.').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByText('Your words appear here as you speak.', { includeHiddenElements: true }).props.accessibilityLiveRegion).toBe('polite');
     expect(view.queryByText('Tap the orb and ask anything in Hindi.')).toBeNull();
     expect(view.queryByText('Live Asha caption')).toBeNull();
     expect(view.queryByLabelText('Open text phrase help')).toBeNull();

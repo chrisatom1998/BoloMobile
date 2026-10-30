@@ -50,7 +50,7 @@ function sharesSpeaker(left: ChatMessage | undefined, right: ChatMessage | undef
   return left.role === right.role;
 }
 
-function CaptionReveal({ children, mode, style }: { children: ReactNode; mode: EffectiveMotion; style: StyleProp<ViewStyle> }) {
+function CaptionReveal({ children, hidden = false, mode, style }: { children: ReactNode; hidden?: boolean; mode: EffectiveMotion; style: StyleProp<ViewStyle> }) {
   const [progress] = useState(() => new Animated.Value(mode === 'reduced' ? 1 : 0));
 
   useEffect(() => {
@@ -72,7 +72,7 @@ function CaptionReveal({ children, mode, style }: { children: ReactNode; mode: E
 
   const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [mode === 'lively' ? 16 : 6, 0], extrapolate: 'clamp' });
   return (
-    <Animated.View style={[style, { opacity: progress, transform: [{ translateY }] }]}>
+    <Animated.View accessibilityElementsHidden={hidden} importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'} style={[style, { opacity: progress, transform: [{ translateY }] }]}>
       {children}
     </Animated.View>
   );
@@ -256,10 +256,11 @@ export default function LiveScreen() {
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    // Tabs stay mounted, so a keyboard opened on another tab must not move this thread.
     const showSubscription = Keyboard.addListener(showEvent, () => {
       if (!mountedRef.current) return;
       setKeyboardVisible(true);
-      scrollTailIntoView(!reducedMotion);
+      if (screenFocused) scrollTailIntoView(!reducedMotion);
     });
     const hideSubscription = Keyboard.addListener(hideEvent, () => {
       if (mountedRef.current) setKeyboardVisible(false);
@@ -268,7 +269,7 @@ export default function LiveScreen() {
       showSubscription.remove();
       hideSubscription.remove();
     };
-  }, [reducedMotion, scrollTailIntoView]);
+  }, [reducedMotion, screenFocused, scrollTailIntoView]);
 
   // A new message follows the tail when the reader is already near it. The first
   // scrollToEnd can run before layout, so retry once on the next frame.
@@ -751,7 +752,7 @@ export default function LiveScreen() {
                 </View>
               </View>
             </View>
-            <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, realtimeStatus === 'disconnected' && styles.captionBlockCompact, captionsAtRest && styles.captionBlockIdle, { width: heroContentWidth }]}>
+            <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} hidden={captionsAtRest} mode={motionMode} style={[styles.captionBlock, realtimeStatus === 'disconnected' && styles.captionBlockCompact, captionsAtRest && styles.captionBlockIdle, { width: heroContentWidth }]}>
               <View style={[styles.captionCard, styles.captionCardYou, realtimeStatus === 'disconnected' && styles.captionCardCompact]}>
                 <View style={[styles.captionLabelBadge, realtimeStatus === 'disconnected' && styles.captionLabelBadgeCompact]} testID="live-caption-label-badge">
                   <Text style={styles.captionLabel}>You</Text>
@@ -847,7 +848,7 @@ export default function LiveScreen() {
         ) : null}
       />
 
-      {aiConsent ? <View style={[styles.composer, { paddingBottom: keyboardVisible ? spacing.sm : Math.max(spacing.md, insets.bottom + 52) }]}>
+      {aiConsent ? <View style={[styles.composer, { paddingBottom: Platform.OS === 'ios' && screenFocused && keyboardVisible ? spacing.sm : Math.max(spacing.md, insets.bottom + 52) }]}>
         {busy && pendingUserMessage ? (
           <View style={styles.thinkingRow}>
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
