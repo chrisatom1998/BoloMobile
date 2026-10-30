@@ -1,6 +1,6 @@
 import { useRouter, type Href } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject, type PropsWithChildren } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FullWindowOverlay } from 'react-native-screens';
 
@@ -85,6 +85,19 @@ function FloatingAshaBubbleSlot(props: ComponentProps<typeof FloatingAshaBubble>
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { FloatingAshaBubble: Bubble } = require('@/components/floating-asha-bubble') as typeof import('@/components/floating-asha-bubble');
   return <Bubble {...props} />;
+}
+
+/**
+ * iOS: a separate window above the native tab bar and stack. Elsewhere FullWindowOverlay is a plain
+ * in-flow View that would push the bubble below the screen, so use an absolute layer instead.
+ */
+function FloatingAshaLayer({ children }: PropsWithChildren) {
+  const layer = (
+    <GestureHandlerRootView pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+      {children}
+    </GestureHandlerRootView>
+  );
+  return Platform.OS === 'ios' ? <FullWindowOverlay>{layer}</FullWindowOverlay> : layer;
 }
 
 function FloatingAshaRouter({ navigateRef }: { navigateRef: MutableRefObject<() => void> }) {
@@ -246,16 +259,14 @@ function EnabledAshaVoiceSession({ children }: PropsWithChildren) {
         {ready && minimized ? (
           // iOS: a separate window above the native tab bar and stack, so the bubble stays on top
           // across tab switches and receives its own touches. It needs its own gesture root.
-          <FullWindowOverlay>
-            <GestureHandlerRootView pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-              <FloatingAshaBubbleSlot
-                isPlaying={voice?.isPlaying ?? false}
-                onEnd={endSession}
-                onExpand={expand}
-                status={voice?.status ?? 'disconnected'}
-              />
-            </GestureHandlerRootView>
-          </FullWindowOverlay>
+          <FloatingAshaLayer>
+            <FloatingAshaBubbleSlot
+              isPlaying={voice?.isPlaying ?? false}
+              onEnd={endSession}
+              onExpand={expand}
+              status={voice?.status ?? 'disconnected'}
+            />
+          </FloatingAshaLayer>
         ) : null}
       </View>
     </AshaVoiceSessionContext.Provider>
