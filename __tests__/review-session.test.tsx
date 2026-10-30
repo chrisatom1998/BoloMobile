@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockRouterReplace = jest.fn();
 
@@ -8,8 +8,32 @@ jest.mock('expo-router', () => ({
 
 jest.mock('lucide-react-native', () => ({
   Check: () => null,
+  Flag: () => null,
   RotateCcw: () => null,
+  ShieldCheck: () => null,
+  Sparkles: () => null,
   Volume2: () => null,
+}));
+
+// Stands in for the native recorder: one tap reports activity and hands over a finished clip.
+jest.mock('@/components/voice-turn-button', () => {
+  const { createElement } = jest.requireActual('react') as typeof import('react');
+  const { Pressable, Text } = jest.requireActual('react-native') as typeof import('react-native');
+  return {
+    VoiceTurnButton: ({ idleLabel, onActivityChange, onRecordingReady }: Parameters<typeof import('../src/components/voice-turn-button').VoiceTurnButton>[0]) => createElement(Pressable, {
+      accessibilityLabel: idleLabel,
+      accessibilityRole: 'button',
+      onPress: () => {
+        onActivityChange?.(true);
+        void onRecordingReady({ audioBase64: 'YXVkaW8=', mimeType: 'audio/mp4' }).finally(() => onActivityChange?.(false));
+      },
+    }, createElement(Text, null, idleLabel)),
+  };
+});
+
+jest.mock('@/services/bolo-api', () => ({
+  checkPronunciation: jest.fn(),
+  reportGeneratedMessage: jest.fn(),
 }));
 
 jest.mock('@/lib/haptics', () => ({
@@ -17,7 +41,7 @@ jest.mock('@/lib/haptics', () => ({
   hapticWarning: jest.fn(),
 }));
 
-jest.mock('@/lib/observability', () => ({ observe: jest.fn() }));
+jest.mock('@/lib/observability', () => ({ observe: jest.fn(), observeOncePerSession: jest.fn() }));
 
 jest.mock('@/lib/speech', () => ({
   hasOfflineSpeech: jest.fn(() => false),
@@ -33,6 +57,7 @@ const phraseC: Phrase = { en: 'One tea, please.', hi: 'एक चाय दी�
 
 const mockAppState = {
   aiConsent: true,
+  clientId: 'client-12345678',
   duePhrases: [] as Phrase[],
   learnerProfile: { scriptPreference: 'both' },
   phraseReviews: {} as Record<string, { mastery: number }>,
@@ -41,6 +66,7 @@ const mockAppState = {
   reviewPhrase: jest.fn((hi: string, remembered: boolean) => {
     if (remembered) mockAppState.duePhrases = mockAppState.duePhrases.filter((phrase) => phrase.hi !== hi);
   }),
+  setAiConsent: jest.fn(async () => true),
 };
 
 jest.mock('@/state/app-state', () => ({
@@ -49,9 +75,11 @@ jest.mock('@/state/app-state', () => ({
 
 import ReviewScreen from '../src/app/review';
 import { hasOfflineSpeech, speakText } from '../src/lib/speech';
+import { checkPronunciation } from '../src/services/bolo-api';
 
 const hasOfflineSpeechMock = hasOfflineSpeech as jest.MockedFunction<typeof hasOfflineSpeech>;
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
+const checkPronunciationMock = checkPronunciation as jest.MockedFunction<typeof checkPronunciation>;
 
 async function gradeCurrentPhrase(view: Awaited<ReturnType<typeof render>>, remembered: boolean) {
   await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
@@ -67,6 +95,7 @@ describe('ReviewScreen session stability', () => {
     mockAppState.phraseReviews = {};
     hasOfflineSpeechMock.mockReturnValue(false);
     speakTextMock.mockResolvedValue();
+    checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'namaste', feedback: 'Keep the first vowel short.' });
   });
 
   it('reviews every due phrase exactly once even as grading shrinks the due list', async () => {
@@ -127,5 +156,79 @@ describe('ReviewScreen session stability', () => {
     await view.rerender(<ReviewScreen />);
     await fireEvent.press(view.getByLabelText(`Hear ${phraseA.hi}`));
     expect(await view.findByText('Audio unavailable.')).toBeTruthy();
+  });
+});
+
+describe('ReviewScreen say it aloud', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAppState.aiConsent = true;
+    mockAppState.duePhrases = [phraseA, phraseB];
+    mockAppState.phrases = [phraseA, phraseB];
+    mockAppState.phraseReviews = {};
+    hasOfflineSpeechMock.mockReturnValue(true);
+    speakTextMock.mockResolvedValue();
+    checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'namaste', feedback: 'Keep the first vowel short.' });
+  });
+
+  it('offers recording only after Reveal, shows feedback, and resets on the next card', async () => {
+    const view = await render(<ReviewScreen />);
+    expect(view.queryByLabelText('Record pronunciation')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+
+    expect(await view.findByText('Keep the first vowel short.')).toBeTruthy();
+    expect(checkPronunciationMock).toHaveBeenCalledWith(expect.objectContaining({ target: phraseA }), expect.any(Object));
+
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, true);
+    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.queryByLabelText('Record pronunciation')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByLabelText('Record pronunciation')).toBeTruthy();
+    expect(view.queryByText('Keep the first vowel short.')).toBeNull();
+  });
+
+  it('grades without a recording', async () => {
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByLabelText('Record pronunciation')).toBeTruthy();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Again' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, false);
+    expect(checkPronunciationMock).not.toHaveBeenCalled();
+    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+  });
+
+  it('keeps the recorder behind the AI consent gate while grading still works', async () => {
+    mockAppState.aiConsent = false;
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+
+    expect(view.getByText('Before using Asha')).toBeTruthy();
+    expect(view.queryByLabelText('Record pronunciation')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'I agree and want to continue' }));
+    expect(mockAppState.setAiConsent).toHaveBeenCalledWith(true);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, true);
+    expect(checkPronunciationMock).not.toHaveBeenCalled();
+  });
+
+  it('pauses Listen while a practice clip is being checked', async () => {
+    let finish!: (value: Awaited<ReturnType<typeof checkPronunciation>>) => void;
+    checkPronunciationMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await waitFor(() => expect(view.getByLabelText(`Hear ${phraseA.hi}`).props.accessibilityState).toEqual({ disabled: true }));
+
+    finish({ outcome: 'speech', transcript: 'namaste', feedback: 'Nice and clear.' });
+    expect(await view.findByText('Nice and clear.')).toBeTruthy();
+    expect(view.getByLabelText(`Hear ${phraseA.hi}`).props.accessibilityState).toEqual({ disabled: false });
   });
 });
