@@ -179,7 +179,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
   });
 
-  it('auto-plays each listen-first card once and returns a forgotten phrase to normal review', async () => {
+  it('mixes speak-first and listen-first cards and returns a forgotten phrase to speak-first', async () => {
     const today = dateKey();
     asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste, chai]));
     asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
@@ -188,9 +188,9 @@ describe('ReviewScreen spaced-repetition journey', () => {
     }));
     const view = await renderReview();
     await waitFor(() => expect(view.getByText('Mastery 3/5')).toBeTruthy());
-    expect(view.queryByText(namaste.en)).toBeNull();
-    expect(speakTextMock).toHaveBeenCalledTimes(1);
-    expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
+    expect(view.getByText(namaste.en)).toBeTruthy();
+    expect(view.getByText('Say it in Hindi')).toBeTruthy();
+    expect(speakTextMock).not.toHaveBeenCalled();
 
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     expect(view.getByText(namaste.en)).toBeTruthy();
@@ -198,21 +198,21 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(readReviews(view)[namaste.hi]?.mastery).toBe(2);
     expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
     expect(view.queryByText(chai.en)).toBeNull();
-    expect(speakTextMock).toHaveBeenCalledTimes(2);
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
     expect(speakTextMock).toHaveBeenLastCalledWith(chai.hi, undefined, 1);
 
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(view.getByText('1 of 2 remembered')).toBeTruthy();
     expect(readReviews(view)[chai.hi]).toEqual(expect.objectContaining({ mastery: 4, intervalDays: 14 }));
-    expect(speakTextMock).toHaveBeenCalledTimes(2);
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
 
     await view.unmount();
     const nextSession = await renderReview();
     await waitFor(() => expect(nextSession.getByText('Mastery 2/5')).toBeTruthy());
     expect(nextSession.getByText(namaste.en)).toBeTruthy();
-    expect(nextSession.getByText('Say this naturally')).toBeTruthy();
-    expect(speakTextMock).toHaveBeenCalledTimes(2);
+    expect(nextSession.getByText('Say it in Hindi')).toBeTruthy();
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps raising mastery across repeated correct reviews', async () => {
@@ -233,6 +233,34 @@ describe('ReviewScreen spaced-repetition journey', () => {
       correctReviews: 3,
       totalReviews: 3,
     })));
+  });
+
+  it.each([true, false])('applies the real recall schedule with audio before Reveal = %s', async (beforeReveal) => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 2, correctReviews: 2, totalReviews: 2 },
+    }));
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
+    if (beforeReveal) await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    if (!beforeReveal) await fireEvent.press(view.getByLabelText(`Hear ${namaste.hi}`));
+    expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
+      mastery: beforeReveal ? 1 : 3,
+      intervalDays: beforeReveal ? 0 : 7,
+      correctReviews: beforeReveal ? 2 : 3,
+      totalReviews: 3,
+      ...(beforeReveal ? { dueAt: today } : {}),
+    }));
+    expect(view.getByText(`${beforeReveal ? 0 : 1} of 1 remembered`)).toBeTruthy();
+    await waitFor(() => {
+      const persisted = JSON.parse(asyncStorage.__store.get(storageKeys.phraseReviews) ?? '{}') as Record<string, PhraseReview>;
+      expect(persisted[namaste.hi]).toEqual(readReviews(view)[namaste.hi]);
+    });
   });
 
   it('replays the revealed phrase at full and slow speed', async () => {

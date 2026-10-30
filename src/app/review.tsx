@@ -7,6 +7,7 @@ import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
+import { reviewCardMode } from '@/lib/learning';
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
@@ -21,6 +22,7 @@ export default function ReviewScreen() {
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const gradedPhraseRef = useRef<string | null>(null);
+  const supportedRecallRef = useRef(false);
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
   // advancing index. Lock the displayed session at the first grade instead of at
   // mount so a screen rendered before hydration still picks up the due list.
@@ -34,15 +36,15 @@ export default function ReviewScreen() {
   const phraseHi = phrase?.hi;
   const mastery = phraseHi ? (phraseReviews[phraseHi]?.mastery ?? 0) : 0;
   const canListen = !!phraseHi && (aiConsent || hasOfflineSpeech(phraseHi));
-  const phraseListenFirst = mastery >= 3 && canListen;
-  // Lock listen-first to the phrase as it was presented. Consent from the
-  // recorder gate must not flip a fallback English card into listen-first.
-  const [presentedPhraseHi, setPresentedPhraseHi] = useState(phraseHi);
-  const [listenFirst, setListenFirst] = useState(phraseListenFirst);
-  if (phraseHi !== presentedPhraseHi) {
-    setPresentedPhraseHi(phraseHi);
-    setListenFirst(phraseListenFirst);
+  // Choose the mix once per presented card. Granting consent can enable audio,
+  // but must not change an English prompt into listen-first mid-card.
+  const [presentedCard, setPresentedCard] = useState(() => ({
+    index, phraseHi, mode: reviewCardMode(mastery, index, canListen),
+  }));
+  if (index !== presentedCard.index || phraseHi !== presentedCard.phraseHi) {
+    setPresentedCard({ index, phraseHi, mode: reviewCardMode(mastery, index, canListen) });
   }
+  const listenFirst = presentedCard.mode === 'listen-first';
 
   useEffect(() => () => { void stopSpeaking(); }, []);
   useEffect(() => {
@@ -62,10 +64,14 @@ export default function ReviewScreen() {
     void stopSpeaking();
     if (!lockedSession) setLockedSession(session);
     clearAudioError();
-    reviewPhrase(phrase.hi, remembered);
-    if (remembered) hapticSuccess();
+    // Hearing the answer before a speak-first reveal is supported recall.
+    // Reuse Again's scheduling so it cannot raise mastery or the recall score.
+    const recalled = remembered && (listenFirst || !supportedRecallRef.current);
+    reviewPhrase(phrase.hi, recalled);
+    if (recalled) hapticSuccess();
     else hapticWarning();
-    if (remembered) setCorrect((value) => value + 1);
+    if (recalled) setCorrect((value) => value + 1);
+    supportedRecallRef.current = false;
     setRevealed(false);
     setIndex((value) => value + 1);
   }
@@ -77,7 +83,8 @@ export default function ReviewScreen() {
   }
 
   function playPhrase(playbackRate = 1) {
-    if (!phrase || (!aiConsent && !hasOfflineSpeech(phrase.hi))) return;
+    if (!phrase || !canListen || recorderBusy) return;
+    if (!listenFirst && !revealed) supportedRecallRef.current = true;
     void speak(phrase.hi, undefined, playbackRate);
   }
 
@@ -113,11 +120,11 @@ export default function ReviewScreen() {
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
       <View style={styles.card}>
-        <Text style={sharedStyles.eyebrow}>{listenFirst ? 'Listen, then say what it means' : 'Say this naturally'}</Text>
+        <Text style={sharedStyles.eyebrow}>{listenFirst ? 'Listen, then say what it means' : 'Say it in Hindi'}</Text>
         {!listenFirst || revealed ? <Text style={styles.prompt}>{phrase.en}</Text> : null}
-        {listenFirst && !revealed ? (
+        {!revealed ? (
           <View style={styles.audioRow}>
-            <Pressable accessibilityLabel="Replay phrase" accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Replay</Text></Pressable>
+            <Pressable accessibilityHint={listenFirst ? undefined : 'Hearing a hint counts as Again for scheduling, even if you tap Got it.'} accessibilityLabel={listenFirst ? 'Replay phrase' : 'Hear a hint'} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>{listenFirst ? 'Replay' : 'Hear a hint'}</Text></Pressable>
           </View>
         ) : null}
         {revealed ? (
