@@ -61,6 +61,7 @@ import OnboardingScreen from '../src/app/onboarding';
 import ProgressScreen, { createProgressStyles } from '../src/app/(tabs)/progress';
 import ReviewScreen from '../src/app/review';
 import { TranscriptPhrasePicker } from '../src/components/transcript-phrase-picker';
+import { dateKey } from '../src/lib/storage';
 import { lightColors } from '../src/theme';
 
 const boloApi = jest.requireMock('../src/services/bolo-api') as { prepareSavedPhraseFromText: jest.Mock };
@@ -249,6 +250,21 @@ describe('previously uncovered audit screens', () => {
     expect(view.queryByText('Your Hindi is taking root.')).toBeNull();
     expect(view.queryByText('Your garden starts with one small turn.')).toBeNull();
     expect(view.getByText('Last 7 days')).toBeTruthy();
+    expect(view.getByText('बोलो', { includeHiddenElements: true }).props['aria-hidden']).toBe(true);
+    for (const bar of view.getAllByTestId('progress-day-bar')) {
+      expect(StyleSheet.flatten(bar.props.style)).toMatchObject({ height: 0, minHeight: 0 });
+    }
+  });
+
+  it('caps a practiced day at the full bar and leaves zero-minute days empty', async () => {
+    mockAppState.practiceHistory = [{ date: dateKey(), seconds: 90, correct: 1, answers: 1, reviews: 0 }];
+    const view = await render(<ProgressScreen />);
+    const bars = view.getAllByTestId('progress-day-bar').map((bar) => StyleSheet.flatten(bar.props.style));
+    const filled = bars.filter((style) => style.height !== 0);
+    expect(filled).toHaveLength(1);
+    expect(parseFloat(String(filled[0]?.height))).toBeLessThanOrEqual(100);
+    expect(filled[0]?.backgroundColor).toBe(lightColors.gold);
+    expect(bars.filter((style) => style.height === 0)).toHaveLength(6);
   });
 
   it('folds progress stats into one row and shows a dash for accuracy before any answers', async () => {

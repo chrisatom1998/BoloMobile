@@ -129,7 +129,7 @@ export default function ProgressScreen() {
         </View>
 
         <View style={styles.weekCard}>
-          <Text accessible={false} numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
+          <Text accessibilityElementsHidden accessible={false} aria-hidden importantForAccessibility="no-hide-descendants" numberOfLines={1} style={styles.weekWatermark}>बोलो</Text>
           <View style={styles.weekHeading}>
             <View style={styles.weekHeadingCopy}>
               <Text style={styles.weekEyebrow}>Last 7 days</Text>
@@ -152,10 +152,18 @@ export default function ProgressScreen() {
             {week.map((day, index) => {
               const minutes = Math.round(day.seconds / 60);
               const today = index === week.length - 1;
+              // A zero-minute day used to keep the 8-point minimum bar, so the
+              // chart disagreed with its own "0" label. Cap real days at 100%.
+              const barPercent = minutes <= 0 ? 0 : Math.min(100, Math.max(6, minutes / maxMinutes * 100));
               return (
                 <View key={day.date} style={styles.barColumn}>
                   <Text style={[styles.barValue, today && styles.barValueToday]}>{minutes}</Text>
-                  <View style={styles.barTrack}><View style={[styles.bar, today && styles.barToday, { height: `${Math.max(6, minutes / maxMinutes * 100)}%` }]} /></View>
+                  <View style={styles.barTrack}>
+                    <View
+                      style={[styles.bar, minutes > 0 && today && styles.barToday, minutes > 0 ? { height: `${barPercent}%` } : styles.barEmpty]}
+                      testID="progress-day-bar"
+                    />
+                  </View>
                   <Text style={[styles.day, today && styles.dayToday]}>{new Date(`${day.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'narrow' })}</Text>
                 </View>
               );
@@ -255,6 +263,7 @@ export const createProgressStyles = (c: ThemeColors) => ({
   barValueToday: { color: c.white, fontWeight: '700' },
   barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
   bar: { width: '100%', minHeight: 8, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
+  barEmpty: { height: 0, minHeight: 0 },
   barToday: { backgroundColor: c.gold },
   day: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontWeight: '600' },
   dayToday: { color: c.white },
