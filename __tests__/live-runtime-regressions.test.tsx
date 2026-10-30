@@ -249,9 +249,13 @@ jest.mock('@/hooks/use-motion-preference', () => ({
   }),
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
-}));
+jest.mock('react-native-safe-area-context', () => {
+  const { View } = jest.requireActual('react-native');
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+  };
+});
 
 let mockAiConsent = true;
 
@@ -421,6 +425,32 @@ describe('live consent layout', () => {
     });
 
     expect(scrollToEnd).not.toHaveBeenCalled();
+    await view.unmount();
+  }, 20_000);
+});
+
+describe('live composer bottom inset', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('measures the tab bar inset natively on iOS and drops it while the keyboard is open', async () => {
+    const listeners = new Map<string, () => void>();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: () => void) => {
+      listeners.set(event, listener);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+    const view = await render(<LiveScreen />);
+    const composerArea = () => view.getByTestId('live-composer-area');
+
+    expect(composerArea().props.edges).toEqual({ bottom: 'additive' });
+    expect(StyleSheet.flatten(composerArea().props.style).paddingBottom).toBe(spacing.sm);
+
+    await act(async () => { expectDefined(listeners.get('keyboardWillShow'))(); });
+    expect(composerArea().props.edges).toEqual({});
+
+    await act(async () => { expectDefined(listeners.get('keyboardWillHide'))(); });
+    expect(composerArea().props.edges).toEqual({ bottom: 'additive' });
     await view.unmount();
   }, 20_000);
 });

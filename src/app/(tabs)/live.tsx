@@ -5,7 +5,7 @@ import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { AlertCircle, Lock, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/components/asha-minimize-control';
@@ -849,7 +849,15 @@ export default function LiveScreen() {
         ) : null}
       />
 
-      {aiConsent ? <View style={[styles.composer, { paddingBottom: Platform.OS === 'ios' && screenFocused && keyboardVisible ? spacing.sm : Math.max(spacing.md, insets.bottom + 52) }]}>
+      {/* On iOS the screen runs under the native tab bar, which the root safe-area
+          insets don't include. A native SafeAreaView measures this view's own
+          bottom inset, tab bar included. The keyboard covers the tab bar and
+          KeyboardAvoidingView already lifts the composer, so drop the inset then. */}
+      {aiConsent ? <SafeAreaView
+        edges={Platform.OS === 'ios' && !(screenFocused && keyboardVisible) ? { bottom: 'additive' } : {}}
+        style={[styles.composer, Platform.OS === 'ios' ? { paddingBottom: spacing.sm } : { paddingBottom: Math.max(spacing.md, insets.bottom + 52) }]}
+        testID="live-composer-area"
+      >
         {busy && pendingUserMessage ? (
           <View style={styles.thinkingRow}>
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -894,7 +902,7 @@ export default function LiveScreen() {
           ))}
         </ScrollView>
         <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
-      </View> : null}
+      </SafeAreaView> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
       {floatingAsha.minimized ? <AshaMinimizedCover onExpand={floatingAsha.expand} statusLabel={aiConsent ? statusKicker : 'LIVE VOICE'} /> : null}
