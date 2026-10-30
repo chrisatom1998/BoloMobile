@@ -168,8 +168,51 @@ describe('ReviewScreen spaced-repetition journey', () => {
     await waitFor(() => expect(view.getByText('Phrase 1 of 2')).toBeTruthy());
 
     expect(view.getByText('Mastery 1/5')).toBeTruthy();
+    expect(speakTextMock).not.toHaveBeenCalled();
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     expect(view.getByText(chai.hi)).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText('Listen, then say what it means')).toBeTruthy();
+    expect(view.queryByText(namaste.en)).toBeNull();
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
+    expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
+  });
+
+  it('auto-plays each listen-first card once and returns a forgotten phrase to normal review', async () => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste, chai]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 3 },
+      [chai.hi]: { ...defaultPhraseReview(today), mastery: 3 },
+    }));
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Mastery 3/5')).toBeTruthy());
+    expect(view.queryByText(namaste.en)).toBeNull();
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
+    expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByText(namaste.en)).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Again' }));
+    expect(readReviews(view)[namaste.hi]?.mastery).toBe(2);
+    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.queryByText(chai.en)).toBeNull();
+    expect(speakTextMock).toHaveBeenCalledTimes(2);
+    expect(speakTextMock).toHaveBeenLastCalledWith(chai.hi, undefined, 1);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(view.getByText('1 of 2 remembered')).toBeTruthy();
+    expect(readReviews(view)[chai.hi]).toEqual(expect.objectContaining({ mastery: 4, intervalDays: 14 }));
+    expect(speakTextMock).toHaveBeenCalledTimes(2);
+
+    await view.unmount();
+    const nextSession = await renderReview();
+    await waitFor(() => expect(nextSession.getByText('Mastery 2/5')).toBeTruthy());
+    expect(nextSession.getByText(namaste.en)).toBeTruthy();
+    expect(nextSession.getByText('Say this naturally')).toBeTruthy();
+    expect(speakTextMock).toHaveBeenCalledTimes(2);
   });
 
   it('keeps raising mastery across repeated correct reviews', async () => {

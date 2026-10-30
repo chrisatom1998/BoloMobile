@@ -74,11 +74,12 @@ jest.mock('@/state/app-state', () => ({
 }));
 
 import ReviewScreen from '../src/app/review';
-import { hasOfflineSpeech, speakText } from '../src/lib/speech';
+import { hasOfflineSpeech, speakText, stopSpeaking } from '../src/lib/speech';
 import { checkPronunciation } from '../src/services/bolo-api';
 
 const hasOfflineSpeechMock = hasOfflineSpeech as jest.MockedFunction<typeof hasOfflineSpeech>;
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
+const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
 const checkPronunciationMock = checkPronunciation as jest.MockedFunction<typeof checkPronunciation>;
 
 async function gradeCurrentPhrase(view: Awaited<ReturnType<typeof render>>, remembered: boolean) {
@@ -157,6 +158,68 @@ describe('ReviewScreen session stability', () => {
     await fireEvent.press(view.getByLabelText(`Hear ${phraseA.hi}`));
     expect(await view.findByText('Audio unavailable.')).toBeTruthy();
   });
+
+  it.each([3, 4, 5])('auto-plays mastery %i with offline audio and hides all phrase text until Reveal', async (mastery) => {
+    mockAppState.aiConsent = false;
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery } };
+    hasOfflineSpeechMock.mockReturnValue(true);
+    const view = await render(<ReviewScreen />);
+
+    expect(view.getByText('Listen, then say what it means')).toBeTruthy();
+    expect(view.queryByText(phraseA.en)).toBeNull();
+    expect(view.queryByText(phraseA.hi)).toBeNull();
+    expect(view.queryByText(/namaste/i)).toBeNull();
+    expect(view.queryByLabelText(`Hear ${phraseA.hi}`)).toBeNull();
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Replay phrase' }));
+    expect(speakTextMock).toHaveBeenCalledTimes(2);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    expect(view.getByText(phraseA.en)).toBeTruthy();
+    expect(view.getByText(phraseA.hi)).toBeTruthy();
+    expect(view.getByText(/namaste/i)).toBeTruthy();
+    expect(speakTextMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses connected audio with consent and lets the learner retry an auto-play failure', async () => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery: 3 } };
+    speakTextMock.mockRejectedValueOnce(new Error('Audio unavailable.'));
+    const view = await render(<ReviewScreen />);
+
+    expect(await view.findByText('Audio unavailable.')).toBeTruthy();
+    expect(view.queryByText(phraseA.en)).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Replay phrase' }));
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
+    expect(view.queryByText('Audio unavailable.')).toBeNull();
+  });
+
+  it.each([0, 1, 2])('keeps mastery %i as an English prompt without auto-play', async (mastery) => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery } };
+    hasOfflineSpeechMock.mockReturnValue(true);
+    const view = await render(<ReviewScreen />);
+
+    expect(view.getByText('Say this naturally')).toBeTruthy();
+    expect(view.getByText(phraseA.en)).toBeTruthy();
+    expect(view.queryByText(phraseA.hi)).toBeNull();
+    expect(view.queryByRole('button', { name: 'Replay phrase' })).toBeNull();
+    expect(speakTextMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the normal card at high mastery without offline audio or consent', async () => {
+    mockAppState.aiConsent = false;
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery: 3 } };
+    const view = await render(<ReviewScreen />);
+
+    expect(view.getByText('Say this naturally')).toBeTruthy();
+    expect(view.getByText(phraseA.en)).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Replay phrase' })).toBeNull();
+    expect(speakTextMock).not.toHaveBeenCalled();
+    await gradeCurrentPhrase(view, false);
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, false);
+  });
 });
 
 describe('ReviewScreen say it aloud', () => {
@@ -171,7 +234,8 @@ describe('ReviewScreen say it aloud', () => {
     checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'namaste', feedback: 'Keep the first vowel short.' });
   });
 
-  it('offers recording only after Reveal, shows feedback, and resets on the next card', async () => {
+  it.each([0, 3])('offers recording only after Reveal, shows feedback, and resets on the next card (mastery %i)', async (mastery) => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery } };
     const view = await render(<ReviewScreen />);
     expect(view.queryByLabelText('Record pronunciation')).toBeNull();
 
@@ -191,7 +255,8 @@ describe('ReviewScreen say it aloud', () => {
     expect(view.queryByText('Keep the first vowel short.')).toBeNull();
   });
 
-  it('grades without a recording', async () => {
+  it.each([0, 3])('grades without a recording (mastery %i)', async (mastery) => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery } };
     const view = await render(<ReviewScreen />);
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     expect(view.getByLabelText('Record pronunciation')).toBeTruthy();
@@ -218,7 +283,8 @@ describe('ReviewScreen say it aloud', () => {
     expect(checkPronunciationMock).not.toHaveBeenCalled();
   });
 
-  it('pauses Listen while a practice clip is being checked', async () => {
+  it.each([0, 3])('pauses Listen while a practice clip is being checked (mastery %i)', async (mastery) => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery } };
     let finish!: (value: Awaited<ReturnType<typeof checkPronunciation>>) => void;
     checkPronunciationMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const view = await render(<ReviewScreen />);
@@ -230,5 +296,24 @@ describe('ReviewScreen say it aloud', () => {
     finish({ outcome: 'speech', transcript: 'namaste', feedback: 'Nice and clear.' });
     expect(await view.findByText('Nice and clear.')).toBeTruthy();
     expect(view.getByLabelText(`Hear ${phraseA.hi}`).props.accessibilityState).toEqual({ disabled: false });
+  });
+
+  it.each([
+    { mastery: 0, remembered: false }, { mastery: 0, remembered: true },
+    { mastery: 3, remembered: false }, { mastery: 3, remembered: true },
+  ])('stops pronunciation feedback when grading mastery $mastery as remembered=$remembered', async ({ mastery, remembered }) => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery } };
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    expect(await view.findByText('Keep the first vowel short.')).toBeTruthy();
+    expect(speakTextMock).toHaveBeenLastCalledWith('Keep the first vowel short.', expect.any(AbortSignal));
+    const stopsBeforeGrading = stopSpeakingMock.mock.calls.length;
+
+    await fireEvent.press(view.getByRole('button', { name: remembered ? 'Got it' : 'Again' }));
+
+    expect(stopSpeakingMock).toHaveBeenCalledTimes(stopsBeforeGrading + 1);
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, remembered);
+    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
   });
 });

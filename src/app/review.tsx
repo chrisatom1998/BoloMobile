@@ -31,8 +31,17 @@ export default function ReviewScreen() {
   const [correct, setCorrect] = useState(0);
   const [recorderBusy, setRecorderBusy] = useState(false);
   const phrase = session[index];
+  const phraseHi = phrase?.hi;
+  const mastery = phraseHi ? (phraseReviews[phraseHi]?.mastery ?? 0) : 0;
+  const canListen = !!phraseHi && (aiConsent || hasOfflineSpeech(phraseHi));
+  const listenFirst = mastery >= 3 && canListen;
 
   useEffect(() => () => { void stopSpeaking(); }, []);
+  useEffect(() => {
+    // Depend on the phrase text, not the re-derived session array, so revealing
+    // the answer or checking pronunciation never restarts the reference audio.
+    if (listenFirst && phraseHi) void speak(phraseHi, undefined, 1);
+  }, [listenFirst, phraseHi, speak]);
   useEffect(() => {
     if (session.length > 0 && index >= session.length) observe('review_completed');
   }, [index, session.length]);
@@ -88,8 +97,6 @@ export default function ReviewScreen() {
 
   const showHindi = learnerProfile.scriptPreference !== 'latin';
   const showLatin = learnerProfile.scriptPreference !== 'devanagari';
-  const mastery = phraseReviews[phrase.hi]?.mastery ?? 0;
-  const canListen = aiConsent || hasOfflineSpeech(phrase.hi);
   // Keep reference audio out of the microphone while a practice clip is recording or being checked.
   const listenEnabled = canListen && !recorderBusy;
 
@@ -98,8 +105,13 @@ export default function ReviewScreen() {
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
       <View style={styles.card}>
-        <Text style={sharedStyles.eyebrow}>Say this naturally</Text>
-        <Text style={styles.prompt}>{phrase.en}</Text>
+        <Text style={sharedStyles.eyebrow}>{listenFirst ? 'Listen, then say what it means' : 'Say this naturally'}</Text>
+        {!listenFirst || revealed ? <Text style={styles.prompt}>{phrase.en}</Text> : null}
+        {listenFirst && !revealed ? (
+          <View style={styles.audioRow}>
+            <Pressable accessibilityLabel="Replay phrase" accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Replay</Text></Pressable>
+          </View>
+        ) : null}
         {revealed ? (
           <View style={styles.answer}>
             {showHindi ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{phrase.hi}</Text> : null}
@@ -108,11 +120,11 @@ export default function ReviewScreen() {
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
-            {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
         ) : (
           <Pressable accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
         )}
+        {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
       </View>
       {revealed ? (
         // Optional practice: grading never waits on a recording. Keying by card
