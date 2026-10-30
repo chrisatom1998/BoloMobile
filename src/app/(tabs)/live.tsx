@@ -8,6 +8,7 @@ import { Animated, AppState, FlatList, KeyboardAvoidingView, Linking, Platform, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/components/asha-minimize-control';
 import { ChatMessageRow } from '@/components/chat-message-row';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { LiveComposer } from '@/components/live-composer';
@@ -29,6 +30,7 @@ import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
+import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
 import { displayFont, hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
@@ -82,6 +84,11 @@ export default function LiveScreen() {
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
+  const floatingAsha = useAshaVoiceSession();
+  const floatingAshaRef = useRef(floatingAsha);
+  useEffect(() => {
+    floatingAshaRef.current = floatingAsha;
+  }, [floatingAsha]);
   const liveSession = useAshaLiveSession();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
@@ -90,7 +97,8 @@ export default function LiveScreen() {
   const [error, setError] = useState('');
   const [liveAshaTranscript, setLiveAshaTranscript] = useState('');
   const [liveUserTranscript, setLiveUserTranscript] = useState('');
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>('disconnected');
+  const resumedStatus = floatingAsha.available ? floatingAsha.status : 'disconnected';
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>(resumedStatus);
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
@@ -101,11 +109,13 @@ export default function LiveScreen() {
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
-  const liveSnapshotIdsRef = useRef<string[]>([]);
+  const ownedSnapshotIds = useRef<string[]>([]);
+  const snapshotIdsRef = useRef(ownedSnapshotIds);
+  const sharedSnapshotIds = floatingAsha.snapshotIds;
   const practiced = useRef(false);
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
-  const realtimeStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
+  const realtimeStatusRef = useRef<RealtimeVoiceStatus>(resumedStatus);
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
   const selectionClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -182,6 +192,9 @@ export default function LiveScreen() {
     resetPracticeTimer();
     return () => {
       setScreenFocused(false);
+      const floating = floatingAshaRef.current;
+      // Minimizing sets a ref before the next paint, so this still sees it.
+      if (floating.available && floating.voice && !isFloatingAshaMinimized()) floating.voice.disconnect();
       if (practiced.current) addPracticeSeconds(elapsedSeconds());
       void stopSpeaking();
     };
@@ -245,8 +258,9 @@ export default function LiveScreen() {
     }));
     // The whole snapshot is revisable: late timestamped deltas can merge two
     // provisional rows. Remove prior snapshot IDs so no stale row survives.
-    replaceLiveChatSnapshot(liveSnapshotIdsRef.current, messages);
-    liveSnapshotIdsRef.current = messages.map((message) => message.id);
+    const ids = snapshotIdsRef.current;
+    replaceLiveChatSnapshot(ids.current, messages);
+    ids.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
     setLiveUserTranscript([...messages].reverse().find((row) => row.role === 'you')?.text ?? '');
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
@@ -375,7 +389,7 @@ export default function LiveScreen() {
     if (status === 'recording') setError('');
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
-      liveSnapshotIdsRef.current = [];
+      snapshotIdsRef.current.current = [];
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
@@ -395,6 +409,23 @@ export default function LiveScreen() {
     if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
     else setLiveUserTranscript(update.text);
   }, []);
+
+  const floatingAvailable = floatingAsha.available;
+  const setFloatingListeners = floatingAsha.setListeners;
+  useEffect(() => {
+    // Point at the provider's id list before listeners are registered. Assigning
+    // during render trips the refs rule, and this effect runs before snapshots.
+    snapshotIdsRef.current = floatingAvailable ? sharedSnapshotIds : ownedSnapshotIds;
+  }, [floatingAvailable, sharedSnapshotIds]);
+  useEffect(() => {
+    if (!floatingAvailable) return undefined;
+    setFloatingListeners({
+      onError: showRealtimeError,
+      onTranscriptChange: updateLiveTranscript,
+      onTranscriptSnapshot: recordLiveSnapshot,
+    });
+    return () => setFloatingListeners(null);
+  }, [floatingAvailable, recordLiveSnapshot, setFloatingListeners, showRealtimeError, updateLiveTranscript]);
   const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
       // The controller map is the in-flight record, so it also guards against a
@@ -509,20 +540,30 @@ export default function LiveScreen() {
         ListHeaderComponent={(
           <View>
             <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, largeTextLayout && styles.voiceHeroLarge, !aiConsent && styles.voiceHeroConsent, { paddingTop: insets.top + spacing.xl }]} testID="voice-conversation-hero">
-              <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
-                <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
-                  <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
-                    <JournalDisplay numberOfLines={reflowHeaderLayout ? undefined : 2} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked]}>Speak with Asha</JournalDisplay>
-                    <Text numberOfLines={reflowHeaderLayout ? undefined : 1} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Private Hindi coach · {responseLanguageName} replies</Text>
+              {(() => {
+                const topbar = (
+                  <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
+                    <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
+                      <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
+                        <JournalDisplay numberOfLines={reflowHeaderLayout ? undefined : 2} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked]}>Speak with Asha</JournalDisplay>
+                        <Text numberOfLines={reflowHeaderLayout ? undefined : 1} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Private Hindi coach · {responseLanguageName} replies</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
+                      {floatingAsha.available && aiConsent ? (
+                        <AshaMinimizeButton onPress={floatingAsha.minimize} />
+                      ) : null}
+                      <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
+                        <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
+                        <Text style={styles.privateText}>Private</Text>
+                      </View>
+                    </View>
                   </View>
-                </View>
-                <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
-                  <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-                    <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
-                    <Text style={styles.privateText}>Private</Text>
-                  </View>
-                </View>
-              </View>
+                );
+                return floatingAsha.available
+                  ? <AshaSwipeToMinimize onMinimize={floatingAsha.minimize}>{topbar}</AshaSwipeToMinimize>
+                  : topbar;
+              })()}
               {!aiConsent ? (
                 <View style={[styles.heroConsent, { width: heroContentWidth }]} testID="live-consent-section">
                   <AiConsentGate actionLabel="Enable live practice" title="Before your first live conversation" />
@@ -548,7 +589,18 @@ export default function LiveScreen() {
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
-                    <RealtimeVoiceButton key={`${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || !screenFocused || busy} motionMode={motionMode} onError={showRealtimeError} liveSession={liveSession} onTranscriptSnapshot={recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark">
+                    {floatingAsha.available && !floatingAsha.voice ? (
+                      <Image
+                        accessible={false}
+                        cachePolicy="memory-disk"
+                        contentFit="cover"
+                        source={ashaPortrait}
+                        style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
+                        testID="asha-header-portrait"
+                        transition={0}
+                      />
+                    ) : (
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -559,6 +611,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     </RealtimeVoiceButton>
+                    )}
                     {aiConsent ? (
                       <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
                         <MessageCircle color={colors.white} size={20} />
@@ -692,6 +745,7 @@ export default function LiveScreen() {
       </View> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
+      {floatingAsha.minimized ? <AshaMinimizedCover onExpand={floatingAsha.expand} statusLabel={aiConsent ? statusKicker : 'LIVE VOICE'} /> : null}
     </KeyboardAvoidingView>
   );
 }
