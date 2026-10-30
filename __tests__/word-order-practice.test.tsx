@@ -145,6 +145,22 @@ describe('WordOrderPractice', () => {
     expect(view.getByLabelText('Check my sentence').props.accessibilityState).toEqual({ disabled: true });
     expect(onResolve).not.toHaveBeenCalled();
   });
+
+  it('scores a correct sentence as correct even when its repeated words were tapped in swapped order', async () => {
+    const onResolve = jest.fn();
+    const view = await render(
+      <WordOrderPractice
+        onResolve={onResolve}
+        targetHi="धीरे धीरे बोलिए।"
+        targetLatin="Dheere dheere boliye."
+      />,
+    );
+
+    for (const index of [1, 0, 2]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
+    await fireEvent.press(view.getByTestId('scene-word-order-check'));
+
+    expect(onResolve).toHaveBeenCalledWith('correct');
+  });
 });
 
 it.each(['latin', 'devanagari', 'both'] as const)('labels tiles and the tray in %s while scoring canonical order', async (preference) => {
