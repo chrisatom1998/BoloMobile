@@ -7,7 +7,7 @@ import { bundledScenes, getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
 import { PlanIcon } from '@/components/plan-icon';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
-import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
+import { currentLessonPlan, getPlanProgress } from '@/lib/lesson-path';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
@@ -21,7 +21,6 @@ export default function LessonPlansScreen() {
   const { learnerProfile, sceneProgress } = useAppState();
   const selectedPlanId = Array.isArray(planId) ? planId[0] : planId;
   const selectedPlan = lessonPlans.find((plan) => plan.id === selectedPlanId);
-  const activeLesson = inProgressLesson(sceneProgress);
   const currentPlan = currentLessonPlan(sceneProgress, learnerProfile);
   const guidedLessonCount = lessonPlans.filter((plan) => plan.id !== 'creator').reduce((total, plan) => total + plan.lessonIds.length, 0);
 
@@ -42,11 +41,9 @@ export default function LessonPlansScreen() {
 
       <View accessibilityLabel={`${lessonPlans.length} ordered lesson plans`} style={styles.plans}>
         {lessonPlans.map((plan) => {
-          const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-          const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
+          const { completed, inProgressIndex: activeLessonIndex, nextIndex } = getPlanProgress(plan.id, sceneProgress);
           const percent = Math.round(completed / plan.lessonIds.length * 100);
           const isCurrent = plan.id === currentPlan.id;
-          const activeLessonIndex = activeLesson?.plan.id === plan.id ? plan.lessonIds.indexOf(activeLesson.lessonId) : -1;
           const status = isCurrent
             ? activeLessonIndex >= 0
               ? `In progress · Lesson ${activeLessonIndex + 1}`
@@ -141,20 +138,10 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
-  const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-  const nextLessonIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
-  const inProgressLessonId = plan.lessonIds
-    .filter((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0 && (sceneProgress[lessonId]?.lastBeatIndex ?? 0) > 0)
-    .reduce<string | undefined>((selected, candidate) => {
-      if (!selected) return candidate;
-      const candidateTime = Date.parse(sceneProgress[candidate]?.lastPracticedAt ?? '');
-      const selectedTime = Date.parse(sceneProgress[selected]?.lastPracticedAt ?? '');
-      const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-      const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-      return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-    }, undefined);
-  const currentIndex = inProgressLessonId
-    ? plan.lessonIds.indexOf(inProgressLessonId)
+  const { completed, inProgressIndex, nextIndex: nextLessonIndex } = getPlanProgress(plan.id, sceneProgress);
+  const inProgressLessonId = inProgressIndex >= 0 ? plan.lessonIds[inProgressIndex] : undefined;
+  const currentIndex = inProgressIndex >= 0
+    ? inProgressIndex
     : nextLessonIndex < 0
       ? plan.lessonIds.length - 1
       : nextLessonIndex;
@@ -206,10 +193,11 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
           const isComplete = (sceneProgress[lesson.id]?.completions ?? 0) > 0;
           const isCurrent = index === currentIndex;
           const isInProgress = lesson.id === inProgressLessonId;
-          const status = isComplete ? (isCurrent ? 'Ready to review' : 'Complete') : isInProgress ? 'In progress' : isCurrent ? 'Next lesson' : 'Up next';
+          const status = isComplete ? (isCurrent ? 'Ready to review' : 'Complete') : isInProgress ? 'In progress' : isCurrent ? 'Next lesson' : null;
+          const turns = `${lesson.beats.length} turns`;
           return (
             <PressableFeedback
-              accessibilityLabel={`${lesson.title}, lesson ${index + 1} of ${plan.lessonIds.length}, ${status}`}
+              accessibilityLabel={`${lesson.title}, lesson ${index + 1} of ${plan.lessonIds.length}, ${status ?? turns}`}
               accessibilityRole="button"
               key={lesson.id}
               testID={`lesson-${lesson.id}`}
@@ -218,8 +206,8 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
             >
               <Text style={[styles.lessonNumberText, isComplete && styles.lessonNumberTextComplete, isCurrent && styles.lessonNumberTextCurrent]}>{String(index + 1).padStart(2, '0')}</Text>
               <View style={styles.lessonCopy}>
-                <Text style={styles.lessonStatus}>{status} · {lesson.beats.length} turns</Text>
-                <Text style={styles.lessonTitle}>{lesson.title}</Text>
+                <Text style={[styles.lessonStatus, !status && styles.lessonStatusLater]}>{status ? `${status} · ${turns}` : turns}</Text>
+                <Text style={[styles.lessonTitle, !status && styles.lessonTitleLater]}>{lesson.title}</Text>
                 <Text style={styles.lessonSubtitle}>{lesson.subtitle}</Text>
               </View>
               <Text style={styles.lessonArrow}>→</Text>
@@ -262,7 +250,9 @@ const useStyles = makeStyles((c) => ({
   lessonNumberTextCurrent: { color: c.ink },
   lessonCopy: { minWidth: 0, flex: 1, gap: 2 },
   lessonStatus: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
+  lessonStatusLater: { color: c.mutedSoft },
   lessonTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 18, lineHeight: 23, fontWeight: '700' },
+  lessonTitleLater: { color: c.muted },
   lessonSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
   lessonArrow: { color: c.forestText, fontSize: 22, fontWeight: '900' },
   planCard: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm },

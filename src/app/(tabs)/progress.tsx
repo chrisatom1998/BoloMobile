@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
-import { selectNextLesson } from '@/lib/lesson-path';
+import { getPlanProgress, selectNextLesson } from '@/lib/lesson-path';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
@@ -63,8 +63,8 @@ export default function ProgressScreen() {
   }, [learnerProfile, sceneProgress]);
   // Only plans the learner has started, plus the current one; the full catalog lives in All plans.
   const planProgress = useMemo(() => lessonPlans.map((plan) => {
-    const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-    return { completed, id: plan.id, percent: Math.round(completed / plan.lessonIds.length * 100), title: plan.title, total: plan.lessonIds.length };
+    const { completed, total } = getPlanProgress(plan.id, sceneProgress);
+    return { completed, id: plan.id, percent: Math.round(completed / total * 100), title: plan.title, total };
   }).filter((plan) => plan.completed > 0 || plan.id === lessonFocus.planId), [lessonFocus.planId, sceneProgress]);
   const weekActivityLabel = reviewedThisWeek > 0
     ? `${reviewedThisWeek} phrase review${reviewedThisWeek === 1 ? '' : 's'}`
@@ -78,7 +78,7 @@ export default function ProgressScreen() {
   const stats = [
     { accessibilityLabel: `${streak} day practice streak`, key: 'streak', label: 'day streak', value: String(streak) },
     { accessibilityLabel: `${phrases.length} phrase${phrases.length === 1 ? '' : 's'} saved`, key: 'phrases', label: 'phrases', value: String(phrases.length) },
-    { accessibilityLabel: `${completedScenes} lesson${completedScenes === 1 ? '' : 's'} finished`, key: 'scenes', label: 'lessons', value: String(completedScenes) },
+    { accessibilityLabel: `${completedScenes} lesson${completedScenes === 1 ? '' : 's'} finished`, key: 'scenes', label: completedScenes === 1 ? 'lesson' : 'lessons', value: String(completedScenes) },
     // No answered turns yet: a dash, not a misleading 0%.
     answeredTurns > 0
       ? { accessibilityLabel: `${accuracy} percent answer accuracy`, key: 'accuracy', label: 'accuracy', value: `${accuracy}%` }

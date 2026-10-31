@@ -11,7 +11,7 @@ import { MotionReveal } from '@/components/motion';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
-import { selectNextLesson } from '@/lib/lesson-path';
+import { getPlanProgress, selectNextLesson } from '@/lib/lesson-path';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
@@ -312,14 +312,10 @@ export default function HomeScreen() {
         data={currentPlan ? [currentPlan] : []}
         keyExtractor={(plan) => plan.id}
         renderItem={({ item: plan }) => {
-          const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-          const selectedLessonIndex = plan.lessonIds.indexOf(lessonSelection.lessonId);
-          const selectedProgress = sceneProgress[lessonSelection.lessonId];
-          const selectedLessonIsInProgress = selectedLessonIndex >= 0
-            && (selectedProgress?.completions ?? 0) === 0
-            && (selectedProgress?.lastBeatIndex ?? 0) > 0;
+          const { completed, inProgressIndex } = getPlanProgress(plan.id, sceneProgress);
+          const selectedLessonIsInProgress = inProgressIndex >= 0;
           const planMeta = selectedLessonIsInProgress
-            ? `Lesson ${selectedLessonIndex + 1} in progress`
+            ? `Lesson ${inProgressIndex + 1} in progress`
             : `${completed} of ${plan.lessonIds.length} lessons`;
           return (
             <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">

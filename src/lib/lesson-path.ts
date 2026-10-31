@@ -32,22 +32,60 @@ export type LessonSelection = {
   plan: LessonPlan;
 };
 
+/** A lesson counts as complete once it has been finished at least once. */
+function isCompleted(progress: SceneProgress | undefined) {
+  return (progress?.completions ?? 0) > 0;
+}
+
+/** A lesson is partway through when it was started but never finished. */
+function isPartway(progress: SceneProgress | undefined) {
+  return !isCompleted(progress) && (progress?.lastBeatIndex ?? 0) > 0;
+}
+
+function practicedAt(progress: SceneProgress | undefined) {
+  const time = Date.parse(progress?.lastPracticedAt ?? '');
+  return Number.isNaN(time) ? 0 : time;
+}
+
+/** The most recently practiced partway lesson among `candidates`; the earlier candidate wins a tie. */
+function mostRecentPartway<T extends { lessonId: string }>(candidates: T[], sceneProgress: Record<string, SceneProgress>): T | undefined {
+  return candidates
+    .filter(({ lessonId }) => isPartway(sceneProgress[lessonId]))
+    .reduce<T | undefined>((selected, candidate) => {
+      if (!selected) return candidate;
+      return practicedAt(sceneProgress[candidate.lessonId]) > practicedAt(sceneProgress[selected.lessonId]) ? candidate : selected;
+    }, undefined);
+}
+
 /** The unfinished lesson the learner was most recently partway through, if any. */
 export function inProgressLesson(sceneProgress: Record<string, SceneProgress>): { lessonId: string; plan: LessonPlan } | undefined {
-  return lessonPlans
-    .flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })))
-    .filter(({ lessonId }) => {
-      const progress = sceneProgress[lessonId];
-      return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-    })
-    .reduce<{ lessonId: string; plan: LessonPlan } | undefined>((selected, candidate) => {
-      if (!selected) return candidate;
-      const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-      const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-      const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-      const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-      return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-    }, undefined);
+  return mostRecentPartway(lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan }))), sceneProgress);
+}
+
+export type PlanProgress = {
+  /** Lessons in the plan. */
+  total: number;
+  /** Lessons finished at least once. */
+  completed: number;
+  /** Index of the lesson the learner is partway through in this plan (the most recently practiced one), or -1. */
+  inProgressIndex: number;
+  /** Index of the first lesson not yet finished, or -1 once every lesson is complete. */
+  nextIndex: number;
+};
+
+/**
+ * One set of counts for a plan, shared by Today, Progress and Lesson plans so they never disagree.
+ * Uses the same completion and partway rules as `inProgressLesson` and `selectNextLesson`.
+ */
+export function getPlanProgress(planId: string, sceneProgress: Record<string, SceneProgress>): PlanProgress {
+  const lessonIds = lessonPlans.find((plan) => plan.id === planId)?.lessonIds ?? [];
+  const partway = mostRecentPartway(lessonIds.map((lessonId) => ({ lessonId })), sceneProgress);
+  return {
+    total: lessonIds.length,
+    completed: lessonIds.filter((lessonId) => isCompleted(sceneProgress[lessonId])).length,
+    inProgressIndex: partway ? lessonIds.indexOf(partway.lessonId) : -1,
+    nextIndex: lessonIds.findIndex((lessonId) => !isCompleted(sceneProgress[lessonId])),
+  };
 }
 
 /** The plan the learner is on now: the one they are partway through, else the first unfinished plan on their path. */

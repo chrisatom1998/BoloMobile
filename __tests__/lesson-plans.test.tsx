@@ -5,6 +5,9 @@ jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 
+import { getScene } from '../src/data/scenes';
+import { colors } from '../src/theme';
+
 const mockRouterPush = jest.fn();
 const mockRouterReplace = jest.fn();
 let mockPlanId: string | undefined = 'essentials';
@@ -102,6 +105,47 @@ describe('lesson plan navigation', () => {
 
     expect(view.getByText('Continue: lesson 2 · Say your name')).toBeTruthy();
     expect(view.getByLabelText('Say your name, lesson 2 of 10, In progress')).toBeTruthy();
+  });
+
+  it('points only the Next lesson card forward on a fresh plan', async () => {
+    const view = await render(<LessonPlansScreen />);
+
+    expect(view.queryByText(/Up next/u)).toBeNull();
+    expect(view.getByLabelText('A warm hello, lesson 1 of 10, Next lesson')).toBeTruthy();
+    expect(view.getByLabelText('Say your name, lesson 2 of 10, 10 turns')).toBeTruthy();
+    // Lessons 2–10 show only their length, in the softer colours.
+    const later = view.getAllByText('10 turns');
+    expect(later).toHaveLength(9);
+    for (const status of later) expect(StyleSheet.flatten(status.props.style).color).toBe(colors.mutedSoft);
+    const third = getScene('plan-essentials-03')!;
+    expect(view.getByLabelText(`${third.title}, lesson 3 of 10, 10 turns`)).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByText(third.title).props.style).color).toBe(colors.muted);
+    expect(StyleSheet.flatten(view.getByText('A warm hello').props.style).color).toBe(colors.ink);
+    expect(view.queryByLabelText(/Up next/u)).toBeNull();
+  });
+
+  it('shows no Up next on Plan detail once lesson 1 is complete', async () => {
+    mockSceneProgress = { 'plan-essentials-01': { completions: 1, lastBeatIndex: 0, lastPracticedAt: '2026-07-28T12:00:00.000Z' } };
+    const view = await render(<LessonPlansScreen />);
+
+    expect(view.getByText('1/10 lessons complete')).toBeTruthy();
+    expect(view.queryByText(/Up next/u)).toBeNull();
+    expect(view.getByLabelText('A warm hello, lesson 1 of 10, Complete')).toBeTruthy();
+    expect(view.getByLabelText('Say your name, lesson 2 of 10, Next lesson')).toBeTruthy();
+    expect(view.getByLabelText('Ask how someone is, lesson 3 of 10, 10 turns')).toBeTruthy();
+    expect(view.getAllByText('10 turns')).toHaveLength(8);
+  });
+
+  it('shows no Up next after the in-progress lesson', async () => {
+    mockSceneProgress = {
+      'plan-essentials-01': { completions: 1, lastBeatIndex: 0, lastPracticedAt: '2026-07-27T12:00:00.000Z' },
+      'plan-essentials-02': { completions: 0, lastBeatIndex: 2, lastPracticedAt: '2026-07-28T12:00:00.000Z' },
+    };
+    const view = await render(<LessonPlansScreen />);
+
+    expect(view.queryByText(/Up next/u)).toBeNull();
+    expect(view.getByLabelText('Say your name, lesson 2 of 10, In progress')).toBeTruthy();
+    expect(view.getByLabelText('Ask how someone is, lesson 3 of 10, 10 turns')).toBeTruthy();
   });
 
   it('stacks list and detail headings at accessibility text sizes', async () => {
