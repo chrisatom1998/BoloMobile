@@ -88,10 +88,11 @@ export async function releaseAudioSessionBeforeCall(): Promise<string> {
   if (typeof ExpoAudio.setIsAudioActiveAsync !== 'function') return 'none';
   try {
     await ExpoAudio.setIsAudioActiveAsync(false);
-    await ExpoAudio.setIsAudioActiveAsync(true);
     return 'ok';
   } catch (cause) {
     return `failed: ${cause instanceof Error ? cause.message.slice(0, 40) : 'unknown'}`;
+  } finally {
+    await ExpoAudio.setIsAudioActiveAsync(true).catch(() => undefined);
   }
 }
 

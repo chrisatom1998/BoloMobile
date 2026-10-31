@@ -64,4 +64,14 @@ describe('WebRTC audio-session notifications', () => {
 
     expect(jest.mocked(setIsAudioActiveAsync).mock.calls).toEqual([[false], [true]]);
   });
+
+  it('turns expo-audio back on when re-enabling after the pre-call release rejects', async () => {
+    jest.mocked(setIsAudioActiveAsync)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('session busy'));
+
+    await expect(releaseAudioSessionBeforeCall()).resolves.toBe('ok');
+
+    expect(jest.mocked(setIsAudioActiveAsync).mock.calls.at(-1)).toEqual([true]);
+  });
 });
