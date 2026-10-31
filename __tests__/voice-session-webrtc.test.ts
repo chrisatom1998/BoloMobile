@@ -68,9 +68,10 @@ describe('WebRTC audio-session notifications', () => {
   it('turns expo-audio back on when re-enabling after the pre-call release rejects', async () => {
     jest.mocked(setIsAudioActiveAsync)
       .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('session busy'))
       .mockRejectedValueOnce(new Error('session busy'));
 
-    await expect(releaseAudioSessionBeforeCall()).resolves.toBe('ok');
+    await expect(releaseAudioSessionBeforeCall()).resolves.toBe('ok, reenable failed: session busy');
 
     expect(jest.mocked(setIsAudioActiveAsync).mock.calls.at(-1)).toEqual([true]);
   });

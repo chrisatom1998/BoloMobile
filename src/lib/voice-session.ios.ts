@@ -82,18 +82,36 @@ export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolea
  * still active from launch or an earlier call gave WebRTC a mic that sent silence.
  * expo-audio's inactive flag also blocks all later playback app-wide, so turn it straight back on:
  * the session still cycles off, and lesson audio and spoken replies keep working after the call.
+ * A re-enable that still fails after one retry is part of the tag, so the debug line does not say ok.
  * Returns a short tag for the debug line.
  */
+function audioActiveFailure(cause: unknown): string {
+  return cause instanceof Error ? cause.message.slice(0, 40) : 'unknown';
+}
+
 export async function releaseAudioSessionBeforeCall(): Promise<string> {
   if (typeof ExpoAudio.setIsAudioActiveAsync !== 'function') return 'none';
+  let releaseFailure: string | null = null;
   try {
     await ExpoAudio.setIsAudioActiveAsync(false);
-    return 'ok';
   } catch (cause) {
-    return `failed: ${cause instanceof Error ? cause.message.slice(0, 40) : 'unknown'}`;
-  } finally {
-    await ExpoAudio.setIsAudioActiveAsync(true).catch(() => undefined);
+    releaseFailure = audioActiveFailure(cause);
   }
+  let reenableFailure: string | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await ExpoAudio.setIsAudioActiveAsync(true);
+      reenableFailure = null;
+      break;
+    } catch (cause) {
+      reenableFailure = audioActiveFailure(cause);
+    }
+  }
+  const reenableTag = reenableFailure ? `reenable failed: ${reenableFailure}` : null;
+  if (releaseFailure && reenableTag) return `failed: ${releaseFailure}, ${reenableTag}`;
+  if (reenableTag) return `ok, ${reenableTag}`;
+  if (releaseFailure) return `failed: ${releaseFailure}`;
+  return 'ok';
 }
 
 /** The audio session right now (category/mode, input, app state, input mute), for the debug line. */
