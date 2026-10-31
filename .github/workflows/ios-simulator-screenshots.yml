@@ -189,7 +189,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t flows < <(node scripts/ios-screenshot-plan.mjs --flows --input "$SCREENSHOT_SCREENS")
+          flows=()
+          while IFS= read -r flow; do
+            [[ -n "$flow" ]] && flows+=("$flow")
+          done < <(node scripts/ios-screenshot-plan.mjs --flows --input "$SCREENSHOT_SCREENS")
           if [[ "${#flows[@]}" -eq 0 ]]; then
             echo "::error::No screenshot flows for $SCREENSHOT_SCREENS"
             exit 1
@@ -224,7 +227,7 @@ jobs:
             capture
           fi
       - name: Name screenshots
-        if: always()
+        if: success()
         shell: bash
         run: |
           set -euo pipefail
@@ -241,7 +244,7 @@ jobs:
         with:
           name: ios-simulator-screenshots-${{ needs.plan.outputs.prefix }}-${{ github.run_id }}
           path: named-screenshots
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
