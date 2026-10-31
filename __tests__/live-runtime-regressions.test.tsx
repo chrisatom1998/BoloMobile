@@ -311,7 +311,7 @@ const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetPracticeTimer = jest.fn();
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetPracticeTimer }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, markActive: jest.fn(), reset: mockResetPracticeTimer }),
 }));
 
 let mockReducedMotion = false;

@@ -122,6 +122,11 @@ export function hindiType(fontSize: number) {
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;
 
+export const layout = {
+  /** Soft edge below the status-bar scrim, so scrolled content dissolves into paper instead of hitting a line. */
+  statusBarFadeHeight: 12,
+} as const;
+
 const fixedLightTheme: {
   colors: ThemeColors;
   isDark: false;

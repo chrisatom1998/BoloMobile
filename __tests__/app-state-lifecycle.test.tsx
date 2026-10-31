@@ -29,6 +29,7 @@ jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () =
 
 import { showAppAlert } from '../src/lib/app-alert';
 import { observe } from '../src/lib/observability';
+import { PRACTICE_CLAMP_MIGRATION_KEY } from '../src/lib/practice-clamp-migration';
 import { AI_CONSENT_VERSION, createAiConsentRecord, dateKey, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState, useAppStateValue } from '../src/state/app-state';
 
@@ -99,6 +100,20 @@ describe('AppStateProvider hydration', () => {
 
     await view.unmount();
     warning.mockRestore();
+  });
+
+  it('clamps an oversized stored practice day to four hours once, before hydrating', async () => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.practice, JSON.stringify({ date: today, chaiDone: true, liveDone: false, seconds: 911 * 60 }));
+    asyncStorage.__store.set(storageKeys.practiceHistory, JSON.stringify([{ date: today, seconds: 911 * 60, correct: 2, answers: 2, reviews: 0 }]));
+
+    const view = await render(<AppStateProvider><StateProbe /></AppStateProvider>);
+    await waitFor(() => expect(view.getByTestId('status').props.children).toBe('Ready'));
+
+    expect(readSnapshot(view).practice).toEqual({ date: today, chaiDone: true, liveDone: false, seconds: 240 * 60 });
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.practiceHistory) ?? 'null')).toEqual([{ date: today, seconds: 240 * 60, correct: 2, answers: 2, reviews: 0 }]);
+    expect(asyncStorage.__store.get(PRACTICE_CLAMP_MIGRATION_KEY)).toBeTruthy();
+    await view.unmount();
   });
 
   it('deletes a stale consent record that no longer matches the current privacy version', async () => {

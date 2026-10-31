@@ -44,7 +44,7 @@ jest.mock('@/components/pronunciation-recorder', () => {
 });
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: () => 0, reset: jest.fn() }),
+  useForegroundTimer: () => ({ elapsedSeconds: () => 0, markActive: jest.fn(), reset: jest.fn() }),
 }));
 
 jest.mock('@/lib/speech', () => ({
