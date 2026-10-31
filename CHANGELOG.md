@@ -18,10 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Pinned `react-native-webrtc` to 155.0.1.
 - Clear chat on the Asha screen (and on Last session) now asks "Clear all saved chat transcripts?" and removes the current chat plus every saved session's transcript lines and tool content while keeping minimal session metadata and any reports still waiting to send. Starting a new voice session no longer removes saved sessions. Delete Bolo data ends any live call, removes every saved session and queued report, and withdrawing AI consent drops queued reports without sending them.
 
 ### Fixed
 
+- Scrolled the Asha chat to the new message when the learner sends typed text or an example chip after scrolling up. Incoming assistant messages still stay put while the reader is away from the tail.
 - Snapshotted the quick-review session at mount so grading a phrase no longer shrinks the live due list underneath the advancing card index, which skipped phrases, produced "2 of 1 remembered" summaries, and could drop the learner into an unrequested low-mastery session instead of the completion screen.
 - Scored resumed scenes over the beats actually answered after the checkpoint instead of the full beat count, which permanently understated best accuracy and practice-history answer totals.
 - Cancelled the scheduled daily practice reminder during "Delete my Bolo data" so the OS notification can no longer keep firing with no way to turn it off after its stored identifier is wiped.

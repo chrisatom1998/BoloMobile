@@ -515,6 +515,10 @@ export default function LiveScreen() {
     const text = raw.trim().slice(0, 500);
     if (!aiConsent || !text || busy || realtimeLocked || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return false;
     hapticTap();
+    // A typed send or example chip is the learner asking to see that turn, so
+    // follow the tail even after they scrolled up to reread. Incoming assistant
+    // lines still follow only while the reader is already near the bottom.
+    scrollTailIntoView(!reducedMotion);
     chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     setPendingUserMessage(userMessage);
@@ -554,7 +558,7 @@ export default function LiveScreen() {
         if (mountedRef.current) setBusy(false);
       }
     }
-  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
+  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, reducedMotion, responseLanguage, scrollTailIntoView]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     const previous = realtimeStatusRef.current;

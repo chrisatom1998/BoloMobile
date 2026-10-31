@@ -764,6 +764,85 @@ describe('immersive live conversation design', () => {
     }
   });
 
+  it('scrolls a typed send into view when the reader has scrolled up', async () => {
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const view = await render(<LiveScreen />);
+    try {
+      view.getByTestId('live-chat-list').props.onScroll({
+        nativeEvent: {
+          contentOffset: { x: 0, y: 0 },
+          contentSize: { height: 2000, width: 390 },
+          layoutMeasurement: { height: 800, width: 390 },
+        },
+      });
+      scrollToEnd.mockClear();
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Show this turn.');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+    } finally {
+      await act(async () => {
+        request.resolve({ transcript: '', reply: 'Shown at the tail.', language: 'en' });
+        for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      });
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('scrolls an example chip into view when the reader has scrolled up', async () => {
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const view = await render(<LiveScreen />);
+    try {
+      view.getByTestId('live-chat-list').props.onScroll({
+        nativeEvent: {
+          contentOffset: { x: 0, y: 0 },
+          contentSize: { height: 2000, width: 390 },
+          layoutMeasurement: { height: 800, width: 390 },
+        },
+      });
+      scrollToEnd.mockClear();
+      await fireEvent.press(view.getByRole('button', { name: 'Order tea' }));
+      expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+    } finally {
+      await act(async () => {
+        request.resolve({ transcript: '', reply: 'Chai, kripya.', language: 'en' });
+        for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      });
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('does not scroll an incoming assistant message while the reader is away from the tail', async () => {
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const view = await render(<LiveScreen />);
+    try {
+      view.getByTestId('live-chat-list').props.onScroll({
+        nativeEvent: {
+          contentOffset: { x: 0, y: 0 },
+          contentSize: { height: 2000, width: 390 },
+          layoutMeasurement: { height: 800, width: 390 },
+        },
+      });
+      scrollToEnd.mockClear();
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    } finally {
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
   it('uses the voice-first hierarchy from the supplied design without hiding typed coaching', async () => {
     const view = await render(<LiveScreen />);
     const hero = view.getByTestId('voice-conversation-hero');
