@@ -37,7 +37,21 @@ jest.mock('lucide-react-native', () => ({
   Volume2: () => null,
 }));
 
-jest.mock('@/components/voice-turn-button', () => ({ VoiceTurnButton: () => null }));
+// Exercise the recorder's speech handoff without native microphone setup.
+jest.mock('@/components/voice-turn-button', () => {
+  const { createElement } = jest.requireActual('react') as typeof import('react');
+  const { Pressable, Text } = jest.requireActual('react-native') as typeof import('react-native');
+  return {
+    VoiceTurnButton: ({ idleLabel, onActivityChange }: Parameters<typeof import('../src/components/voice-turn-button').VoiceTurnButton>[0]) => createElement(Pressable, {
+      accessibilityRole: 'button',
+      accessibilityLabel: idleLabel,
+      onPress: () => {
+        onActivityChange?.(true);
+        void jest.requireMock('@/lib/speech').stopSpeaking();
+      },
+    }, createElement(Text, null, idleLabel)),
+  };
+});
 
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 jest.mock('@/lib/haptics', () => ({ hapticSuccess: jest.fn(), hapticWarning: jest.fn() }));
@@ -50,10 +64,10 @@ jest.mock('@/lib/speech', () => ({
 
 import ReviewScreen from '../src/app/review';
 import { hapticSuccess, hapticWarning } from '../src/lib/haptics';
-import { dateKey, defaultPhraseReview, storageKeys } from '../src/lib/storage';
+import { createAiConsentRecord, dateKey, defaultPhraseReview, storageKeys } from '../src/lib/storage';
 import type { PhraseReview } from '../src/state/app-state-types';
 import { AppStateProvider, useAppStateValue } from '../src/state/app-state';
-import { speakText } from '../src/lib/speech';
+import { speakText, stopSpeaking } from '../src/lib/speech';
 
 const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default as {
   __store: Map<string, string>;
@@ -262,6 +276,26 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(view.getByText('1 of 1 remembered')).toBeTruthy();
   });
 
+  it('keeps the hint penalty when playback fails after it started', async () => {
+    seedDuePhrases();
+    speakTextMock.mockImplementationOnce(async (_text, _signal, _rate, _language, _mode, _normalize, onStarted) => {
+      onStarted?.();
+      throw new Error('Playback interrupted.');
+    });
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
+
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    expect(await view.findByText('Playback interrupted.')).toBeTruthy();
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
+      mastery: 0, correctReviews: 0, totalReviews: 1, intervalDays: 0,
+    }));
+  });
+
   it('downgrades Got it when the learner grades while the hint is still playing', async () => {
     const today = dateKey();
     asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste, chai]));
@@ -323,6 +357,38 @@ describe('ReviewScreen spaced-repetition journey', () => {
 
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 3, correctReviews: 3, totalReviews: 3 }));
     expect(view.getByText('1 of 1 remembered')).toBeTruthy();
+  });
+
+  it.each([false, true])('recorder cancellation with playback started=%s preserves only a heard hint', async (started) => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 2, correctReviews: 2, totalReviews: 2 },
+    }));
+    asyncStorage.__store.set(storageKeys.aiConsent, JSON.stringify(createAiConsentRecord()));
+    const hint = deferred<boolean>();
+    speakTextMock.mockImplementationOnce((_text, _signal, _rate, _language, _mode, _normalize, onStarted) => {
+      if (started) onStarted?.();
+      return hint.promise;
+    });
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    jest.mocked(stopSpeaking).mockImplementationOnce(async () => { hint.resolve(false); });
+
+    await fireEvent.press(view.getByRole('button', { name: 'Record pronunciation' }));
+    await waitFor(() => expect(!!view.queryByText('Hint used, so this card counts as Again.')).toBe(started));
+    expect(view.queryByRole('alert')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
+      mastery: started ? 1 : 3,
+      correctReviews: started ? 2 : 3,
+      totalReviews: 3,
+    }));
+    expect(view.getByText(`${started ? 0 : 1} of 1 remembered`)).toBeTruthy();
   });
 
   it('keeps the hint when a second tap cancels the first playback', async () => {
@@ -466,7 +532,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     }
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     if (!beforeReveal) await fireEvent.press(view.getByLabelText(`Hear ${namaste.hi}`));
-    expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
+    expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1, ...(beforeReveal ? [undefined, undefined, undefined, expect.any(Function)] : []));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({

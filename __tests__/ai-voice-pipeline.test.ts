@@ -718,6 +718,64 @@ describe('AI voice speech orchestration', () => {
     expect(playbackSpy).not.toHaveBeenCalled();
   });
 
+  it.each(['generated', 'offline'] as const)('tracks started %s playback when the recorder stops speech', async (source) => {
+    const native = installPlayer();
+    jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue({
+      audioBase64: 'c3RhcnRlZC1oaW50', mimeType: 'audio/mpeg',
+    });
+    const onStarted = jest.fn();
+    const speech = speakText(source === 'offline' ? 'नमस्ते' : 'A generated recorder hint.',
+      undefined, 1, undefined, 'playback', false, onStarted);
+    await waitFor(() => native.player.play.mock.calls.length > 0);
+
+    await stopSpeaking();
+
+    await expect(speech).resolves.toBe(false);
+    expect(onStarted).toHaveBeenCalledTimes(1);
+    expect(native.player.pause).toHaveBeenCalled();
+  });
+
+  it.each(['generated', 'offline'] as const)('does not report started %s playback cancelled during audio setup', async (source) => {
+    const native = installPlayer();
+    const setup = deferred<void>();
+    expoAudio.setAudioModeAsync.mockReturnValueOnce(setup.promise);
+    jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue({
+      audioBase64: 'c2V0dXAtaGludA==', mimeType: 'audio/mpeg',
+    });
+    const onStarted = jest.fn();
+    const speech = speakText(source === 'offline' ? 'नमस्ते' : 'A hint awaiting audio setup.',
+      undefined, 1, undefined, 'playback', false, onStarted);
+    await waitFor(() => expoAudio.setAudioModeAsync.mock.results.some((result) => result.value === setup.promise));
+
+    const stopped = stopSpeaking();
+    setup.resolve();
+    await stopped;
+
+    await expect(speech).resolves.toBe(false);
+    expect(onStarted).not.toHaveBeenCalled();
+    expect(native.player.play).not.toHaveBeenCalled();
+  });
+
+  it('does not report playback started when the recorder cancels TTS loading', async () => {
+    const native = installPlayer();
+    const requestStarted = deferred<void>();
+    jest.spyOn(boloApi, 'requestAiVoiceAudio').mockImplementation((_text, signal) => {
+      requestStarted.resolve();
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new Error('cancelled loading')), { once: true });
+      });
+    });
+    const onStarted = jest.fn();
+    const speech = speakText('A loading recorder hint.', undefined, 1, undefined, 'playback', false, onStarted);
+    await requestStarted.promise;
+
+    await stopSpeaking();
+
+    await expect(speech).resolves.toBe(false);
+    expect(onStarted).not.toHaveBeenCalled();
+    expect(native.player.play).not.toHaveBeenCalled();
+  });
+
   it('reports an already-aborted listen as not played', async () => {
     const controller = new AbortController();
     controller.abort();

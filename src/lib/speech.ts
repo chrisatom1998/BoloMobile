@@ -179,6 +179,7 @@ async function playGeneratedSpeech(
   playbackRate: number,
   audioMode: VoiceAudioMode,
   normalizeGeneratedChatReply: boolean,
+  onPlaybackStarted?: () => void,
 ) {
   let result = prepared ? await prepared : await prepareSpeechAudio(chunk, signal);
   for (let attempt = 0; attempt < GENERATED_SPEECH_ATTEMPTS; attempt += 1) {
@@ -190,7 +191,9 @@ async function playGeneratedSpeech(
     }
     try {
       const audio = result.audio;
-      if (playbackRate === 1 && audioMode === 'playback') {
+      if (onPlaybackStarted) {
+        await playAiVoiceAudio(audio, signal, playbackRate, audioMode, normalizeGeneratedChatReply, onPlaybackStarted);
+      } else if (playbackRate === 1 && audioMode === 'playback') {
         if (normalizeGeneratedChatReply) await playAiVoiceAudio(audio, signal, 1, audioMode, true);
         else await playAiVoiceAudio(audio, signal);
       } else if (normalizeGeneratedChatReply) {
@@ -233,6 +236,8 @@ export async function speakText(
   requestedLanguage?: AshaResponseLanguage,
   audioMode: VoiceAudioMode = 'playback',
   normalizeGeneratedChatReply = false,
+  // Fires when a native player accepts play(), after TTS and player setup.
+  onPlaybackStarted?: () => void,
 ): Promise<boolean> {
   // A normal Listen action can arrive from a still-mounted non-Live tab while
   // the Realtime call owns iOS's PlayAndRecord session. In that case, retain
@@ -271,7 +276,7 @@ export async function speakText(
       if (controller.signal.aborted) return false;
       prepareChunk(index + 1);
       if (hasOfflineSpeech(chunk)) {
-        await playOfflineSpeech(chunk, controller.signal, playbackRate, effectiveAudioMode);
+        await playOfflineSpeech(chunk, controller.signal, playbackRate, effectiveAudioMode, onPlaybackStarted);
         continue;
       }
       await playGeneratedSpeech(
@@ -281,6 +286,7 @@ export async function speakText(
         playbackRate,
         effectiveAudioMode,
         normalizeGeneratedChatReply,
+        onPlaybackStarted,
       );
       preparedAudio.delete(index);
     }

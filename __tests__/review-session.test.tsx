@@ -307,7 +307,7 @@ describe('ReviewScreen session stability', () => {
     expect(view.queryByText(phraseA.hi)).toBeNull();
     expect(view.queryByText(/namaste/i)).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
-    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1, undefined, undefined, undefined, expect.any(Function));
     expect(view.queryByText(phraseA.hi)).toBeNull();
     await gradeCurrentPhrase(view, true);
     expect(mockAppState.reviewPhrase).toHaveBeenLastCalledWith(phraseA.hi, false);

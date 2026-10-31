@@ -171,6 +171,7 @@ export async function playAiVoiceAudio(
   playbackRate = 1,
   audioMode: VoiceAudioMode = 'playback',
   normalizeGeneratedChatReply = false,
+  onPlaybackStarted?: () => void,
 ): Promise<void> {
   if (signal.aborted) return;
   const keepAudioSessionActive = audioMode === 'realtimePlayback';
@@ -237,6 +238,7 @@ export async function playAiVoiceAudio(
         prepared.hasStarted = true;
         try {
           prepared.player.play();
+          onPlaybackStarted?.();
         } catch (error) {
           finish(error instanceof Error ? error : new Error('AI voice playback failed. Please try again.'));
         }

@@ -69,7 +69,13 @@ export function hasOfflineSpeech(text: string) {
   return lessonText !== null && offlineHindiAudio[lessonText] !== undefined;
 }
 
-export async function playOfflineSpeech(text: string, signal: AbortSignal, playbackRate = 1, audioMode: VoiceAudioMode = 'playback') {
+export async function playOfflineSpeech(
+  text: string,
+  signal: AbortSignal,
+  playbackRate = 1,
+  audioMode: VoiceAudioMode = 'playback',
+  onPlaybackStarted?: () => void,
+) {
   const lessonText = canonicalLessonAudioText(text);
   const source = lessonText ? offlineHindiAudio[lessonText] : undefined;
   if (source === undefined) return false;
@@ -112,7 +118,10 @@ export async function playOfflineSpeech(text: string, signal: AbortSignal, playb
         Math.min(MAX_PLAYBACK_TIMEOUT_MS, PLAYBACK_TIMEOUT_MS / rate),
       );
       if (signal.aborted) cancel();
-      else player.play();
+      else {
+        player.play();
+        onPlaybackStarted?.();
+      }
     });
     return true;
   } finally {

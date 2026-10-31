@@ -20,12 +20,12 @@ export default function ReviewScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
-  const { audioError, clearAudioError, speak } = useSpeakText();
+  const { audioError, clearAudioError, speak, speakWithResult } = useSpeakText();
   const gradedPhraseRef = useRef<string | null>(null);
   const supportedRecallRef = useRef(false);
   // Monotonic so a finished card's late result cannot match the next card's run.
   const hintRunRef = useRef(0);
-  // A hint clip that actually finished on this card. A later failure must not
+  // A hint clip that started on this card. A later failure must not
   // erase that. grade() clears it before the next card is shown.
   const hintHeardRef = useRef(false);
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
@@ -96,7 +96,7 @@ export default function ReviewScreen() {
     // Listen, Slow, and a second hint tap all stop the clip that is already
     // playing. Bump the run first so that cancel cannot clear a hint the
     // learner already started. Only the latest hint run may clear, and only
-    // when it fails and no earlier hint on this card finished.
+    // when nothing started and no earlier hint on this card was heard.
     const run = ++hintRunRef.current;
     if (listenFirst || revealed) {
       void speak(phrase.hi, undefined, playbackRate);
@@ -105,9 +105,9 @@ export default function ReviewScreen() {
     const hintedPhrase = phrase.hi;
     supportedRecallRef.current = true;
     setHintUsed(true);
-    void speak(hintedPhrase, undefined, playbackRate).then((played) => {
+    void speakWithResult(hintedPhrase, undefined, playbackRate).then((result) => {
       if (gradedPhraseRef.current === hintedPhrase || run !== hintRunRef.current) return;
-      if (played) {
+      if (result.started) {
         hintHeardRef.current = true;
         return;
       }
