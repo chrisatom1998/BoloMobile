@@ -107,7 +107,7 @@ describe('previously uncovered audit screens', () => {
 
   it('disables connected review audio when consent is absent and no bundled clip exists', async () => {
     const view = await render(<ReviewScreen />);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     expect(view.getByRole('button', { name: `Hear ${phrase.hi}` }).props.accessibilityState).toEqual({ disabled: true });
     expect(speech.speakText).not.toHaveBeenCalled();
@@ -271,7 +271,7 @@ describe('previously uncovered audit screens', () => {
   it('keeps review controls reachable in a scrolling Dynamic Type layout', async () => {
     const view = await render(<ReviewScreen />);
     expect(view.getByTestId('review-scroll').props.contentContainerStyle).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByRole('button', { name: 'Got it' })).toBeTruthy();
   });
 
