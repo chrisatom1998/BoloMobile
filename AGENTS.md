@@ -17,3 +17,7 @@ On boot, the marketing site listens on port 3000 and the Expo app listens on por
 # Expo version pins (iPhone live-voice microphone)
 
 `expo` is pinned to 57.0.27, `expo-modules-core` / `expo-constants` to 57.0.21, and `package.json` → `expo.install.exclude` lists the packages held at their Oct 21 2026 versions. The Oct 29 Expo patch releases made the iPhone microphone send silence in Asha live voice (bisected on a device 2026-10-30, PR #82). `expo-doctor` would otherwise ask to upgrade them back. Remove the pins and the exclude list together, and only after live voice has been checked on a real iPhone: two Asha calls in a row, with the phone unplugged from the Mac and Continuity Camera off, since a cabled Mac can claim the iPhone microphone and make every app on the phone record silence.
+
+# Design system
+
+UI work follows `docs/design-system.md` (type roles, colour roles, button variants, spacing and radius tokens in `src/theme.ts`). Keep the orange, serif, original look.
