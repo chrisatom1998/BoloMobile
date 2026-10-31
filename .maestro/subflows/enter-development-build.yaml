@@ -8,11 +8,18 @@ appId: com.bolo.hindi
     text: "Bolo, http://.*:8081"
     optional: true
 - extendedWaitUntil:
-    visible: ".*(Your Hindi plan in one minute|This is the developer menu).*"
+    visible: ".*(Where are you starting|This is the developer menu).*"
     timeout: 30000
-- tapOn:
-    text: "Continue"
-    optional: true
+# Onboarding's own footer has a Continue button, so only dismiss the developer
+# menu's Continue when that menu is actually showing.
+- runFlow:
+    label: Dismiss the developer menu when it covers the app
+    when:
+      visible: ".*This is the developer menu.*"
+    commands:
+      - tapOn:
+          text: "Continue"
+          optional: true
 - tapOn:
     text: "Close"
     optional: true

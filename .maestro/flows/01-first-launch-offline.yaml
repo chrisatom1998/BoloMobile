@@ -14,18 +14,16 @@ tags:
     permissions:
       microphone: deny
 - runFlow: ../subflows/enter-development-build.yaml
-- assertVisible: "Your Hindi plan in one minute"
-- scrollUntilVisible:
-    element:
-      text: "Check microphone access"
-    direction: DOWN
-- tapOn: "Check microphone access"
-- scrollUntilVisible:
-    element:
-      text: "Microphone access is off. Typed and written practice still work."
-    direction: DOWN
-    timeout: 20000
-- assertVisible: "Microphone access is off. Typed and written practice still work."
+- assertVisible: "Where are you starting?"
+- assertVisible: "1 of 5"
+# The microphone check left onboarding; live practice asks for permission when it
+# connects, and the preset denial is exercised by the consent flow. Here the step
+# footer must stay reachable without scrolling, and Back must keep an edit.
+- tapOn: "Beginner, I know greetings and a few phrases."
+- tapOn: "Continue"
+- assertVisible: "How should Hindi appear?"
+- tapOn: "Back"
+- assertVisible: "Where are you starting?"
 - runFlow: ../subflows/complete-onboarding.yaml
 - stopApp
 - launchApp:
@@ -34,7 +32,7 @@ tags:
       EXDevMenuShowsAtLaunch: false
       EXDevMenuShowFloatingActionButton: false
 - runFlow: ../subflows/dismiss-dev-menu.yaml
-- assertNotVisible: "Your Hindi plan in one minute"
+- assertNotVisible: "Where are you starting?"
 - setAirplaneMode: enabled
 - scrollUntilVisible:
     element:

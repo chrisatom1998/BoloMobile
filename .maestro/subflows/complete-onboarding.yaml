@@ -1,13 +1,16 @@
 appId: com.bolo.hindi
 ---
-- scrollUntilVisible:
-    element:
-      text: "Build my practice plan"
-    direction: DOWN
-    speed: 60
-    visibilityPercentage: 80
-    centerElement: false
-    timeout: 45000
+# Onboarding is five single-question steps with Back / Continue pinned at the
+# bottom. Each step has a valid default, so Continue is enabled throughout.
+- assertVisible: "Where are you starting?"
+- tapOn: "Continue"
+- assertVisible: "How should Hindi appear?"
+- tapOn: "Continue"
+- assertVisible: "What matters most?"
+- tapOn: "Continue"
+- assertVisible: "Asha’s replies"
+- tapOn: "Continue"
+- assertVisible: "Daily practice target"
 - tapOn: "Build my practice plan"
 - extendedWaitUntil:
     visible: "Bolo"

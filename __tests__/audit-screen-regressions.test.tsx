@@ -1,4 +1,4 @@
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
 import { Dimensions, StyleSheet } from 'react-native';
 
@@ -22,9 +22,13 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
-}));
+jest.mock('react-native-safe-area-context', () => {
+  const { View } = jest.requireActual('react-native');
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+  };
+});
 
 jest.mock('expo-audio', () => ({
   AudioModule: {
@@ -238,15 +242,98 @@ describe('previously uncovered audit screens', () => {
     });
   });
 
-  it('keeps the onboarding daily goal numeric through selection and submission', async () => {
+  /** Taps Continue `count` times from whichever onboarding step is showing. */
+  async function continueSteps(view: Awaited<ReturnType<typeof render>>, count: number) {
+    for (let index = 0; index < count; index += 1) {
+      await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    }
+  }
+
+  it('walks a new learner through five single-question steps and keeps the daily goal numeric', async () => {
     const view = await render(<OnboardingScreen />);
+
+    expect(view.getByTestId('onboarding-screen')).toBeTruthy();
+    expect(view.getByRole('header', { name: 'Where are you starting?' })).toBeTruthy();
+    expect(view.getByText('1 of 5')).toBeTruthy();
+    expect(view.getByLabelText('Step 1 of 5').props.accessibilityValue).toEqual({ min: 1, max: 5, now: 1 });
+    // Only one question renders per step, and a new learner has no Back or Cancel on step 1.
+    expect(view.queryByRole('radiogroup', { name: 'Hindi script preference' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Back' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Cancel recalibration' })).toBeNull();
+    expect(view.queryByRole('button', { name: 'Build my practice plan' })).toBeNull();
+    expect(view.queryByText(/microphone/iu)).toBeNull();
+
+    await continueSteps(view, 1);
+    expect(view.getByRole('header', { name: 'How should Hindi appear?' })).toBeTruthy();
+    expect(view.getByText('2 of 5')).toBeTruthy();
+    await continueSteps(view, 1);
+    expect(view.getByRole('header', { name: 'What matters most?' })).toBeTruthy();
+    await continueSteps(view, 1);
+    expect(view.getByRole('header', { name: 'Asha’s replies' })).toBeTruthy();
+    await continueSteps(view, 1);
+    expect(view.getByRole('header', { name: 'Daily practice target' })).toBeTruthy();
+    expect(view.getByText('5 of 5')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Continue' })).toBeNull();
+
     await fireEvent.press(view.getByRole('radio', { name: '5 minutes' }));
     await fireEvent.press(view.getByRole('button', { name: 'Build my practice plan' }));
 
-    expect(mockCompleteOnboarding).toHaveBeenCalledWith(expect.any(Object), 5);
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith(
+      { level: 'new', scriptPreference: 'both', primaryGoal: 'conversation', responseLanguage: 'en', microphoneTested: false },
+      5,
+    );
+    expect(mockRouter.replace).toHaveBeenCalledWith('/');
   });
 
-  it('seeds recalibration from saved preferences and offers a cancel exit', async () => {
+  it('previews the same sentence in each script option and names it for assistive tech', async () => {
+    const view = await render(<OnboardingScreen />);
+    await continueSteps(view, 1);
+
+    expect(view.getByRole('radio', { name: 'Hindi script with roman letters, आप कैसे हैं?, aap kaise hain?' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.getByRole('radio', { name: 'Hindi script only, आप कैसे हैं?' })).toBeTruthy();
+    const latinOnly = view.getByRole('radio', { name: 'Roman letters only, aap kaise hain?' });
+    expect(latinOnly).toBeTruthy();
+    // The preview is visual only (the radio label already carries it), so it is hidden from
+    // the accessibility tree. Latin-only learners are never shown Devanagari, even here.
+    const hidden = { includeHiddenElements: true };
+    expect(within(latinOnly).queryByText('आप कैसे हैं?', hidden)).toBeNull();
+    expect(within(latinOnly).getByText('aap kaise hain?', hidden)).toBeTruthy();
+    const hindiTexts = view.getAllByText('आप कैसे हैं?', hidden);
+    expect(hindiTexts).toHaveLength(2);
+    for (const text of hindiTexts) {
+      expect(text.props.accessibilityLanguage).toBe('hi-IN');
+      expect(StyleSheet.flatten(text.props.style).fontFamily).toBe('Tiro Devanagari Hindi');
+      expect(StyleSheet.flatten(text.props.style).fontWeight).toBe('400');
+    }
+  });
+
+  it('keeps edits when moving Back and forward between steps', async () => {
+    const view = await render(<OnboardingScreen />);
+    await fireEvent.press(view.getByRole('radio', { name: 'Beginner, I know greetings and a few phrases.' }));
+    await continueSteps(view, 1);
+    await fireEvent.press(view.getByRole('radio', { name: 'Hindi script only, आप कैसे हैं?' }));
+    await continueSteps(view, 1);
+    await fireEvent.press(view.getByRole('radio', { name: 'Travel' }));
+
+    await fireEvent.press(view.getByRole('button', { name: 'Back' }));
+    expect(view.getByRole('header', { name: 'How should Hindi appear?' })).toBeTruthy();
+    expect(view.getByRole('radio', { name: 'Hindi script only, आप कैसे हैं?' }).props.accessibilityState).toEqual({ checked: true });
+    await fireEvent.press(view.getByRole('button', { name: 'Back' }));
+    expect(view.getByRole('radio', { name: 'Beginner, I know greetings and a few phrases.' }).props.accessibilityState).toEqual({ checked: true });
+    expect(view.queryByRole('button', { name: 'Back' })).toBeNull();
+
+    await continueSteps(view, 2);
+    expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
+    await continueSteps(view, 2);
+    await fireEvent.press(view.getByRole('button', { name: 'Build my practice plan' }));
+
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith(
+      { level: 'beginner', scriptPreference: 'devanagari', primaryGoal: 'travel', responseLanguage: 'en', microphoneTested: false },
+      10,
+    );
+  });
+
+  it('seeds recalibration from saved preferences and offers a cancel exit on the first step', async () => {
     mockOnboardingMode = 'recalibrate';
     mockAppState.goal = 5;
     mockAppState.learnerProfile = {
@@ -259,13 +346,62 @@ describe('previously uncovered audit screens', () => {
     };
     const view = await render(<OnboardingScreen />);
 
+    expect(view.getByText('Tune your plan')).toBeTruthy();
     expect(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }).props.accessibilityState).toEqual({ checked: true });
-    expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
+    await continueSteps(view, 1);
+    expect(view.queryByRole('button', { name: 'Cancel recalibration' })).toBeNull();
+    expect(view.getByRole('radio', { name: 'Roman letters only, aap kaise hain?' }).props.accessibilityState).toEqual({ checked: true });
+    await continueSteps(view, 1);
     expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
-    expect(view.getByRole('radio', { name: 'Hindi first' }).props.accessibilityState).toEqual({ checked: true });
+    await continueSteps(view, 1);
+    expect(view.getByRole('radio', { name: /^Hindi first/u }).props.accessibilityState).toEqual({ checked: true });
+    await continueSteps(view, 1);
     expect(view.getByRole('radio', { name: '5 minutes' }).props.accessibilityState).toEqual({ checked: true });
+
+    // Saving keeps every seeded value, including the retired microphone flag.
+    await fireEvent.press(view.getByRole('button', { name: 'Save my practice plan' }));
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith(
+      { level: 'intermediate', scriptPreference: 'latin', primaryGoal: 'travel', responseLanguage: 'hi', microphoneTested: true },
+      5,
+    );
+  });
+
+  it('keeps the onboarding footer compact at default text size and stacks it for Dynamic Type', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1 }, window: { ...window, fontScale: 1 } }));
+
+    try {
+      const compact = await render(<OnboardingScreen />);
+      await fireEvent.press(compact.getByRole('button', { name: 'Continue' }));
+      expect(StyleSheet.flatten(compact.getByTestId('onboarding-progress').props.style)).toMatchObject({ flexDirection: 'row' });
+      expect(StyleSheet.flatten(compact.getByTestId('onboarding-footer').props.style)).toMatchObject({ flexDirection: 'row' });
+      // The icon-only Back control keeps its accessible name and a 44pt+ target.
+      const back = compact.getByRole('button', { name: 'Back' });
+      expect(within(back).queryByText('Back')).toBeNull();
+      expect(StyleSheet.flatten(back.props.style)).toMatchObject({ minWidth: 56, minHeight: 52 });
+      await compact.unmount();
+
+      await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
+      const large = await render(<OnboardingScreen />);
+      await fireEvent.press(large.getByRole('button', { name: 'Continue' }));
+      expect(StyleSheet.flatten(large.getByTestId('onboarding-progress').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(large.getByTestId('onboarding-footer').props.style)).toMatchObject({ flexDirection: 'column-reverse' });
+      expect(within(large.getByRole('button', { name: 'Back' })).getByText('Back')).toBeTruthy();
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+  });
+
+  it('cancels recalibration from step 1 without saving', async () => {
+    mockOnboardingMode = 'recalibrate';
+    const view = await render(<OnboardingScreen />);
+
+    expect(view.queryByRole('button', { name: 'Back' })).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Cancel recalibration' }));
     expect(mockRouter.back).toHaveBeenCalledTimes(1);
+    expect(mockCompleteOnboarding).not.toHaveBeenCalled();
   });
 
   it('keeps review controls reachable in a scrolling Dynamic Type layout', async () => {

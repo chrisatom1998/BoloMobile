@@ -126,13 +126,37 @@ describe('fail-closed merge verification', () => {
     const scrolls = [...smoke.matchAll(/^- scrollUntilVisible:\n((?: {4,}[^\n]+\n?)*)/gmu)]
       .map((match) => match[1]);
 
-    expect(scrolls).toHaveLength(5);
+    // Onboarding steps keep their footer on screen, so the only scrolls left are
+    // the live consent card and the Settings deletion row.
+    expect(scrolls).toHaveLength(3);
     for (const scroll of scrolls) {
       expect(scroll).toContain('direction: DOWN');
       expect(scroll).toContain('speed: 60');
       expect(scroll).toContain('visibilityPercentage: 80');
       expect(scroll).toContain('centerElement: false');
       expect(scroll).toContain('timeout: 45000');
+    }
+  });
+
+  test('walks every onboarding step in order before building the plan', () => {
+    const screen = read('src/app/onboarding.tsx');
+    const titles = [...screen.matchAll(/^ {6}title: '([^']+)',$/gmu)].map((match) => match[1]);
+    expect(titles).toHaveLength(5);
+    const subflow = read('.maestro/subflows/complete-onboarding.yaml');
+    const asserted = [...subflow.matchAll(/^- assertVisible: "([^"]+)"$/gmu)].map((match) => match[1]);
+    expect(asserted).toEqual(titles);
+    expect(subflow.match(/^- tapOn: "Continue"$/gmu)).toHaveLength(4);
+    expect(subflow).toContain('- tapOn: "Build my practice plan"');
+    expect(subflow).not.toContain('scrollUntilVisible');
+    // The dev-build entry subflow must not swallow onboarding's own Continue button.
+    const entry = read('.maestro/subflows/enter-development-build.yaml');
+    expect(entry).toContain(`visible: ".*(${titles[0]?.replace('?', '')}|This is the developer menu).*"`);
+    expect(entry).toMatch(/when:\n {6}visible: "\.\*This is the developer menu\.\*"\n {4}commands:\n {6}- tapOn:\n {10}text: "Continue"/u);
+    // Retired microphone copy must not linger in any device flow.
+    for (const file of ['00-ci-smoke', '01-first-launch-offline', '04-data-deletion']) {
+      const flow = read(`.maestro/flows/${file}.yaml`);
+      expect(flow).not.toContain('Check microphone access');
+      expect(flow).not.toContain('Your Hindi plan in one minute');
     }
   });
 
