@@ -23,6 +23,7 @@ const mockDisconnect = jest.fn();
 const mockStartTurn = jest.fn(async () => undefined);
 const mockFinishTurn = jest.fn(async () => undefined);
 let mockVoiceStatus: 'disconnected' | 'ready' | 'recording' | 'responding' = 'ready';
+let mockIsPlaying: boolean | null = null;
 
 jest.mock('@/hooks/use-realtime-conversation', () => ({
   useRealtimeConversation: () => ({
@@ -31,7 +32,7 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
     startTurn: mockStartTurn,
     status: mockVoiceStatus,
     microphoneEnabled: mockVoiceStatus === 'recording',
-    isPlaying: mockVoiceStatus === 'responding',
+    isPlaying: mockIsPlaying ?? mockVoiceStatus === 'responding',
   }),
 }));
 
@@ -52,6 +53,7 @@ describe('realtime voice accessibility', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockVoiceStatus = 'ready';
+    mockIsPlaying = null;
   });
 
   it('uses the large glowing orb as the only visible start control', async () => {
@@ -190,6 +192,43 @@ describe('realtime voice accessibility', () => {
       expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-badge').props.style).backgroundColor).toBe(lightColors.orbRecording);
       await fireEvent.press(recording.getByLabelText('Mute microphone'));
       expect(mockFinishTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it('marks the outer ring while Asha speaks over an open microphone and reports playback to the host', async () => {
+      const onPlaybackChange = jest.fn();
+      mockVoiceStatus = 'recording';
+      const listening = await render(
+        <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onPlaybackChange={onPlaybackChange} size="portrait" tone="dark">
+          <Text>Asha</Text>
+        </RealtimeVoiceButton>,
+      );
+      const restingOuter = StyleSheet.flatten(listening.getByTestId('realtime-voice-portrait-outer-ring').props.style);
+      expect(restingOuter).toMatchObject({ borderColor: lightColors.portraitRing, borderWidth: 2 });
+      expect(onPlaybackChange).toHaveBeenLastCalledWith(false);
+      await listening.unmount();
+      // Unmounting an owned control reports that playback stopped, like its status.
+      expect(onPlaybackChange).toHaveBeenLastCalledWith(false);
+
+      mockIsPlaying = true;
+      const speaking = await render(
+        <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onPlaybackChange={onPlaybackChange} size="portrait" tone="dark">
+          <Text>Asha</Text>
+        </RealtimeVoiceButton>,
+      );
+      expect(StyleSheet.flatten(speaking.getByTestId('realtime-voice-portrait-outer-ring').props.style)).toMatchObject({ borderColor: lightColors.gold, borderWidth: 3 });
+      // The microphone is still on, so the control still offers Mute.
+      expect(speaking.getByLabelText('Mute microphone')).toBeTruthy();
+      expect(onPlaybackChange).toHaveBeenLastCalledWith(true);
+      await speaking.unmount();
+
+      mockIsPlaying = null;
+      mockVoiceStatus = 'disconnected';
+      const idle = await render(
+        <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="portrait" tone="dark">
+          <Text>Asha</Text>
+        </RealtimeVoiceButton>,
+      );
+      expect(StyleSheet.flatten(idle.getByTestId('realtime-voice-portrait-outer-ring').props.style).borderWidth).toBe(2);
     });
 
     it('shrinks with the compact layout and exposes disabled state', async () => {

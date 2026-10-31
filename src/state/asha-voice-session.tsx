@@ -8,7 +8,7 @@ import type { FloatingAshaBubble } from '@/components/floating-asha-bubble';
 import type { RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
-import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
+import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, logTypedChatSession, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { floatingAshaEnabled } from '@/lib/floating-asha';
 import { useAppState } from '@/state/app-state';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
@@ -205,6 +205,8 @@ function AshaVoiceSessionHost({
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
       void stopSpeaking();
+      // The chat about to be cleared is kept as a past session, typed messages included.
+      logTypedChatSession(appRef.current.chatHistory ?? [], appRef.current.learnerProfile.responseLanguage);
       appRef.current.clearChatHistory();
       ids.current = [];
     }

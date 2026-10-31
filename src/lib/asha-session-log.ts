@@ -9,7 +9,7 @@
  */
 import { LIVE_MODES, type LiveMode } from '@/services/bolo-api';
 import { MAX_CHAT_MESSAGE_CHARACTERS } from '@/lib/storage';
-import type { AshaResponseLanguage } from '@/state/app-state-types';
+import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 /** Set this to false to stop writing the session log and hide the Last session screen. */
 export const ashaSessionLogEnabled = true;
@@ -18,7 +18,7 @@ export const ashaSessionLogEnabled = true;
 export const ASHA_SESSION_KEY_PREFIX = 'bolo-asha-session-v1:';
 /** Ids and start times only; it changes on insertion, eviction, expiry, or deletion. */
 export const ASHA_SESSION_INDEX_KEY = 'bolo-asha-session-index-v1';
-/** The latest session shown on Last session plus up to two hidden crash-recovery records. */
+/** How many past sessions the Past sessions screen lists; older ones are evicted. */
 export const MAX_ASHA_SESSIONS = 3;
 export const ASHA_SESSION_RETENTION_DAYS = 30;
 export const MAX_ASHA_SESSION_ROWS = 200;
@@ -40,6 +40,8 @@ export const ASHA_SESSION_END_REASONS = [
   'data_deleted',
   'config_changed',
   'app_terminated',
+  /** A typed chat saved when the learner started a new voice conversation. */
+  'new_conversation',
 ] as const;
 export type AshaSessionEndReason = (typeof ASHA_SESSION_END_REASONS)[number];
 export type AshaSessionState = 'active' | 'ended' | 'interrupted';
@@ -101,9 +103,9 @@ export function isAshaSessionKey(key: string) {
   return key.startsWith(ASHA_SESSION_KEY_PREFIX) && key.length > ASHA_SESSION_KEY_PREFIX.length;
 }
 
-/** Only a session the learner ended on purpose counts as completed; everything else was cut short. */
+/** Only a session the learner closed on purpose counts as completed; everything else was cut short. */
 export function ashaSessionStateFor(endReason: AshaSessionEndReason): Exclude<AshaSessionState, 'active'> {
-  return endReason === 'user_ended' ? 'ended' : 'interrupted';
+  return endReason === 'user_ended' || endReason === 'new_conversation' ? 'ended' : 'interrupted';
 }
 
 export function isAshaSessionEndReason(value: unknown): value is AshaSessionEndReason {
@@ -278,9 +280,52 @@ export function pruneAshaSessions<T extends { startedAt: string }>(sessions: T[]
   return sortAshaSessions(sessions).filter((session) => Date.parse(session.startedAt) >= cutoff).slice(-MAX_ASHA_SESSIONS);
 }
 
-/** The record Last session shows: the most recent by start time. Older records stay hidden. */
+/** The most recent session by start time. */
 export function latestAshaSession(sessions: AshaSessionRecord[]): AshaSessionRecord | null {
   return sortAshaSessions(sessions).at(-1) ?? null;
+}
+
+/** The order Past sessions lists records in: the newest conversation first. */
+export function ashaSessionsNewestFirst<T extends { startedAt: string }>(sessions: T[]): T[] {
+  return sortAshaSessions(sessions).reverse();
+}
+
+/** The millisecond timestamp a typed chat id (`you-<ms>`, `asha-<ms>`) was created at, when it carries one. */
+function chatMessageTimestamp(id: string): number | null {
+  const match = /^(?:you|asha)-(\d{12,14})$/u.exec(id);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * A typed chat (and any voice rows not yet in a stored session) as a finished
+ * record, so starting a new voice conversation saves the chat it is about to
+ * clear instead of dropping it. Rows already held by a stored session are left
+ * out so a transcript is never saved twice; with no new rows there is nothing
+ * to save and null is returned.
+ */
+export function createTypedChatSessionRecord(
+  messages: Pick<ChatMessage, 'id' | 'role' | 'text'>[],
+  input: { id: string; responseLanguage: AshaResponseLanguage; now: string; storedRowIds?: Iterable<string> },
+): AshaSessionRecord | null {
+  const stored = new Set(input.storedRowIds ?? []);
+  const fresh = messages.filter((message) => message.text.trim() && !stored.has(message.id));
+  if (!fresh.length) return null;
+  const stamps = fresh.map((message) => chatMessageTimestamp(message.id));
+  const nowMs = Date.parse(input.now);
+  const firstStamp = stamps.find((stamp): stamp is number => stamp !== null && stamp <= nowMs);
+  const startedMs = firstStamp ?? nowMs;
+  const rows = fresh.map((message, index) => {
+    const stamp = stamps[index] ?? null;
+    const at = stamp !== null && stamp >= startedMs && stamp <= nowMs ? stamp - startedMs : index;
+    return { id: message.id, speaker: message.role, text: message.text, startMs: at, endMs: at };
+  });
+  const record = withinCaps({
+    ...createAshaSessionRecord({ id: input.id, startedAt: new Date(startedMs).toISOString(), responseLanguage: input.responseLanguage }),
+    rows: rows.map((row) => sanitizeSnapshotRow(row)).filter((row): row is AshaSessionTranscriptRow => row !== null),
+  });
+  if (!record.rows.length) return null;
+  const endedAt = new Date(startedMs + Math.max(...record.rows.map((row) => row.endMs))).toISOString();
+  return { ...record, state: 'ended', endReason: 'new_conversation', endedAt };
 }
 
 /** The session whose transcript holds this live row, for associating a report locally. */

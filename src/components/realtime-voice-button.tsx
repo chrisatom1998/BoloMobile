@@ -55,6 +55,8 @@ type Props = {
   /** Shares this exact control's turn action with a companion UI surface. */
   onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
+  /** Whether Asha's audio is playing. With the microphone on, the hosting screen shows "speaking" instead of "listening". */
+  onPlaybackChange?: (playing: boolean) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
   responseLanguage?: AshaResponseLanguage;
@@ -73,6 +75,8 @@ export type RealtimeVoiceControls = {
   startTurn: () => Promise<void>;
   status: RealtimeVoiceStatus;
   microphoneEnabled: boolean;
+  /** Asha's audio is playing; `status` alone reads `recording` while she talks over an open microphone. */
+  isPlaying?: boolean;
 };
 
 const labels = {
@@ -193,12 +197,16 @@ export function RealtimeVoiceButton(props: Props) {
   return <OwnedRealtimeVoiceButton {...props} />;
 }
 
-function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
+function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onPlaybackChange, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
+  const onPlaybackChangeRef = useRef(onPlaybackChange);
   const onMicrophonePhaseRef = useRef(onMicrophonePhase);
   const ensuringRef = useRef(false);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
+  const playing = voice.isPlaying ?? false;
+  // Asha talking while the call is live, whether or not the microphone is open.
+  const speaking = connected && voice.status !== 'connecting' && (playing || voice.status === 'responding');
   const styles = useStyles();
   const { colors } = useTheme();
   const { orbStyle, rippleStyle } = useOrbMotion(voice.status, motionMode);
@@ -211,6 +219,19 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
+
+  useEffect(() => {
+    onPlaybackChangeRef.current = onPlaybackChange;
+  }, [onPlaybackChange]);
+
+  useEffect(() => {
+    onPlaybackChange?.(playing);
+  }, [onPlaybackChange, playing]);
+
+  useEffect(() => {
+    if (!owned) return undefined;
+    return () => onPlaybackChangeRef.current?.(false);
+  }, [owned]);
 
   useEffect(() => {
     onMicrophonePhaseRef.current = onMicrophonePhase;
@@ -289,7 +310,7 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
     const StatusIcon = recording ? MicOff : Mic;
     return (
       <View style={[styles.stage, styles.stagePortrait, compact && styles.stagePortraitCompact]} testID="realtime-voice-stage">
-        <View pointerEvents="none" style={[styles.ring, styles.portraitRingOuter, compact && styles.portraitRingOuterCompact, connected && styles.portraitRingConnected]} />
+        <View pointerEvents="none" style={[styles.ring, styles.portraitRingOuter, compact && styles.portraitRingOuterCompact, connected && styles.portraitRingConnected, speaking && styles.portraitRingSpeaking]} testID="realtime-voice-portrait-outer-ring" />
         <Animated.View
           pointerEvents="none"
           style={[styles.ring, styles.portraitRingInner, compact && styles.portraitRingInnerCompact, recording && styles.portraitRingRecording, rippleStyle]}
@@ -405,6 +426,8 @@ const useStyles = makeStyles((c) => ({
   portraitRingInner: { width: 128, height: 128, borderWidth: 2, borderColor: c.portraitRing },
   portraitRingInnerCompact: { width: 110, height: 110 },
   portraitRingRecording: { borderWidth: 3, borderColor: c.gold },
+  // While Asha speaks the outer ring thickens to gold, so the stage shows her turn even with the microphone open.
+  portraitRingSpeaking: { borderWidth: 3, borderColor: c.gold },
   portraitButton: { width: 112, height: 112, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   portraitButtonCompact: { width: 96, height: 96 },
   portraitBadge: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: radius.pill, borderWidth: 3, borderColor: c.night, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },

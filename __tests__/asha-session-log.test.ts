@@ -6,10 +6,12 @@ import {
   ashaSessionIdForRow,
   ashaSessionIndexEntries,
   ashaSessionKey,
+  ashaSessionsNewestFirst,
   ashaSessionStateFor,
   clearAshaSessionContent,
   connectAshaSession,
   createAshaSessionRecord,
+  createTypedChatSessionRecord,
   finishAshaSession,
   isAshaSessionKey,
   isAshaSessionStorable,
@@ -153,6 +155,7 @@ describe('Asha session log records', () => {
 
   it.each([
     ['user_ended', 'ended'],
+    ['new_conversation', 'ended'],
     ['config_changed', 'interrupted'],
     ['connection_lost', 'interrupted'],
     ['backgrounded', 'interrupted'],
@@ -218,6 +221,8 @@ describe('Asha session log records', () => {
     // Ordering follows start time, not insertion order.
     expect(latestAshaSession([pruned[2]!, pruned[0]!, pruned[1]!])?.id).toBe('s-3');
     expect(latestAshaSession([])).toBeNull();
+    // Past sessions lists the newest conversation first, whatever order the store holds.
+    expect(ashaSessionsNewestFirst([pruned[1]!, pruned[2]!, pruned[0]!]).map((session) => session.id)).toEqual(['s-3', 's-2', 's-1']);
     expect(ashaSessionIndexEntries([pruned[2]!, pruned[0]!])).toEqual([{ id: 's-1', startedAt: pruned[0]!.startedAt }, { id: 's-3', startedAt: pruned[2]!.startedAt }]);
   });
 
@@ -322,5 +327,61 @@ describe('Asha session log sanitizers', () => {
     expect(sanitizeAshaSessionIndex(JSON.stringify({ entries: entries.slice(0, 1) }))).toEqual([entries[0]]);
     expect(sanitizeAshaSessionIndex(null)).toEqual([]);
     expect(sanitizeAshaSessionIndex('{')).toEqual([]);
+  });
+});
+
+describe('typed chat saved as a session', () => {
+  const now = '2026-10-31T10:05:00.000Z';
+  const typed = [
+    { id: 'you-1793441040000', role: 'you' as const, text: 'How do I say thank you?' },
+    { id: 'asha-1793441044000', role: 'asha' as const, text: 'धन्यवाद (dhanyavaad).' },
+  ];
+
+  it('turns the chat into a completed record timed from the typed message ids', () => {
+    const record = createTypedChatSessionRecord(typed, { id: 'typed-1', responseLanguage: 'hi', now });
+    expect(record).toMatchObject({
+      schema: 1,
+      id: 'typed-1',
+      state: 'ended',
+      endReason: 'new_conversation',
+      responseLanguage: 'hi',
+      startedAt: '2026-10-31T10:04:00.000Z',
+      endedAt: '2026-10-31T10:04:04.000Z',
+      learnerTurns: 1,
+      savedPhrases: [],
+      lessonsPracticed: [],
+    });
+    expect(record!.rows).toEqual([
+      { id: 'you-1793441040000', speaker: 'you', text: 'How do I say thank you?', startMs: 0, endMs: 0 },
+      { id: 'asha-1793441044000', speaker: 'asha', text: 'धन्यवाद (dhanyavaad).', startMs: 4_000, endMs: 4_000 },
+    ]);
+    expect(ashaSessionStateFor('new_conversation')).toBe('ended');
+    expect(isAshaSessionStorable(record!)).toBe(true);
+  });
+
+  it('skips rows a stored session already holds and saves nothing when none remain', () => {
+    const voiceRows = [
+      { id: 'live-1761905000000-0-0', role: 'you' as const, text: 'Namaste' },
+      { id: 'live-1761905000000-0-1', role: 'asha' as const, text: 'Namaste!' },
+    ];
+    expect(createTypedChatSessionRecord(voiceRows, { id: 'dup', responseLanguage: 'en', now, storedRowIds: voiceRows.map((row) => row.id) })).toBeNull();
+    const mixed = createTypedChatSessionRecord([...voiceRows, ...typed], { id: 'mixed', responseLanguage: 'en', now, storedRowIds: voiceRows.map((row) => row.id) });
+    expect(mixed!.rows.map((row) => row.id)).toEqual(typed.map((message) => message.id));
+    expect(createTypedChatSessionRecord([], { id: 'empty', responseLanguage: 'en', now })).toBeNull();
+    expect(createTypedChatSessionRecord([{ id: 'you-1', role: 'you', text: '   ' }], { id: 'blank', responseLanguage: 'en', now })).toBeNull();
+  });
+
+  it('falls back to the save time and row order when ids carry no usable timestamp', () => {
+    const record = createTypedChatSessionRecord([
+      { id: 'legacy-a', role: 'you', text: 'Hi' },
+      { id: 'asha-9999999999999', role: 'asha', text: 'Future stamp is ignored' },
+    ], { id: 'legacy', responseLanguage: 'en', now });
+    expect(record).toMatchObject({ startedAt: now, endedAt: '2026-10-31T10:05:00.001Z' });
+    expect(record!.rows.map((row) => row.startMs)).toEqual([0, 1]);
+  });
+
+  it('round-trips through the stored-record sanitizer', () => {
+    const record = createTypedChatSessionRecord(typed, { id: 'typed-2', responseLanguage: 'en', now })!;
+    expect(sanitizeAshaSession(JSON.stringify(record))).toEqual(record);
   });
 });

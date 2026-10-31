@@ -11,6 +11,7 @@ const mockStartTurn = jest.fn();
 const mockReplaceLiveChatSnapshot = jest.fn();
 const mockMarkLiveTurn = jest.fn();
 const mockClearChatHistory = jest.fn();
+const mockChatHistory = [{ id: 'you-1761900000000', role: 'you', text: 'Typed before the call' }];
 let mockStatus: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding' = 'disconnected';
 let mockTranscriptSnapshot: ((rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void) | undefined;
 let mockConnectionStart: ((signal: AbortSignal) => void | Promise<void>) | undefined;
@@ -24,10 +25,11 @@ jest.mock('@/lib/asha-session-log-store', () => ({
   ensureAshaSessionLogLoaded: jest.fn(() => mockRecovery),
   logAshaSessionEvent: jest.fn(),
   logAshaSessionSnapshot: jest.fn(),
+  logTypedChatSession: jest.fn(),
   registerLiveCallEnder: jest.fn(() => mockUnregisterEnder),
 }));
 
-import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '../src/lib/asha-session-log-store';
+import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, logTypedChatSession, registerLiveCallEnder } from '../src/lib/asha-session-log-store';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockNavigate }),
@@ -82,6 +84,7 @@ jest.mock('@/state/app-state', () => ({
     clientId: 'client-12345678',
     aiConsent: true,
     learnerProfile: { responseLanguage: 'en' },
+    chatHistory: mockChatHistory,
     replaceLiveChatSnapshot: mockReplaceLiveChatSnapshot,
     markLiveTurn: mockMarkLiveTurn,
     clearChatHistory: mockClearChatHistory,
@@ -113,6 +116,7 @@ describe('Asha voice session above the navigator', () => {
     mockReplaceLiveChatSnapshot.mockClear();
     mockMarkLiveTurn.mockClear();
     mockClearChatHistory.mockClear();
+    jest.mocked(logTypedChatSession).mockClear();
     mockConnectionStart = undefined;
     mockSessionEvent = undefined;
     mockTranscriptSnapshot = undefined;
@@ -262,6 +266,18 @@ describe('Asha voice session above the navigator', () => {
       { id: 'asha-1', role: 'asha', text: 'Hello', language: 'en' },
     ]);
     expect(mockMarkLiveTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the chat on screen as a past session before clearing it when no screen is listening', async () => {
+    const view = await renderSession();
+    mockStatus = 'connecting';
+    await act(async () => { view.rerender(<AshaVoiceSessionProvider><Probe /></AshaVoiceSessionProvider>); });
+    expect(logTypedChatSession).not.toHaveBeenCalled();
+    mockStatus = 'ready';
+    await act(async () => { view.rerender(<AshaVoiceSessionProvider><Probe /></AshaVoiceSessionProvider>); });
+    expect(logTypedChatSession).toHaveBeenCalledWith(mockChatHistory, 'en');
+    expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(logTypedChatSession).mock.invocationCallOrder[0]).toBeLessThan(mockClearChatHistory.mock.invocationCallOrder[0]!);
   });
 
   it('runs the conversation screen reset before the shared voice session connects', async () => {

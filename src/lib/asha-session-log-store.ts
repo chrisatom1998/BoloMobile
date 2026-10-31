@@ -23,6 +23,7 @@ import {
   clearAshaSessionContent as clearRecordContent,
   connectAshaSession,
   createAshaSessionRecord,
+  createTypedChatSessionRecord,
   finishAshaSession,
   isAshaSessionKey,
   isAshaSessionStorable,
@@ -40,7 +41,7 @@ import {
 } from '@/lib/asha-session-log';
 import { observe } from '@/lib/observability';
 import { createLocalId } from '@/lib/storage';
-import type { AshaResponseLanguage } from '@/state/app-state-types';
+import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 type LocalStorage = {
   getItem(key: string): Promise<string | null>;
@@ -391,6 +392,27 @@ export function logAshaSessionEvent(event: AshaSessionEvent, responseLanguage: A
 export function logAshaSessionSnapshot(rows: AshaSnapshotRow[]) {
   if (!ashaSessionLogEnabled) return;
   apply(() => updateActive((record) => mergeAshaSessionRows(record, rows)));
+}
+
+/**
+ * Saves the chat on screen as a finished session right before a new voice
+ * conversation clears it, typed messages included. Rows a stored session already
+ * holds (a voice call's own transcript) are skipped so nothing is saved twice,
+ * and a chat with no new rows saves nothing.
+ */
+export function logTypedChatSession(messages: Pick<ChatMessage, 'id' | 'role' | 'text'>[], responseLanguage: AshaResponseLanguage, details: SessionEventDetails = {}) {
+  if (!ashaSessionLogEnabled || !messages.length) return;
+  const at = details.at ?? new Date().toISOString();
+  apply(() => {
+    const storedRowIds = sessions.flatMap((session) => session.rows.map((row) => row.id));
+    const record = createTypedChatSessionRecord(messages, { id: details.id ?? createLocalId(), responseLanguage, now: at, storedRowIds });
+    if (!record) return;
+    // Already finished, so it joins the stored list directly; its index entry and
+    // any eviction wait for the first durable write (see scheduleRecordWrite).
+    unpublished.add(record.id);
+    replaceSessions(sortAshaSessions([...sessions, record]));
+    scheduleRecordWrite(record.id);
+  });
 }
 
 export function logAshaSessionTool(outcome: { savedPhrase?: string; lessonId?: string }) {
