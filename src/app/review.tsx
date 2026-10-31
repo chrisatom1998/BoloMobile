@@ -23,6 +23,11 @@ export default function ReviewScreen() {
   const { audioError, clearAudioError, speak } = useSpeakText();
   const gradedPhraseRef = useRef<string | null>(null);
   const supportedRecallRef = useRef(false);
+  // Monotonic so a finished card's late result cannot match the next card's run.
+  const hintRunRef = useRef(0);
+  // A hint clip that actually finished on this card. A later failure must not
+  // erase that. grade() clears it before the next card is shown.
+  const hintHeardRef = useRef(false);
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
   // advancing index. Lock the displayed session at the first grade instead of at
   // mount so a screen rendered before hydration still picks up the due list.
@@ -74,6 +79,7 @@ export default function ReviewScreen() {
     else hapticWarning();
     if (recalled) setCorrect((value) => value + 1);
     supportedRecallRef.current = false;
+    hintHeardRef.current = false;
     setHintUsed(false);
     setRevealed(false);
     setIndex((value) => value + 1);
@@ -87,22 +93,25 @@ export default function ReviewScreen() {
 
   function playPhrase(playbackRate = 1) {
     if (!phrase || !canListen || recorderBusy) return;
+    // Listen, Slow, and a second hint tap all stop the clip that is already
+    // playing. Bump the run first so that cancel cannot clear a hint the
+    // learner already started. Only the latest hint run may clear, and only
+    // when it fails and no earlier hint on this card finished.
+    const run = ++hintRunRef.current;
     if (listenFirst || revealed) {
       void speak(phrase.hi, undefined, playbackRate);
       return;
     }
-    // Count the hint as soon as it's tapped, so Got it is downgraded while the
-    // clip is still playing. Take that back only when this playback does not
-    // finish and the card is still ungraded. A failure and a cancellation both
-    // resolve false: the learner did not hear the hint, so Got it stays real
-    // recall and no error is shown for a cancellation. Grading stops the clip;
-    // once this card is graded, that late false must not change the score or
-    // clear a hint the learner already took on the next card.
     const hintedPhrase = phrase.hi;
     supportedRecallRef.current = true;
     setHintUsed(true);
     void speak(hintedPhrase, undefined, playbackRate).then((played) => {
-      if (played || gradedPhraseRef.current === hintedPhrase) return;
+      if (gradedPhraseRef.current === hintedPhrase || run !== hintRunRef.current) return;
+      if (played) {
+        hintHeardRef.current = true;
+        return;
+      }
+      if (hintHeardRef.current) return;
       supportedRecallRef.current = false;
       setHintUsed(false);
     });
