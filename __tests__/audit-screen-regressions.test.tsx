@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
-import { Dimensions, StyleSheet } from 'react-native';
+import { Dimensions, ScrollView, StyleSheet } from 'react-native';
 
 const mockRouter = { back: jest.fn(), push: jest.fn(), replace: jest.fn() };
 let mockOnboardingMode: string | undefined;
@@ -331,6 +331,28 @@ describe('previously uncovered audit screens', () => {
       { level: 'beginner', scriptPreference: 'devanagari', primaryGoal: 'travel', responseLanguage: 'en', microphoneTested: false },
       10,
     );
+  });
+
+  it('returns to the top of the next step after choosing from a scrolled position', async () => {
+    const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo').mockImplementation(() => undefined);
+    const view = await render(<OnboardingScreen />);
+    const scroll = view.getByTestId('onboarding-scroll');
+
+    // A large-text learner scrolls down to the last level option before pressing Continue.
+    await fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { x: 0, y: 420 } } });
+    await fireEvent.press(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    expect(view.getByRole('header', { name: 'How should Hindi appear?' })).toBeTruthy();
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: false });
+
+    // Back resets the offset too, so the previous question reopens at its heading.
+    await fireEvent.scroll(scroll, { nativeEvent: { contentOffset: { x: 0, y: 300 } } });
+    await fireEvent.press(view.getByRole('button', { name: 'Back' }));
+    expect(view.getByRole('header', { name: 'Where are you starting?' })).toBeTruthy();
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: false });
+    expect(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }).props.accessibilityState).toEqual({ checked: true });
   });
 
   it('seeds recalibration from saved preferences and offers a cancel exit on the first step', async () => {

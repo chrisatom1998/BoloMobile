@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowRight, Check, ChevronLeft, X } from 'lucide-react-native';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Platform, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -99,6 +99,7 @@ export default function OnboardingScreen() {
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const recalibrating = mode === 'recalibrate' && learnerProfile.completed;
   const [step, setStep] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
   const [level, setLevel] = useState<LearnerLevel>(recalibrating ? learnerProfile.level : 'new');
   const [scriptPreference, setScriptPreference] = useState<ScriptPreference>(recalibrating ? learnerProfile.scriptPreference : 'both');
   const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>(recalibrating ? learnerProfile.primaryGoal : 'conversation');
@@ -183,6 +184,9 @@ export default function OnboardingScreen() {
 
   function goTo(next: number) {
     setStep(next);
+    // Each step is a fresh question. Return to the top without animating so a step
+    // reached from a scrolled position (large text, lower options) opens at its heading.
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
     // Android reads the new heading through the live region; iOS needs an explicit announcement.
     if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(`Step ${next + 1} of ${STEP_COUNT}. ${stepAt(next).title}`);
   }
@@ -205,7 +209,9 @@ export default function OnboardingScreen() {
   return (
     <View style={sharedStyles.screen} testID="onboarding-screen">
       <ScrollView
+        ref={scrollRef}
         contentInsetAdjustmentBehavior="automatic"
+        testID="onboarding-scroll"
         contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + spacing.lg }]}
         style={sharedStyles.screen}
       >
