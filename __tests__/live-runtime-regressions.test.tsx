@@ -724,18 +724,12 @@ describe('immersive live conversation design', () => {
     if (!message) throw new Error('The Romanized Asha message was not rendered.');
     expect(message.props.value).toBe(displayReply);
     expect(view.queryByDisplayValue(longDevanagariReply)).toBeNull();
-    const initialStyle = StyleSheet.flatten(message.props.style);
-    expect(initialStyle.height).toBeUndefined();
-    expect(initialStyle.minHeight).toBe(23);
-
-    await act(async () => {
-      message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
-      await Promise.resolve();
-    });
-    const resizedMessage = view.getAllByLabelText(/^(?:You|Asha): /u)
-      .find((candidate) => candidate.props.value === displayReply);
-    if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
-    expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
+    // The bubble is sized by a hidden Text twin, never by a pinned input height
+    // that can go stale after a narrow first layout.
+    const inputStyle = StyleSheet.flatten(message.props.style);
+    expect(inputStyle.height).toBeUndefined();
+    expect(inputStyle.position).toBe('absolute');
+    expect(message.props.onContentSizeChange).toBeUndefined();
     expect(speech.preloadSpeech).not.toHaveBeenCalled();
 
     await view.unmount();
