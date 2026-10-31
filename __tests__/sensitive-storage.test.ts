@@ -1,6 +1,6 @@
 import { ASHA_SESSION_INDEX_KEY, ashaSessionKey, type AshaSessionRecord } from '../src/lib/asha-session-log';
 import {
-  SENSITIVE_KEY_ACCOUNT,
+  HISTORY_SEAL_ACCOUNT,
   SENSITIVE_VALUE_PREFIX,
   readSensitiveItem,
   revealSensitiveValue,
@@ -131,7 +131,7 @@ describe('sensitive on-device storage', () => {
   it('stores the encryption key outside AsyncStorage when the platform keystore is unavailable only as a fallback account', async () => {
     const store = memoryStore();
     await writeSensitiveItem(store, 'bolo-chat-history', secret);
-    const key = store.snapshot().get(SENSITIVE_KEY_ACCOUNT) ?? '';
+    const key = store.snapshot().get(HISTORY_SEAL_ACCOUNT) ?? '';
     expect(key.length).toBeGreaterThan(0);
     expect(key).not.toContain(secret);
     expect(store.snapshot().get('bolo-chat-history')).not.toContain(key);

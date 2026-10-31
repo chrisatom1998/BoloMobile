@@ -10,7 +10,7 @@
 import type { AESEncryptionKey, AESSealedData } from 'expo-crypto';
 
 export const SENSITIVE_VALUE_PREFIX = 'bolo-enc-v1:';
-export const SENSITIVE_KEY_ACCOUNT = 'bolo-sensitive-key-v1';
+export const HISTORY_SEAL_ACCOUNT = 'bolo-history-seal-v1';
 
 const IV_BYTES = 12;
 const KEY_BYTES = 32;
@@ -115,8 +115,8 @@ async function secureStoreApi(): Promise<SecureApi | null> {
     const SecureStore = await import('expo-secure-store');
     if (await SecureStore.isAvailableAsync()) {
       secureApi = {
-        get: () => SecureStore.getItemAsync(SENSITIVE_KEY_ACCOUNT),
-        set: (value) => SecureStore.setItemAsync(SENSITIVE_KEY_ACCOUNT, value),
+        get: () => SecureStore.getItemAsync(HISTORY_SEAL_ACCOUNT),
+        set: (value) => SecureStore.setItemAsync(HISTORY_SEAL_ACCOUNT, value),
       };
       return secureApi;
     }
@@ -161,11 +161,11 @@ async function loadKey(store: SensitiveStore): Promise<KeyMaterial> {
     return rememberKey('secure', async () => materialize(await secure.get(), (hex) => secure.set(hex)));
   }
   const material = await rememberKey('fallback', async () => materialize(
-    await store.getItem(SENSITIVE_KEY_ACCOUNT),
-    (hex) => store.setItem(SENSITIVE_KEY_ACCOUNT, hex),
+    await store.getItem(HISTORY_SEAL_ACCOUNT),
+    (hex) => store.setItem(HISTORY_SEAL_ACCOUNT, hex),
   ));
-  if ((await store.getItem(SENSITIVE_KEY_ACCOUNT)) !== material.hex) {
-    await store.setItem(SENSITIVE_KEY_ACCOUNT, material.hex);
+  if ((await store.getItem(HISTORY_SEAL_ACCOUNT)) !== material.hex) {
+    await store.setItem(HISTORY_SEAL_ACCOUNT, material.hex);
   }
   return material;
 }

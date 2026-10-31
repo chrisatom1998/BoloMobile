@@ -47,7 +47,7 @@ import { SYNC_OUTBOX_CLEARING_KEY, SYNC_OUTBOX_KEY, syncOutbox } from '../src/li
 import { BoloApiError, reportGeneratedMessage } from '../src/services/bolo-api';
 import { observe } from '../src/lib/observability';
 import { cancelPracticeReminder } from '../src/lib/practice-reminder';
-import { SENSITIVE_KEY_ACCOUNT, revealSensitiveValue } from '../src/lib/sensitive-storage';
+import { HISTORY_SEAL_ACCOUNT, revealSensitiveValue } from '../src/lib/sensitive-storage';
 import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
@@ -187,7 +187,7 @@ describe('AppStateProvider clearAllData', () => {
       practice: emptyPractice(),
       streakDays: [],
     });
-    expect(asyncStorage.__store.size).toBe(Object.keys(storageKeys).length + (asyncStorage.__store.has(SENSITIVE_KEY_ACCOUNT) ? 1 : 0));
+    expect(asyncStorage.__store.size).toBe(Object.keys(storageKeys).length + (asyncStorage.__store.has(HISTORY_SEAL_ACCOUNT) ? 1 : 0));
     expect(asyncStorage.__store.has(ASHA_SESSION_INDEX_KEY)).toBe(false);
     expect(sessionKeys()).toEqual([]);
     expect(asyncStorage.__store.has(SYNC_OUTBOX_KEY)).toBe(false);
