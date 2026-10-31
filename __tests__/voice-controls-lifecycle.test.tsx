@@ -67,10 +67,10 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => ({ clientId: 'client-12345678' }),
 }));
 
-import { requestRecordingPermissionsAsync } from 'expo-audio';
+import { requestRecordingPermissionsAsync, useAudioRecorder } from 'expo-audio';
 
 import { PronunciationRecorder } from '../src/components/pronunciation-recorder';
-import { VoiceTurnButton } from '../src/components/voice-turn-button';
+import { VoiceTurnButton, VoiceTurnPlaceholder } from '../src/components/voice-turn-button';
 import { speakText, stopSpeaking } from '../src/lib/speech';
 import { isRealtimeVoiceSessionActive, registerRealtimeVoiceOwner, resetVoiceAudioMode, setVoiceAudioMode } from '../src/lib/voice';
 import { checkPronunciation, reportGeneratedMessage } from '../src/services/bolo-api';
@@ -124,6 +124,49 @@ describe('voice control lifecycle', () => {
   it('uses the brand colour for the idle record button', async () => {
     const view = await render(<VoiceTurnButton idleLabel="Record pronunciation" onRecordingReady={jest.fn()} />);
     expect(StyleSheet.flatten(view.getByLabelText('Record pronunciation').props.style).backgroundColor).toBe(lightColors.brand);
+  });
+
+  it('runs the hero mic as the same tap-to-start, tap-to-stop control with a round brand face', async () => {
+    const onRecordingReady = jest.fn(async () => undefined);
+    const view = await render(<VoiceTurnButton appearance="hero" idleLabel="Say it" onRecordingReady={onRecordingReady} testID="review-say-it" />);
+    const sayIt = view.getByLabelText('Say it');
+    expect(sayIt.props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByText('Say it')).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByTestId('review-say-it-face').props.style)).toMatchObject({ width: 88, height: 88, backgroundColor: lightColors.brand });
+
+    await fireEvent.press(sayIt);
+    await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
+    expect(StyleSheet.flatten(view.getByTestId('review-say-it-face').props.style)).toMatchObject({ backgroundColor: lightColors.neutralSurface });
+    expect(view.getByText(/^Stop · \d+s$/u)).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Stop recording'));
+    await waitFor(() => expect(onRecordingReady).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(view.getByLabelText('Say it').props.accessibilityState).toEqual({ disabled: false }));
+    await view.unmount();
+  });
+
+  it('renders the consent placeholder as a disabled mic without mounting a recorder', async () => {
+    const useAudioRecorderMock = useAudioRecorder as jest.Mock;
+    const view = await render(<VoiceTurnPlaceholder accessibilityHint="Pronunciation checks need your consent to connected AI processing." idleLabel="Say it" testID="review-say-it" />);
+    const sayIt = view.getByLabelText('Say it');
+    expect(sayIt.props.accessibilityState).toEqual({ disabled: true });
+    expect(sayIt.props.accessibilityHint).toBe('Pronunciation checks need your consent to connected AI processing.');
+    expect(useAudioRecorderMock).not.toHaveBeenCalled();
+    await fireEvent.press(sayIt);
+    expect(requestPermissionMock).not.toHaveBeenCalled();
+    expect(expoAudio.__mockRecorder.record).not.toHaveBeenCalled();
+  });
+
+  it('keeps the hero recorder disabled before consent and offers the notice instead of recording', async () => {
+    const useAudioRecorderMock = useAudioRecorder as jest.Mock;
+    const view = await render(<PronunciationRecorder idleLabel="Say it" lessonTitle="Review" target={{ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' }} variant="hero" />);
+    expect(view.getByLabelText('Say it').props.accessibilityState).toEqual({ disabled: true });
+    expect(useAudioRecorderMock).not.toHaveBeenCalled();
+    expect(view.getByText('Pronunciation checks need your consent to connected AI processing.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Allow pronunciation checks' }));
+    expect(view.queryByRole('button', { name: 'Allow pronunciation checks' })).toBeNull();
+    expect(requestPermissionMock).not.toHaveBeenCalled();
+    expect(checkPronunciationMock).not.toHaveBeenCalled();
   });
 
   it('starts only one permission flow when the record button is tapped twice before permission resolves', async () => {

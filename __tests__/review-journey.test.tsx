@@ -32,13 +32,14 @@ jest.mock('expo-router', () => ({
 jest.mock('lucide-react-native', () => ({
   Check: () => null,
   Flag: () => null,
+  Mic: () => null,
   RotateCcw: () => null,
   ShieldCheck: () => null,
   Sparkles: () => null,
   Volume2: () => null,
 }));
 
-jest.mock('@/components/voice-turn-button', () => ({ VoiceTurnButton: () => null }));
+jest.mock('@/components/voice-turn-button', () => ({ VoiceTurnButton: () => null, VoiceTurnPlaceholder: () => null }));
 
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 jest.mock('@/lib/haptics', () => ({ hapticSuccess: jest.fn(), hapticWarning: jest.fn() }));
@@ -126,10 +127,10 @@ describe('ReviewScreen spaced-repetition journey', () => {
   it('reschedules a forgotten phrase for today and a remembered phrase for tomorrow', async () => {
     seedDuePhrases();
     const view = await renderReview();
-    await waitFor(() => expect(view.getByText('Phrase 1 of 2')).toBeTruthy());
-    expect(view.getByText('Mastery 0/5')).toBeTruthy();
+    await waitFor(() => expect(view.getByText('1 of 2')).toBeTruthy());
+    expect(view.getByLabelText('Mastery 0 of 5')).toBeTruthy();
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByText(namaste.hi)).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Again' }));
 
@@ -141,9 +142,9 @@ describe('ReviewScreen spaced-repetition journey', () => {
       totalReviews: 1,
     })));
     expect(hapticWarningMock).toHaveBeenCalledTimes(1);
-    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText('2 of 2')).toBeTruthy();
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 
     await waitFor(() => expect(readReviews(view)[chai.hi]).toEqual(expect.objectContaining({
@@ -174,14 +175,14 @@ describe('ReviewScreen spaced-repetition journey', () => {
       [chai.hi]: { ...defaultPhraseReview(today), mastery: 1 },
     }));
     const view = await renderReview();
-    await waitFor(() => expect(view.getByText('Phrase 1 of 2')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('1 of 2')).toBeTruthy());
 
-    expect(view.getByText('Mastery 1/5')).toBeTruthy();
+    expect(view.getByLabelText('Mastery 1 of 5')).toBeTruthy();
     expect(speakTextMock).not.toHaveBeenCalled();
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByText(chai.hi)).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
-    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText('2 of 2')).toBeTruthy();
     expect(view.getByText('Listen, then say what it means')).toBeTruthy();
     expect(view.queryByText(namaste.en)).toBeNull();
     expect(speakTextMock).toHaveBeenCalledTimes(1);
@@ -196,21 +197,21 @@ describe('ReviewScreen spaced-repetition journey', () => {
       [chai.hi]: { ...defaultPhraseReview(today), mastery: 3 },
     }));
     const view = await renderReview();
-    await waitFor(() => expect(view.getByText('Mastery 3/5')).toBeTruthy());
+    await waitFor(() => expect(view.getByLabelText('Mastery 3 of 5')).toBeTruthy());
     expect(view.getByText(namaste.en)).toBeTruthy();
     expect(view.getByText('Say it in Hindi')).toBeTruthy();
     expect(speakTextMock).not.toHaveBeenCalled();
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByText(namaste.en)).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Again' }));
     expect(readReviews(view)[namaste.hi]?.mastery).toBe(2);
-    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText('2 of 2')).toBeTruthy();
     expect(view.queryByText(chai.en)).toBeNull();
     expect(speakTextMock).toHaveBeenCalledTimes(1);
     expect(speakTextMock).toHaveBeenLastCalledWith(chai.hi, undefined, 1);
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(view.getByText('1 of 2 remembered')).toBeTruthy();
     expect(readReviews(view)[chai.hi]).toEqual(expect.objectContaining({ mastery: 4, intervalDays: 14 }));
@@ -218,7 +219,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
 
     await view.unmount();
     const nextSession = await renderReview();
-    await waitFor(() => expect(nextSession.getByText('Mastery 2/5')).toBeTruthy());
+    await waitFor(() => expect(nextSession.getByLabelText('Mastery 2 of 5')).toBeTruthy());
     expect(nextSession.getByText(namaste.en)).toBeTruthy();
     expect(nextSession.getByText('Say it in Hindi')).toBeTruthy();
     expect(speakTextMock).toHaveBeenCalledTimes(1);
@@ -231,9 +232,9 @@ describe('ReviewScreen spaced-repetition journey', () => {
       [namaste.hi]: { ...defaultPhraseReview(today), mastery: 2, intervalDays: 3, correctReviews: 2, totalReviews: 2 },
     }));
     const view = await renderReview();
-    await waitFor(() => expect(view.getByText('Mastery 2/5')).toBeTruthy());
+    await waitFor(() => expect(view.getByLabelText('Mastery 2 of 5')).toBeTruthy());
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 
     await waitFor(() => expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
@@ -256,7 +257,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
     expect(await view.findByText('Audio unavailable.')).toBeTruthy();
     await waitFor(() => expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull());
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 3, correctReviews: 3, totalReviews: 3 }));
@@ -278,7 +279,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
 
     await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
     expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
@@ -300,7 +301,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 1, correctReviews: 2 }));
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(readReviews(view)[chai.hi]).toEqual(expect.objectContaining({ mastery: 1, correctReviews: 2, totalReviews: 3, dueAt: today }));
     expect(view.getByText('0 of 2 remembered')).toBeTruthy();
@@ -319,7 +320,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
     await waitFor(() => expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull());
     expect(view.queryByRole('alert')).toBeNull();
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 3, correctReviews: 3, totalReviews: 3 }));
@@ -353,7 +354,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     });
     expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
       mastery: 1,
@@ -378,7 +379,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
 
     await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
     expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByLabelText(`Hear ${namaste.hi}`));
     await act(async () => {
       hintPlayback.resolve(false);
@@ -419,7 +420,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     });
     await waitFor(() => expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull());
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 3, correctReviews: 3, totalReviews: 3 }));
     expect(view.getByText('1 of 1 remembered')).toBeTruthy();
@@ -442,7 +443,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     expect(await view.findByText('Audio unavailable.')).toBeTruthy();
     expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
       mastery: 1,
@@ -465,7 +466,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
       await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
       expect(await view.findByText('Hint used, so this card counts as Again.')).toBeTruthy();
     }
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     if (!beforeReveal) await fireEvent.press(view.getByLabelText(`Hear ${namaste.hi}`));
     expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
@@ -487,9 +488,9 @@ describe('ReviewScreen spaced-repetition journey', () => {
   it('replays the revealed phrase at full and slow speed', async () => {
     seedDuePhrases();
     const view = await renderReview();
-    await waitFor(() => expect(view.getByText('Phrase 1 of 2')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('1 of 2')).toBeTruthy());
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByLabelText(`Hear ${namaste.hi}`));
     expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);
 
@@ -506,7 +507,7 @@ it('keeps unknown saved spelling on review and speaks its canonical Hindi', asyn
   asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([phrase]));
   const view = await render(<AppStateProvider><ReviewScreen /></AppStateProvider>);
   await waitFor(() => expect(view.getByText(phrase.en)).toBeTruthy());
-  await fireEvent.press(view.getByText('Reveal answer'));
+  await fireEvent.press(view.getByText('Show answer'));
   expect(view.getByText(phrase.latin)).toBeTruthy();
   await fireEvent.press(view.getByLabelText(`Hear ${phrase.hi}`));
   expect(speakTextMock).toHaveBeenLastCalledWith(phrase.hi, undefined, 1);

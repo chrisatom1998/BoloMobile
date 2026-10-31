@@ -81,9 +81,9 @@ describe('pronunciation recording lifecycle', () => {
     jest.restoreAllMocks();
   });
 
-  it('automatically stops and submits exactly once at 15 seconds', async () => {
+  it.each(['pill', 'hero'] as const)('automatically stops and submits exactly once at 15 seconds (%s appearance)', async (appearance) => {
     const onRecordingReady = jest.fn(async () => undefined);
-    const view = await render(<VoiceTurnButton idleLabel="Record pronunciation" onRecordingReady={onRecordingReady} />);
+    const view = await render(<VoiceTurnButton appearance={appearance} idleLabel="Record pronunciation" onRecordingReady={onRecordingReady} />);
 
     await fireEvent.press(view.getByLabelText('Record pronunciation'));
     await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
