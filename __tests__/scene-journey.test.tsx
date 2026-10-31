@@ -272,8 +272,19 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
 
     await waitFor(() => expect(mockSetReminder).toHaveBeenCalled());
-    await Promise.resolve();
+    await act(async () => {
+      await mockSetReminder.mock.results[0]?.value;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(mockCancelNotification).not.toHaveBeenCalled();
+  });
+
+  it('cancels the newly scheduled reminder when saving it throws', async () => {
+    mockSetReminder.mockRejectedValueOnce(new Error('storage full'));
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockCancelNotification).toHaveBeenCalledWith('reminder-1'));
   });
 
   it('does not offer a reminder after a lesson was already finished or the offer was answered', async () => {

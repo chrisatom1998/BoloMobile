@@ -435,7 +435,8 @@ function SceneScreen() {
               setReminderOffer('closed');
               // If saving fails the stored reminder rolls back, so cancel the
               // notification that was just scheduled instead of orphaning it.
-              void setReminder(next).then(async (saved) => {
+              // A rejected save counts as a failed one.
+              void setReminder(next).catch(() => false).then(async (saved) => {
                 if (!saved && next.notificationId) await cancelPracticeReminder(next);
               }).catch(() => undefined);
             }}
