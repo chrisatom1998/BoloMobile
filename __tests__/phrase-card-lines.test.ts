@@ -70,6 +70,44 @@ describe('phraseCardLines', () => {
     expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'devanagari' })).toEqual({ devanagari: 'नमस्ते', english: 'Hello', primary: 'devanagari' });
   });
 
+  it('does not invent a Devanagari line from a romanized-only mixed-script value', () => {
+    for (const scriptPreference of ['both', 'devanagari', 'latin'] as const) {
+      expect(phraseCardLines({ romanized: 'chai कम', english: 'Less chai', scriptPreference })).toEqual({
+        romanized: 'Chai kam',
+        english: 'Less chai',
+        primary: 'romanized',
+      });
+    }
+  });
+
+  it('emits Latin letters only for loanword vowels in "latin" mode and still shows Devanagari otherwise', () => {
+    expect(phraseCardLines({ devanagari: 'ऑटो वाले से पूछो।', english: 'Ask the auto driver.', scriptPreference: 'latin' })).toEqual({
+      romanized: 'Oto vaale se poochho.',
+      english: 'Ask the auto driver.',
+      primary: 'romanized',
+    });
+    expect(phraseCardLines({ devanagari: 'ऑटो वाले से पूछो।', english: 'Ask the auto driver.', scriptPreference: 'devanagari' })).toEqual({
+      devanagari: 'ऑटो वाले से पूछो।',
+      english: 'Ask the auto driver.',
+      primary: 'devanagari',
+    });
+    for (const sample of ['ऑटो', 'डॉक्टर', 'ऍप', 'ॐ शांति', 'अ॑ग्नि', 'क॰']) {
+      const lines = phraseCardLines({ devanagari: sample, romanized: sample, scriptPreference: 'latin' });
+      expect(JSON.stringify(lines)).not.toMatch(/[\u0900-\u097f]/u);
+      expect(lines.romanized).toMatch(/[A-Za-z]/u);
+      expect(lines.english).toBeUndefined();
+    }
+  });
+
+  it('keeps unknown Romanized phrases, English names and punctuation as typed', () => {
+    expect(phraseCardLines({ romanized: 'Mera naam Chris hai!', english: 'My name is Chris!', scriptPreference: 'latin' })).toEqual({
+      romanized: 'Mera naam Chris hai!',
+      english: 'My name is Chris!',
+      primary: 'romanized',
+    });
+    expect(phraseCardLines({ devanagari: 'ऑटो', romanized: 'awto', english: 'Auto.', scriptPreference: 'both' }).romanized).toBe('awto');
+  });
+
   it('omits empty or whitespace-only lines', () => {
     expect(phraseCardLines({ devanagari: 'नमस्ते', romanized: '  ', english: '', scriptPreference: 'both' })).toEqual({
       devanagari: 'नमस्ते',

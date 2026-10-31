@@ -20,3 +20,23 @@ it('uses the same common spellings in source chat, saved phrases and word meanin
   expect(romanizeDevanagari('कृपया पानी')).toBe('Kripya paani');
   expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
 });
+
+describe('loanword vowels and rare signs', () => {
+  it('romanizes loanword vowels and never lets Devanagari leak into the Latin output', () => {
+    expect(romanizeDevanagari('ऑटो')).toBe('Oto');
+    expect(romanizeDevanagari('डॉक्टर')).toBe('Doktar');
+    expect(romanizeDevanagari('ऍप')).toBe('Ep');
+    expect(romanizeDevanagari('कॅफ़े')).toBe('Kefe');
+    expect(romanizeDevanagari('ॐ शांति')).toBe('Om shaanti');
+    expect(romanizeDevanagari('ऑटो वाले से पूछो।')).toBe('Oto vaale se poochho.');
+    expect(romanizeDevanagari('अ॑ग्नि')).toBe('Agni');
+    for (const sample of ['ऑटो', 'डॉक्टर', 'ऍप', 'ॠषि', 'ऌ', 'ॡ', 'ॲप', 'ऎ', 'ऒ', 'कॆ', 'कॊ', 'कॄ', 'कॢ', 'कॣ', 'क॰', 'ॐ', 'अ॒', 'क॓', 'क॔']) {
+      expect(romanizeDevanagari(sample)).not.toMatch(/[\u0900-\u097F]/u);
+    }
+  });
+
+  it('keeps unknown Latin, English names and punctuation as typed', () => {
+    expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
+    expect(romanizeDevanagari('Chris, bolo "chai"!')).toBe('Chris, bolo "chai"!');
+  });
+});
