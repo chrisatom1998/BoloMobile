@@ -45,7 +45,7 @@ jest.mock('@/lib/observability', () => ({ observe: jest.fn(), observeOncePerSess
 
 jest.mock('@/lib/speech', () => ({
   hasOfflineSpeech: jest.fn(() => false),
-  speakText: jest.fn(async () => undefined),
+  speakText: jest.fn(async () => true),
   stopSpeaking: jest.fn(async () => undefined),
 }));
 
@@ -104,7 +104,7 @@ describe('ReviewScreen session stability', () => {
     mockAppState.phrases = [phraseA, phraseB, phraseC];
     mockAppState.phraseReviews = {};
     hasOfflineSpeechMock.mockReturnValue(false);
-    speakTextMock.mockResolvedValue();
+    speakTextMock.mockResolvedValue(true);
     checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'namaste', feedback: 'Keep the first vowel short.' });
   });
 
@@ -347,7 +347,7 @@ describe('ReviewScreen say it aloud', () => {
     mockAppState.phrases = [phraseA, phraseB];
     mockAppState.phraseReviews = {};
     hasOfflineSpeechMock.mockReturnValue(true);
-    speakTextMock.mockResolvedValue();
+    speakTextMock.mockResolvedValue(true);
     checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'namaste', feedback: 'Keep the first vowel short.' });
   });
 

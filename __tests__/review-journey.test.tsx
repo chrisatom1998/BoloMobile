@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
 const mockRouterReplace = jest.fn();
@@ -44,7 +44,7 @@ jest.mock('@/lib/haptics', () => ({ hapticSuccess: jest.fn(), hapticWarning: jes
 jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn(), observeOncePerSession: jest.fn() }));
 jest.mock('@/lib/speech', () => ({
   hasOfflineSpeech: jest.fn(() => true),
-  speakText: jest.fn(async () => undefined),
+  speakText: jest.fn(async () => true),
   stopSpeaking: jest.fn(async () => undefined),
 }));
 
@@ -81,6 +81,14 @@ function readReviews(view: Awaited<ReturnType<typeof render>>) {
   return JSON.parse(String(view.getByTestId('reviews').props.children)) as Record<string, PhraseReview>;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 function seedDuePhrases() {
   const today = dateKey();
   asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste, chai]));
@@ -103,7 +111,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     asyncStorage.__store.clear();
-    speakTextMock.mockResolvedValue();
+    speakTextMock.mockResolvedValue(true);
   });
 
   it('invites the learner to save a phrase before any review exists', async () => {
@@ -246,7 +254,70 @@ describe('ReviewScreen spaced-repetition journey', () => {
     await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
     await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
     expect(await view.findByText('Audio unavailable.')).toBeTruthy();
+    await waitFor(() => expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull());
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 3, correctReviews: 3, totalReviews: 3 }));
+    expect(view.getByText('1 of 1 remembered')).toBeTruthy();
+  });
+
+  it('downgrades Got it when the learner grades while the hint is still playing', async () => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste, chai]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 2, correctReviews: 2, totalReviews: 2 },
+      [chai.hi]: { ...defaultPhraseReview(today), mastery: 2, correctReviews: 2, totalReviews: 2 },
+    }));
+    const firstHint = deferred<boolean>();
+    const secondHint = deferred<boolean>();
+    speakTextMock.mockReturnValueOnce(firstHint.promise).mockReturnValueOnce(secondHint.promise);
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
+
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({
+      mastery: 1,
+      intervalDays: 0,
+      correctReviews: 2,
+      totalReviews: 3,
+      dueAt: today,
+    }));
+    expect(view.getByText('One tea, please.')).toBeTruthy();
     expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    await act(async () => {
+      firstHint.resolve(false);
+      await firstHint.promise;
+    });
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 1, correctReviews: 2 }));
+
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(readReviews(view)[chai.hi]).toEqual(expect.objectContaining({ mastery: 1, correctReviews: 2, totalReviews: 3, dueAt: today }));
+    expect(view.getByText('0 of 2 remembered')).toBeTruthy();
+  });
+
+  it('keeps Got it as real recall when hint playback is cancelled', async () => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 2, correctReviews: 2, totalReviews: 2 },
+    }));
+    speakTextMock.mockResolvedValueOnce(false);
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
+
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    await waitFor(() => expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull());
+    expect(view.queryByRole('alert')).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
 

@@ -91,14 +91,20 @@ export default function ReviewScreen() {
       void speak(phrase.hi, undefined, playbackRate);
       return;
     }
-    // A hint is supported recall only once audio actually played: a failed
-    // playback leaves Got it as real recall. A late success on a card that has
-    // already been graded must not mark the next card.
+    // Count the hint as soon as it's tapped, so Got it is downgraded while the
+    // clip is still playing. Take that back only when this playback does not
+    // finish and the card is still ungraded. A failure and a cancellation both
+    // resolve false: the learner did not hear the hint, so Got it stays real
+    // recall and no error is shown for a cancellation. Grading stops the clip;
+    // once this card is graded, that late false must not change the score or
+    // clear a hint the learner already took on the next card.
     const hintedPhrase = phrase.hi;
+    supportedRecallRef.current = true;
+    setHintUsed(true);
     void speak(hintedPhrase, undefined, playbackRate).then((played) => {
-      if (!played || gradedPhraseRef.current === hintedPhrase) return;
-      supportedRecallRef.current = true;
-      setHintUsed(true);
+      if (played || gradedPhraseRef.current === hintedPhrase) return;
+      supportedRecallRef.current = false;
+      setHintUsed(false);
     });
   }
 
