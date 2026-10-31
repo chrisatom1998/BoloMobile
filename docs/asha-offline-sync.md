@@ -121,7 +121,7 @@ export type AshaSessionRecord = {
 ```
 
 Limits, in the same style as `storage.ts`:
-- Keep at most 20 sessions, oldest dropped first. Retain them for 30 days.
+- Keep at most 20 stored sessions, oldest dropped first. Retain them for 30 days. A record is stored only once the session reaches `ready` or gains a transcript row. An attempt that ends as `start_failed` with no rows is discarded and never enters the list, so it cannot take a slot or drop an older session, including while that attempt is still `connecting`. Never drop a session that has rows to make room for one that does not.
 - Store at most 200 rows per session, each capped at `MAX_CHAT_MESSAGE_CHARACTERS`.
 - Records that would serialize to more than 256 KB are trimmed by dropping the oldest rows.
 
@@ -134,9 +134,10 @@ Validate on read with a `sanitizeAshaSessions(raw: string | null)` that matches 
 - Add a new AsyncStorage key `bolo-asha-sessions-v1` holding an array of records, newest last. It stays out of `storageKeys` and `PersistedState`, so the existing hydrate in `app-state.tsx` and `restorableProgressKeys` don't change. It is owned by a small provider or module with its own serialized write queue, following the `enqueuePersistence` pattern.
 - Why AsyncStorage instead of `expo-file-system`: all small structured state already lives there, and tests already mock it. Revisit if the size cap is a problem (see Risks).
 - Write path:
-  - On `connecting`, create an `active` record.
-  - On each transcript snapshot, update `rows` in memory and persist with the same coalescing as `replaceLiveChatSnapshot` (one queued write at a time, reading the newest state). Also persist at least every 2 s and on every status change.
-  - On `disconnect`, finalize with `endedAt` and `endReason`.
+  - On `connecting`, create an `active` record in memory only. Do not append it to `bolo-asha-sessions-v1` and do not run the 20-session drop until the session reaches `ready` or receives its first transcript row.
+  - If `disconnect` happens before that and the record has no rows, drop it (`endReason: 'start_failed'`). Nothing is written and no older session is removed.
+  - On each transcript snapshot, update `rows` in memory and persist with the same coalescing as `replaceLiveChatSnapshot` (one queued write at a time, reading the newest state). Once the record is stored, also persist at least every 2 s and on every status change.
+  - On `disconnect` of a stored record, finalize with `endedAt` and `endReason`.
 - Crash recovery: at hydrate, any record still `active` becomes `interrupted` with `endReason: 'app_terminated'`.
 - The `chatHistory` behavior stays as it is: it remains the "current conversation" view. Before `clearChatHistory()` runs on a new connection, the previous session is already finalized in the log, so the wipe no longer loses data.
 
@@ -181,8 +182,9 @@ type OutboxEntry = OutboxOp & {
 
 ### 5. Retry, backoff, and error classification
 
-- Transient errors (retry): `BoloApiError` with no `status` (network or timeout in `post()`), status 408, 429, or 5xx.
-- Permanent errors (mark `failed`, no retry): any other 4xx, response validation failure (`'Bolo returned an invalid response…'`), or a missing endpoint.
+- Transient errors (retry): only the two no-`status` failures `post()` uses for transport problems — `'Bolo is unavailable right now. Check your connection and try again.'` (network) and `'The request timed out. Check your connection and try again.'` (timeout) — plus status 408, 429, or 5xx. A missing `status` is not itself enough.
+- Not transient, and not an offline-connection failure: every other `BoloApiError` with no `status`. That includes a caller abort in `post()` (`'The request was canceled.'`), `getBoloLiveApiUrl()` when the Live URL is missing or invalid (`'Live voice isn’t available right now. You can still type to Asha.'`), and `createLiveCall` rejecting the client payload (`'Bolo could not start this live voice session.'`). Do not enqueue these, and do not describe them as a lost internet connection.
+- Permanent errors (mark `failed`, no retry): any other 4xx, response validation failure (`'Bolo returned an invalid response…'`, which does carry `status`), or a missing endpoint. Local validation and cancellation never enter the outbox, so they are not marked `failed` either.
 - Backoff: `delay = min(15 min, 2 s × 2^attempts)` with full jitter. Give up after 8 attempts or 7 days, whichever comes first, and mark the entry `failed`. Failed entries stay visible, with Retry and Discard actions, until the learner acts or the retention window passes.
 - A 429 with `Retry-After` is honored. `post()` does not expose headers today, so this needs a small change in `bolo-api.ts`. Otherwise 429 uses the normal backoff.
 
@@ -215,7 +217,7 @@ type OutboxEntry = OutboxOp & {
 
 | State | Trigger | What the learner sees |
 |---|---|---|
-| Offline, before start | `createLiveCall` fails with a transient error while `connecting` | A clear message, "Live voice needs an internet connection. Lessons and saved phrases work offline.", with a link to today's lesson. Today they see the generic `'Bolo is unavailable right now…'` in `setError`. |
+| Offline, before start | `createLiveCall` fails while `connecting` because `post()` hit the network or timeout error in [Retry, backoff, and error classification](#5-retry-backoff-and-error-classification) | A clear message, "Live voice needs an internet connection. Lessons and saved phrases work offline.", with a link to today's lesson. A missing Live URL and a rejected client payload keep today's copy (`'Live voice isn’t available right now…'` and `'Bolo could not start this live voice session.'`). |
 | Connecting | status `connecting` | No change. |
 | Live | `ready` / `recording` / `responding` | No change. The transcript saves continuously in the background. |
 | Interrupted | `endReason` is `connection_lost` or `backgrounded` | The transcript stays on screen with a small banner: "Connection lost. This conversation is saved on your device." Start again gives a new session. |
@@ -239,8 +241,8 @@ Every new string needs accessible labels in the existing style (see `__tests__/r
 Use Jest (`jest-expo` preset, `npm test` = `jest --runInBand`) and follow the existing patterns:
 
 - **Pure unit tests:**
-  - `__tests__/asha-session-log.test.ts`: create, update, and finalize; row capping and trimming; the 20-session and 30-day limits; sanitizer rejection of malformed or oversized records; `active` → `interrupted` at hydrate.
-  - `__tests__/sync-outbox.test.ts`: FIFO order; error classification against real `BoloApiError` shapes from `bolo-api.ts`; the backoff schedule with `jest.useFakeTimers()` and seeded jitter; the attempt and age caps; `in_flight` recovery; a single flush at a time.
+  - `__tests__/asha-session-log.test.ts`: create, update, and finalize; row capping and trimming; the 20-session and 30-day limits, including that an empty `start_failed` attempt is not stored and does not evict an older session; sanitizer rejection of malformed or oversized records; `active` → `interrupted` at hydrate.
+  - `__tests__/sync-outbox.test.ts`: FIFO order; error classification against real `BoloApiError` shapes from `bolo-api.ts` (network and timeout are transient; cancellation, a missing Live URL, and a rejected live-call payload are not); the backoff schedule with `jest.useFakeTimers()` and seeded jitter; the attempt and age caps; `in_flight` recovery; a single flush at a time.
   - Style follows `__tests__/live-transcripts.test.ts` and `__tests__/live-tools.test.ts`.
 - **AsyncStorage:** mock it per file with `jest.mock('@react-native-async-storage/async-storage', …)`, as in `__tests__/app-state-persistence.test.ts` and `__tests__/app-state-clear-data.test.tsx`. Cover write failures with the user-visible alert path, like `reportPersistenceFailure`.
 - **Hook and integration tests:**
