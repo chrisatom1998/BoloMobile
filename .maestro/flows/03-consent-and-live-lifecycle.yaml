@@ -20,6 +20,14 @@ tags:
 - assertNotVisible: "Live translate"
 - scrollUntilVisible:
     element:
+      text: "Talk with Asha"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+- tapOn: "Talk with Asha"
+- scrollUntilVisible:
+    element:
       text: "Enable live practice"
     direction: DOWN
     visibilityPercentage: 100
@@ -49,7 +57,7 @@ tags:
     text: "Don’t Allow"
     optional: true
 - extendedWaitUntil:
-    visible: "Microphone access is required for live voice practice.*"
+    visible: "Microphone access is required before Asha can listen.*"
     timeout: 30000
 - setPermissions:
     permissions:
