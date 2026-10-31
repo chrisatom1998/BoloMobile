@@ -527,10 +527,12 @@ async function flushMicrotasks() {
   });
 }
 
-function scrollLiveChat(view: { getByTestId: (id: string) => { props: Record<string, unknown> } }, offsetY: number) {
+function scrollLiveChat(view: { getByTestId: (id: string) => { props: Record<string, unknown> } }, offsetY: number, options?: { drag?: boolean }) {
   const list = view.getByTestId('live-chat-list');
-  const beginDrag = list.props.onScrollBeginDrag;
-  if (typeof beginDrag === 'function') beginDrag();
+  if (options?.drag !== false) {
+    const beginDrag = list.props.onScrollBeginDrag;
+    if (typeof beginDrag === 'function') beginDrag();
+  }
   const onScroll = list.props.onScroll;
   if (typeof onScroll !== 'function') throw new Error('Expected the live chat list to handle scroll.');
   onScroll({
@@ -812,6 +814,76 @@ describe('immersive live conversation design', () => {
     } finally {
       await act(async () => {
         request.resolve({ transcript: '', reply: 'Shown at the tail.', language: 'en' });
+        for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      });
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('ignores a non-drag scroll during the send animation, then honors one after the scroll ends', async () => {
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const view = await render(<LiveScreen />);
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => undefined);
+    try {
+      scrollLiveChat(view, 0);
+      scrollToEnd.mockClear();
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Watch the animation.');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      await flushScrollFrames();
+      scrollToEnd.mockClear();
+
+      scrollLiveChat(view, 0, { drag: false });
+      await act(async () => {
+        request.resolve({ transcript: '', reply: 'Still following.', language: 'en' });
+        for (let index = 0; index < 12; index += 1) await Promise.resolve();
+      });
+      await flushScrollFrames();
+      expect(within(view.getByTestId('live-chat-list')).getByLabelText('Asha: Still following.')).toBeTruthy();
+      expect(scrollToEnd).toHaveBeenCalled();
+
+      scrollToEnd.mockClear();
+      const end = view.getByTestId('live-chat-list').props.onMomentumScrollEnd;
+      if (typeof end !== 'function') throw new Error('Expected the live chat list to end momentum.');
+      end();
+      scrollLiveChat(view, 0, { drag: false });
+      await act(async () => {
+        view.getByTestId('live-chat-list').props.onContentSizeChange();
+      });
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    } finally {
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('jumps a typed send when motion is reduced', async () => {
+    mockReducedMotion = true;
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const view = await render(<LiveScreen />);
+    const rowVisibleAtScroll: boolean[] = [];
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => {
+      rowVisibleAtScroll.push(within(view.getByTestId('live-chat-list')).queryByLabelText('You: Quiet send.') != null);
+    });
+    try {
+      scrollLiveChat(view, 0);
+      scrollToEnd.mockClear();
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Quiet send.');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      await flushScrollFrames();
+
+      expect(within(view.getByTestId('live-chat-list')).getByLabelText('You: Quiet send.')).toBeTruthy();
+      expect(scrollToEnd).toHaveBeenNthCalledWith(1, { animated: false });
+      expect(scrollToEnd).toHaveBeenNthCalledWith(2, { animated: false });
+      expect(rowVisibleAtScroll).toEqual([true, true]);
+    } finally {
+      mockReducedMotion = false;
+      await act(async () => {
+        request.resolve({ transcript: '', reply: 'Quiet reply.', language: 'en' });
         for (let index = 0; index < 12; index += 1) await Promise.resolve();
       });
       scrollToEnd.mockRestore();
