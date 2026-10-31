@@ -113,6 +113,17 @@ describe('fail-closed merge verification', () => {
     expect(jobSource).toContain('BOLO_LIVE_API_URL: https://live.example.test');
   });
 
+  test('starts the native build immediately and keeps it fast', () => {
+    const nativeJob = matchingBlock(ciWorkflow, '  ios-native-build:', '  maestro-smoke:');
+
+    expect(nativeJob).not.toMatch(/^    needs:/m);
+    expect(nativeJob).toContain('USE_CCACHE: 1');
+    expect(nativeJob).toContain('actions/cache/restore@');
+    expect(nativeJob).toContain('actions/cache/save@');
+    expect(nativeJob).toContain('ARCHS=arm64');
+    expect(requiredChecks).toContain("needs['ios-native-build'].result");
+  });
+
   test('restores static validation of every committed Maestro flow', () => {
     const manifest = JSON.parse(read('package.json')) as {
       scripts: Record<string, string>;
