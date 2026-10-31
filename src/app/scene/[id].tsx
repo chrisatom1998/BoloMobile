@@ -444,6 +444,8 @@ function SceneScreen() {
     return (
       <ScrollView
         key="scene-name-step"
+        // iOS: grow the bottom inset with the keyboard so the bottom-pinned Continue rides above it. Android resizes the window instead.
+        automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
         keyboardShouldPersistTaps="handled"
@@ -591,7 +593,8 @@ function SceneScreen() {
       {!aiConsent ? (
         <View style={styles.offlineNote}>
           {/* Lessons never needed a choice here: they always run offline. One quiet line, details on request. */}
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAiDetails }} hitSlop={8} onPress={() => setShowAiDetails((shown) => !shown)} testID="scene-ai-details">
+          {/* hitSlop lifts the 18pt line to a 44pt target without changing how the note looks. */}
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAiDetails }} hitSlop={14} onPress={() => setShowAiDetails((shown) => !shown)} testID="scene-ai-details">
             <Text style={styles.offlineNoteText}>Works offline · <Text style={styles.offlineNoteLink}>{showAiDetails ? 'Hide Asha coaching details' : 'Add Asha coaching'}</Text></Text>
           </Pressable>
           {showAiDetails ? <AiConsentGate /> : null}
@@ -656,7 +659,8 @@ function SceneScreen() {
         {currentUsesName && resolution === null && practiceName.trim() ? (
           <View style={styles.nameRow}>
             <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
-            <Pressable accessibilityLabel="Change your practice name" accessibilityRole="button" hitSlop={8} onPress={() => { setNameDraft(practiceName); setNameStepOpen(true); }} testID="scene-change-name">
+            {/* hitSlop lifts the 13pt link to a 44pt target without changing how it looks. */}
+            <Pressable accessibilityLabel="Change your practice name" accessibilityRole="button" hitSlop={14} onPress={() => { setNameDraft(practiceName); setNameStepOpen(true); }} testID="scene-change-name">
               <Text style={styles.nameRowLink}>Change</Text>
             </Pressable>
           </View>

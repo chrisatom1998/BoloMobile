@@ -1,6 +1,7 @@
 import '../../global.css';
 
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { HeroUINativeProvider } from 'heroui-native/provider';
 import { useEffect } from 'react';
@@ -13,9 +14,14 @@ import { TapPressable } from '@/components/tap-pressable';
 import { useHindiFont } from '@/hooks/use-hindi-font';
 import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
 import { observe } from '@/lib/observability';
+import { releaseSplashScreen } from '@/lib/splash-screen';
 import { AshaVoiceSessionProvider } from '@/state/asha-voice-session';
 import { AppStateProvider, useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, spacing, useTheme } from '@/theme';
+
+// Keep the native splash up until persisted app state has hydrated; AppNavigator releases it.
+// Module scope, per the expo-splash-screen docs: inside a component it can run after the splash is already gone.
+SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
   useHindiFont();
@@ -43,7 +49,9 @@ function AppNavigator() {
   usePracticeReminderRouting(hydrated);
 
   useEffect(() => {
-    if (hydrated) observe('app_opened');
+    if (!hydrated) return;
+    releaseSplashScreen();
+    observe('app_opened');
   }, [hydrated]);
 
   return (

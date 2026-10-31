@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { observe } from '@/lib/observability';
+import { releaseSplashScreen } from '@/lib/splash-screen';
 import { hindiType, makeStyles, radius, spacing } from '@/theme';
 
 type State = { failed: boolean };
@@ -18,6 +19,8 @@ export class AppErrorBoundary extends Component<PropsWithChildren, State> {
   override componentDidCatch(error: Error, _info: ErrorInfo) {
     if (__DEV__) console.error(error);
     observe('runtime_error');
+    // A crash before hydration would otherwise leave the native splash covering the fallback forever.
+    releaseSplashScreen();
   }
 
   override render() {
