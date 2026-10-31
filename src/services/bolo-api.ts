@@ -5,7 +5,7 @@ import { displayHindiTranscript, learnerPhraseLatin } from '@/lib/learner-phrase
 import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { knownSavedPhrase } from '@/lib/known-hindi-phrases';
-import { signalNetworkAvailable } from '@/lib/network-signal';
+import { signalNetworkAvailable, signalNetworkLost } from '@/lib/network-signal';
 import { observe } from '@/lib/observability';
 
 const FALLBACK_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
@@ -261,7 +261,11 @@ async function post<T>(
     // Classify by what happened, never by the error's text: the caller's signal
     // means cancellation, our own timer means a timeout, anything else is transport.
     if (signal?.aborted) throw new BoloApiError(CANCELED_MESSAGE, { kind: 'aborted' });
-    if (timedOut) throw new BoloApiError(TIMEOUT_MESSAGE, { kind: 'timeout' });
+    if (timedOut) {
+      signalNetworkLost();
+      throw new BoloApiError(TIMEOUT_MESSAGE, { kind: 'timeout' });
+    }
+    signalNetworkLost();
     throw new BoloApiError(OFFLINE_MESSAGE, { kind: 'network' });
   } finally {
     clearTimeout(timeout);

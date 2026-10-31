@@ -16,7 +16,7 @@ import type { EffectiveMotion } from '@/hooks/use-motion-preference';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
 import { boloApiErrorKind, type BoloApiErrorKind } from '@/services/bolo-api';
 import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
-import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
+import { hapticCallEnded, hapticCallStarted, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
@@ -246,6 +246,23 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
     onStatusChange?.(voice.status);
   }, [onStatusChange, voice.status]);
 
+  const previousStatus = useRef(voice.status);
+  const callEndedRef = useRef(false);
+  useEffect(() => {
+    const previous = previousStatus.current;
+    previousStatus.current = voice.status;
+    // The connect press itself stays silent: a haptic during WebRTC setup can
+    // stall the iOS audio session. The tap arrives once the call is ready.
+    if (previous === 'connecting' && voice.status !== 'connecting' && voice.status !== 'disconnected') {
+      callEndedRef.current = false;
+      hapticCallStarted();
+    }
+    if (!callEndedRef.current && previous !== 'disconnected' && previous !== 'connecting' && voice.status === 'disconnected') {
+      callEndedRef.current = true;
+      hapticCallEnded();
+    }
+  }, [voice.status]);
+
   useEffect(() => {
     if (!owned) return undefined;
     return () => onStatusChangeRef.current?.('disconnected');
@@ -300,7 +317,10 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
   }, [onDisconnectReady, voice.disconnect]);
 
   const endSession = useCallback(() => {
-    hapticSelect();
+    if (voice.status !== 'disconnected' && !callEndedRef.current) {
+      callEndedRef.current = true;
+      hapticCallEnded();
+    }
     voice.disconnect();
   }, [voice]);
 

@@ -14,7 +14,7 @@ export default function NotFoundScreen() {
       <Stack.Screen options={{ title: 'Page not found' }} />
       <Text style={styles.title}>That Bolo page is not available.</Text>
       <Text style={styles.body}>The link may be old or incomplete. Your saved practice and phrases are unchanged.</Text>
-      <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}>
+      <Pressable accessibilityLabel="Back to Today" accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}>
         <Text style={sharedStyles.primaryButtonText}>Back to Today</Text>
       </Pressable>
     </ScrollView>

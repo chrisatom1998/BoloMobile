@@ -89,7 +89,8 @@ describe('PhrasesScreen primary journey', () => {
   it('replaces empty review tools with one next-lesson action', async () => {
     const view = await render(<PhrasesScreen />);
 
-    expect(view.getByText('Practice a lesson, then save any useful phrase you want to keep.')).toBeTruthy();
+    expect(view.getByText('Finish a lesson, then save a line you want to keep. It will wait here.')).toBeTruthy();
+    expect(view.getByText('Nothing saved yet')).toBeTruthy();
     expect(view.queryByLabelText('Search saved phrases')).toBeNull();
     expect(view.queryByLabelText('Phrase category')).toBeNull();
     expect(view.queryByText('Ready for review')).toBeNull();

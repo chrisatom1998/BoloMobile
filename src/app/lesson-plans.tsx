@@ -1,13 +1,15 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
 import { ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
+import { OfflineNote } from '@/components/screen-state';
 import { bundledScenes, getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
 import { PlanIcon } from '@/components/plan-icon';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
+import { screenCopy } from '@/lib/screen-copy';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
@@ -32,6 +34,7 @@ export default function LessonPlansScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
       <Stack.Screen options={{ headerLargeTitle: false, title: 'Lesson plans' }} />
+      <OfflineNote body={screenCopy.lessonPlansOfflineBody} />
       <View style={[styles.heading, largeTextLayout && styles.headingLarge]} testID="lesson-plans-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>Guided curriculum</JournalKicker>

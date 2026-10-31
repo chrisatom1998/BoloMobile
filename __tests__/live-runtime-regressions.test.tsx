@@ -4,6 +4,7 @@ import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pre
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
+import { LIVE_MIC_PERMISSION_MESSAGE } from '../src/lib/live-permission';
 import { lightColors, spacing } from '../src/theme';
 
 function expectDefined<T>(value: T | undefined): T {
@@ -672,7 +673,7 @@ describe('live microphone denial', () => {
     await fireEvent.press(view.getByLabelText('Show microphone denied'));
 
     expect(view.getByText('The microphone is off')).toBeTruthy();
-    expect(view.getByText('Microphone access is required for live voice practice.')).toBeTruthy();
+    expect(view.getByText(LIVE_MIC_PERMISSION_MESSAGE)).toBeTruthy();
     await fireEvent.press(view.getByTestId('mic-open-settings'));
     expect(openSettings).toHaveBeenCalledTimes(1);
 
@@ -1207,7 +1208,7 @@ describe('offline capture and queued reports', () => {
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
     await fireEvent.press(view.getByLabelText('Mock realtime offline'));
-    const notice = view.getByText('Live voice needs an internet connection. Lessons and saved phrases work offline.');
+    const notice = view.getByText("Lessons and saved phrases still work. Asha will be here when you are back online.");
     expect(notice.props.accessibilityRole).toBe('alert');
     const link = view.getByLabelText('Go to today’s lesson');
     expect(link.props.accessibilityRole).toBe('link');
@@ -1215,7 +1216,7 @@ describe('offline capture and queued reports', () => {
     expect(mockRouterPush).toHaveBeenCalledWith('/');
 
     await fireEvent.press(view.getByLabelText('Mock realtime timeout'));
-    expect(view.getByText('Live voice needs an internet connection. Lessons and saved phrases work offline.')).toBeTruthy();
+    expect(view.getByText("Lessons and saved phrases still work. Asha will be here when you are back online.")).toBeTruthy();
 
     // A missing Live URL, a rejected payload, and offline-sounding wording with another kind keep their own copy.
     await fireEvent.press(view.getByLabelText('Mock realtime unconfigured'));

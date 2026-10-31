@@ -1,25 +1,63 @@
 import * as Haptics from 'expo-haptics';
 
-function fireAndForget(promise: Promise<unknown>) {
-  promise.catch(() => undefined);
+/**
+ * Reduce Motion (system or the in-app Reduced setting) turns haptics off.
+ * The root layout keeps this flag current. It starts on so a tap before the
+ * first accessibility read still answers.
+ */
+let reducedMotion = false;
+
+export function setHapticsReducedMotion(reduced: boolean) {
+  reducedMotion = reduced;
+}
+
+export function hapticsReducedMotion() {
+  return reducedMotion;
+}
+
+function fire(run: () => Promise<unknown>) {
+  if (reducedMotion) return;
+  run().catch(() => undefined);
 }
 
 export function hapticTap() {
-  fireAndForget(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
+  fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
 }
 
 export function hapticSelect() {
-  fireAndForget(Haptics.selectionAsync());
+  fire(() => Haptics.selectionAsync());
 }
 
+/** A correct review or lesson answer. Soft, not a notification buzz. */
 export function hapticSuccess() {
-  fireAndForget(Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+  fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft));
 }
 
+/** Again, or a miss. A light tap, not an error notification. */
 export function hapticWarning() {
-  fireAndForget(Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning));
+  fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
 }
 
 export function hapticStartRecording() {
-  fireAndForget(Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+  fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium));
+}
+
+/** The lesson completion screen. One success tap, once per finish. */
+export function hapticLessonComplete() {
+  fire(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+}
+
+/** The practice streak grew. Same quiet success as finishing a lesson. */
+export function hapticStreak() {
+  fire(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success));
+}
+
+/** The live call reached ready. Fired after connect, not during audio setup. */
+export function hapticCallStarted() {
+  fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft));
+}
+
+/** The learner ended the live call, or the call dropped after it had started. */
+export function hapticCallEnded() {
+  fire(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light));
 }

@@ -1,8 +1,9 @@
-import { useFocusEffect } from 'expo-router';
+import { Redirect, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { getObservabilitySnapshot, type ObservabilityEvent, type ObservabilitySnapshot } from '@/lib/observability';
+import { showPrivateDiagnostics } from '@/lib/release-ui';
 import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
 
 /** Plain names for the counters, so support screenshots read as sentences rather than event ids. */
@@ -25,6 +26,11 @@ const eventLabels: Record<ObservabilityEvent, string> = {
 };
 
 export default function DiagnosticsScreen() {
+  if (!showPrivateDiagnostics()) return <Redirect href="/" />;
+  return <DiagnosticsBody />;
+}
+
+function DiagnosticsBody() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const [snapshot, setSnapshot] = useState<ObservabilitySnapshot>({ days: {} });

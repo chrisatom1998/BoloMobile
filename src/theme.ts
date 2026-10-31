@@ -94,6 +94,24 @@ export const radius = {
   pill: 999,
 } as const;
 
+/**
+ * Device chrome that is not a spacing step. Screens still add the live
+ * `useSafeAreaInsets()` values; these are only the floors and tails.
+ */
+export const safeArea = {
+  /** iPhone home-indicator height, used when the inset has not arrived yet. */
+  homeIndicator: 34,
+  /** Extra scroll room on Progress so the last card clears the tab bar. */
+  progressScrollTail: 120,
+} as const;
+
+/** Pressed feedback. Opacity only, so a tap feels like a UIKit highlight. */
+export const press = {
+  opacity: 0.64,
+  /** Dark overlay on paper while a finger is down. */
+  highlightOpacity: 0.08,
+} as const;
+
 /** Serif display face for Latin headings. Georgia has no Devanagari glyphs; use `hindiFont` for Hindi. */
 export const displayFont = 'Georgia';
 

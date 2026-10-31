@@ -221,7 +221,7 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(syncOutbox.clear).toHaveBeenCalledTimes(1);
     expect((syncOutbox.clear as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(deleteMobileDataMock.mock.invocationCallOrder[0]!);
     expect(clearAllData).not.toHaveBeenCalled();
-    expect(view.getByRole('button', { name: 'Deleting…' }).props.accessibilityState).toEqual({ disabled: true });
+    expect(view.getByRole('button', { name: 'Deleting…' }).props.accessibilityState).toEqual({ busy: true, disabled: true });
 
     remoteDeletion.resolve({ deleted: true });
     await waitFor(() => expect(clearAllData).toHaveBeenCalledTimes(1));
@@ -230,7 +230,7 @@ describe('SettingsScreen lifecycle and UI', () => {
       'Bolo data deleted',
       expect.stringContaining('new random app identifier'),
     ));
-    expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ busy: false, disabled: false });
   });
 
   it('preserves local data and the current identifier when remote deletion fails', async () => {
@@ -247,7 +247,7 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(deleteMobileDataMock).toHaveBeenCalledWith('client-12345678', expect.any(AbortSignal));
     expect(clearAllPracticeRemindersMock).not.toHaveBeenCalled();
     expect(clearAllData).not.toHaveBeenCalled();
-    expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ busy: false, disabled: false });
   });
 
   it('keeps local reminder state available for retry when system cancellation fails', async () => {
@@ -275,7 +275,7 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(deleteMobileDataMock).toHaveBeenCalledTimes(1);
     expect(showAppAlertMock).toHaveBeenCalledWith('Could not delete data', 'Local data was left in place.');
     expect(showAppAlertMock).not.toHaveBeenCalledWith('Bolo data deleted', expect.any(String));
-    expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ busy: false, disabled: false });
   });
 
   it('locks duplicate deletion submissions while the first request is pending', async () => {
@@ -328,7 +328,7 @@ describe('SettingsScreen lifecycle and UI', () => {
 
     expect(setAiConsent).toHaveBeenCalledWith(false);
     const pending = view.getByRole('button', { name: 'Saving…' });
-    expect(pending.props.accessibilityState).toEqual({ disabled: true });
+    expect(pending.props.accessibilityState).toEqual({ busy: true, disabled: true });
     expect(StyleSheet.flatten(pending.props.style).minHeight).toBeGreaterThanOrEqual(44);
     expect(showAppAlertMock).not.toHaveBeenCalledWith('AI consent withdrawn', expect.any(String));
 
@@ -337,7 +337,7 @@ describe('SettingsScreen lifecycle and UI', () => {
       'AI consent withdrawn',
       'Connected AI features are now disabled.',
     ));
-    expect(view.getByRole('button', { name: 'Withdraw consent' }).props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByRole('button', { name: 'Withdraw consent' }).props.accessibilityState).toEqual({ busy: false, disabled: false });
   });
 
   it('locks duplicate consent withdrawals while the first save is pending', async () => {
@@ -372,7 +372,7 @@ describe('SettingsScreen lifecycle and UI', () => {
 
     expect(setAiConsent).toHaveBeenCalledWith(false);
     expect(showAppAlertMock).not.toHaveBeenCalledWith('AI consent withdrawn', expect.any(String));
-    expect(view.getByRole('button', { name: 'Withdraw consent' }).props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByRole('button', { name: 'Withdraw consent' }).props.accessibilityState).toEqual({ busy: false, disabled: false });
   });
 
   it('exposes core navigation roles and 44 point destructive actions', async () => {

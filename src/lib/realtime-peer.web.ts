@@ -1,4 +1,5 @@
 import { waitForLiveIceGathering } from '@/lib/live-ice';
+import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observeLivePlayback } from '@/lib/live-playback';
 import type { RealtimePeerOptions, RealtimePeerSession } from '@/lib/realtime-peer.types';
 
@@ -18,7 +19,7 @@ export async function createRealtimePeerSession({
   if (signal?.aborted) throw new Error('The live voice connection was canceled.');
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch((cause: unknown) => {
     const name = cause instanceof Error ? cause.name : '';
-    if (name === 'NotAllowedError') throw new Error('Microphone access is required for live voice practice.');
+    if (name === 'NotAllowedError') throw new Error(LIVE_MIC_PERMISSION_MESSAGE);
     if (name === 'NotFoundError') throw new Error('No microphone is available for live voice practice.');
     throw cause;
   });

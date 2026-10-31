@@ -608,6 +608,6 @@ describe('Realtime peer setup cleanup', () => {
       onClose: jest.fn(),
       onMessage: jest.fn(),
       signal: new AbortController().signal,
-    })).rejects.toThrow('Microphone access is required for live voice practice.');
+    })).rejects.toThrow('Microphone access is required before Asha can listen. Allow it in Settings, then come back.');
   });
 });

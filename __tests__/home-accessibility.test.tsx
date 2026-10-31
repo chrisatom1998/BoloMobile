@@ -70,7 +70,7 @@ describe('home accessibility', () => {
 
     const list = view.getByTestId('today-guided-plan-list');
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
-    expect(StyleSheet.flatten(list.props.contentContainerStyle).paddingTop).toBe(18);
+    expect(StyleSheet.flatten(list.props.contentContainerStyle).paddingTop).toBe(67);
     expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
   });
 
