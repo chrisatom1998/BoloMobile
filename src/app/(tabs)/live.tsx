@@ -167,6 +167,9 @@ export default function LiveScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const nearBottomRef = useRef(true);
   const followedMessageCountRef = useRef(0);
+  // A typed send or example chip asks the next message-count follow to run even
+  // when the reader has scrolled up. Cleared once that follow's layout settles.
+  const forceFollowRef = useRef(false);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
   const visibleMessages = useMemo(
@@ -319,17 +322,25 @@ export default function LiveScreen() {
     };
   }, [reducedMotion, screenFocused, scrollTailIntoView]);
 
-  // A new message follows the tail when the reader is already near it. The first
-  // scrollToEnd can run before layout, so retry once on the next frame.
+  // A new message follows the tail when the reader is already near it. A send
+  // sets forceFollowRef so the same follow runs after the new row commits, even
+  // if they had scrolled up. The first scrollToEnd can run before layout, so
+  // retry once on the next frame, then release the forced follow.
   useEffect(() => {
     const countChanged = messageCount !== followedMessageCountRef.current;
     followedMessageCountRef.current = messageCount;
-    if (!aiConsent || messageCount === 0 || !countChanged || !nearBottomRef.current) return;
+    const forceFollow = forceFollowRef.current;
+    if (!aiConsent || messageCount === 0 || !countChanged || (!nearBottomRef.current && !forceFollow)) return;
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
       listRef.current?.scrollToEnd({ animated: false });
       secondFrame = requestAnimationFrame(() => {
         listRef.current?.scrollToEnd({ animated: false });
+        if (!forceFollow) return;
+        forceFollowRef.current = false;
+        // This follow landed on the new tail. Later assistant lines keep
+        // following until the reader scrolls away.
+        nearBottomRef.current = true;
       });
     });
     return () => {
@@ -515,10 +526,9 @@ export default function LiveScreen() {
     const text = raw.trim().slice(0, 500);
     if (!aiConsent || !text || busy || realtimeLocked || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return false;
     hapticTap();
-    // A typed send or example chip is the learner asking to see that turn, so
-    // follow the tail even after they scrolled up to reread. Incoming assistant
-    // lines still follow only while the reader is already near the bottom.
-    scrollTailIntoView(!reducedMotion);
+    // The new row is not committed yet. The message-count effect follows once
+    // it renders, including when the reader had scrolled up.
+    forceFollowRef.current = true;
     chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
     setPendingUserMessage(userMessage);
@@ -558,7 +568,7 @@ export default function LiveScreen() {
         if (mountedRef.current) setBusy(false);
       }
     }
-  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, reducedMotion, responseLanguage, scrollTailIntoView]);
+  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     const previous = realtimeStatusRef.current;

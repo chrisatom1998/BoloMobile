@@ -527,6 +527,24 @@ async function flushMicrotasks() {
   });
 }
 
+function scrollLiveChat(view: { getByTestId: (id: string) => { props: Record<string, unknown> } }, offsetY: number) {
+  const onScroll = view.getByTestId('live-chat-list').props.onScroll;
+  if (typeof onScroll !== 'function') throw new Error('Expected the live chat list to handle scroll.');
+  onScroll({
+    nativeEvent: {
+      contentOffset: { x: 0, y: offsetY },
+      contentSize: { height: 2000, width: 390 },
+      layoutMeasurement: { height: 800, width: 390 },
+    },
+  });
+}
+
+async function flushScrollFrames() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+}
+
 type FiberNode = {
   memoizedProps?: Record<string, unknown>;
   return: FiberNode | null;
@@ -764,23 +782,29 @@ describe('immersive live conversation design', () => {
     }
   });
 
-  it('scrolls a typed send into view when the reader has scrolled up', async () => {
+  it('follows a typed send only after the new message and typing row have rendered', async () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     boloApi.sendMobileChat.mockReturnValue(request.promise);
-    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
     const view = await render(<LiveScreen />);
+    const tailHadNewTurn: boolean[] = [];
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => {
+      const list = within(view.getByTestId('live-chat-list'));
+      tailHadNewTurn.push(list.queryByLabelText('You: Show this turn.') != null && list.queryByTestId('asha-typing-indicator') != null);
+    });
     try {
-      view.getByTestId('live-chat-list').props.onScroll({
-        nativeEvent: {
-          contentOffset: { x: 0, y: 0 },
-          contentSize: { height: 2000, width: 390 },
-          layoutMeasurement: { height: 800, width: 390 },
-        },
-      });
+      scrollLiveChat(view, 0);
       scrollToEnd.mockClear();
       await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Show this turn.');
       await fireEvent.press(view.getByLabelText('Send message'));
-      expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+
+      const list = within(view.getByTestId('live-chat-list'));
+      expect(list.getByLabelText('You: Show this turn.')).toBeTruthy();
+      expect(list.getByTestId('asha-typing-indicator')).toBeTruthy();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+
+      await flushScrollFrames();
+      expect(scrollToEnd).toHaveBeenCalledTimes(2);
+      expect(tailHadNewTurn).toEqual([true, true]);
     } finally {
       await act(async () => {
         request.resolve({ transcript: '', reply: 'Shown at the tail.', language: 'en' });
@@ -792,22 +816,25 @@ describe('immersive live conversation design', () => {
     }
   });
 
-  it('scrolls an example chip into view when the reader has scrolled up', async () => {
+  it('follows an example chip only after its message has rendered', async () => {
     const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
     boloApi.sendMobileChat.mockReturnValue(request.promise);
-    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
     const view = await render(<LiveScreen />);
+    const chipVisibleAtScroll: boolean[] = [];
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd').mockImplementation(() => {
+      chipVisibleAtScroll.push(within(view.getByTestId('live-chat-list')).queryByLabelText('You: Order tea') != null);
+    });
     try {
-      view.getByTestId('live-chat-list').props.onScroll({
-        nativeEvent: {
-          contentOffset: { x: 0, y: 0 },
-          contentSize: { height: 2000, width: 390 },
-          layoutMeasurement: { height: 800, width: 390 },
-        },
-      });
+      scrollLiveChat(view, 0);
       scrollToEnd.mockClear();
       await fireEvent.press(view.getByRole('button', { name: 'Order tea' }));
-      expect(scrollToEnd).toHaveBeenCalledWith({ animated: true });
+
+      expect(within(view.getByTestId('live-chat-list')).getByLabelText('You: Order tea')).toBeTruthy();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+
+      await flushScrollFrames();
+      expect(scrollToEnd).toHaveBeenCalledTimes(2);
+      expect(chipVisibleAtScroll).toEqual([true, true]);
     } finally {
       await act(async () => {
         request.resolve({ transcript: '', reply: 'Chai, kripya.', language: 'en' });
@@ -819,22 +846,67 @@ describe('immersive live conversation design', () => {
     }
   });
 
-  it('does not scroll an incoming assistant message while the reader is away from the tail', async () => {
+  it('does not follow an assistant reply that arrives after the reader scrolls back up', async () => {
+    const request = deferred<{ transcript: string; reply: string; language: 'en' }>();
+    boloApi.sendMobileChat.mockReturnValue(request.promise);
+    const view = await render(<LiveScreen />);
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    try {
+      scrollLiveChat(view, 0);
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Ask from the top.');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      await flushScrollFrames();
+      scrollToEnd.mockClear();
+
+      scrollLiveChat(view, 0);
+      await act(async () => {
+        request.resolve({ transcript: '', reply: 'Reply below the fold.', language: 'en' });
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      expect(within(view.getByTestId('live-chat-list')).getByLabelText('Asha: Reply below the fold.')).toBeTruthy();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    } finally {
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('does not follow a realtime voice turn while the reader is away from the tail', async () => {
     const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
     const view = await render(<LiveScreen />);
     try {
-      view.getByTestId('live-chat-list').props.onScroll({
-        nativeEvent: {
-          contentOffset: { x: 0, y: 0 },
-          contentSize: { height: 2000, width: 390 },
-          layoutMeasurement: { height: 800, width: 390 },
-        },
-      });
+      scrollLiveChat(view, 0);
       scrollToEnd.mockClear();
       await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      await flushScrollFrames();
+
+      const list = within(view.getByTestId('live-chat-list'));
+      expect(list.getByLabelText('You: Namaste')).toBeTruthy();
+      expect(list.getByLabelText('Asha: Hello there.')).toBeTruthy();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    } finally {
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('does not follow the tail when a send is rejected', async () => {
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    const view = await render(<LiveScreen />);
+    try {
+      await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+      scrollLiveChat(view, 0);
+      scrollToEnd.mockClear();
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        getOnPress(view.getByRole('button', { name: 'Order tea' }))();
+        await new Promise((resolve) => setTimeout(resolve, 50));
       });
+
+      expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
+      expect(within(view.getByTestId('live-chat-list')).queryByLabelText('You: Order tea')).toBeNull();
       expect(scrollToEnd).not.toHaveBeenCalled();
     } finally {
       scrollToEnd.mockRestore();
