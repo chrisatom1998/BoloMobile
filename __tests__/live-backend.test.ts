@@ -1,5 +1,5 @@
 /** @jest-environment node */
-import { BOLO_TOOLS, createLiveRoutes, LIVE_REQUEST_TIMEOUT_MS, safetyIdentifier, sanitizeLiveHistory } from '../backend/live';
+import { BOLO_TOOLS, createLiveCostBudget, createLiveRoutes, LIVE_REQUEST_TIMEOUT_MS, readLiveCostLimits, safetyIdentifier, sanitizeLiveHistory } from '../backend/live';
 
 const sdp = 'v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n';
 const validBody = { clientId: 'mobile-client-123', offerSdp: sdp, responseLanguage: 'en' };
@@ -37,8 +37,18 @@ function setup() {
 }
 
 describe('GPT-Live backend', () => {
+  const costEnv = ['BOLO_LIVE_DAILY_SESSION_CAP', 'BOLO_LIVE_IP_SESSION_LIMIT'] as const;
+  const previousCostEnv = new Map(costEnv.map(name => [name, process.env[name]]));
+
   beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => undefined));
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    for (const name of costEnv) {
+      const previous = previousCostEnv.get(name);
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    }
+  });
 
   it('pins model, voice, storage, delegation and frontend permissions when exchanging an SDP offer', async () => {
     const { deps, call } = setup();
@@ -309,5 +319,146 @@ describe('GPT-Live backend', () => {
     deps.secrets.readSecret.mockResolvedValue('  ');
     expect((await status()).body).toMatchObject({ configured: false, available: false });
     expect(deps.openAI).not.toHaveBeenCalled();
+  });
+
+  it('stops billing another OpenAI session when one address rotates client ids', async () => {
+    process.env.BOLO_LIVE_IP_SESSION_LIMIT = '2';
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '100';
+    const { deps, call } = setup();
+    const address = '203.0.113.10';
+    expect((await call({ body: validBody, clientAddress: address })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: address })).status).toBe(200);
+    expect(await call({ body: { ...validBody, clientId: 'mobile-client-789' }, clientAddress: address })).toEqual({
+      status: 429,
+      body: { error: 'Please wait before starting another voice session.' },
+    });
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-999' }, clientAddress: '198.51.100.25' })).status).toBe(200);
+    expect(deps.openAI).toHaveBeenCalledTimes(3);
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops billing another OpenAI session after the daily cap across addresses and client ids', async () => {
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '2';
+    process.env.BOLO_LIVE_IP_SESSION_LIMIT = '100';
+    const { deps, call } = setup();
+    expect((await call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '203.0.113.11' })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-789' }, clientAddress: '203.0.113.12' })).status).toBe(429);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-999' } })).status).toBe(429);
+    expect(deps.openAI).toHaveBeenCalledTimes(2);
+    expect(deps.secrets.readSecret).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not spend the daily cap on a malformed body or a per-client denial', async () => {
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '1';
+    const { deps, call } = setup();
+    expect((await call({ body: { ...validBody, offerSdp: 'invalid' }, clientAddress: '203.0.113.10' })).status).toBe(400);
+    deps.allowMobileRequest.mockResolvedValueOnce(false);
+    expect((await call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(429);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '198.51.100.8' })).status).toBe(200);
+    expect(deps.openAI).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a wrapped or capitalized address as the same bucket and rejects a list', async () => {
+    process.env.BOLO_LIVE_IP_SESSION_LIMIT = '1';
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '10';
+    const { deps, call } = setup();
+    expect((await call({ body: validBody, clientAddress: ' 203.0.113.10 ' })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '203.0.113.10' })).status).toBe(429);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-789' }, clientAddress: '2001:DB8::10' })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-999' }, clientAddress: '2001:db8::10' })).status).toBe(429);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-321' }, clientAddress: '::ffff:198.51.100.20' })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-654' }, clientAddress: '198.51.100.20' })).status).toBe(429);
+    const ratedBeforeInvalid = deps.allowMobileRequest.mock.calls.length;
+    for (const clientAddress of ['203.0.113.10, 198.51.100.1', '203.0.113.10:443', 'not-an-ip', '999.1.1.1', '203.0.113.010', 1]) {
+      expect((await call({ body: validBody, clientAddress })).status).toBe(400);
+    }
+    expect(deps.allowMobileRequest.mock.calls.length).toBe(ratedBeforeInvalid);
+    expect(deps.openAI).toHaveBeenCalledTimes(3);
+  });
+
+  it('holds a daily slot until the in-flight session create finishes', async () => {
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '1';
+    const { deps, call } = setup();
+    let release: (value: Pick<Response, 'ok' | 'body'>) => void = () => undefined;
+    deps.openAI.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const first = call({ body: validBody, clientAddress: '203.0.113.10' });
+    const { setImmediate: immediate } = jest.requireActual<{ setImmediate: (callback: () => void) => void }>('timers');
+    try {
+      while (deps.openAI.mock.calls.length < 1) {
+        await new Promise<void>(resolve => { immediate(() => resolve()); });
+      }
+      expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '198.51.100.20' })).status).toBe(429);
+      expect(deps.openAI).toHaveBeenCalledTimes(1);
+    } finally {
+      release({ ok: true, body: jsonBody({ session: { id: 'live_test123' }, transport: { type: 'webrtc', sdp } }) });
+    }
+    expect((await first).status).toBe(200);
+  });
+
+  it('opens a fresh daily budget on the next UTC day', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-10-31T23:30:00.000Z'));
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '1';
+    process.env.BOLO_LIVE_IP_SESSION_LIMIT = '1';
+    const { call } = setup();
+    expect((await call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(200);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '198.51.100.10' })).status).toBe(429);
+    jest.setSystemTime(new Date('2026-11-01T00:00:00.000Z'));
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-789' }, clientAddress: '203.0.113.10' })).status).toBe(200);
+  });
+
+  it('returns the daily slot when reading the API key throws', async () => {
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '1';
+    const { deps, call } = setup();
+    deps.secrets.readSecret.mockRejectedValueOnce(new Error('vault down'));
+    expect((await call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(502);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '198.51.100.8' })).status).toBe(200);
+    expect(deps.openAI).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify((console.error as jest.Mock).mock.calls)).not.toContain('vault down');
+  });
+
+  it('returns the daily slot when the server has no OpenAI key', async () => {
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '1';
+    const { deps, call } = setup();
+    deps.secrets.readSecret.mockResolvedValueOnce('  ');
+    expect((await call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(503);
+    expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: '198.51.100.8' })).status).toBe(200);
+    expect(deps.openAI).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses every new session when the daily cap is zero and addressed clients when the IP limit is zero', async () => {
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '0';
+    const { deps, call } = setup();
+    expect((await call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(429);
+    expect(deps.openAI).not.toHaveBeenCalled();
+    process.env.BOLO_LIVE_DAILY_SESSION_CAP = '10';
+    process.env.BOLO_LIVE_IP_SESSION_LIMIT = '0';
+    const second = setup();
+    expect((await second.call({ body: validBody, clientAddress: '203.0.113.10' })).status).toBe(429);
+    expect((await second.call({ body: validBody })).status).toBe(200);
+    expect(second.deps.openAI).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('live cost limit configuration', () => {
+  it('uses the documented defaults and ignores values that are not a whole number', () => {
+    expect(readLiveCostLimits({})).toEqual({ dailySessionCap: 2000, ipSessionLimit: 480 });
+    expect(readLiveCostLimits({ BOLO_LIVE_DAILY_SESSION_CAP: '0', BOLO_LIVE_IP_SESSION_LIMIT: '0' })).toEqual({ dailySessionCap: 0, ipSessionLimit: 0 });
+    expect(readLiveCostLimits({ BOLO_LIVE_DAILY_SESSION_CAP: ' 25 ', BOLO_LIVE_IP_SESSION_LIMIT: 'nope' })).toEqual({ dailySessionCap: 25, ipSessionLimit: 480 });
+    expect(readLiveCostLimits({ BOLO_LIVE_DAILY_SESSION_CAP: '', BOLO_LIVE_IP_SESSION_LIMIT: '1e3' })).toEqual({ dailySessionCap: 2000, ipSessionLimit: 480 });
+    expect(readLiveCostLimits({ BOLO_LIVE_DAILY_SESSION_CAP: '-1', BOLO_LIVE_IP_SESSION_LIMIT: '1000000000' })).toEqual({ dailySessionCap: 2000, ipSessionLimit: 480 });
+  });
+
+  it('does not consume a daily slot for an address the table cannot store, and reclaims stale addresses the next day', () => {
+    const budget = createLiveCostBudget(1);
+    const limits = { dailySessionCap: 2, ipSessionLimit: 10 };
+    const firstDay = Date.parse('2026-10-31T00:00:00.000Z');
+    const nextDay = Date.parse('2026-11-01T00:00:00.000Z');
+    expect(budget.reserve('203.0.113.10', limits, firstDay)).toBe('ok');
+    expect(budget.reserve('198.51.100.10', limits, firstDay)).toBe('ip');
+    expect(budget.reserve(null, limits, firstDay)).toBe('ok');
+    expect(budget.reserve(null, limits, firstDay)).toBe('daily');
+    expect(budget.reserve('198.51.100.10', limits, nextDay)).toBe('ok');
   });
 });

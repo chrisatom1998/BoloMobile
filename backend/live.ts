@@ -9,6 +9,12 @@ const MAX_HISTORY_BYTES = 6_000;
 const MAX_CONTEXT_BYTES = 24_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 96 * 1024;
 const MAX_MODEL_RESPONSE_BYTES = 16 * 1024;
+const CLIENT_SESSION_LIMIT = 12;
+const DEFAULT_LIVE_DAILY_SESSION_CAP = 2_000;
+const DEFAULT_LIVE_IP_SESSION_LIMIT = 480;
+const MAX_LIVE_ADDRESS_BUCKETS = 10_000;
+const SESSION_LIMIT_MESSAGE = 'Please wait before starting another voice session.';
+const CLIENT_ADDRESS_MESSAGE = 'Voice session client address must be one IP address.';
 const ALLOWED_MODES = new Set([
   'hindi-immersion',
   'hindi-english-help',
@@ -294,6 +300,121 @@ function createSession(offerSdp: string, mode: string, language: 'en' | 'hi', co
   };
 }
 
+type LiveCostLimits = { dailySessionCap: number; ipSessionLimit: number };
+type LiveCostDecision = 'ok' | 'daily' | 'ip';
+
+function runtimeEnv(): Record<string, string | undefined> {
+  const candidate = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  return candidate ?? {};
+}
+
+function parseCostLimit(value: string | undefined, fallback: number) {
+  if (value === undefined) return fallback;
+  const trimmed = value.trim();
+  // Nine digits keeps the configured ceiling inside Number.isSafeInteger.
+  if (!/^\d{1,9}$/.test(trimmed)) return fallback;
+  return Number(trimmed);
+}
+
+/** Reads the UTC-day voice budgets. Blank or non-numeric values keep the defaults; `0` refuses that scope. */
+export function readLiveCostLimits(env: Record<string, string | undefined> = runtimeEnv()): LiveCostLimits {
+  return {
+    dailySessionCap: parseCostLimit(env.BOLO_LIVE_DAILY_SESSION_CAP, DEFAULT_LIVE_DAILY_SESSION_CAP),
+    ipSessionLimit: parseCostLimit(env.BOLO_LIVE_IP_SESSION_LIMIT, DEFAULT_LIVE_IP_SESSION_LIMIT),
+  };
+}
+
+function canonicalIpv4(value: string) {
+  const parts = value.split('.');
+  if (parts.length !== 4) return null;
+  const numbers: string[] = [];
+  for (const part of parts) {
+    if (!/^(?:0|[1-9]\d{0,2})$/.test(part)) return null;
+    const number = Number(part);
+    if (number > 255) return null;
+    numbers.push(String(number));
+  }
+  return numbers.join('.');
+}
+
+function isIpv6(value: string) {
+  if (!value.includes(':') || value.includes(':::') || value.includes('.')) return false;
+  const halves = value.split('::');
+  if (halves.length > 2) return false;
+  const groups = halves.flatMap(half => (half === '' ? [] : half.split(':')));
+  if (groups.some(group => !/^[0-9a-f]{1,4}$/.test(group))) return false;
+  if (halves.length === 1) return groups.length === 8;
+  return groups.length < 8;
+}
+
+function canonicalIp(value: string) {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(value);
+  if (mapped?.[1]) return canonicalIpv4(mapped[1]);
+  if (value.includes('.')) return canonicalIpv4(value);
+  if (!isIpv6(value)) return null;
+  return value;
+}
+
+/** `null` means the host did not supply an address. `{ ok: false }` means the value is not one IP. */
+function normalizeLiveClientAddress(value: unknown): { ok: true; address: string | null } | { ok: false } {
+  if (value === undefined || value === null) return { ok: true, address: null };
+  if (typeof value !== 'string') return { ok: false };
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) return { ok: true, address: null };
+  if (trimmed.length > 64) return { ok: false };
+  const address = canonicalIp(trimmed);
+  if (address === null) return { ok: false };
+  return { ok: true, address };
+}
+
+/**
+ * Process-local UTC-day budgets for billable GPT-Live session creates.
+ * Callers should keep one budget for the life of the process. A host that
+ * builds routes per request resets these counters.
+ */
+export function createLiveCostBudget(maxAddresses = MAX_LIVE_ADDRESS_BUCKETS) {
+  const usage = new Map<string, { day: string; count: number }>();
+  const countOn = (key: string, day: string) => {
+    const bucket = usage.get(key);
+    return bucket && bucket.day === day ? bucket.count : 0;
+  };
+  const write = (key: string, day: string, count: number) => {
+    usage.set(key, { day, count });
+  };
+  const addressCount = () => {
+    let total = 0;
+    for (const key of usage.keys()) if (key.startsWith('ip:')) total += 1;
+    return total;
+  };
+  const prune = (day: string) => {
+    for (const [key, bucket] of usage) if (bucket.day !== day) usage.delete(key);
+  };
+  return {
+    reserve(address: string | null, limits: LiveCostLimits, now = Date.now()): LiveCostDecision {
+      const day = new Date(now).toISOString().slice(0, 10);
+      if (countOn('global', day) >= limits.dailySessionCap) return 'daily';
+      const ipKey = address === null ? null : `ip:${address}`;
+      if (ipKey && countOn(ipKey, day) >= limits.ipSessionLimit) return 'ip';
+      if (ipKey && !usage.has(ipKey)) {
+        if (addressCount() >= maxAddresses) prune(day);
+        if (!usage.has(ipKey) && addressCount() >= maxAddresses) return 'ip';
+      }
+      write('global', day, countOn('global', day) + 1);
+      if (ipKey) write(ipKey, day, countOn(ipKey, day) + 1);
+      return 'ok';
+    },
+    release(address: string | null, now = Date.now()) {
+      const day = new Date(now).toISOString().slice(0, 10);
+      for (const key of ['global', ...(address === null ? [] : [`ip:${address}`])]) {
+        const bucket = usage.get(key);
+        if (!bucket || bucket.day !== day) continue;
+        if (bucket.count <= 1) usage.delete(key);
+        else bucket.count -= 1;
+      }
+    },
+  };
+}
+
 export async function safetyIdentifier(clientId: string) {
   const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(clientId));
   // OpenAI caps safety identifiers at 64 characters; keep 'bolo-' plus 32 hex characters.
@@ -330,6 +451,8 @@ async function readBoundedJson(response: Pick<Response, 'body'>, maximumBytes: n
 }
 
 export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TError>) {
+  // One budget per routes object, so the host must reuse these handlers.
+  const budget = createLiveCostBudget();
   return {
     'GET /api/live-status': [async () => {
       let configured = false;
@@ -371,7 +494,7 @@ export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TE
         protocol: 'live',
       });
     }],
-    'POST /api/live-call': [async ({ body }: { body?: unknown }) => {
+    'POST /api/live-call': [async ({ body, clientAddress }: { body?: unknown; clientAddress?: unknown }) => {
       if (!record(body)
         || typeof body.clientId !== 'string' || !deps.validClientId(body.clientId)) {
         return deps.error('A valid mobile client identifier is required.', 400);
@@ -391,14 +514,34 @@ export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TE
         return deps.error('A valid voice session offer is required.', 400);
       }
       const clientId = body.clientId;
+      // The host passes the socket address it already trusts. The JSON body is
+      // not a source of identity: clientId is generated on the device.
+      const address = normalizeLiveClientAddress(clientAddress);
+      if (!address.ok) return deps.error(CLIENT_ADDRESS_MESSAGE, 400);
       let timer: ReturnType<typeof setTimeout> | undefined;
       const controller = new AbortController();
+      let hold: { address: string | null; at: number } | null = null;
+      let calledUpstream = false;
       try {
-        if (!await deps.allowMobileRequest(clientId + '-live', 12)) {
-          return deps.error('Please wait before starting another voice session.', 429);
+        // Per-identifier limit first, so a client already over its own bucket
+        // does not consume the shared daily budget.
+        if (!await deps.allowMobileRequest(clientId + '-live', CLIENT_SESSION_LIMIT)) {
+          return deps.error(SESSION_LIMIT_MESSAGE, 429);
         }
+        // Check and increment with no await between them. Over-cap requests
+        // never read the API key or call OpenAI.
+        const limits = readLiveCostLimits();
+        const reservedAt = Date.now();
+        if (budget.reserve(address.address, limits, reservedAt) !== 'ok') {
+          return deps.error(SESSION_LIMIT_MESSAGE, 429);
+        }
+        hold = { address: address.address, at: reservedAt };
         const key = await deps.secrets.readSecret('OPENAI_API_KEY');
-        if (!key?.trim()) return deps.error('Live practice is temporarily unavailable.', 503);
+        if (!key?.trim()) {
+          budget.release(hold.address, hold.at);
+          hold = null;
+          return deps.error('Live practice is temporarily unavailable.', 503);
+        }
         const language = body.responseLanguage === 'hi'
           || (body.responseLanguage === undefined && mode === 'hindi-immersion') ? 'hi' : 'en';
         const request = createSession(body.offerSdp, mode, language, context, body.history, body.clientTools === true);
@@ -409,11 +552,13 @@ export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TE
           }, LIVE_REQUEST_TIMEOUT_MS);
         });
         const upstream = async () => {
+          const safety = await safetyIdentifier(clientId);
+          calledUpstream = true;
           const response = await deps.openAI('/live/sessions', key, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'OpenAI-Safety-Identifier': await safetyIdentifier(clientId),
+              'OpenAI-Safety-Identifier': safety,
             },
             body: JSON.stringify(request),
             signal: controller.signal,
@@ -428,6 +573,8 @@ export function createLiveRoutes<TJson, TError>(deps: LiveDependencies<TJson, TE
         }
         return deps.json({ answerSdp: result.transport.sdp, sessionId: result.session.id });
       } catch (cause) {
+        // A failure before the OpenAI call did not create a billable session.
+        if (hold && !calledUpstream) budget.release(hold.address, hold.at);
         // Log only this module's own reason codes, never upstream messages,
         // credentials, transcripts, or SDP.
         const reason = cause instanceof Error && /^live_[a-z_]+$/.test(cause.message)
