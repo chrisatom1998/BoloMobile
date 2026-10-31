@@ -1,12 +1,12 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { Dimensions, StyleSheet, Text } from 'react-native';
 
+import { PhraseCard } from '../src/components/phrase-card';
+import { hindiFont, lightColors } from '../src/theme';
+
 jest.mock('lucide-react-native', () => ({
   Volume2: () => null,
 }));
-
-import { PhraseCard } from '../src/components/phrase-card';
-import { hindiFont, lightColors } from '../src/theme';
 
 const phrase = { devanagari: 'आप कैसे हैं?', romanized: 'Aap kaise hain?', english: 'How are you?' };
 const DEVANAGARI = /[ऀ-ॿ]/u;
@@ -74,6 +74,22 @@ describe('PhraseCard', () => {
     expect(view.getByRole('button').props.accessibilityLabel).not.toMatch(DEVANAGARI);
     expect(textOrder(view)).toEqual(['phrase-card-romanized', 'phrase-card-english']);
     expect(StyleSheet.flatten(view.getByTestId('phrase-card-romanized').props.style)).toMatchObject({ fontSize: 20 });
+  });
+
+  it('renders no Devanagari for "latin" even when the romanized field is mixed-script', async () => {
+    const view = await render(<PhraseCard devanagari="चाय कम" english="Less chai" onListen={jest.fn()} romanized="chai कम" scriptPreference="latin" />);
+    expect(view.queryByTestId('phrase-card-devanagari')).toBeNull();
+    expect(view.getByTestId('phrase-card-romanized')).toHaveTextContent('Chai kam');
+    expect(renderedText(view)).not.toMatch(DEVANAGARI);
+    expect(view.getByRole('button').props.accessibilityLabel).not.toMatch(DEVANAGARI);
+  });
+
+  it('renders no Devanagari for "latin" when only a mislabeled Devanagari romanization is supplied', async () => {
+    const view = await render(<PhraseCard onListen={jest.fn()} romanized="नमस्ते" scriptPreference="latin" />);
+    expect(view.queryByTestId('phrase-card-devanagari')).toBeNull();
+    expect(view.getByTestId('phrase-card-romanized')).toHaveTextContent('Namaste');
+    expect(renderedText(view)).not.toMatch(DEVANAGARI);
+    expect(view.getByRole('button').props.accessibilityLabel).toBe('Listen to Namaste');
   });
 
   it('derives the romanization from Devanagari when none is supplied', async () => {

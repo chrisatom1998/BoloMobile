@@ -54,6 +54,22 @@ describe('phraseCardLines', () => {
     expect(phraseCardLines({ devanagari: 'Namaste', scriptPreference: 'both' })).toEqual({ romanized: 'Namaste', primary: 'romanized' });
   });
 
+  it('never leaks Devanagari through the romanized field, even in "latin" mode', () => {
+    for (const scriptPreference of ['both', 'devanagari', 'latin'] as const) {
+      const mixed = phraseCardLines({ devanagari: 'चाय कम', romanized: 'chai कम', scriptPreference });
+      expect(mixed.romanized === undefined || !/[\u0900-\u097f]/u.test(mixed.romanized)).toBe(true);
+      expect(mixed.devanagari === undefined || scriptPreference !== 'latin').toBe(true);
+    }
+    expect(phraseCardLines({ devanagari: 'चाय कम', romanized: 'chai कम', scriptPreference: 'latin' })).toEqual({ romanized: 'Chai kam', primary: 'romanized' });
+    expect(phraseCardLines({ devanagari: 'चाय कम', romanized: 'chai कम', scriptPreference: 'both' })).toEqual({ devanagari: 'चाय कम', romanized: 'Chai kam', primary: 'devanagari' });
+  });
+
+  it('treats a Devanagari-only "romanized" field as the Hindi source', () => {
+    expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'latin' })).toEqual({ romanized: 'Namaste', english: 'Hello', primary: 'romanized' });
+    expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'both' })).toEqual({ devanagari: 'नमस्ते', romanized: 'Namaste', english: 'Hello', primary: 'devanagari' });
+    expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'devanagari' })).toEqual({ devanagari: 'नमस्ते', english: 'Hello', primary: 'devanagari' });
+  });
+
   it('omits empty or whitespace-only lines', () => {
     expect(phraseCardLines({ devanagari: 'नमस्ते', romanized: '  ', english: '', scriptPreference: 'both' })).toEqual({
       devanagari: 'नमस्ते',
