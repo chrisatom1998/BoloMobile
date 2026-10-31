@@ -32,6 +32,10 @@ export function recommendedScenes(profile: LearnerProfile, progress: Record<stri
 
 export const reviewIntervals = [0, 1, 3, 7, 14, 30];
 
+export function reviewCardMode(mastery: number, index: number, canListen: boolean): 'speak-first' | 'listen-first' {
+  return mastery >= 3 && canListen && index % 2 === 1 ? 'listen-first' : 'speak-first';
+}
+
 export function duePhraseList(phrases: SavedPhrase[], reviews: Record<string, PhraseReview>, today = dateKey()) {
   return phrases.filter((phrase) => (reviews[phrase.hi]?.dueAt ?? today) <= today);
 }

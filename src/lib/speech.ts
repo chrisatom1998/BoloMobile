@@ -223,6 +223,9 @@ export async function preloadSpeech(text: string, requestedLanguage?: AshaRespon
   }
 }
 
+// Resolves true only when the clip runs to completion. Cancellation, including
+// an already-aborted signal, resolves false instead of throwing so callers can
+// tell a phrase the learner heard from one that was stopped.
 export async function speakText(
   text: string,
   signal?: AbortSignal,
@@ -230,7 +233,7 @@ export async function speakText(
   requestedLanguage?: AshaResponseLanguage,
   audioMode: VoiceAudioMode = 'playback',
   normalizeGeneratedChatReply = false,
-) {
+): Promise<boolean> {
   // A normal Listen action can arrive from a still-mounted non-Live tab while
   // the Realtime call owns iOS's PlayAndRecord session. In that case, retain
   // the call session rather than tearing it down for standalone playback.
@@ -239,7 +242,7 @@ export async function speakText(
     : audioMode;
   const chunks = splitSpeechByLanguage(text, requestedLanguage);
   void stopSpeaking();
-  if (!chunks.length || signal?.aborted) return;
+  if (!chunks.length || signal?.aborted) return false;
 
   const controller = new AbortController();
   activeSpeechController = controller;
@@ -265,7 +268,7 @@ export async function speakText(
     prepareChunk(1);
 
     for (const [index, { text: chunk, language }] of chunks.entries()) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return false;
       prepareChunk(index + 1);
       if (hasOfflineSpeech(chunk)) {
         await playOfflineSpeech(chunk, controller.signal, playbackRate, effectiveAudioMode);
@@ -289,6 +292,7 @@ export async function speakText(
     if (activeSpeechRun === run) activeSpeechRun = null;
     markRunSettled();
   }
+  return !controller.signal.aborted;
 }
 
 export { hasOfflineSpeech } from '@/lib/offline-voice-player';

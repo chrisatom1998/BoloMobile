@@ -30,14 +30,17 @@ export function useSpeakText() {
 
   // Options are forwarded as a rest tuple so callers keep the exact `speakText`
   // argument shape they need instead of always pinning a language or rate.
-  const speak = useCallback(async (text: string, ...options: SpeakOptions) => {
+  // True means the clip finished. False means it failed or was cancelled, so a
+  // hint the learner never heard can be told apart from one that played.
+  const speak = useCallback(async (text: string, ...options: SpeakOptions): Promise<boolean> => {
     setAudioError('');
     try {
-      await speakText(text, ...options);
+      return await speakText(text, ...options);
     } catch (error) {
       if (mountedRef.current && !options[0]?.aborted) {
         setAudioError(error instanceof Error ? error.message : playbackFallbackMessage);
       }
+      return false;
     }
   }, []);
 

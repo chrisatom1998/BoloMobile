@@ -122,6 +122,12 @@ export function previousDate(key: string): string {
   return dateKey(value);
 }
 
+export function nextDate(key: string): string {
+  const value = new Date(`${key}T12:00:00`);
+  value.setDate(value.getDate() + 1);
+  return dateKey(value);
+}
+
 export function emptyPractice(today = dateKey()): PracticeState {
   return { date: today, chaiDone: false, liveDone: false, seconds: 0 };
 }

@@ -11,6 +11,7 @@ import { MotionReveal } from '@/components/motion';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
+import { selectNextLesson } from '@/lib/lesson-path';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
@@ -61,6 +62,7 @@ export default function HomeScreen() {
   // Whole minutes drive both the label and the ring so they never disagree.
   const minutesToday = Math.floor(practice.seconds / 60);
   const goalPercent = Math.min(100, Math.round(minutesToday / goal * 100));
+  const minutesLabel = minutesToday > 999 ? '999+' : String(minutesToday);
   // Every due phrase counts here, not the 5-phrase review-session cap from duePhrases.
   // `calendarDay` re-runs these after midnight: this tab stays mounted, and
   // phrases can fall due overnight without their references changing.
@@ -81,27 +83,8 @@ export default function HomeScreen() {
     [calendarDay, dueCount, practice, practiceHistory, reviewStreakDays],
   );
   const lessonSelection = useMemo(() => {
-    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
-    const resumed = catalog
-      .filter(({ lessonId }) => {
-        const progress = sceneProgress[lessonId];
-        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-      })
-      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
-        if (!selected) return candidate;
-        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-      }, undefined);
-    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
-    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
-    const lessonId = resumed?.lessonId
-      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
-      ?? plan.lessonIds[0]!;
+    const { lessonId, mode, plan } = selectNextLesson(sceneProgress, learnerProfile);
     const scene = getScene(lessonId);
-    const mode = resumed ? 'continue' : incompletePlan ? 'next' : 'review';
 
     return {
       action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
@@ -111,19 +94,26 @@ export default function HomeScreen() {
       scene,
       title: scene?.title ?? plan.title,
     };
-  }, [sceneProgress]);
+  }, [learnerProfile, sceneProgress]);
   const currentPlan = lessonSelection.plan;
   const heroScene = lessonSelection.scene;
 
   const currentStep = todayPlan.nextStep;
+  // A review step with nothing due is not shown, so a new learner never sees a struck-out "Skipped" row.
+  const visibleSteps = useMemo(() => todayPlan.steps.filter((step) => !step.skipped), [todayPlan.steps]);
+  const stepKicker = useCallback((key: TodayStep['key'], label: string) => {
+    const position = visibleSteps.findIndex((step) => step.key === key) + 1;
+    return position > 0 ? `STEP ${position} OF ${visibleSteps.length} · ${label}` : label;
+  }, [visibleSteps]);
+  const lessonNumber = lessonSelection.plan.lessonIds.indexOf(lessonSelection.lessonId) + 1;
   const hero = useMemo(() => {
     const lessonStep = {
       action: lessonSelection.action,
       chips: (heroScene?.words ?? []).map((word) => ({ key: word, latin: false, text: word })),
-      kicker: `STEP 2 OF 3 · ${lessonSelection.kicker}`,
-      meta: heroScene?.place,
+      kicker: stepKicker('lesson', lessonSelection.kicker),
+      meta: lessonNumber > 0 ? `${lessonSelection.plan.title} · Lesson ${lessonNumber} of ${lessonSelection.plan.lessonIds.length}` : undefined,
       onPress: () => openLesson(lessonSelection.lessonId),
-      subtitle: heroScene?.subtitle,
+      subtitle: heroScene?.subtitle ? `New phrase: “${heroScene.subtitle.replace(/[.!?]$/u, '')}”` : undefined,
       title: lessonSelection.title,
     };
     switch (currentStep) {
@@ -131,7 +121,7 @@ export default function HomeScreen() {
         return {
           action: 'Start review',
           chips: reviewPreview.map((item) => ({ ...item, latin: showLatinPreview })),
-          kicker: 'STEP 1 OF 3 · REVIEW',
+          kicker: stepKicker('review', 'REVIEW'),
           meta: undefined,
           onPress: () => router.push('/review' as Href),
           subtitle: `${plural(dueCount, 'phrase')} due. A quick recall keeps them fresh.`,
@@ -143,7 +133,7 @@ export default function HomeScreen() {
         return {
           action: 'Talk with Asha',
           chips: [],
-          kicker: 'STEP 3 OF 3 · SPEAK',
+          kicker: stepKicker('asha', 'SPEAK'),
           meta: undefined,
           onPress: () => router.push('/live' as Href),
           subtitle: 'Try today’s lesson lines out loud in a short chat with Asha.',
@@ -160,7 +150,7 @@ export default function HomeScreen() {
           title: 'Shabaash!',
         };
     }
-  }, [dueCount, heroScene, lessonSelection, openLesson, reviewPreview, router, showLatinPreview, streak, currentStep]);
+  }, [dueCount, heroScene, lessonNumber, lessonSelection, openLesson, reviewPreview, router, showLatinPreview, stepKicker, streak, currentStep]);
   const dayComplete = currentStep === null;
   const watermark = leadingGraphemes(dayComplete ? 'शाबाश' : currentStep === 'lesson' ? heroScene?.words[0] ?? '' : 'बोलो', 2);
 
@@ -231,7 +221,8 @@ export default function HomeScreen() {
               ) : null}
             </Svg>
             <View pointerEvents="none" style={styles.goalValue}>
-              <Text style={styles.goalMinutes}>{minutesToday}</Text>
+              {/* Long practice days used to push the number out of the ring. */}
+              <Text numberOfLines={1} style={[styles.goalMinutes, minutesLabel.length >= 3 && styles.goalMinutesLong]}>{minutesLabel}</Text>
               <Text style={styles.goalUnit} testID="today-goal-value">of {goal} min</Text>
             </View>
           </View>
@@ -255,7 +246,7 @@ export default function HomeScreen() {
         ) : null}
 
         <View accessibilityLabel="Today’s practice steps" accessibilityRole="list" style={styles.steps} testID="today-steps">
-          {todayPlan.steps.map((step, index) => {
+          {visibleSteps.map((step, index) => {
             const copy = stepCopy(step);
             const done = step.status === 'done';
             const current = step.status === 'current';
@@ -263,7 +254,7 @@ export default function HomeScreen() {
               <View
                 key={step.key}
                 accessible
-                accessibilityLabel={`Step ${index + 1} of 3, ${copy.label}, ${done ? (step.skipped ? 'skipped' : 'done') : current ? 'up next' : 'later'}`}
+                accessibilityLabel={`Step ${index + 1} of ${visibleSteps.length}, ${copy.label}, ${done ? 'done' : current ? 'up next' : 'later'}`}
                 style={styles.stepRow}
                 testID={`today-step-${step.key}`}
               >
@@ -309,7 +300,7 @@ export default function HomeScreen() {
         </View>
       </View>
     </View>
-  ), [colors, dateLine, dayComplete, dueCount, goal, goalPercent, hero, largeTextLayout, minutesToday, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, todayPlan.steps, watermark]);
+  ), [colors, dateLine, dayComplete, dueCount, goal, goalPercent, hero, largeTextLayout, minutesLabel, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, visibleSteps, watermark]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
@@ -334,7 +325,7 @@ export default function HomeScreen() {
             <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
               <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
                 <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
+                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')}</Text>
               </View>
               <PressableFeedback
                 accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
@@ -398,6 +389,7 @@ const useStyles = makeStyles((c) => ({
   goalRing: { transform: [{ rotate: '-90deg' }] },
   goalValue: { position: 'absolute', alignItems: 'center' },
   goalMinutes: { color: c.white, fontFamily: displayFont, fontSize: 17, lineHeight: 19, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  goalMinutesLong: { fontSize: 13, lineHeight: 16 },
   goalUnit: { color: '#FBEFE8', fontSize: 9, lineHeight: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
   heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   heroWord: { maxWidth: '100%', borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.14)', paddingHorizontal: spacing.md, paddingVertical: 6 },

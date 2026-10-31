@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2 } from 'lucide-react-native';
+import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -767,7 +767,7 @@ export default function LiveScreen() {
           <Text style={styles.studioPhraseCue}>Say “{studioPhrase.latin}” naturally; keep the rhythm relaxed.</Text>
           <View style={styles.studioMastery}>
             <Sprout color={colors.goldText} size={15} />
-            <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `${studioPhraseMastery}/5 roots` : 'Plant a root'}</Text>
+            <Text style={styles.studioMasteryText}>{studioPhraseMastery ? `Mastery ${studioPhraseMastery}/5` : 'New phrase'}</Text>
           </View>
         </View>
       </Pressable>
@@ -830,7 +830,8 @@ export default function LiveScreen() {
                 </View>
               ) : null}
               <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
-                <SegmentedControl
+                {/* Before consent there is nothing to choose a language for; a greyed-out switch only read as broken. */}
+                {aiConsent ? <SegmentedControl
                   accessibilityLabel="Asha voice language"
                   disabled={!aiConsent || languageControlLocked}
                   disabledHint={!aiConsent
@@ -845,7 +846,7 @@ export default function LiveScreen() {
                   style={[styles.languageSelector, { width: heroContentWidth }]}
                   tone="dark"
                   value={responseLanguage}
-                />
+                /> : null}
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
@@ -1013,6 +1014,10 @@ export default function LiveScreen() {
               <AlertCircle color={colors.dangerSoft} size={16} />
             </View>
             <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
+            {/* The banner takes room from Asha's portrait above; let the learner clear it. */}
+            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={10} onPress={() => setError('')} testID="live-error-dismiss">
+              <X color={colors.heroSubtle} size={16} />
+            </Pressable>
           </View>
         ) : null}
         {error === LIVE_OFFLINE_MESSAGE ? (
@@ -1031,6 +1036,9 @@ export default function LiveScreen() {
               <AlertCircle color={colors.dangerSoft} size={16} />
             </View>
             <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text>
+            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={10} onPress={clearAudioError}>
+              <X color={colors.heroSubtle} size={16} />
+            </Pressable>
           </View>
         ) : null}
         <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
