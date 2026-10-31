@@ -21,8 +21,6 @@ type TodayPlanInput = {
   practice: Pick<PersistedState['practice'], 'date' | 'liveDone'>;
   practiceHistory?: PersistedState['practiceHistory'];
   reviewStreakDays?: PersistedState['reviewStreakDays'];
-  /** Ignored for the lesson step. A beat-0 checkpoint refreshes this without finishing a lesson. */
-  sceneProgress?: PersistedState['sceneProgress'];
   now?: Date;
 };
 
