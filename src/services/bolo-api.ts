@@ -97,6 +97,11 @@ type MobileChatInput = {
   messages: ChatMessage[];
   clientId: string;
   responseLanguage?: AshaResponseLanguage;
+  /**
+   * Ask `/api/mobile-chat` for a structured-v1 block. Older servers ignore the field.
+   * Word explanations leave this false so they stay plain English prose.
+   */
+  structuredReply?: boolean;
 };
 
 type SavedPhrasePreparationInput = {
@@ -245,7 +250,9 @@ export function buildMobileChatPayload(input: MobileChatInput) {
     languageMode: MOBILE_LANGUAGE_MODE,
     responseLanguage: input.responseLanguage,
     // Servers that predate the structured contract ignore this field.
-    replyFormat: STRUCTURED_REPLY_FORMAT,
+    // Omitted for plain-prose callers (word explanations) so a structured server
+    // does not turn those requests into phrase JSON.
+    ...(input.structuredReply === false ? {} : { replyFormat: STRUCTURED_REPLY_FORMAT }),
   };
 }
 
@@ -272,6 +279,7 @@ export async function getContextualWordDefinition(input: {
   const result = await sendMobileChat({
     clientId: input.clientId,
     messages: sourceMessages,
+    structuredReply: false,
     text: buildContextualWordDefinitionPrompt({ phrase, word }),
   }, signal);
   const explanation = result.reply.trim();

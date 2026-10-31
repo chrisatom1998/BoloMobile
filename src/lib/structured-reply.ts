@@ -39,16 +39,26 @@ function latinLine(value: unknown): string | undefined {
   return text;
 }
 
-function optionalLatinLine(value: unknown): { ok: boolean; text?: string } {
-  if (value === undefined || value === null) return { ok: true };
-  const text = latinLine(value);
+/** Null and "" mean "absent". A present value that fails the reader rejects the block. */
+function optionalField(value: unknown, read: (value: unknown) => string | undefined): { ok: boolean; text?: string } {
+  if (value === undefined || value === null || value === '') return { ok: true };
+  const text = read(value);
   return text ? { ok: true, text } : { ok: false };
 }
 
-function optionalProse(value: unknown): { ok: boolean; text?: string } {
-  if (value === undefined || value === null) return { ok: true };
+function optionalLatinLine(value: unknown): { ok: boolean; text?: string } {
+  return optionalField(value, latinLine);
+}
+
+/** English coaching prose: no Devanagari, so a Latin-mode learner never sees Hindi script here. */
+function englishProse(value: unknown): string | undefined {
   const text = boundedText(value, MAX_STRUCTURED_PROSE_CHARACTERS);
-  return text ? { ok: true, text } : { ok: false };
+  if (!text || DEVANAGARI.test(text)) return undefined;
+  return text;
+}
+
+function optionalProse(value: unknown): { ok: boolean; text?: string } {
+  return optionalField(value, englishProse);
 }
 
 function sanitizePhrase(value: unknown): StructuredPhrase | null {
@@ -62,11 +72,9 @@ function sanitizePhrase(value: unknown): StructuredPhrase | null {
 
 function sanitizeCorrection(value: unknown): StructuredCorrection | null {
   if (!isRecord(value) || !isRecord(value.youSaid) || !isRecord(value.say)) return null;
-  const youSaidDevanagari = value.youSaid.devanagari === undefined || value.youSaid.devanagari === null ? undefined : devanagariLine(value.youSaid.devanagari);
-  const youSaidRomanized = value.youSaid.romanized === undefined || value.youSaid.romanized === null ? undefined : latinLine(value.youSaid.romanized);
-  if (value.youSaid.devanagari != null && !youSaidDevanagari) return null;
-  if (value.youSaid.romanized != null && !youSaidRomanized) return null;
-  if (!youSaidDevanagari && !youSaidRomanized) return null;
+  const youSaidDevanagari = optionalField(value.youSaid.devanagari, devanagariLine);
+  const youSaidRomanized = optionalField(value.youSaid.romanized, latinLine);
+  if (!youSaidDevanagari.ok || !youSaidRomanized.ok || (!youSaidDevanagari.text && !youSaidRomanized.text)) return null;
   const sayDevanagari = devanagariLine(value.say.devanagari);
   const sayRomanized = latinLine(value.say.romanized);
   const sayEnglish = optionalLatinLine(value.say.english);
@@ -74,8 +82,8 @@ function sanitizeCorrection(value: unknown): StructuredCorrection | null {
   if (!sayDevanagari || !sayRomanized || !sayEnglish.ok || !note.ok) return null;
   return {
     youSaid: {
-      ...(youSaidDevanagari ? { devanagari: youSaidDevanagari } : {}),
-      ...(youSaidRomanized ? { romanized: youSaidRomanized } : {}),
+      ...(youSaidDevanagari.text ? { devanagari: youSaidDevanagari.text } : {}),
+      ...(youSaidRomanized.text ? { romanized: youSaidRomanized.text } : {}),
     },
     say: { devanagari: sayDevanagari, romanized: sayRomanized, ...(sayEnglish.text ? { english: sayEnglish.text } : {}) },
     ...(note.text ? { note: note.text } : {}),

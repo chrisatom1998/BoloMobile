@@ -87,4 +87,29 @@ describe('structured mobile-chat reference', () => {
     expect(ok).toEqual({ version: 1, phrases: modelJson.phrases });
     expect(readableReply(ok!)).toBe('चाय में चीनी कम डालिए। (chaay mein cheeni kam daaliye.) — Please put less sugar in the tea.');
   });
+
+  it('matches the app sanitizer, including empty optionals and Devanagari prose', () => {
+    const cases: unknown[] = [
+      modelJson,
+      { version: 1, intro: '', outro: '', phrases: [{ devanagari: 'चाय', romanized: 'chaay', english: 'tea' }], corrections: null },
+      { version: 1, intro: 'Say नमस्ते', phrases: modelJson.phrases },
+      { version: 1, corrections: [{ youSaid: { romanized: 'daalo' }, say: { devanagari: 'डालिए', romanized: 'daaliye', english: '' }, note: 'Use डालिए.' }] },
+      { version: 1, phrases: [{ devanagari: 'चाय', romanized: 'chaay!', english: 'tea, please.' }] },
+    ];
+    for (const value of cases) {
+      expect(clientSanitize(value)).toEqual(sanitizeStructuredReply(value));
+    }
+  });
+
+  it('refuses a readable reply that would not fit the existing client cap', () => {
+    const phrases = Array.from({ length: 8 }, () => ({
+      devanagari: 'क'.repeat(40),
+      romanized: 'chaay '.repeat(40).trim(),
+      english: 'please '.repeat(35).trim(),
+    }));
+    const structured = sanitizeStructuredReply({ version: 1, phrases });
+    expect(structured).toBeDefined();
+    expect(readableReply(structured!).length).toBeGreaterThan(2_400);
+    expect(normalizeStructuredMobileChatReply({ transcript: 'tea', language: 'en', modelOutput: { version: 1, phrases } })).toBeNull();
+  });
 });

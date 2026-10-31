@@ -124,7 +124,7 @@ describe('local progress storage', () => {
 
   it('loads string-only messages unchanged and keeps only a valid structured block', () => {
     const structured = {
-      version: 1,
+      version: 1 as const,
       intro: 'Ask politely:',
       phrases: [{ devanagari: 'चाय में चीनी कम डालिए।', romanized: 'chaay mein cheeni kam daaliye.', english: 'Please put less sugar in the tea.' }],
     };

@@ -43,7 +43,7 @@ Contract references verified October 6, 2026: [Create Live session](https://deve
 
 ### Request
 
-The app now sends `replyFormat: 'structured-v1'` with every `/api/mobile-chat` body (`src/services/bolo-api.ts`). A server that does not know the field must ignore it and answer exactly as before. `wantsStructuredReply(body)` returns `true` only for `replyFormat: 'structured-v1'` with `responseLanguage !== 'hi'`: Hindi-mode replies stay Devanagari prose, which the app renders per the learner's script preference.
+Asha chat sends `replyFormat: 'structured-v1'` on `/api/mobile-chat` (`src/services/bolo-api.ts`). A server that does not know the field must ignore it and answer exactly as before. Word-explanation calls omit `replyFormat` so they stay plain English prose. `wantsStructuredReply(body)` returns `true` only for `replyFormat: 'structured-v1'` with `responseLanguage !== 'hi'`: Hindi-mode replies stay Devanagari prose, which the app renders per the learner's script preference. Empty strings on optional fields are treated as absent, the same way as `null`.
 
 ### Response
 

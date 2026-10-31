@@ -48,10 +48,9 @@ export function ChatMessageMenu({
       transparent
       visible={visible}
     >
-      <View style={styles.backdrop} testID={testID}>
+      <View accessibilityViewIsModal style={styles.backdrop} testID={testID}>
         <Pressable accessibilityLabel="Close menu" accessibilityRole="button" onPress={onClose} style={styles.scrim} />
         <View
-          accessibilityViewIsModal
           style={[styles.sheet, { paddingBottom: Math.max(spacing.md, insets.bottom + spacing.sm) }, Platform.OS === 'web' && styles.sheetWeb]}
         >
           <Text accessibilityRole="header" numberOfLines={2} style={styles.title}>{title}</Text>

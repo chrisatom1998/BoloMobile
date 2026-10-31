@@ -1,5 +1,6 @@
 import { fireEvent, render, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { createLiveStyles } from '../src/app/(tabs)/live';
 import { ChatMessageRow, phrasePlaybackKey } from '../src/components/chat-message-row';
@@ -61,6 +62,7 @@ function handlers() {
 async function renderRow(message: ChatMessage, scriptPreference: ScriptPreference, overrides: Partial<Parameters<typeof ChatMessageRow>[0]> = {}) {
   const callbacks = handlers();
   const view = await render(
+    <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, right: 0, bottom: 0, left: 0 } }}>
     <ChatMessageRow
       aiConsent
       continuesNext={false}
@@ -75,7 +77,8 @@ async function renderRow(message: ChatMessage, scriptPreference: ScriptPreferenc
       styles={styles}
       {...callbacks}
       {...overrides}
-    />,
+    />
+    </SafeAreaProvider>,
   );
   return { ...callbacks, view };
 }
@@ -122,6 +125,15 @@ describe('ChatMessageRow legacy messages', () => {
     const { view } = await renderRow(legacyMessage, 'devanagari');
     expect(lineText(view.getByLabelText(/^Asha: /u))).toBe('You can say: चाय में चीनी कम डालिए.');
     expect(view.getByText('चाय में चीनी कम डालिए').props.accessibilityLanguage).toBe('hi-IN');
+  });
+
+  it('keeps an unknown Romanized learner phrase and English punctuation intact', async () => {
+    const you: ChatMessage = { id: 'you-roman', role: 'you', text: 'Kripayaa paanee dijiye.' };
+    const prose: ChatMessage = { id: 'asha-prose', role: 'asha', language: 'en', text: 'Less sugar, please — really!' };
+    const romanized = await renderRow(you, 'devanagari');
+    expect(lineText(romanized.view.getByLabelText('You: Kripayaa paanee dijiye.'))).toBe('Kripayaa paanee dijiye.');
+    const english = await renderRow(prose, 'both');
+    expect(lineText(english.view.getByLabelText('Asha: Less sugar, please — really!'))).toBe('Less sugar, please — really!');
   });
 
   it('derives a romanization once, covering ऑ, and keeps the learner bubble in step', async () => {

@@ -40,6 +40,27 @@ describe('sanitizeStructuredReply', () => {
     expect(sanitizeStructuredReply({ version: 1, corrections: [{ youSaid: {}, say: { devanagari: 'डालिए', romanized: 'daaliye' } }] })).toBeUndefined();
     expect(sanitizeStructuredReply({ version: 1, corrections: [{ youSaid: { romanized: 'daalo' }, say: { devanagari: 'डालिए' } }] })).toBeUndefined();
     expect(sanitizeStructuredReply({ version: 1, intro: 42 })).toBeUndefined();
+    // Devanagari in English prose would leak script into Latin mode, so the block is dropped.
+    expect(sanitizeStructuredReply({ version: 1, intro: 'Say नमस्ते' })).toBeUndefined();
+    expect(sanitizeStructuredReply({ version: 1, outro: 'फिर मिलेंगे' })).toBeUndefined();
+    expect(sanitizeStructuredReply({
+      version: 1,
+      corrections: [{ youSaid: { romanized: 'daalo' }, say: { devanagari: 'डालिए', romanized: 'daaliye' }, note: 'Use डालिए.' }],
+    })).toBeUndefined();
+  });
+
+  it('treats empty optional strings like null so a phrase block still renders', () => {
+    expect(sanitizeStructuredReply({
+      version: 1,
+      intro: '',
+      outro: '',
+      phrases: [{ devanagari: 'चाय', romanized: 'chaay', english: 'tea' }],
+      corrections: [{ youSaid: { devanagari: '', romanized: 'daalo' }, say: { devanagari: 'डालिए', romanized: 'daaliye', english: '' }, note: '' }],
+    })).toEqual({
+      version: 1,
+      phrases: [{ devanagari: 'चाय', romanized: 'chaay', english: 'tea' }],
+      corrections: [{ youSaid: { romanized: 'daalo' }, say: { devanagari: 'डालिए', romanized: 'daaliye' } }],
+    });
   });
 
   it('drops oversized blocks instead of failing', () => {

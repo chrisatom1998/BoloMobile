@@ -146,7 +146,11 @@ function CorrectionTable({
           {say.english ? <Text style={styles.correctionEnglish}>{say.english}</Text> : null}
         </View>
       </View>
-      {correction.note ? <Text style={styles.correctionNote}>{correction.note}</Text> : null}
+      {correction.note ? (
+        <Text style={styles.correctionNote}>
+          {legacyTranscriptDisplay(correction.note, { normalizeKnown: false, scriptPreference }).displayText}
+        </Text>
+      ) : null}
     </View>
   );
 }

@@ -150,6 +150,12 @@ function optional(value: unknown, read: (value: unknown) => string | undefined) 
   return text ? { ok: true as const, text } : { ok: false as const, text: undefined };
 }
 
+/** English coaching prose. Devanagari belongs in phrase fields, never in intro, outro, or a note. */
+function englishProse(value: unknown, maximum: number) {
+  const text = boundedText(value, maximum);
+  return text && !DEVANAGARI.test(text) ? text : undefined;
+}
+
 function sanitizePhrase(value: unknown): StructuredPhrase | null {
   if (!record(value)) return null;
   const devanagari = devanagariLine(value.devanagari);
@@ -166,7 +172,7 @@ function sanitizeCorrection(value: unknown): StructuredCorrection | null {
   const sayDevanagari = devanagariLine(value.say.devanagari);
   const sayRomanized = latinLine(value.say.romanized);
   const sayEnglish = optional(value.say.english, latinLine);
-  const note = optional(value.note, (note) => boundedText(note, MAX_STRUCTURED_PROSE_CHARACTERS));
+  const note = optional(value.note, (note) => englishProse(note, MAX_STRUCTURED_PROSE_CHARACTERS));
   if (!sayDevanagari || !sayRomanized || !sayEnglish.ok || !note.ok) return null;
   return {
     youSaid: {
@@ -185,11 +191,9 @@ function sanitizeCorrection(value: unknown): StructuredCorrection | null {
  */
 export function sanitizeStructuredReply(value: unknown): StructuredReply | undefined {
   if (!record(value) || value.version !== STRUCTURED_REPLY_VERSION) return undefined;
-  const intro = optional(value.intro, (text) => boundedText(text, MAX_STRUCTURED_PROSE_CHARACTERS));
-  const outro = optional(value.outro, (text) => boundedText(text, MAX_STRUCTURED_PROSE_CHARACTERS));
+  const intro = optional(value.intro, (text) => englishProse(text, MAX_STRUCTURED_PROSE_CHARACTERS));
+  const outro = optional(value.outro, (text) => englishProse(text, MAX_STRUCTURED_PROSE_CHARACTERS));
   if (!intro.ok || !outro.ok) return undefined;
-  if (intro.text && DEVANAGARI.test(intro.text)) return undefined;
-  if (outro.text && DEVANAGARI.test(outro.text)) return undefined;
 
   let phrases: StructuredPhrase[] | undefined;
   if (value.phrases !== undefined && value.phrases !== null) {
@@ -214,7 +218,7 @@ export function sanitizeStructuredReply(value: unknown): StructuredReply | undef
     ...(corrections?.length ? { corrections } : {}),
     ...(outro.text ? { outro: outro.text } : {}),
   };
-  if (Buffer.byteLength(JSON.stringify(structured), 'utf8') > MAX_STRUCTURED_REPLY_BYTES) return undefined;
+  if (new TextEncoder().encode(JSON.stringify(structured)).byteLength > MAX_STRUCTURED_REPLY_BYTES) return undefined;
   return structured;
 }
 
