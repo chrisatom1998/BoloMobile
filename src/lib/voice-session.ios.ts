@@ -76,6 +76,10 @@ export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolea
   return 'native session module missing';
 }
 
+function audioActiveFailure(cause: unknown): string {
+  return cause instanceof Error ? cause.message.slice(0, 40) : 'unknown';
+}
+
 /**
  * Turns the audio session off before a call configures it. A typed reply leaves it this way
  * (expo-audio deactivates after playback), and only then did Asha hear the first call; a session
@@ -85,10 +89,6 @@ export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolea
  * A re-enable that still fails after one retry is part of the tag, so the debug line does not say ok.
  * Returns a short tag for the debug line.
  */
-function audioActiveFailure(cause: unknown): string {
-  return cause instanceof Error ? cause.message.slice(0, 40) : 'unknown';
-}
-
 export async function releaseAudioSessionBeforeCall(): Promise<string> {
   if (typeof ExpoAudio.setIsAudioActiveAsync !== 'function') return 'none';
   let releaseFailure: string | null = null;
