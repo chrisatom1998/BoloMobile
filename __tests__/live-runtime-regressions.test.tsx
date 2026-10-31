@@ -965,6 +965,13 @@ describe('immersive live conversation design', () => {
     expect(inputStyle.height).toBeUndefined();
     expect(inputStyle.position).toBe('absolute');
     expect(message.props.onContentSizeChange).toBeUndefined();
+    // The sizer itself must exist, stay invisible, and stay out of the
+    // accessibility tree, so removing it fails this test.
+    const sizer = view.getAllByText(displayReply, { includeHiddenElements: true })
+      .find((candidate) => StyleSheet.flatten(candidate.props.style).opacity === 0);
+    if (!sizer) throw new Error('The hidden sizer Text for the Asha message was not rendered.');
+    expect(sizer.props.accessibilityElementsHidden).toBe(true);
+    expect(sizer.props.importantForAccessibility).toBe('no-hide-descendants');
     expect(speech.preloadSpeech).not.toHaveBeenCalled();
 
     await view.unmount();
