@@ -46,7 +46,7 @@ export default function SettingsScreen() {
   const reminder = state.reminder ?? defaultReminderSettings();
   const motionPreference = state.motionPreference ?? DEFAULT_MOTION_PREFERENCE;
   const stackMotionPreferences = fontScale >= 1.2 || windowWidth < 360;
-  const { restoreProgress, setMotionPreference, setReminder, updateLearnerProfile } = state;
+  const { restoreProgress, setGoal, setMotionPreference, setReminder, updateLearnerProfile } = state;
   const [deleting, setDeleting] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [savingReminder, setSavingReminder] = useState(false);
@@ -266,7 +266,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]} testID="settings-learning-row">
           <View style={styles.icon}><Languages color={colors.ink} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]} testID="settings-learning-copy"><Text accessibilityRole="header" style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script and Asha’s default reply language</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]} testID="settings-learning-copy"><Text accessibilityRole="header" style={styles.title}>Learning preferences</Text><Text style={styles.body}>Control script, Asha’s default reply language, and your daily goal</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Hindi display</Text>
         <SegmentedControl
@@ -290,6 +290,19 @@ export default function SettingsScreen() {
           ]}
           stackedAtLargeText
           value={learnerProfile.responseLanguage}
+        />
+        <Text style={styles.choiceLabel}>Daily practice goal</Text>
+        <SegmentedControl
+          accessibilityLabel="Daily practice goal"
+          onValueChange={(minutes) => setGoal(Number(minutes) as 5 | 10 | 15)}
+          options={[
+            { accessibilityLabel: '5 minutes a day', label: '5 min', value: '5' },
+            { accessibilityLabel: '10 minutes a day', label: '10 min', value: '10' },
+            { accessibilityLabel: '15 minutes a day', label: '15 min', value: '15' },
+          ]}
+          stackedAtLargeText
+          testID="settings-daily-goal"
+          value={String(state.goal ?? 10) as '5' | '10' | '15'}
         />
         <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'recalibrate' } })} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
       </View>
