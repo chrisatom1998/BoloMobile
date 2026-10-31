@@ -34,16 +34,13 @@ describe('home accessibility', () => {
     const view = await render(<HomeScreen />);
     const settings = view.getByLabelText('Settings');
     const streak = view.getByLabelText('0 day practice streak');
-    const fiveMinuteGoal = view.getByLabelText('5 minute daily goal');
     const firstPlan = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
-    const startLesson = view.getByLabelText('Start lesson');
+    const nextStep = view.getByTestId('today-next-step');
     const topbar = view.getByTestId('today-topbar');
 
     expect(StyleSheet.flatten(settings.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(settings.props.style).minWidth).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(streak.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    expect(StyleSheet.flatten(fiveMinuteGoal.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    expect(fiveMinuteGoal.props.accessibilityState).toEqual({ selected: true });
     expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('0 percent of daily goal complete');
     expect(view.getByText('नम', { includeHiddenElements: true }).props['aria-hidden']).toBe(true);
     const leakedAccessibilityProps: string[] = [];
@@ -59,8 +56,13 @@ describe('home accessibility', () => {
     visit(view.getByTestId('today-goal-dial'));
     expect(leakedAccessibilityProps).toEqual([]);
     expect(view.getByText('0 days')).toBeTruthy();
-    expect(view.getByText('Save one from any lesson')).toBeTruthy();
-    expect(StyleSheet.flatten(startLesson.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(nextStep.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    for (const tile of ['today-talk-with-asha', 'today-saved-phrases', 'today-plan-catalog']) {
+      expect(StyleSheet.flatten(view.getByTestId(tile).props.style).minHeight).toBeGreaterThanOrEqual(44);
+    }
+    for (const step of ['review', 'lesson', 'asha']) {
+      expect(view.getByTestId(`today-step-${step}`).props.accessibilityLabel).toMatch(/^Step \d of 3, /);
+    }
     expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
 
@@ -70,31 +72,20 @@ describe('home accessibility', () => {
     expect(list.props.contentInsetAdjustmentBehavior).toBe('never');
   });
 
-  it('keeps 44pt goal buttons by stacking the stat row on narrow phones', async () => {
+  it('keeps the jump tiles in one row on regular phones', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');
     await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 360 }, window: { ...window, fontScale: 1, width: 360 } }));
-
     try {
       const view = await render(<HomeScreen />);
-      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'column' });
-      expect(StyleSheet.flatten(view.getByTestId('today-goal-choice-15').props.style)).toMatchObject({ minHeight: 44, minWidth: 44 });
-    }
-    finally {
-      await act(async () => Dimensions.set({ screen, window }));
-    }
-
-    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1, width: 393 }, window: { ...window, fontScale: 1, width: 393 } }));
-    try {
-      const view = await render(<HomeScreen />);
-      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'row' });
+      expect(StyleSheet.flatten(view.getByTestId('today-jump-row').props.style)).toMatchObject({ flexDirection: 'row' });
     }
     finally {
       await act(async () => Dimensions.set({ screen, window }));
     }
   });
 
-  it('reflows the Today header, hero footer, and stat row at accessibility text sizes', async () => {
+  it('reflows the Today header, hero footer, and jump tiles at accessibility text sizes', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');
     await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 2 }, window: { ...window, fontScale: 2 } }));
@@ -102,8 +93,7 @@ describe('home accessibility', () => {
     try {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
-      expect(StyleSheet.flatten(view.getByTestId('today-goal-dial').props.style)).toMatchObject({ flexDirection: 'column' });
-      expect(StyleSheet.flatten(view.getByTestId('today-stat-row').props.style)).toMatchObject({ flexDirection: 'column' });
+      expect(StyleSheet.flatten(view.getByTestId('today-jump-row').props.style)).toMatchObject({ flexDirection: 'column' });
       expect(StyleSheet.flatten(view.getByTestId('today-hero-footer').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
     }
     finally {
