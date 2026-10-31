@@ -1,32 +1,40 @@
-import { Redirect, useRouter, type Href } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowRight, AudioLines, BookOpenText, Check, Flame, ListOrdered, Settings } from 'lucide-react-native';
-import { useCallback, useMemo } from 'react';
-import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View } from 'react-native';
+import { ArrowRight, Check, Flame, Settings } from 'lucide-react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { FlatList, Platform, ScrollView, StatusBar, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { JournalDisplay } from '@/components/journal-chrome';
+import { MasteryMeter } from '@/components/mastery-meter';
 import { MotionReveal } from '@/components/motion';
+import { PhraseCard } from '@/components/phrase-card';
+import { StatusBarScrim } from '@/components/status-bar-scrim';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
-import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
+import { useSpeakText } from '@/hooks/use-speak-text';
 import { dueSavedPhrases } from '@/lib/learning';
+import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
-import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 27;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
-/** Due phrases previewed on the review step; the last one fades to hint at the rest. */
-const reviewPreviewLimit = 3;
+/**
+ * Due phrases shown on the "Due today" strip. It is a preview, not the full
+ * queue: the strip would otherwise spell out every answer before a recall
+ * session, and the review route already walks the whole list.
+ */
+export const duePreviewLimit = 5;
+const listenConsentHint = 'Agree to connected AI processing to enable Listen.';
 
 /** First `count` grapheme clusters (base letter plus its marks), so Devanagari matras stay attached. */
 function leadingGraphemes(text: string, count: number) {
@@ -53,11 +61,12 @@ export default function HomeScreen() {
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
-  const { goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, practiceHistory, reviewStreakDays, sceneProgress: savedSceneProgress, streak } = state;
+  const { aiConsent, goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, practiceHistory, reviewStreakDays, sceneProgress: savedSceneProgress, streak } = state;
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const openLesson = useCallback((lessonId: string) => router.push({ pathname: '/scene/[id]', params: { id: lessonId } }), [router]);
   const openPlan = useCallback((planId: string) => router.push({ pathname: '/lesson-plans', params: { planId } }), [router]);
+  const openReview = useCallback(() => router.push('/review' as Href), [router]);
   // Whole minutes drive both the label and the ring so they never disagree.
   const minutesToday = Math.floor(practice.seconds / 60);
   const goalPercent = Math.min(100, Math.round(minutesToday / goal * 100));
@@ -68,11 +77,10 @@ export default function HomeScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based due check.
   const duePhraseList = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases, calendarDay]);
   const dueCount = duePhraseList.length;
-  const showLatinPreview = learnerProfile?.scriptPreference === 'latin';
-  const reviewPreview = useMemo(() => duePhraseList.slice(0, reviewPreviewLimit).map((phrase) => ({
-    key: phrase.hi,
-    text: showLatinPreview ? learnerPhraseLatin(phrase.hi, phrase.latin) : phrase.hi,
-  })), [duePhraseList, showLatinPreview]);
+  // dueSavedPhrases sorts weakest first, so the preview is the phrases most worth a look.
+  const duePreview = useMemo(() => duePhraseList.slice(0, duePreviewLimit), [duePhraseList]);
+  const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
+  const playbackRate = learnerProfile?.phrasePlaybackRate ?? 1;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay is the only input to today's date line.
   const dateLine = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), [calendarDay]);
   const todayPlan = useMemo(
@@ -105,7 +113,7 @@ export default function HomeScreen() {
 
     return {
       action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
-      kicker: mode === 'continue' ? 'CONTINUE LESSON' : mode === 'next' ? 'NEXT LESSON' : 'REVIEW LESSON',
+      kicker: mode === 'continue' ? 'Continue lesson' : mode === 'next' ? 'Next lesson' : 'Review lesson',
       lessonId,
       plan,
       scene,
@@ -119,8 +127,7 @@ export default function HomeScreen() {
   const hero = useMemo(() => {
     const lessonStep = {
       action: lessonSelection.action,
-      chips: (heroScene?.words ?? []).map((word) => ({ key: word, latin: false, text: word })),
-      kicker: `STEP 2 OF 3 · ${lessonSelection.kicker}`,
+      kicker: `Step 2 of 3 · ${lessonSelection.kicker}`,
       meta: heroScene?.place,
       onPress: () => openLesson(lessonSelection.lessonId),
       subtitle: heroScene?.subtitle,
@@ -130,11 +137,10 @@ export default function HomeScreen() {
       case 'review':
         return {
           action: 'Start review',
-          chips: reviewPreview.map((item) => ({ ...item, latin: showLatinPreview })),
-          kicker: 'STEP 1 OF 3 · REVIEW',
+          kicker: 'Step 1 of 3 · Review',
           meta: undefined,
-          onPress: () => router.push('/review' as Href),
-          subtitle: `${plural(dueCount, 'phrase')} due. A quick recall keeps them fresh.`,
+          onPress: openReview,
+          subtitle: `${plural(dueCount, 'phrase')} ${dueCount === 1 ? 'is' : 'are'} due. Two minutes keeps them fresh.`,
           title: 'Review your phrases',
         };
       case 'lesson':
@@ -142,8 +148,7 @@ export default function HomeScreen() {
       case 'asha':
         return {
           action: 'Talk with Asha',
-          chips: [],
-          kicker: 'STEP 3 OF 3 · SPEAK',
+          kicker: 'Step 3 of 3 · Speak',
           meta: undefined,
           onPress: () => router.push('/live' as Href),
           subtitle: 'Try today’s lesson lines out loud in a short chat with Asha.',
@@ -153,29 +158,71 @@ export default function HomeScreen() {
         return {
           ...lessonStep,
           action: 'Keep going',
-          chips: [],
-          kicker: 'DONE FOR TODAY',
+          kicker: 'Done for today',
           meta: undefined,
           subtitle: `Today’s practice is complete. ${streak > 0 ? `${plural(streak, 'day')} in a row. ` : ''}More is optional.`,
           title: 'Shabaash!',
         };
     }
-  }, [dueCount, heroScene, lessonSelection, openLesson, reviewPreview, router, showLatinPreview, streak, currentStep]);
+  }, [dueCount, heroScene, lessonSelection, openLesson, openReview, router, streak, currentStep]);
   const dayComplete = currentStep === null;
   const watermark = leadingGraphemes(dayComplete ? 'शाबाश' : currentStep === 'lesson' ? heroScene?.words[0] ?? '' : 'बोलो', 2);
 
   const stepCopy = useCallback((step: TodayStep) => {
     if (step.key === 'review') {
       if (step.skipped) return { label: 'No phrases due', meta: 'Skipped' };
-      return step.status === 'done' ? { label: 'Reviewed phrases', meta: 'Done' } : { label: 'Review saved phrases', meta: '2 min' };
+      return step.status === 'done' ? { label: 'Reviewed phrases', meta: 'Done' } : { label: `Review ${plural(dueCount, 'saved phrase')}`, meta: '2 min' };
     }
     if (step.key === 'lesson') {
       return step.status === 'done' ? { label: 'Finished a lesson', meta: 'Done' } : { label: `Lesson: ${lessonSelection.title}`, meta: '4 min' };
     }
-    return step.status === 'done' ? { label: 'Spoke with Asha', meta: 'Done' } : { label: 'Chat with Asha', meta: '3 min' };
-  }, [lessonSelection.title]);
+    return step.status === 'done' ? { label: 'Spoke with Asha', meta: 'Done' } : { label: 'Say it out loud with Asha', meta: '3 min' };
+  }, [dueCount, lessonSelection.title]);
 
-  const header = useMemo(() => (
+  // Listen reuses the saved-phrase playback from the Phrases tab: same speech
+  // service, same consent rule, same remembered playback speed.
+  const { audioError, clearAudioError, speak } = useSpeakText();
+  const [playingPhrase, setPlayingPhrase] = useState('');
+  useFocusEffect(useCallback(() => () => {
+    void stopSpeaking();
+    setPlayingPhrase('');
+  }, []));
+  const playPhrase = useCallback(async (text: string) => {
+    if (!aiConsent && !hasOfflineSpeech(text)) return;
+    clearAudioError();
+    setPlayingPhrase(text);
+    await speak(text, undefined, playbackRate);
+    setPlayingPhrase((current) => (current === text ? '' : current));
+  }, [aiConsent, clearAudioError, playbackRate, speak]);
+
+  const dueMeta = dueCount === 0
+    ? 'All caught up'
+    : dueCount > duePreviewLimit
+      ? `${plural(dueCount, 'phrase')} due · showing ${duePreviewLimit}`
+      : `${plural(dueCount, 'phrase')} due`;
+  const dueCards = duePreview.map((phrase, index) => {
+    const canListen = Boolean(aiConsent) || hasOfflineSpeech(phrase.hi);
+    return (
+      <PhraseCard
+        key={phrase.hi}
+        devanagari={phrase.hi}
+        english={phrase.en}
+        listenDisabled={!canListen}
+        listenHint={canListen ? undefined : listenConsentHint}
+        onListen={() => { void playPhrase(phrase.hi); }}
+        playing={playingPhrase === phrase.hi}
+        romanized={phrase.latin}
+        scriptPreference={scriptPreference}
+        size="compact"
+        style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}
+        testID={`today-due-card-${index}`}
+      >
+        <MasteryMeter mastery={phraseReviews?.[phrase.hi]?.mastery ?? 0} testID={`today-due-card-${index}-mastery`} />
+      </PhraseCard>
+    );
+  });
+
+  const header = (
     <View style={styles.headerContent}>
       <View style={[styles.topbar, stackedTopbarLayout && styles.topbarLarge]} testID="today-topbar">
         <View style={styles.greetingCopy}>
@@ -196,12 +243,13 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* The hero has one job: the next step and its button. */}
       <MotionReveal mode={motionMode} motionKey={currentStep ?? 'done'} style={[styles.hero, dayComplete && styles.heroDone]} testID="today-primary-motion">
         {watermark ? <Text accessibilityElementsHidden accessible={false} aria-hidden ellipsizeMode="clip" importantForAccessibility="no-hide-descendants" numberOfLines={1} style={styles.heroWatermark}>{watermark}</Text> : null}
         <View style={[styles.heroHeader, largeTextLayout && styles.heroHeaderLarge]}>
           <View style={styles.heroCopy} testID="today-next-practice">
             <View style={styles.heroTopline}>
-              <View style={styles.heroChip}><Text style={styles.heroChipText}>{hero.kicker}</Text></View>
+              <Text style={styles.heroKicker} testID="today-hero-kicker">{hero.kicker}</Text>
               {hero.meta ? <Text numberOfLines={2} style={styles.heroMeta}>{hero.meta}</Text> : null}
             </View>
             <Text style={styles.heroTitle}>{hero.title}</Text>
@@ -237,45 +285,12 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {hero.chips.length > 0 ? (
-          <View style={styles.heroWords} testID={currentStep === 'review' ? 'today-review-preview' : 'today-lesson-words'}>
-            {hero.chips.map((chip, index) => (
-              <View key={chip.key} style={[styles.heroWord, currentStep === 'review' && index === reviewPreviewLimit - 1 && styles.heroWordFaded]}>
-                <Text accessibilityLanguage={chip.latin ? undefined : 'hi-IN'} ellipsizeMode="tail" numberOfLines={1} style={chip.latin ? styles.heroWordLatin : styles.heroWordText}>{chip.text}</Text>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
         {currentStep === 'asha' ? (
           <View style={styles.ashaInvite}>
             <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.ashaPortrait} testID="today-asha-portrait" transition={0} />
             <Text style={styles.ashaInviteText}>“Ready? Greet me like a neighbor and tell me your name.”</Text>
           </View>
         ) : null}
-
-        <View accessibilityLabel="Today’s practice steps" accessibilityRole="list" style={styles.steps} testID="today-steps">
-          {todayPlan.steps.map((step, index) => {
-            const copy = stepCopy(step);
-            const done = step.status === 'done';
-            const current = step.status === 'current';
-            return (
-              <View
-                key={step.key}
-                accessible
-                accessibilityLabel={`Step ${index + 1} of 3, ${copy.label}, ${done ? (step.skipped ? 'skipped' : 'done') : current ? 'up next' : 'later'}`}
-                style={styles.stepRow}
-                testID={`today-step-${step.key}`}
-              >
-                <View style={[styles.stepDot, done && styles.stepDotDone, current && styles.stepDotCurrent]}>
-                  {done ? <Check color={colors.ink} size={13} strokeWidth={3.2} /> : null}
-                </View>
-                <Text style={[styles.stepLabel, done && styles.stepLabelDone, current && styles.stepLabelCurrent]}>{copy.label}</Text>
-                <Text style={styles.stepMeta}>{copy.meta}</Text>
-              </View>
-            );
-          })}
-        </View>
 
         <View style={[styles.heroFooter, largeTextLayout && styles.heroFooterLarge]} testID="today-hero-footer">
           <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.heroButton} testID="today-next-step">
@@ -285,31 +300,77 @@ export default function HomeScreen() {
         </View>
       </MotionReveal>
 
-      <View style={styles.jumpSection}>
-        <Text style={styles.jumpLabel}>Or jump to</Text>
-        <View style={[styles.jumpRow, largeTextLayout && styles.jumpRowLarge]} testID="today-jump-row">
-          <PressableFeedback accessibilityLabel="Talk with Asha" accessibilityRole="button" onPress={() => router.push('/live' as Href)} style={styles.jumpTile} testID="today-talk-with-asha">
-            <AudioLines color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>Asha</Text>
-          </PressableFeedback>
-          <PressableFeedback
-            accessibilityLabel={dueCount > 0 ? `Saved phrases, ${plural(dueCount, 'phrase')} due` : 'Saved phrases'}
-            accessibilityRole="button"
-            onPress={() => router.push('/phrases' as Href)}
-            style={styles.jumpTile}
-            testID="today-saved-phrases"
-          >
-            <BookOpenText color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>Phrases</Text>
-          </PressableFeedback>
-          <PressableFeedback accessibilityLabel={`Browse all ${lessonPlans.length} plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.jumpTile} testID="today-plan-catalog">
-            <ListOrdered color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>All plans</Text>
-          </PressableFeedback>
+      {/* Informational rows: only the hero button navigates, so these carry no button role. */}
+      <View accessibilityLabel="Today’s practice steps" accessibilityRole="list" style={styles.stepsCard} testID="today-steps">
+        {todayPlan.steps.map((step, index) => {
+          const copy = stepCopy(step);
+          const done = step.status === 'done';
+          const current = step.status === 'current';
+          return (
+            <View
+              key={step.key}
+              accessible
+              accessibilityLabel={`Step ${index + 1} of 3, ${copy.label}, ${done ? (step.skipped ? 'skipped' : 'done') : current ? 'up next' : 'later'}`}
+              style={[styles.stepRow, index > 0 && styles.stepRowDivided]}
+              testID={`today-step-${step.key}`}
+            >
+              <View style={[styles.stepCheck, done && styles.stepCheckDone, current && styles.stepCheckCurrent]} testID={`today-step-${step.key}-check`}>
+                {done ? <Check color={colors.white} size={14} strokeWidth={3.2} /> : null}
+              </View>
+              <View style={[styles.stepCopy, largeTextLayout && styles.stepCopyLarge]} testID={`today-step-${step.key}-copy`}>
+                <Text style={[styles.stepLabel, done && styles.stepLabelDone, current && styles.stepLabelCurrent]}>{copy.label}</Text>
+                <Text style={[styles.stepMeta, done && styles.stepMetaDone]}>{copy.meta}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.dueSection} testID="today-due">
+        <View style={[styles.sectionHeading, largeTextLayout && styles.sectionHeadingLarge]}>
+          <View style={styles.sectionCopy}>
+            <JournalDisplay style={styles.sectionTitle}>Due today</JournalDisplay>
+            <Text style={styles.sectionMeta} testID="today-due-meta">{dueMeta}</Text>
+          </View>
+          {dueCount > 0 ? (
+            <Pressable
+              accessibilityLabel={`Review all ${plural(dueCount, 'due phrase')}`}
+              accessibilityRole="button"
+              onPress={openReview}
+              style={styles.sectionLink}
+              testID="today-due-review-all"
+            >
+              <Text style={styles.sectionLinkText}>Review all</Text>
+              <ArrowRight color={colors.brandText} size={16} strokeWidth={2.2} />
+            </Pressable>
+          ) : null}
         </View>
+        {dueCount === 0 ? (
+          <View style={styles.dueEmpty} testID="today-due-empty">
+            <Text style={styles.dueEmptyText}>Nothing is due right now. Phrases you save come back here when it’s time to recall them.</Text>
+            {phrases.length > 0 ? (
+              <Pressable accessibilityLabel="Saved phrases" accessibilityRole="button" onPress={() => router.push('/phrases' as Href)} style={styles.dueEmptyLink} testID="today-due-saved-phrases">
+                <Text style={styles.sectionLinkText}>Saved phrases</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : largeTextLayout ? (
+          <View style={styles.dueStack} testID="today-due-strip">{dueCards}</View>
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.dueStrip}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.dueScroller}
+            testID="today-due-strip"
+          >
+            {dueCards}
+          </ScrollView>
+        )}
+        {audioError ? <Text accessibilityRole="alert" style={styles.dueError} testID="today-due-error">{audioError}</Text> : null}
       </View>
     </View>
-  ), [colors, dateLine, dayComplete, dueCount, goal, goalPercent, hero, largeTextLayout, minutesToday, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, todayPlan.steps, watermark]);
+  );
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
@@ -332,9 +393,9 @@ export default function HomeScreen() {
             : `${completed} of ${plan.lessonIds.length} lessons`;
           return (
             <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
-              <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
-                <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
+              <View style={[styles.sectionHeading, largeTextLayout && styles.sectionHeadingLarge]}>
+                <JournalDisplay style={styles.sectionTitle}>Your path</JournalDisplay>
+                <Text style={styles.sectionMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
               </View>
               <PressableFeedback
                 accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
@@ -353,6 +414,9 @@ export default function HomeScreen() {
                     return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
                   })}
                 </View>
+                {selectedLessonIndex >= 0 ? (
+                  <Text style={styles.planNext} testID="today-plan-next">{lessonSelection.kicker}: {lessonSelection.title}</Text>
+                ) : null}
               </PressableFeedback>
             </MotionReveal>
           );
@@ -387,49 +451,57 @@ const useStyles = makeStyles((c) => ({
   heroHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   heroHeaderLarge: { flexDirection: 'column-reverse', alignItems: 'flex-start' },
   heroCopy: { minWidth: 0, flex: 1, gap: 6 },
-  heroTopline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  heroChip: { borderRadius: radius.pill, backgroundColor: c.gold, paddingHorizontal: 9, paddingVertical: 4 },
-  heroChipText: { color: c.ink, fontSize: 11, lineHeight: 15, fontWeight: '600', letterSpacing: 0.9 },
-  heroMeta: { color: c.brandSoft, fontSize: 13, lineHeight: 18 },
+  heroTopline: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
+  // Every text on the rust card is full-opacity #FBEFE8 or white (>= 5:1 on brand and forest).
+  heroKicker: { color: '#FBEFE8', fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  heroMeta: { color: '#FBEFE8', fontSize: 13, lineHeight: 18 },
   heroTitle: { color: c.white, fontFamily: displayFont, fontSize: 30, lineHeight: 34, fontWeight: '700', letterSpacing: -0.3 },
-  heroSubtitle: { color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
+  heroSubtitle: { maxWidth: 300, color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
   goalDial: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
   // Rotating the whole ring starts the arc at 12 o'clock without SVG transform props, which web rejects.
   goalRing: { transform: [{ rotate: '-90deg' }] },
   goalValue: { position: 'absolute', alignItems: 'center' },
   goalMinutes: { color: c.white, fontFamily: displayFont, fontSize: 17, lineHeight: 19, fontWeight: '700', fontVariant: ['tabular-nums'] },
   goalUnit: { color: '#FBEFE8', fontSize: 9, lineHeight: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  heroWord: { maxWidth: '100%', borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.14)', paddingHorizontal: spacing.md, paddingVertical: 6 },
-  heroWordFaded: { opacity: 0.5 },
-  heroWordText: { ...hindiType(16), color: c.white },
-  heroWordLatin: { color: c.white, fontSize: 15, lineHeight: 22, fontWeight: '500' },
   ashaInvite: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: 'rgba(255, 255, 255, 0.10)', paddingVertical: 10, paddingHorizontal: spacing.md },
   ashaPortrait: { width: 48, height: 48, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
   ashaInviteText: { minWidth: 0, flex: 1, color: '#FBEFE8', fontSize: 14, lineHeight: 19 },
-  steps: { gap: 2, borderTopColor: 'rgba(255, 255, 255, 0.18)', borderTopWidth: 1, paddingTop: spacing.md },
-  stepRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  stepDot: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: 'rgba(255, 255, 255, 0.5)', borderWidth: 2 },
-  stepDotDone: { backgroundColor: c.gold, borderColor: c.gold },
-  stepDotCurrent: { backgroundColor: 'rgba(231, 172, 61, 0.25)', borderColor: c.gold },
-  stepLabel: { minWidth: 0, flex: 1, color: '#FBEFE8', fontSize: 15, lineHeight: 20 },
-  stepLabelDone: { color: c.brandSoft, textDecorationLine: 'line-through' },
-  stepLabelCurrent: { color: c.white, fontWeight: '700' },
-  stepMeta: { color: c.brandSoft, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
   heroFooter: { flexDirection: 'row' },
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
   heroButton: { minHeight: 52, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },
   heroButtonText: { color: c.ink, fontSize: 17, fontWeight: '700' },
-  jumpSection: { gap: 10 },
-  jumpLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  jumpRow: { flexDirection: 'row', gap: spacing.sm },
-  jumpRowLarge: { flexDirection: 'column' },
-  jumpTile: { minWidth: 0, minHeight: 72, flex: 1, justifyContent: 'center', gap: 6, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: 10 },
-  jumpTitle: { color: c.ink, fontSize: 14, lineHeight: 19, fontWeight: '600' },
-  pathHeading: { width: '100%', flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
-  pathHeadingLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  pathTitle: { fontSize: 18, lineHeight: 24, letterSpacing: -0.2, fontWeight: '600' },
-  pathMeta: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  stepsCard: { width: '100%', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  stepRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
+  stepRowDivided: { borderTopColor: c.line, borderTopWidth: 1 },
+  stepCheck: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: c.lineStrong, borderWidth: 2 },
+  stepCheckDone: { backgroundColor: c.forest, borderColor: c.forest },
+  stepCheckCurrent: { backgroundColor: c.goldSoft, borderColor: c.gold },
+  stepCopy: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  stepCopyLarge: { flexDirection: 'column', alignItems: 'flex-start', gap: 2 },
+  stepLabel: { minWidth: 0, flexShrink: 1, color: c.ink, fontSize: 16, lineHeight: 21 },
+  // Done rows read as muted (#535D5A on white, 7:1) with a check: no strikethrough.
+  stepLabelDone: { color: c.muted },
+  stepLabelCurrent: { fontWeight: '700' },
+  stepMeta: { color: c.muted, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  stepMetaDone: { color: c.forestText, fontWeight: '600' },
+  dueSection: { gap: 10 },
+  sectionHeading: { width: '100%', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md },
+  sectionHeadingLarge: { flexDirection: 'column', alignItems: 'flex-start' },
+  sectionCopy: { minWidth: 0, flexShrink: 1, gap: 2 },
+  sectionTitle: { fontSize: 18, lineHeight: 24, letterSpacing: -0.2, fontWeight: '600' },
+  sectionMeta: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  sectionLink: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, marginRight: -spacing.sm },
+  sectionLinkText: { color: c.brandText, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  // Bleed the strip to the screen edge so the last card peeks in from the right.
+  dueScroller: { marginHorizontal: -20 },
+  dueStrip: { paddingHorizontal: 20, gap: 10 },
+  dueStack: { gap: 10 },
+  dueCard: { width: 200, backgroundColor: c.paperRaised },
+  dueCardLarge: { width: '100%' },
+  dueEmpty: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg },
+  dueEmptyText: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  dueEmptyLink: { minHeight: 44, alignSelf: 'flex-start', justifyContent: 'center' },
+  dueError: { color: c.danger, fontSize: 13, lineHeight: 18 },
   planCard: { width: '100%', minHeight: 48, gap: 10, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg },
   planCopy: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   planCopyLarge: { flexDirection: 'column', alignItems: 'flex-start' },
@@ -439,4 +511,5 @@ const useStyles = makeStyles((c) => ({
   planSegment: { minWidth: 0, flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: c.line },
   planSegmentDone: { backgroundColor: c.brand },
   planSegmentCurrent: { backgroundColor: c.goldIcon },
+  planNext: { color: c.muted, fontSize: 13, lineHeight: 18 },
 }));
