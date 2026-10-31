@@ -667,13 +667,7 @@ describe('immersive live conversation design', () => {
       expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
       expect(view.queryByTestId('asha-header-portrait')).toBeTruthy();
       expect(view.queryByLabelText('Create Asha reply')).toBeNull();
-      const toggle = view.queryByTestId('composer-mic-toggle');
-      if (toggle) {
-        expect(toggle.props.accessibilityState).toEqual({ disabled: true });
-        expect(StyleSheet.flatten(toggle.props.style).opacity).toBeLessThan(1);
-      } else {
-        expect(toggle).toBeNull();
-      }
+      expect(view.queryByTestId('composer-mic-toggle')).toBeNull();
       expect(view.queryByLabelText('Connect with Asha')).toBeNull();
       expect(view.queryByText('Live microphone')).toBeNull();
       await view.unmount();
