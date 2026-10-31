@@ -132,6 +132,9 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
     let releaseRecordingMode = false;
     const isCurrentAttempt = () => mountedRef.current && lifecycleRef.current === lifecycle;
     try {
+      // Notify before cancelling playback. Review retires the hint run from this
+      // callback, and the abort resolves the clip as not played immediately after.
+      onActivityChangeRef.current?.(true);
       await stopSpeaking();
       if (!isCurrentAttempt()) return;
       const permission = await requestRecordingPermissionsAsync();

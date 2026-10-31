@@ -155,6 +155,9 @@ describe('voice control lifecycle', () => {
     );
 
     await waitFor(() => expect(onActivityChange).toHaveBeenLastCalledWith(false));
+    stopSpeakingMock.mockImplementationOnce(async () => {
+      expect(onActivityChange).toHaveBeenCalledWith(true);
+    });
     await fireEvent.press(view.getByLabelText('Record pronunciation'));
     await waitFor(() => expect(view.getByLabelText('Stop recording')).toBeTruthy());
     expect(stopSpeakingMock).toHaveBeenCalledTimes(1);

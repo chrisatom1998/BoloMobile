@@ -91,12 +91,19 @@ export default function ReviewScreen() {
     else router.replace('/');
   }
 
+  function onRecorderActivity(active: boolean) {
+    // Starting a recording stops the hint clip. Retire that run first, the same
+    // way Listen and Slow do, so the cancel cannot clear a hint already taken.
+    if (active) hintRunRef.current += 1;
+    setRecorderBusy(active);
+  }
+
   function playPhrase(playbackRate = 1) {
     if (!phrase || !canListen || recorderBusy) return;
-    // Listen, Slow, and a second hint tap all stop the clip that is already
-    // playing. Bump the run first so that cancel cannot clear a hint the
-    // learner already started. Only the latest hint run may clear, and only
-    // when it fails and no earlier hint on this card finished.
+    // Listen, Slow, a second hint tap, and starting a recording all stop the
+    // clip that is already playing. Bump the run first so that cancel cannot
+    // clear a hint the learner already started. Only the latest hint run may
+    // clear, and only when it fails and no earlier hint on this card finished.
     const run = ++hintRunRef.current;
     if (listenFirst || revealed) {
       void speak(phrase.hi, undefined, playbackRate);
@@ -183,7 +190,7 @@ export default function ReviewScreen() {
       {revealed ? (
         // Optional practice: grading never waits on a recording. Keying by card
         // remounts the recorder so feedback never carries over to the next phrase.
-        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
+        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={onRecorderActivity} target={phrase} />
       ) : null}
     </ScrollView>
   );
