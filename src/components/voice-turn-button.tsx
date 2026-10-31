@@ -18,14 +18,20 @@ const MAX_RECORDING_MS = 15_000;
 const MAX_BASE64_CHARACTERS = 6_000_000;
 const FOREGROUND_EXIT_MESSAGE = 'Pronunciation recording stopped when Bolo left the foreground. Record again when you return.';
 
+/** 'pill' is the inline lesson control; 'hero' is the large round review mic with its label underneath. */
+export type VoiceTurnAppearance = 'pill' | 'hero';
+
 type Props = {
+  accessibilityHint?: string;
+  appearance?: VoiceTurnAppearance;
   disabled?: boolean;
   idleLabel?: string;
   onActivityChange?: (active: boolean) => void;
   onRecordingReady: (recording: { audioBase64: string; mimeType: string }) => Promise<void>;
+  testID?: string;
 };
 
-export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActivityChange, onRecordingReady }: Props) {
+export function VoiceTurnButton({ accessibilityHint, appearance = 'pill', disabled = false, idleLabel = 'Speak', onActivityChange, onRecordingReady, testID }: Props) {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const mountedRef = useRef(true);
@@ -235,31 +241,107 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
   useEffect(() => () => onActivityChangeRef.current?.(false), []);
 
   const label = starting ? 'Starting…' : busy ? 'Asha is thinking…' : isRecording ? `Stop · ${Math.max(1, Math.ceil(recorderState.durationMillis / 1000))}s` : idleLabel;
-  const unavailable = disabled || busy || starting;
+  const hero = appearance === 'hero';
   const styles = useStyles();
-  const { colors } = useTheme();
 
   return (
-    <View style={styles.wrapper}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={isRecording ? 'Stop recording' : idleLabel}
-        accessibilityState={busy || starting ? { disabled: unavailable, busy: true } : { disabled: unavailable }}
-        accessibilityValue={busy || starting ? { text: label } : undefined}
-        disabled={unavailable}
+    <View style={[styles.wrapper, hero && styles.wrapperHero]}>
+      <VoiceTurnFace
+        accessibilityHint={accessibilityHint}
+        appearance={appearance}
+        busy={busy}
+        disabled={disabled}
+        idleLabel={idleLabel}
+        isRecording={isRecording}
+        label={label}
         onPress={isRecording ? () => void finish() : () => void start()}
-        style={[styles.button, isRecording && styles.recording, (busy || starting) && styles.working, disabled && styles.disabled]}
-      >
-        {isRecording ? <Square color={colors.white} fill={colors.white} size={17} /> : <Mic color={colors.white} size={19} />}
-        <Text style={styles.label}>{label}</Text>
-      </Pressable>
-      {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
+        starting={starting}
+        testID={testID}
+      />
+      {error ? <Text accessibilityRole="alert" style={[styles.error, hero && styles.errorHero]}>{error}</Text> : null}
       {error && permissionDenied && Platform.OS !== 'web' ? (
-        <Pressable accessibilityRole="link" accessibilityLabel="Open Settings to allow microphone access" hitSlop={8} onPress={() => void Linking.openSettings()} style={styles.settingsLink}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Open Settings to allow microphone access" hitSlop={8} onPress={() => void Linking.openSettings()} style={[styles.settingsLink, hero && styles.settingsLinkHero]}>
           <Text style={styles.settingsLinkText}>Open Settings</Text>
         </Pressable>
       ) : null}
     </View>
+  );
+}
+
+type VoiceTurnPlaceholderProps = {
+  accessibilityHint?: string;
+  appearance?: VoiceTurnAppearance;
+  idleLabel?: string;
+  testID?: string;
+};
+
+/**
+ * The record button's disabled look for surfaces that cannot record yet (for
+ * example before AI consent). It mounts no audio recorder, so nothing native is
+ * created until the learner has agreed.
+ */
+export function VoiceTurnPlaceholder({ accessibilityHint, appearance = 'hero', idleLabel = 'Speak', testID }: VoiceTurnPlaceholderProps) {
+  const styles = useStyles();
+  return (
+    <View style={[styles.wrapper, appearance === 'hero' && styles.wrapperHero]}>
+      <VoiceTurnFace accessibilityHint={accessibilityHint} appearance={appearance} disabled idleLabel={idleLabel} label={idleLabel} testID={testID} />
+    </View>
+  );
+}
+
+type VoiceTurnFaceProps = {
+  accessibilityHint?: string;
+  appearance: VoiceTurnAppearance;
+  busy?: boolean;
+  disabled?: boolean;
+  idleLabel: string;
+  isRecording?: boolean;
+  label: string;
+  onPress?: () => void;
+  starting?: boolean;
+  testID?: string;
+};
+
+/**
+ * Same tap-to-start / tap-to-stop control in both looks. The hero only changes
+ * the face: an 88pt round mic inside static rings (so Reduce Motion needs no
+ * special case), with the label underneath instead of beside the icon.
+ */
+function VoiceTurnFace({ accessibilityHint, appearance, busy = false, disabled = false, idleLabel, isRecording = false, label, onPress, starting = false, testID }: VoiceTurnFaceProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const hero = appearance === 'hero';
+  const working = busy || starting;
+  const unavailable = disabled || working;
+  const icon = isRecording
+    ? <Square color={colors.white} fill={colors.white} size={hero ? 30 : 17} />
+    : <Mic color={colors.white} size={hero ? 38 : 19} />;
+
+  return (
+    <Pressable
+      accessibilityHint={accessibilityHint}
+      accessibilityRole="button"
+      accessibilityLabel={isRecording ? 'Stop recording' : idleLabel}
+      accessibilityState={working ? { disabled: unavailable, busy: true } : { disabled: unavailable }}
+      accessibilityValue={working ? { text: label } : undefined}
+      disabled={unavailable}
+      onPress={onPress}
+      style={hero
+        ? [styles.heroPressable, disabled && styles.disabled]
+        : [styles.button, isRecording && styles.recording, working && styles.working, disabled && styles.disabled]}
+      testID={testID}
+    >
+      {hero ? (
+        <View style={styles.heroRings}>
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.heroRingOuter} />
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.heroRingInner} />
+          <View style={[styles.heroFace, isRecording && styles.recording, working && styles.working]} testID={testID ? `${testID}-face` : undefined}>
+            {icon}
+          </View>
+        </View>
+      ) : icon}
+      <Text style={hero ? styles.heroLabel : styles.label}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -282,6 +364,16 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   label: { color: c.white, fontSize: 15, fontWeight: '800' },
   error: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLink: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  wrapperHero: { alignItems: 'center', alignSelf: 'stretch' },
+  heroPressable: { alignItems: 'center', gap: spacing.sm },
+  // Static rings, so Reduce Motion needs no special case here.
+  heroRings: { width: 132, height: 132, alignItems: 'center', justifyContent: 'center' },
+  heroRingOuter: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: radius.pill, borderWidth: 2, borderColor: c.brandSoft },
+  heroRingInner: { position: 'absolute', top: 14, right: 14, bottom: 14, left: 14, borderRadius: radius.pill, borderWidth: 2, borderColor: c.brandSoft, opacity: 0.7 },
+  heroFace: { width: 88, height: 88, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', shadowColor: c.brand, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.28, shadowRadius: 24, elevation: 6 },
+  heroLabel: { color: c.ink, fontSize: 16, lineHeight: 21, fontWeight: '800', textAlign: 'center' },
+  errorHero: { textAlign: 'center' },
+  settingsLinkHero: { alignSelf: 'center' },
   settingsLinkText: { color: c.forestText, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 }));
