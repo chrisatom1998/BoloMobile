@@ -26,6 +26,14 @@ export function formatReminderTime(hour: number, minute = 0) {
   return `${normalizedHour % 12 || 12}:${String(normalizedMinute).padStart(2, '0')} ${normalizedHour >= 12 ? 'PM' : 'AM'}`;
 }
 
+/** Morning, lunch, and evening choices; a time restored from a backup stays listed so it still shows as selected. */
+const reminderPresetHours = [7, 9, 12, 18, 19, 20, 21] as const;
+function reminderHours(savedHour?: number) {
+  const hours: number[] = [...reminderPresetHours];
+  if (savedHour !== undefined && !hours.includes(savedHour)) hours.push(savedHour);
+  return hours.sort((a, b) => a - b);
+}
+
 const motionDescriptions: Record<MotionPreference, string> = {
   system: Platform.OS === 'android' ? 'Follows your phone’s Remove animations setting.' : 'Follows your iPhone’s Reduce Motion setting.',
   gentle: 'Uses calm, short transitions. This is Bolo’s default.',
@@ -310,7 +318,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><Sparkles color={colors.forest} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Motion</Text><Text style={styles.body}>Gentle movement, or almost none</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Animation style</Text>
         <SegmentedControl
@@ -319,10 +327,11 @@ export default function SettingsScreen() {
           compact
           onValueChange={setMotionPreference}
           options={[
-            { label: 'System', value: 'system' },
             { label: 'Gentle', value: 'gentle' },
-            { label: 'Lively', value: 'lively' },
             { label: 'Reduced', value: 'reduced' },
+            // Older builds offered System and Lively; keep whichever one is saved visible until it is changed.
+            ...(motionPreference === 'system' ? [{ label: 'System', value: 'system' as const }] : []),
+            ...(motionPreference === 'lively' ? [{ label: 'Lively', value: 'lively' as const }] : []),
           ]}
           stacked={stackMotionPreferences}
           stackedAtLargeText
@@ -347,13 +356,11 @@ export default function SettingsScreen() {
           onValueChange={(next) => void changeReminder(next === 'off' ? undefined : Number(next))}
           options={[
             { label: 'Off', value: 'off' },
-            { label: formatReminderTime(9), value: '9' },
-            { label: formatReminderTime(19), value: '19' },
-            { label: formatReminderTime(20), value: '20' },
+            ...reminderHours(reminder.enabled ? reminder.hour : undefined).map((hour) => ({ label: formatReminderTime(hour), value: String(hour) })),
           ]}
           stackedAtLargeText
           testID="practice-reminder-control"
-          value={reminder.enabled ? String(reminder.hour) as '9' | '19' | '20' : 'off'}
+          value={reminder.enabled ? String(reminder.hour) : 'off'}
         />
       </View>
 
@@ -367,18 +374,12 @@ export default function SettingsScreen() {
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
         </View>
       ) : (
-        <AiConsentGate><View /></AiConsentGate>
+        <AiConsentGate compact={{ body: 'Asha coaching is off. Lessons, reviews and saved-phrase audio all work offline without it.', label: 'Review and turn on Asha coaching' }}><View /></AiConsentGate>
       )}
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]} testID="settings-privacy-link">
         <View style={styles.icon}><LockKeyhole color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
-        <ChevronRight color={colors.muted} size={20} />
-      </Pressable>
-
-      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
-        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Private diagnostics</Text><Text style={styles.body}>View content-free reliability counters stored on this device</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
@@ -397,6 +398,12 @@ export default function SettingsScreen() {
       <Pressable accessibilityRole="link" onPress={() => openPage('terms', 'Terms of Use')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><FileText color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Terms of Use</Text><Text style={styles.body}>Read Bolo&apos;s public terms</Text></View>
+        <ChevronRight color={colors.muted} size={20} />
+      </Pressable>
+
+      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
+        <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Diagnostics for support</Text><Text style={styles.body}>Simple counts that help us fix problems. Stays on this phone.</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
@@ -439,7 +446,7 @@ export default function SettingsScreen() {
           <View style={styles.icon}><DatabaseBackup color={colors.danger} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
         </View>
-        <Text style={styles.detail}>Bolo first deletes reports associated with your random app identifier. It then clears local data and rotates that identifier. If the request fails, the identifier is kept so you can retry.</Text>
+        <Text style={styles.detail}>Deletes any reports you sent from this phone, then erases your phrases, progress and settings here. If Bolo can&apos;t reach its server, nothing is erased and you can try again.</Text>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: deleting }} disabled={deleting} onPress={confirmDeletion} style={[styles.destructiveButton, deleting && styles.disabled]}>
           <Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{deleting ? 'Deleting…' : 'Delete my Bolo data'}</Text>
         </Pressable>

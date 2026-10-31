@@ -35,4 +35,9 @@ describe('loanword vowels and rare signs', () => {
       expect(romanizeDevanagari(sample)).not.toMatch(/[\u0900-\u097F]/u);
     }
   });
+
+  it('keeps unknown Latin, English names and punctuation as typed', () => {
+    expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
+    expect(romanizeDevanagari('Chris, bolo "chai"!')).toBe('Chris, bolo "chai"!');
+  });
 });

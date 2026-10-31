@@ -13,6 +13,11 @@ import { makeStyles, radius, spacing, useTheme } from '@/theme';
 type AiConsentGateProps = {
   actionLabel?: string;
   children?: ReactNode;
+  /**
+   * Shows one line and a button instead of the full notice until the learner asks for it.
+   * The full summary appears only on Asha; elsewhere the wall of text crowded out the screen's own job.
+   */
+  compact?: { body: string; label?: string };
   title?: string;
 };
 
@@ -28,6 +33,7 @@ const consentSummary = [
 export function AiConsentGate({
   actionLabel = 'I agree and want to continue',
   children,
+  compact,
   title = 'Before using Asha',
 }: AiConsentGateProps) {
   const { colors } = useTheme();
@@ -35,10 +41,12 @@ export function AiConsentGate({
   const { aiConsent, setAiConsent } = useAppState();
   const [saving, setSaving] = useState(false);
   const [noticeExpanded, setNoticeExpanded] = useState(false);
+  const [compactOpen, setCompactOpen] = useState(false);
   const savingRef = useRef(false);
+  const collapsed = Boolean(compact) && !compactOpen;
   useEffect(() => {
-    if (!aiConsent) observeOncePerSession('consent_viewed');
-  }, [aiConsent]);
+    if (!aiConsent && !collapsed) observeOncePerSession('consent_viewed');
+  }, [aiConsent, collapsed]);
   if (aiConsent) return children;
 
   function openPrivacyPolicy() {
@@ -58,6 +66,17 @@ export function AiConsentGate({
       savingRef.current = false;
       setSaving(false);
     }
+  }
+
+  if (compact && collapsed) {
+    return (
+      <View style={styles.compactCard} testID="consent-compact">
+        <Text style={styles.compactBody}>{compact.body}</Text>
+        <Pressable accessibilityRole="button" onPress={() => setCompactOpen(true)} style={styles.compactButton} testID="consent-compact-open">
+          <Text style={styles.compactButtonText}>{compact.label ?? 'Turn on Asha coaching'}</Text>
+        </Pressable>
+      </View>
+    );
   }
 
   return (
@@ -125,4 +144,8 @@ const useStyles = makeStyles((c) => ({
   buttonText: { color: c.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
   version: { color: c.mutedSoft, fontSize: 11, lineHeight: 15 },
   disabled: { opacity: 0.5 },
+  compactCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
+  compactBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  compactButtonText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
 }));

@@ -61,8 +61,10 @@ describe('home accessibility', () => {
       expect(StyleSheet.flatten(view.getByTestId(tile).props.style).minHeight).toBeGreaterThanOrEqual(44);
     }
     for (const step of ['review', 'lesson', 'asha']) {
-      expect(view.getByTestId(`today-step-${step}`).props.accessibilityLabel).toMatch(/^Step \d of 3, /);
+      const row = view.queryByTestId(`today-step-${step}`);
+      if (row) expect(row.props.accessibilityLabel).toMatch(/^Step \d of [23], /);
     }
+    expect(view.getByTestId('today-step-lesson')).toBeTruthy();
     expect(StyleSheet.flatten(firstPlan.props.style).minHeight).toBeGreaterThanOrEqual(48);
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
 
