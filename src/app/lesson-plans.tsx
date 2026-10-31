@@ -1,5 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
@@ -11,6 +12,9 @@ import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
+
+/** Scroll distance after which the plan's large in-page title has left the screen. */
+const DETAIL_TITLE_SCROLL_OFFSET = 120;
 
 export default function LessonPlansScreen() {
   const router = useRouter();
@@ -128,7 +132,7 @@ export default function LessonPlansScreen() {
                 <Text style={styles.sceneTitle}>{scene.title}</Text>
                 <Text style={styles.planSubtitle}>{scene.subtitle} · {scene.level}{done ? ' · Done' : ''}</Text>
               </View>
-              <Text style={styles.lessonArrow}>→</Text>
+              <Text style={styles.lessonArrow}>›</Text>
             </PressableFeedback>
           );
         })}
@@ -141,6 +145,8 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
+  const [titleVisible, setTitleVisible] = useState(false);
+  const [canGoBack] = useState(() => router.canGoBack());
   const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
   const nextLessonIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
   const inProgressLessonId = plan.lessonIds
@@ -163,19 +169,26 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   const percent = Math.round(completed / plan.lessonIds.length * 100);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.detailContent} style={sharedStyles.screen}>
-      <Stack.Screen options={{ headerLargeTitle: false, title: plan.title }} />
-      <PressableFeedback
-        accessibilityLabel="Back to all lesson plans"
-        accessibilityRole="button"
-        onPress={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/lesson-plans');
-        }}
-        style={styles.backButton}
-      >
-        <Text style={styles.backButtonText}>← All lesson plans</Text>
-      </PressableFeedback>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.detailContent}
+      onScroll={(event) => setTitleVisible(event.nativeEvent.contentOffset.y > DETAIL_TITLE_SCROLL_OFFSET)}
+      scrollEventThrottle={32}
+      style={sharedStyles.screen}
+    >
+      {/* The nav title stays empty until the large in-page title scrolls away, so the name is not shown twice. */}
+      <Stack.Screen options={{ headerLargeTitle: false, title: titleVisible ? plan.title : '' }} />
+      {canGoBack ? null : (
+        // The nav back button covers this when there is history; keep a way back for deep links.
+        <PressableFeedback
+          accessibilityLabel="Back to all lesson plans"
+          accessibilityRole="button"
+          onPress={() => router.replace('/lesson-plans')}
+          style={styles.backButton}
+        >
+          <Text style={styles.backButtonText}>← All lesson plans</Text>
+        </PressableFeedback>
+      )}
       <View style={[styles.detailHeading, largeTextLayout && styles.headingLarge]} testID="lesson-plan-detail-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>{`Plan ${String(plan.order).padStart(2, '0')} · Guided curriculum`}</JournalKicker>
@@ -222,7 +235,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
                 <Text style={styles.lessonTitle}>{lesson.title}</Text>
                 <Text style={styles.lessonSubtitle}>{lesson.subtitle}</Text>
               </View>
-              <Text style={styles.lessonArrow}>→</Text>
+              <Text style={styles.lessonArrow}>›</Text>
             </PressableFeedback>
           );
         })}

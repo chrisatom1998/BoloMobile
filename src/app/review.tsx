@@ -183,7 +183,7 @@ export default function ReviewScreen() {
       {revealed ? (
         // Optional practice: grading never waits on a recording. Keying by card
         // remounts the recorder so feedback never carries over to the next phrase.
-        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
+        <PronunciationRecorder compact key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
       ) : null}
     </ScrollView>
   );
