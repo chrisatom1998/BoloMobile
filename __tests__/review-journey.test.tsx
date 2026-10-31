@@ -235,6 +235,25 @@ describe('ReviewScreen spaced-repetition journey', () => {
     })));
   });
 
+  it('keeps Got it as real recall when the hint never played', async () => {
+    const today = dateKey();
+    asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste]));
+    asyncStorage.__store.set(storageKeys.phraseReviews, JSON.stringify({
+      [namaste.hi]: { ...defaultPhraseReview(today), mastery: 2, correctReviews: 2, totalReviews: 2 },
+    }));
+    speakTextMock.mockRejectedValueOnce(new Error('Audio unavailable.'));
+    const view = await renderReview();
+    await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    expect(await view.findByText('Audio unavailable.')).toBeTruthy();
+    expect(view.queryByText('Hint used, so this card counts as Again.')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+
+    expect(readReviews(view)[namaste.hi]).toEqual(expect.objectContaining({ mastery: 3, correctReviews: 3, totalReviews: 3 }));
+    expect(view.getByText('1 of 1 remembered')).toBeTruthy();
+  });
+
   it.each([true, false])('applies the real recall schedule with audio before Reveal = %s', async (beforeReveal) => {
     const today = dateKey();
     asyncStorage.__store.set(storageKeys.phrases, JSON.stringify([namaste]));
@@ -243,7 +262,10 @@ describe('ReviewScreen spaced-repetition journey', () => {
     }));
     const view = await renderReview();
     await waitFor(() => expect(view.getByText('Say it in Hindi')).toBeTruthy());
-    if (beforeReveal) await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    if (beforeReveal) {
+      await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+      expect(await view.findByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    }
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
     if (!beforeReveal) await fireEvent.press(view.getByLabelText(`Hear ${namaste.hi}`));
     expect(speakTextMock).toHaveBeenLastCalledWith(namaste.hi, undefined, 1);

@@ -29,6 +29,8 @@ export default function ReviewScreen() {
   const [lockedSession, setLockedSession] = useState<typeof duePhrases | null>(null);
   const session = lockedSession ?? (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5));
   const [index, setIndex] = useState(0);
+  // Mirrors supportedRecallRef for the screen, so sighted learners see why Got it counts as Again.
+  const [hintUsed, setHintUsed] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
   const [recorderBusy, setRecorderBusy] = useState(false);
@@ -72,6 +74,7 @@ export default function ReviewScreen() {
     else hapticWarning();
     if (recalled) setCorrect((value) => value + 1);
     supportedRecallRef.current = false;
+    setHintUsed(false);
     setRevealed(false);
     setIndex((value) => value + 1);
   }
@@ -84,8 +87,19 @@ export default function ReviewScreen() {
 
   function playPhrase(playbackRate = 1) {
     if (!phrase || !canListen || recorderBusy) return;
-    if (!listenFirst && !revealed) supportedRecallRef.current = true;
-    void speak(phrase.hi, undefined, playbackRate);
+    if (listenFirst || revealed) {
+      void speak(phrase.hi, undefined, playbackRate);
+      return;
+    }
+    // A hint is supported recall only once audio actually played: a failed
+    // playback leaves Got it as real recall. A late success on a card that has
+    // already been graded must not mark the next card.
+    const hintedPhrase = phrase.hi;
+    void speak(hintedPhrase, undefined, playbackRate).then((played) => {
+      if (!played || gradedPhraseRef.current === hintedPhrase) return;
+      supportedRecallRef.current = true;
+      setHintUsed(true);
+    });
   }
 
   if (session.length === 0) {
@@ -139,6 +153,7 @@ export default function ReviewScreen() {
         ) : (
           <Pressable accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
         )}
+        {hintUsed && !listenFirst ? <Text style={styles.hintNote} testID="review-hint-note">Hint used, so this card counts as Again.</Text> : null}
         {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
       </View>
       {revealed ? (
@@ -172,6 +187,7 @@ const useStyles = makeStyles((c) => ({
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
   audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   audioText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  hintNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
   disabled: { opacity: 0.4 },
   revealButton: { minHeight: 52, borderRadius: radius.md, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
