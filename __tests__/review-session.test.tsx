@@ -609,6 +609,30 @@ describe('ReviewScreen speak-first layout', () => {
     expect(view.queryByTestId('review-answer-devanagari')).toBeNull();
     expect(view.getByTestId('review-answer-romanized')).toHaveTextContent(/namaste/iu);
     expect(view.getByTestId('review-answer').props.accessibilityRole).toBeUndefined();
+
+    // The Listen and Slow names come from the same script-safe lines as the card.
+    const listen = view.getByRole('button', { name: /^Hear namaste$/iu });
+    const slow = view.getByRole('button', { name: /^Hear namaste slowly$/iu });
+    expect(listen.props.accessibilityLabel).not.toMatch(DEVANAGARI);
+    expect(slow.props.accessibilityLabel).not.toMatch(DEVANAGARI);
+    expect(view.queryByLabelText(`Hear ${phraseA.hi}`)).toBeNull();
+    expect(view.queryByLabelText(`Hear ${phraseA.hi} slowly`)).toBeNull();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(DEVANAGARI);
+
+    await fireEvent.press(slow);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 0.72);
+    await fireEvent.press(listen);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenLastCalledWith(phraseA.hi, true);
+  });
+
+  it('names Listen with the Devanagari line for Devanagari-only and both-script learners', async () => {
+    mockAppState.learnerProfile = { scriptPreference: 'devanagari' };
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.getByLabelText(`Hear ${phraseA.hi}`)).toBeTruthy();
+    expect(view.getByLabelText(`Hear ${phraseA.hi} slowly`)).toBeTruthy();
   });
 
   it('reveals the answer through the shared PhraseCard and respects the Devanagari-only preference', async () => {
