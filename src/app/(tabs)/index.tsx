@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { Redirect, useFocusEffect, useRouter, type Href } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ArrowRight, Check, Flame, Settings } from 'lucide-react-native';
@@ -25,6 +26,7 @@ import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
+const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 27;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
 /**
@@ -267,6 +269,13 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {currentStep === 'asha' ? (
+          <View style={styles.ashaInvite}>
+            <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.ashaPortrait} testID="today-asha-portrait" transition={0} />
+            <Text style={styles.ashaInviteText}>“Ready? Greet me like a neighbor and tell me your name.”</Text>
+          </View>
+        ) : null}
+
         <View style={[styles.heroFooter, largeTextLayout && styles.heroFooterLarge]} testID="today-hero-footer">
           <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.heroButton} testID="today-next-step">
             <Text style={styles.heroButtonText}>{hero.action}</Text>
@@ -443,6 +452,9 @@ const useStyles = makeStyles((c) => ({
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
   heroButton: { minHeight: 52, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },
   heroButtonText: { color: c.ink, fontSize: 17, fontWeight: '700' },
+  ashaInvite: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: 'rgba(255, 255, 255, 0.10)', paddingVertical: 10, paddingHorizontal: spacing.md },
+  ashaPortrait: { width: 48, height: 48, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  ashaInviteText: { minWidth: 0, flex: 1, color: '#FBEFE8', fontSize: 14, lineHeight: 19 },
   stepsCard: { width: '100%', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
   stepRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   stepRowDivided: { borderTopColor: c.line, borderTopWidth: 1 },

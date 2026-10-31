@@ -173,8 +173,8 @@ describe('HomeScreen primary journey', () => {
 
     expect(view.getByTestId('today-hero-kicker')).toHaveTextContent('Step 3 of 3 · Speak');
     expect(view.getByText('Say it out loud')).toBeTruthy();
-    expect(view.queryByTestId('today-asha-portrait')).toBeNull();
-    expect(view.queryByText(/Greet me like a neighbor/u)).toBeNull();
+    expect(view.getByTestId('today-asha-portrait')).toBeTruthy();
+    expect(view.getByText(/Greet me like a neighbor/u)).toBeTruthy();
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 2 of 3, Finished a lesson, done');
 
     await fireEvent.press(view.getByTestId('today-next-step'));
