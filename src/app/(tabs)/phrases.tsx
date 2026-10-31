@@ -1,7 +1,7 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
-import { BookOpen, Volume2 } from 'lucide-react-native';
+import { BookOpen, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -132,7 +132,7 @@ export default function PhrasesScreen() {
             </View>
           ) : null}
         </View>
-        <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep. Press and hold one to remove it.</Text>
+        <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep.</Text>
       </View>
       {phrases.length > 0 ? (
         <>
@@ -221,14 +221,7 @@ export default function PhrasesScreen() {
           const mastery = review?.mastery ?? 0;
           const isDue = dueSet.has(item.hi);
           return (
-            <Pressable
-              accessibilityActions={[{ name: 'remove', label: `Remove ${item.hi}` }]}
-              accessibilityHint="Press and hold to remove"
-              onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'remove') confirmRemove(item); }}
-              onLongPress={() => confirmRemove(item)}
-              style={[styles.card, largeTextLayout && styles.cardLarge]}
-              testID="saved-phrase-card"
-            >
+            <View style={[styles.card, largeTextLayout && styles.cardLarge]}>
               <View style={[styles.cardMain, largeTextLayout && styles.cardMainLarge]}>
                 <View style={styles.copy}>
                   {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{item.hi}</Text> : null}
@@ -243,10 +236,11 @@ export default function PhrasesScreen() {
                   <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: `${replaySpeeds.find((speed) => speed.rate === playbackRate)?.label ?? 'Normal'} speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
                     <Volume2 color={colors.brandText} size={18} />
                   </PressableFeedback>
+                  <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
                 </View>
               </View>
               {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
-            </Pressable>
+            </View>
           );
         }}
         style={sharedStyles.screen}
@@ -298,6 +292,7 @@ const useStyles = makeStyles((c) => ({
   masterySegmentFilled: { backgroundColor: c.forest },
   mastery: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   masteryDue: { color: c.brandText },
+  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerMeta: { alignItems: 'flex-end', gap: spacing.xs },
   speedButton: { ...buttons.secondary, minHeight: 36, paddingHorizontal: spacing.md },
   speedButtonText: { ...buttons.secondaryText, ...type.caption, fontWeight: '600' },

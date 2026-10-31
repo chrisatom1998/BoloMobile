@@ -159,7 +159,7 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    await fireEvent(view.getByTestId('saved-phrase-card'), 'longPress');
+    await fireEvent.press(view.getByLabelText('Remove नमस्ते'));
     expect(showAppAlertMock).toHaveBeenCalledWith(
       'Remove saved phrase?',
       'नमस्ते',
