@@ -4,11 +4,13 @@ import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
+import { deleteAllAshaSessions, endLiveCallForDataDeletion, startAshaSessionRetention } from '@/lib/asha-session-log-store';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { restorableProgressKeys, type RestorableProgress } from '@/lib/progress-backup';
 import { updatePracticeWidget } from '@/lib/practice-widget';
+import { syncOutbox } from '@/lib/sync-outbox';
 import {
   appendChatHistory,
   replaceChatHistorySnapshot,
@@ -281,6 +283,31 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     };
   }, [enqueuePersistence, hydrated, replaceState]);
 
+  // Queued network work (report retries) runs only with consent and the current client id,
+  // and flushes on foreground, on any successful Bolo request, and on its own backoff timer.
+  useEffect(() => syncOutbox.start(), []);
+  // One announcement per delivered report for the whole app; screens only update their rows.
+  useEffect(() => syncOutbox.subscribeDelivered(() => {
+    showAppAlert('Report received', 'Thank you. This reply was sent for review.');
+  }), []);
+  // Saved Asha sessions expire on foreground too, not only at hydration.
+  useEffect(() => startAshaSessionRetention(), []);
+  useEffect(() => {
+    if (!hydrated) return;
+    // Without consent nothing may be queued. A queue that survived a withdrawal whose
+    // cleanup failed is removed now, before consent can be granted again; sending stays
+    // blocked until that removal succeeds.
+    if (stateRef.current.aiConsent === null) {
+      void syncOutbox.clear().catch((error: unknown) => {
+        console.warn('Bolo could not remove queued reports left from a consent withdrawal.', error);
+      });
+    }
+  }, [hydrated]);
+  useEffect(() => {
+    if (!hydrated) return;
+    syncOutbox.setContext({ clientId: state.clientId, enabled: state.aiConsent !== null, consentSince: state.aiConsent?.acceptedAt });
+  }, [hydrated, state.aiConsent, state.clientId]);
+
   useEffect(() => {
     if (!hydrated) return;
     updatePracticeWidget({
@@ -490,6 +517,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
     if (clearingAllDataRef.current) return false;
+    // Withdrawing consent drops every queued network operation (pending, in-flight,
+    // and failed reports) before anything else can await; re-granting never resurrects them.
+    const outboxCleared = aiConsent ? null : syncOutbox.clear().then(() => true, () => false);
     let nextConsent: PersistedState['aiConsent'];
     try {
       nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
@@ -502,6 +532,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       return false;
     }
     if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
+    if (outboxCleared && !(await outboxCleared)) {
+      reportPersistenceFailure(new Error('queued reports were not removed'), 'AI consent is withdrawn, but Bolo could not remove the reports waiting to be sent. They will not be sent; open Settings again to retry removing them.');
+    }
     return true;
   }, [enqueuePersistence, replaceState]);
 
@@ -522,6 +555,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
+    // End any live call first so its finalization runs as `data_deleted` and is
+    // never stored, then invalidate the session log and outbox generations before
+    // any await or identifier rotation. Late rows, tool callbacks, and queued
+    // writes from before this point are discarded; stale flush loops stop.
+    endLiveCallForDataDeletion();
+    const sessionDeletion = deleteAllAshaSessions().then(() => true, (error: unknown) => {
+      console.warn('Bolo could not clear the Asha session log.', error);
+      return false;
+    });
+    const outboxDeletion = syncOutbox.clear().then(() => true, (error: unknown) => {
+      console.warn('Bolo could not clear queued reports.', error);
+      return false;
+    });
     const next: PersistedState = {
       ...initialState,
       practice: emptyPractice(),
@@ -540,9 +586,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch (error) {
       console.warn('Bolo could not clear local data.', error);
       observe('runtime_error');
-      throw new Error('Bolo could not clear local data. Your existing local data was left in place.');
+      const [sessionsCleared, outboxCleared] = await Promise.all([sessionDeletion, outboxDeletion]);
+      throw new Error(sessionsCleared && outboxCleared
+        ? 'Bolo could not clear local data. Saved Asha sessions and queued reports were removed, but your other existing local data was left in place.'
+        : 'Bolo could not clear local data. Your existing local data was left in place.');
     } finally {
       clearingAllDataRef.current = false;
+    }
+    // The Asha session log and queued reports live outside PersistedState but hold
+    // the same conversations, so Delete Bolo data must remove them as well.
+    const [sessionsCleared, outboxCleared] = await Promise.all([sessionDeletion, outboxDeletion]);
+    if (!sessionsCleared || !outboxCleared) {
+      observe('runtime_error');
+      throw new Error('Bolo cleared your progress but could not clear saved Asha sessions or queued reports. Try Delete Bolo data again.');
     }
     try {
       await clearObservability();

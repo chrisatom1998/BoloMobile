@@ -360,6 +360,134 @@ describe('GPT-Live conversation lifecycle', () => {
     await unmount();
   });
 
+  describe('session events for the on-device session log', () => {
+    const sessionEvents = (onSessionEvent: jest.Mock) => onSessionEvent.mock.calls.map(([event]) => event);
+
+    it('reports starting with the session setup, ready with the server session id, and ended when the learner stops', async () => {
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent, liveSession: () => ({ mode: 'lesson', context: { lessonId: 'chai', lessonTitle: 'Chai' } }) });
+      await act(async () => { await result.current.connect(); });
+      await peerOptions.exchangeSdp('offer', new AbortController().signal);
+      expect(sessionEvents(onSessionEvent)).toEqual([
+        { type: 'starting', mode: 'lesson', lessonId: 'chai' },
+        { type: 'ready', serverSessionId: undefined },
+      ]);
+      await act(async () => { result.current.disconnect(); });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'user_ended' });
+      await unmount();
+      expect(onSessionEvent).toHaveBeenCalledTimes(3);
+    });
+
+    it('passes the Live server session id once the SDP exchange completes before ready', async () => {
+      const onSessionEvent = jest.fn();
+      createPeerMock.mockImplementation(async (options) => {
+        peerOptions = options;
+        await options.exchangeSdp('offer', new AbortController().signal);
+        emit({ type: 'session.started' });
+        return peer;
+      });
+      const { result, unmount } = await mount({ onSessionEvent });
+      await act(async () => { await result.current.connect(); });
+      expect(sessionEvents(onSessionEvent)[1]).toEqual({ type: 'ready', serverSessionId: 'live-session' });
+      await unmount();
+    });
+
+    it('does not report an end for a hook that never started a session', async () => {
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent });
+      await act(async () => { result.current.disconnect(); });
+      await unmount();
+      expect(onSessionEvent).not.toHaveBeenCalled();
+    });
+
+    it('ends as backgrounded when the app leaves the foreground', async () => {
+      let change!: (state: 'background') => void;
+      jest.spyOn(AppState, 'addEventListener').mockImplementation((_name, handler) => { change = handler; return { remove: jest.fn() }; });
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent });
+      await act(async () => { await result.current.connect(); });
+      await act(async () => { change('background'); });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'backgrounded' });
+      await unmount();
+    });
+
+    it('ends as connection_lost when the server closes the session', async () => {
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent });
+      await act(async () => { await result.current.connect(); });
+      await act(async () => { emit({ type: 'session.closed' }); });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'connection_lost' });
+      await unmount();
+    });
+
+    it('ends as connection_lost when the transport closes', async () => {
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent });
+      await act(async () => { await result.current.connect(); });
+      await act(async () => { peerOptions.onClose?.(); });
+      expect(result.current.status).toBe('disconnected');
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'connection_lost' });
+      await unmount();
+    });
+
+    it('ends as connection_lost when the microphone command is never confirmed', async () => {
+      jest.useFakeTimers();
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent });
+      let failure!: Promise<unknown>;
+      await act(async () => { failure = result.current.startTurn().catch((error) => error); await flush(); });
+      await act(async () => { jest.advanceTimersByTime(10_000); await flush(); });
+      expect(await failure).toEqual(expect.objectContaining({ message: expect.stringContaining('did not confirm') }));
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'connection_lost' });
+      await unmount();
+    });
+
+    it('ends as data_deleted when Delete Bolo data ends the call, and ignores reasons that are not session end reasons', async () => {
+      const onSessionEvent = jest.fn();
+      const { result, unmount } = await mount({ onSessionEvent });
+      await act(async () => { await result.current.connect(); });
+      await act(async () => { result.current.disconnect('data_deleted'); });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'data_deleted' });
+      expect(result.current.status).toBe('disconnected');
+      await act(async () => { await result.current.connect(); });
+      await act(async () => { (result.current.disconnect as (reason?: unknown) => void)({ nativeEvent: {} }); });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'user_ended' });
+      await unmount();
+    });
+
+    it('ends as config_changed when the reply language or consent changes', async () => {
+      const onSessionEvent = jest.fn();
+      const { result, rerender, unmount } = await renderHook(({ enabled, language }: { enabled: boolean; language: 'en' | 'hi' }) => useRealtimeConversation({ clientId: 'client-12345678', enabled, responseLanguage: language, onError: jest.fn(), onSessionEvent }), { initialProps: { enabled: true, language: 'en' } });
+      await act(async () => { await result.current.connect(); });
+      await rerender({ enabled: true, language: 'hi' });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'config_changed' });
+      await act(async () => { await result.current.connect(); });
+      await rerender({ enabled: false, language: 'hi' });
+      expect(sessionEvents(onSessionEvent).at(-1)).toEqual({ type: 'ended', reason: 'config_changed' });
+      await unmount();
+    });
+
+    it('ends as start_failed when the call cannot be set up or times out', async () => {
+      const onSessionEvent = jest.fn();
+      const onConnectionStart = jest.fn(async () => { throw new Error('Could not clear chat'); });
+      const { result, unmount } = await mount({ onSessionEvent, onConnectionStart });
+      await act(async () => { await expect(result.current.connect()).rejects.toThrow('Could not clear chat'); });
+      expect(sessionEvents(onSessionEvent)).toEqual([{ type: 'starting', mode: undefined, lessonId: undefined }, { type: 'ended', reason: 'start_failed' }]);
+      await unmount();
+
+      jest.useFakeTimers();
+      autoStart = false;
+      const late = jest.fn();
+      const mounted = await mount({ onSessionEvent: late });
+      let failure!: Promise<unknown>;
+      await act(async () => { failure = mounted.result.current.connect().catch((error) => error); await flush(); });
+      await act(async () => { jest.advanceTimersByTime(15_000); await flush(); });
+      await failure;
+      expect(sessionEvents(late).at(-1)).toEqual({ type: 'ended', reason: 'start_failed' });
+      await mounted.unmount();
+    });
+  });
+
   describe('client-executed Live tools', () => {
     const toolCall = (callId: string, name = 'get_learner_progress', args = '{}') => ({
       type: 'response.event',
