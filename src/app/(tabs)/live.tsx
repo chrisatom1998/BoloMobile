@@ -129,6 +129,7 @@ export default function LiveScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
   const composerMicActionRef = useRef<(() => void) | null>(null);
+  const [composerMicActionBound, setComposerMicActionBound] = useState(false);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, clearingChat, pendingUserMessage],
@@ -175,7 +176,9 @@ export default function LiveScreen() {
     recording: 'Mute microphone',
     responding: 'Unmute microphone',
   }[realtimeStatus];
-  const composerMicDisabled = !screenFocused || busy || clearingChat || realtimeStatus === 'connecting';
+  // Same gate as the portrait control, plus connecting (the button blocks that itself)
+  // and a missing turn action, which happens when the floating session has no voice yet.
+  const composerMicDisabled = !aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused) || realtimeStatus === 'connecting' || !composerMicActionBound;
 
   const scrollToChat = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: !reducedMotion });
@@ -183,6 +186,7 @@ export default function LiveScreen() {
 
   const bindComposerMicAction = useCallback((action: (() => void) | null) => {
     composerMicActionRef.current = action;
+    setComposerMicActionBound((current) => (action !== null) === current ? current : action !== null);
   }, []);
 
   const pressComposerMic = useCallback(() => {
@@ -797,9 +801,9 @@ export default function LiveScreen() {
           ))}
         </ScrollView>
         <View style={styles.composerEntry}>
-          {conversationStarted ? (
+          {conversationStarted && composerMicActionBound ? (
             <Pressable
-              accessibilityHint={voiceHeroBody}
+              accessibilityHint="Mutes or unmutes your microphone."
               accessibilityLabel={composerMicLabel}
               accessibilityRole="button"
               accessibilityState={{ disabled: composerMicDisabled }}

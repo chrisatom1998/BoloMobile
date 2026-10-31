@@ -40,6 +40,7 @@ jest.mock('expo-image', () => ({
 jest.mock('lucide-react-native', () => ({
   ArrowDown: () => null,
   BookmarkPlus: () => null,
+  ChevronDown: () => null,
   Flag: () => null,
   Lock: () => null,
   MessageCircle: () => null,
@@ -266,6 +267,26 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 let mockAiConsent = true;
+let mockFloatingAvailable = false;
+
+jest.mock('@/state/asha-voice-session', () => {
+  const actual = jest.requireActual('@/state/asha-voice-session') as Record<string, unknown>;
+  return {
+    ...actual,
+    useAshaVoiceSession: () => ({
+      available: mockFloatingAvailable,
+      minimized: false,
+      status: 'disconnected' as const,
+      isPlaying: false,
+      voice: null,
+      snapshotIds: { current: [] as string[] },
+      minimize: () => undefined,
+      expand: () => undefined,
+      endSession: () => undefined,
+      setListeners: () => undefined,
+    }),
+  };
+});
 
 jest.mock('@/state/app-state', () => ({
   __appendChatMessagesMock: jest.fn(),
@@ -624,7 +645,7 @@ describe('immersive live conversation design', () => {
     expect(view.getByText('Tap Asha to unmute and join the conversation.')).toBeTruthy();
     expect(within(view.getByTestId('asha-voice-status')).getByText('MUTED')).toBeTruthy();
     const unmute = view.getByLabelText('Unmute microphone');
-    expect(unmute.props.accessibilityHint).toBe('Tap Asha to unmute and join the conversation.');
+    expect(unmute.props.accessibilityHint).toBe('Mutes or unmutes your microphone.');
     expect(within(view.getByTestId('live-chat-list')).queryByLabelText('Unmute microphone')).toBeNull();
     await fireEvent.press(unmute);
     expect(view.getByLabelText('Mute microphone')).toBeTruthy();
@@ -632,6 +653,35 @@ describe('immersive live conversation design', () => {
 
     await view.unmount();
     await flushMicrotasks();
+  });
+
+  it('hides the composer mic when a floating session has no voice controls', async () => {
+    mockFloatingAvailable = true;
+    try {
+      const view = await render(<LiveScreen />);
+      boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Hello there.', language: 'en' });
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Need a conversation first.');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      await flushMicrotasks();
+
+      expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+      expect(view.queryByTestId('asha-header-portrait')).toBeTruthy();
+      expect(view.queryByLabelText('Create Asha reply')).toBeNull();
+      const toggle = view.queryByTestId('composer-mic-toggle');
+      if (toggle) {
+        expect(toggle.props.accessibilityState).toEqual({ disabled: true });
+        expect(StyleSheet.flatten(toggle.props.style).opacity).toBeLessThan(1);
+      } else {
+        expect(toggle).toBeNull();
+      }
+      expect(view.queryByLabelText('Connect with Asha')).toBeNull();
+      expect(view.queryByText('Live microphone')).toBeNull();
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      mockFloatingAvailable = false;
+      boloApi.sendMobileChat.mockReset();
+    }
   });
 
   it('clears a stale voice error when the next recording actually starts', async () => {
