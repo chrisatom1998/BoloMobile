@@ -1,5 +1,6 @@
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { knownHindiDisplayPhrase } from '@/lib/known-hindi-phrases';
+import type { ScriptPreference } from '@/state/app-state-types';
 
 /** Normalize only complete authoritative phrases; retain unknown learner spelling. */
 export function learnerPhraseLatin(hindi: string, latin: string) {
@@ -52,4 +53,182 @@ function preferredWordsInOriginalText(text: string, preferred: string) {
   if (originalWords.length !== preferredWords.length) return romanizeDevanagari(text);
   let index = 0;
   return romanizeDevanagari(text.replace(sourceWord, () => preferredWords[index++]!));
+}
+
+// ---------------------------------------------------------------------------
+// Legacy (string-only) transcript rendering per script preference.
+// ---------------------------------------------------------------------------
+
+/** Devanagari letters, marks and digits; danda and abbreviation sign are treated as punctuation. */
+const HINDI_RUN = /[ऀ-ॣ०-९ॱ-ॿ]+(?:[ \t,;:'"’\-–…]+[ऀ-ॣ०-९ॱ-ॿ]+)*/gu;
+const HINDI_WORD = /[ऀ-ॣ०-९ॱ-ॿ]+/gu;
+const LATIN_WORD = /[A-Za-z]+/gu;
+const DEVANAGARI_ANY = /[ऀ-ॿ]/u;
+/** Our romanizer's first letters versus common alternative spellings. */
+const INITIAL_EQUIVALENTS: Record<string, string> = { w: 'v', z: 'j', f: 'p', q: 'k', c: 'ch' };
+
+export type TranscriptSegment =
+  | { kind: 'text'; text: string; sourceStart: number; sourceEnd: number }
+  | {
+    kind: 'hindi';
+    devanagari: string;
+    /** The single romanization shown for this run: the model's own when it supplied one, otherwise derived. */
+    romanized: string;
+    romanizedByModel: boolean;
+    sourceStart: number;
+    sourceEnd: number;
+  };
+
+export type TranscriptSpan = {
+  text: string;
+  script: 'latin' | 'devanagari';
+  /** Index into `segments`. */
+  segment: number;
+};
+
+export type LegacyTranscriptDisplay = {
+  /** Original text minus the model's transliteration parentheticals; selection offsets map into it. */
+  selectionSource: string;
+  segments: TranscriptSegment[];
+  /** Visible runs in reading order; Devanagari spans take the Tiro face and hi-IN. */
+  spans: TranscriptSpan[];
+  /** Concatenation of `spans` (what a selection's offsets refer to). */
+  displayText: string;
+  /** The 'latin' rendering: a screen reader gets one pronounceable romanization per Hindi run. */
+  accessibleText: string;
+  hasDevanagari: boolean;
+};
+
+function sameInitial(expected: string, candidate: string) {
+  const a = expected[0]?.toLowerCase() ?? '';
+  const b = candidate[0]?.toLowerCase() ?? '';
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return INITIAL_EQUIVALENTS[b] === a || INITIAL_EQUIVALENTS[a] === b || (a === 'c' && b === 'k') || (a === 'k' && b === 'c');
+}
+
+/**
+ * A parenthetical directly after a Hindi run is treated as the model's own
+ * transliteration only when it reads like one: Latin letters only, the same
+ * number of words, and mostly matching initial sounds. An English gloss such
+ * as "(less)" stays prose.
+ */
+function modelTransliteration(run: string, derived: string, following: string) {
+  const match = /^(\s*)\(([^()]*)\)/u.exec(following);
+  if (!match) return null;
+  const inner = match[2] ?? '';
+  if (!/[A-Za-z]/u.test(inner) || DEVANAGARI_ANY.test(inner)) return null;
+  const hindiWords = run.match(HINDI_WORD) ?? [];
+  const latinWords = inner.match(LATIN_WORD) ?? [];
+  const derivedWords = derived.match(LATIN_WORD) ?? [];
+  if (!hindiWords.length || latinWords.length !== hindiWords.length) return null;
+  if (derivedWords.length === latinWords.length) {
+    const matches = latinWords.filter((word, index) => sameInitial(derivedWords[index]!, word)).length;
+    if (matches / latinWords.length < 0.6) return null;
+  }
+  return { consumed: match[0].length, romanized: inner.trim() };
+}
+
+function atSentenceStart(preceding: string) {
+  return /(?:^|[.!?।॥\n]\s*)$/u.test(preceding);
+}
+
+/** Derived romanization with inline casing: capitalized only at a sentence start or for a proper name. */
+function derivedRomanization(run: string, preceding: string, normalizeKnown: boolean) {
+  const romanized = displayHindiTranscript(run, normalizeKnown);
+  if (atSentenceStart(preceding)) return romanized;
+  // "x " keeps the romanizer from treating the run as a sentence start, so a
+  // proper name (Asha) stays capitalized while ordinary words stay lowercase.
+  const inline = romanizeDevanagari(`x ${run}`).slice(2);
+  if (/^[A-Z]/u.test(inline)) return romanized;
+  return romanized.charAt(0).toLowerCase() + romanized.slice(1);
+}
+
+/** Splits a legacy transcript string into prose and Hindi runs, folding in the model's transliterations. */
+export function segmentTranscript(text: string, normalizeKnown = true): { segments: TranscriptSegment[]; selectionSource: string } {
+  if (!DEVANAGARI_ANY.test(text)) {
+    return { segments: [{ kind: 'text', text, sourceStart: 0, sourceEnd: text.length }], selectionSource: text };
+  }
+  const segments: TranscriptSegment[] = [];
+  let selectionSource = '';
+  let cursor = 0;
+  const pushText = (value: string) => {
+    if (!value) return;
+    segments.push({ kind: 'text', text: value, sourceStart: selectionSource.length, sourceEnd: selectionSource.length + value.length });
+    selectionSource += value;
+  };
+  HINDI_RUN.lastIndex = 0;
+  for (const match of text.matchAll(HINDI_RUN)) {
+    const run = match[0];
+    const index = match.index;
+    pushText(text.slice(cursor, index));
+    const preceding = text.slice(0, index);
+    const derived = derivedRomanization(run, preceding, normalizeKnown);
+    const following = text.slice(index + run.length);
+    const model = modelTransliteration(run, derived, following);
+    segments.push({
+      kind: 'hindi',
+      devanagari: run,
+      romanized: model?.romanized ?? derived,
+      romanizedByModel: Boolean(model),
+      sourceStart: selectionSource.length,
+      sourceEnd: selectionSource.length + run.length,
+    });
+    selectionSource += run;
+    cursor = index + run.length + (model?.consumed ?? 0);
+  }
+  pushText(text.slice(cursor));
+  return { segments, selectionSource };
+}
+
+function latinizeProse(value: string) {
+  return value.replace(/[।॥॰]/gu, '.');
+}
+
+/**
+ * Renders a legacy string per the learner's script preference. 'both' shows each
+ * Hindi run in Devanagari followed by exactly one romanization in parentheses;
+ * 'devanagari' shows the script alone; 'latin' shows only the romanization and
+ * never a Devanagari character.
+ */
+export function legacyTranscriptDisplay(text: string, options: { normalizeKnown?: boolean; scriptPreference: ScriptPreference }): LegacyTranscriptDisplay {
+  const normalizeKnown = options.normalizeKnown ?? true;
+  const { segments, selectionSource } = segmentTranscript(text, normalizeKnown);
+  const hasDevanagari = segments.some((segment) => segment.kind === 'hindi');
+  if (!hasDevanagari) {
+    const displayText = displayHindiTranscript(text, normalizeKnown);
+    return {
+      selectionSource: canonicalTranscriptSource(text, normalizeKnown),
+      segments,
+      spans: [{ text: displayText, script: 'latin', segment: 0 }],
+      displayText,
+      accessibleText: displayText,
+      hasDevanagari: false,
+    };
+  }
+  const render = (scriptPreference: ScriptPreference) => {
+    const spans: TranscriptSpan[] = [];
+    segments.forEach((segment, index) => {
+      if (segment.kind === 'text') {
+        spans.push({ text: scriptPreference === 'latin' ? latinizeProse(segment.text) : segment.text, script: 'latin', segment: index });
+        return;
+      }
+      if (scriptPreference === 'latin') {
+        spans.push({ text: segment.romanized, script: 'latin', segment: index });
+        return;
+      }
+      spans.push({ text: segment.devanagari, script: 'devanagari', segment: index });
+      if (scriptPreference === 'both') spans.push({ text: ` (${segment.romanized})`, script: 'latin', segment: index });
+    });
+    return spans;
+  };
+  const spans = render(options.scriptPreference);
+  return {
+    selectionSource,
+    segments,
+    spans,
+    displayText: spans.map((span) => span.text).join(''),
+    accessibleText: render('latin').map((span) => span.text).join(''),
+    hasDevanagari: true,
+  };
 }

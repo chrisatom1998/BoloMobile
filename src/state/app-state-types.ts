@@ -69,9 +69,37 @@ export type ReminderSettings = {
   notificationId: string | null;
 };
 
+/** One Hindi phrase Asha teaches: canonical Devanagari, one romanization, the English meaning. */
+export type StructuredPhrase = {
+  devanagari: string;
+  romanized: string;
+  english: string;
+};
+
+/** "You said / Say" pair. `youSaid` has at least one script; `say` always has both. */
+export type StructuredCorrection = {
+  youSaid: { devanagari?: string; romanized?: string };
+  say: { devanagari: string; romanized: string; english?: string };
+  note?: string;
+};
+
+/**
+ * Versioned structured chat reply (`replyFormat: 'structured-v1'`). The plain
+ * `text` of the message stays authoritative for old builds, speech, and reports.
+ */
+export type StructuredReply = {
+  version: 1;
+  intro?: string;
+  phrases?: StructuredPhrase[];
+  corrections?: StructuredCorrection[];
+  outro?: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: 'you' | 'asha';
   text: string;
   language?: AshaResponseLanguage;
+  /** Present only on Asha replies that arrived with a valid structured block. */
+  structured?: StructuredReply;
 };

@@ -36,3 +36,40 @@ Security notes: a modified client can send the two extra events, but they can on
 Run `npx jest __tests__/live-backend.test.ts --runInBand` from the repository root. After deploying, verify `GET /api/live-status`, then test a real microphone conversation, interruptions, mute/unmute, transcript display, and hangup on a native development build. Model retrieval is not a substitute for a device audio check.
 
 Contract references verified October 6, 2026: [Create Live session](https://developers.openai.com/api/reference/resources/live/methods/create), [WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc?api=live), [Delegation](https://developers.openai.com/api/docs/guides/live-delegation), [Prompting](https://developers.openai.com/api/docs/guides/live-prompting).
+
+## Typed chat: structured replies (`mobile-chat-structured.ts`)
+
+`mobile-chat-structured.ts` is an undeployed, portable reference for the `/api/mobile-chat` structured reply contract. The deployed mobile-chat server source is not in this repository, so this module must be integrated and deployed separately; nothing here changes `live.ts` or any deployed service.
+
+### Request
+
+The app now sends `replyFormat: 'structured-v1'` with every `/api/mobile-chat` body (`src/services/bolo-api.ts`). A server that does not know the field must ignore it and answer exactly as before. `wantsStructuredReply(body)` returns `true` only for `replyFormat: 'structured-v1'` with `responseLanguage !== 'hi'`: Hindi-mode replies stay Devanagari prose, which the app renders per the learner's script preference.
+
+### Response
+
+The response keeps the existing required fields and adds one optional block:
+
+```json
+{
+  "transcript": "...",
+  "reply": "Less sugar in your tea? Ask the waiter politely:\nचाय में चीनी कम डालिए। (chaay mein cheeni kam daaliye.) — Please put less sugar in the tea.",
+  "language": "en",
+  "structured": {
+    "version": 1,
+    "intro": "Less sugar in your tea? Ask the waiter politely:",
+    "phrases": [{ "devanagari": "चाय में चीनी कम डालिए।", "romanized": "chaay mein cheeni kam daaliye.", "english": "Please put less sugar in the tea." }],
+    "corrections": [{ "youSaid": { "devanagari": "डालो", "romanized": "daalo" }, "say": { "devanagari": "डालिए", "romanized": "daaliye", "english": "please put" }, "note": "daalo is for friends; a waiter gets the polite ending." }],
+    "outro": "Want to try ordering?"
+  }
+}
+```
+
+- `reply` stays required and readable: old app builds render it unchanged, and the current app uses it for speech, reports and history for older servers. `readableReply(structured)` produces it: every Devanagari phrase is followed by its single romanization in parentheses, which the app's legacy renderer recognises and never duplicates.
+- `structured` is optional and versioned (`version: 1`). Limits (identical in the app's `src/lib/structured-reply.ts`): `intro`/`outro` ≤ 600 characters of English prose; ≤ 8 `phrases`; ≤ 6 `corrections`; each `devanagari` is Devanagari script without Latin letters; each `romanized`/`english`/`note` has no Devanagari; every line ≤ 300 characters; the serialized block ≤ 6,000 UTF-8 bytes. `youSaid` needs at least one script; `say.english` and `note` are optional.
+- Validation is strict but tolerant: `sanitizeStructuredReply` ignores unknown fields and returns `undefined` for a malformed, oversized or empty block. Both server and app then drop the block and fall back to `reply`; a bad block never fails the response.
+
+### Producing it
+
+Ask the model for JSON with `STRUCTURED_REPLY_JSON_SCHEMA` (OpenAI strict structured outputs: optional fields are nullable) and append `structuredReplyInstructions()` to Asha's English-mode instructions. Then call `normalizeStructuredMobileChatReply({ transcript, language, modelOutput })`: it parses the JSON (tolerating a fenced block), validates it, builds `reply`, and returns `{ transcript, reply, language, structured? }`, or `null` when nothing readable came back so the server can retry or answer with its usual error. Plain-text model output (the model ignored the schema) is returned as the `reply` with no `structured` block.
+
+Run `npx jest __tests__/mobile-chat-structured.test.ts --runInBand`. `scripts/validate-live-services.mjs` sends `replyFormat` and validates the shape of any `structured` block the deployed service returns (`scripts/lib/mobile-chat-checks.mjs`).
