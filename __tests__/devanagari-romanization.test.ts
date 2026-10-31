@@ -29,6 +29,7 @@ describe('loanword vowels and rare signs', () => {
     expect(romanizeDevanagari('कॅफ़े')).toBe('Kefe');
     expect(romanizeDevanagari('ॐ शांति')).toBe('Om shaanti');
     expect(romanizeDevanagari('ऑटो वाले से पूछो।')).toBe('Oto vaale se poochho.');
+    // Rare signs and accents must not survive as raw script.
     expect(romanizeDevanagari('अ॑ग्नि')).toBe('Agni');
     for (const sample of ['ऑटो', 'डॉक्टर', 'ऍप', 'ॠषि', 'ऌ', 'ॡ', 'ॲप', 'ऎ', 'ऒ', 'कॆ', 'कॊ', 'कॄ', 'कॢ', 'कॣ', 'क॰', 'ॐ', 'अ॒', 'क॓', 'क॔']) {
       expect(romanizeDevanagari(sample)).not.toMatch(/[\u0900-\u097F]/u);
