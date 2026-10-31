@@ -147,8 +147,6 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
       : nextLessonIndex;
   const currentLessonId = plan.lessonIds[currentIndex] ?? '';
   const currentLesson = getScene(currentLessonId);
-  // Only the first unfinished lesson after the current one is "Up next"; later ones just show their length.
-  const upNextIndex = plan.lessonIds.findIndex((id, index) => index > currentIndex && (sceneProgress[id]?.completions ?? 0) === 0);
   const percent = Math.round(completed / plan.lessonIds.length * 100);
 
   return (
@@ -195,7 +193,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
           const isComplete = (sceneProgress[lesson.id]?.completions ?? 0) > 0;
           const isCurrent = index === currentIndex;
           const isInProgress = lesson.id === inProgressLessonId;
-          const status = isComplete ? (isCurrent ? 'Ready to review' : 'Complete') : isInProgress ? 'In progress' : isCurrent ? 'Next lesson' : index === upNextIndex ? 'Up next' : null;
+          const status = isComplete ? (isCurrent ? 'Ready to review' : 'Complete') : isInProgress ? 'In progress' : isCurrent ? 'Next lesson' : null;
           const turns = `${lesson.beats.length} turns`;
           return (
             <PressableFeedback

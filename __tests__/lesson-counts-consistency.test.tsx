@@ -113,7 +113,7 @@ describe('lesson counts agree across Today, Plan detail and Progress', () => {
     }
   });
 
-  it('Plan detail counts the same finished lesson and names lesson 2 as next', async () => {
+  it('Plan detail counts the same finished lesson, names lesson 2 as next, and has no Up next', async () => {
     mockPlanId = 'essentials';
     const view = await render(<LessonPlansScreen />);
 
@@ -122,7 +122,8 @@ describe('lesson counts agree across Today, Plan detail and Progress', () => {
     expect(view.getByLabelText('A warm hello, lesson 1 of 10, Complete')).toBeTruthy();
     expect(view.getByLabelText('Say your name, lesson 2 of 10, Next lesson')).toBeTruthy();
     expect(view.queryByText(/in progress/iu)).toBeNull();
-    expect(view.getAllByText(/Up next/u)).toHaveLength(1);
+    expect(view.queryByText(/Up next/u)).toBeNull();
+    expect(view.getByLabelText('Ask how someone is, lesson 3 of 10, 10 turns')).toBeTruthy();
   });
 
   it('Progress shows one finished lesson, singular, and the same per-plan count', async () => {
