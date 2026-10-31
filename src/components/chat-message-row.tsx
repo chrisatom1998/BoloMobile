@@ -1,6 +1,6 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
@@ -17,6 +17,8 @@ const actionHitSlop = { bottom: 0, left: spacing.xs / 2, right: spacing.xs / 2, 
 
 // Web textareas draw a resize grip, which makes a chat line look editable.
 const webChatText = { resize: 'none' } as TextStyle;
+const selectableTextFrame: ViewStyle = { alignSelf: 'stretch', minHeight: 23 };
+const hiddenSizer: TextStyle = { opacity: 0 };
 
 function messageActionExcerpt(text: string) {
   const normalized = text.replace(/\s+/gu, ' ').trim();
@@ -45,11 +47,6 @@ function SelectableChatText({
   style: StyleProp<TextStyle>;
   text: string;
 }) {
-  const [measurement, setMeasurement] = useState<{ height?: number; text: string }>({ text });
-  // A new or recycled message must measure at its natural height before the
-  // measured value is pinned; a one-line initial height clips long turns.
-  const height = measurement.text === text ? measurement.height : undefined;
-
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
     if (end <= start) {
@@ -64,25 +61,26 @@ function SelectableChatText({
     });
   }, [onSelectedText, onSelectionCollapsed, sourceText, text]);
 
+  // A hidden Text sizes the bubble; the selectable TextInput sits on top. Pinning
+  // the input to its own contentSize kept stale tall heights from narrow layouts.
   return (
-    <TextInput
-      accessibilityHint={accessibilityHint}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityLiveRegion={accessibilityLiveRegion}
-      accessibilityRole="text"
-      contextMenuHidden={false}
-      multiline
-      onContentSizeChange={(event) => {
-        const nextHeight = Math.max(23, Math.ceil(event.nativeEvent.contentSize.height));
-        setMeasurement((current) => current.text === text && current.height === nextHeight ? current : { height: nextHeight, text });
-      }}
-      onSelectionChange={selectionChanged}
-      readOnly
-      scrollEnabled={false}
-      selectionColor={selectionColor}
-      style={[style, Platform.OS === 'web' ? webChatText : null, { minHeight: 23 }, height === undefined ? undefined : { height }]}
-      value={text}
-    />
+    <View style={selectableTextFrame}>
+      <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[style, hiddenSizer]}>{text}</Text>
+      <TextInput
+        accessibilityHint={accessibilityHint}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityLiveRegion={accessibilityLiveRegion}
+        accessibilityRole="text"
+        contextMenuHidden={false}
+        multiline
+        onSelectionChange={selectionChanged}
+        readOnly
+        scrollEnabled={false}
+        selectionColor={selectionColor}
+        style={[style, Platform.OS === 'web' ? webChatText : null, StyleSheet.absoluteFill]}
+        value={text}
+      />
+    </View>
   );
 }
 
