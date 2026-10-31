@@ -10,6 +10,7 @@ type Props = {
   disabled: boolean;
   /** True only after the learner message and Asha reply have been accepted. */
   onSend: (text: string) => Promise<boolean>;
+  onFocusChange?: (focused: boolean) => void;
   styles: ReturnType<typeof createLiveStyles>;
 };
 
@@ -17,7 +18,7 @@ type Props = {
  * Owns the typed message draft so a keystroke re-renders only the composer,
  * leaving the animated hero and the chat list untouched.
  */
-export const LiveComposer = memo(function LiveComposer({ disabled, onSend, styles }: Props) {
+export const LiveComposer = memo(function LiveComposer({ disabled, onFocusChange, onSend, styles }: Props) {
   const { colors } = useTheme();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -74,7 +75,9 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
           enterKeyHint="enter"
           maxLength={500}
           multiline
+          onBlur={() => onFocusChange?.(false)}
           onChangeText={changeInput}
+          onFocus={() => onFocusChange?.(true)}
           placeholder="Ask in English or Hindi…"
           placeholderTextColor={colors.heroSubtle}
           style={[styles.input, locked && styles.inputDisabled]}

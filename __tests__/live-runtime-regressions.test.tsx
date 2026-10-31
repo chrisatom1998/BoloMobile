@@ -794,7 +794,12 @@ describe('immersive live conversation design', () => {
     expect(view.getByLabelText('Open chat history')).toBeTruthy();
     expect(view.queryByLabelText('Go back')).toBeNull();
     expect(view.getByTestId('featured-phrase-section')).toBeTruthy();
+    expect(view.getByText('नमस्ते।')).toBeTruthy();
+    expect(view.getByText('Hello.')).toBeTruthy();
     expect(within(hero).queryByText('Featured phrase')).toBeNull();
+    expect(view.queryByTestId('live-example-chips')).toBeNull();
+    await fireEvent(view.getByLabelText('Message Asha'), 'focus');
+    expect(view.getByTestId('live-example-chips')).toBeTruthy();
 
     const sheet = view.getByTestId('ask-asha-sheet');
     const sheetStyle = StyleSheet.flatten(sheet.props.style);
@@ -2000,7 +2005,7 @@ describe('live audio control exclusion', () => {
       expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(true);
       await fireEvent.press(listen);
     }
-    await fireEvent.press(view.getByText('Correct my Hindi'));
+    expect(view.queryByText('Correct my Hindi')).toBeNull();
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
 
@@ -2043,6 +2048,7 @@ describe('live audio control exclusion', () => {
     expect(view.queryByLabelText(/Read reply aloud:/u)).toBeNull();
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     const listen = view.getByLabelText('Read reply aloud: Hello there.');
+    await fireEvent(view.getByLabelText('Message Asha'), 'focus');
     const example = view.getByRole('button', { name: 'Correct my Hindi' });
     const send = view.getByLabelText('Send message');
     const listenStyle = StyleSheet.flatten(listen.props.style);

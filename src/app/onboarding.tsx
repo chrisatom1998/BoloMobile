@@ -14,7 +14,6 @@ import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, u
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
-const SELECTED_ORANGE = '#D8663C';
 
 type OnboardingStep = 'listen' | 'level' | 'goal';
 type ReplyId = 'namaste' | 'thanks' | 'bye';
@@ -243,7 +242,7 @@ const useStyles = makeStyles((c) => ({
   hearButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    borderColor: SELECTED_ORANGE,
+    borderColor: c.brand,
     borderRadius: radius.pill,
     borderCurve: 'continuous',
     borderWidth: 1.5,
@@ -251,7 +250,7 @@ const useStyles = makeStyles((c) => ({
     minHeight: 44,
     paddingHorizontal: spacing.lg,
   },
-  hearText: { color: SELECTED_ORANGE, fontSize: 15, fontWeight: '700' },
+  hearText: { color: c.brandText, fontSize: 15, fontWeight: '700' },
   miss: { color: c.muted, fontSize: 14, lineHeight: 20 },
   choices: { gap: spacing.sm },
   choice: {
@@ -267,9 +266,9 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  choiceSelected: { backgroundColor: '#F8E6DE', borderColor: SELECTED_ORANGE },
+  choiceSelected: { backgroundColor: c.brandSoft, borderColor: c.brand },
   mark: { borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 18, width: 18 },
-  markSelected: { backgroundColor: SELECTED_ORANGE, borderColor: SELECTED_ORANGE },
+  markSelected: { backgroundColor: c.brand, borderColor: c.brand },
   choiceCopy: { flex: 1, gap: 2, minWidth: 0 },
   choiceLabel: { color: c.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' },
   choiceHindi: { ...hindiType(20) },

@@ -28,6 +28,7 @@ import { showAppAlert } from '@/lib/app-alert';
 import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
 import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { selectFeaturedPhrase } from '@/lib/featured-phrase';
 import { hapticTap } from '@/lib/haptics';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observe } from '@/lib/observability';
@@ -103,7 +104,7 @@ export default function LiveScreen() {
   // 390 and wider fit the title and Private badge on one row. Narrower phones stack them.
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < 390;
   const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, duePhrases = [], learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], sceneProgress = {}, togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const floatingAsha = useAshaVoiceSession();
   const floatingAshaRef = useRef(floatingAsha);
@@ -169,6 +170,7 @@ export default function LiveScreen() {
   const followedMessageCountRef = useRef(0);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, clearingChat, pendingUserMessage],
@@ -189,7 +191,13 @@ export default function LiveScreen() {
           ? { speaker: 'you' as const, text: youCaption }
           : null;
   const conversationStarted = aiConsent && (hasTranscriptMessages || speechCaption !== null);
-  const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
+  const studioPhrase = useMemo(
+    () => selectFeaturedPhrase(duePhrases, sceneProgress, learnerProfile),
+    [duePhrases, learnerProfile, sceneProgress],
+  );
+  // Starter chips stay off the resting first screen. They return when the composer
+  // is focused, including while the transcript is still only the welcome.
+  const showExampleChips = composerFocused;
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
@@ -706,10 +714,10 @@ export default function LiveScreen() {
       accessibilityLabel="View last Asha session"
       accessibilityRole="button"
       onPress={openLastSession}
-      style={[styles.lastSessionButton, !aiConsent && styles.lastSessionButtonConsent]}
+      style={[styles.lastSessionButton, !reflowHeaderLayout && styles.lastSessionButtonIcon]}
     >
       <History color={colors.gold} size={17} />
-      <Text style={styles.lastSessionText}>Last session</Text>
+      {reflowHeaderLayout ? <Text style={styles.lastSessionText}>Last session</Text> : null}
     </Pressable>
   ) : null;
 
@@ -812,6 +820,7 @@ export default function LiveScreen() {
                       {floatingAsha.available && aiConsent ? (
                         <AshaMinimizeButton onPress={floatingAsha.minimize} />
                       ) : null}
+                      {lastSessionButton}
                       <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
                         <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
                         <Text style={styles.privateText}>Private</Text>
@@ -826,7 +835,6 @@ export default function LiveScreen() {
               {!aiConsent ? (
                 <View style={[styles.heroConsent, { width: heroContentWidth }]} testID="live-consent-section">
                   <AiConsentGate actionLabel="Enable live practice" title="Before your first live conversation" />
-                  {lastSessionButton}
                 </View>
               ) : null}
               <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
@@ -919,7 +927,6 @@ export default function LiveScreen() {
                     <Text style={styles.askEyebrow}>Ask Asha</Text>
                     <Text style={styles.askTitle}>How do I say…?</Text>
                   </View>
-                  {lastSessionButton}
                   {chatHistory.length > 0 ? (
                     <Pressable
                       accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
@@ -1041,20 +1048,22 @@ export default function LiveScreen() {
             </Pressable>
           </View>
         ) : null}
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
-          {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
-            <PressableFeedback
-              accessibilityRole="button"
-              accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
-              isDisabled={busy || clearingChat || realtimeLocked}
-              key={example}
-              onPress={() => { void sendText(example); }}
-              style={[styles.example, (busy || clearingChat || realtimeLocked) && styles.disabled]}
-            >
-              <Text style={styles.exampleText}>{example}</Text>
-            </PressableFeedback>
-          ))}
-        </ScrollView>
+        {showExampleChips ? (
+          <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples} testID="live-example-chips">
+            {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
+              <PressableFeedback
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
+                isDisabled={busy || clearingChat || realtimeLocked}
+                key={example}
+                onPress={() => { void sendText(example); }}
+                style={[styles.example, (busy || clearingChat || realtimeLocked) && styles.disabled]}
+              >
+                <Text style={styles.exampleText}>{example}</Text>
+              </PressableFeedback>
+            ))}
+          </ScrollView>
+        ) : null}
         <View style={styles.composerEntry}>
           {conversationStarted && composerMicActionBound ? (
             <Pressable
@@ -1070,7 +1079,7 @@ export default function LiveScreen() {
               {realtimeStatus === 'recording' ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
             </Pressable>
           ) : null}
-          <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
+          <LiveComposer disabled={busy || clearingChat || realtimeLocked} onFocusChange={setComposerFocused} onSend={sendText} styles={styles} />
         </View>
       </SafeAreaView> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
@@ -1161,8 +1170,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
   clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
   clearChatText: { flexShrink: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
-  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
+  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexShrink: 1, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  lastSessionButtonIcon: { width: 44, height: 44, paddingHorizontal: 0, paddingVertical: 0 },
   lastSessionText: { flexShrink: 1, color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
   failedReportText: { color: c.dangerSoft },
   queuedReports: { gap: spacing.sm, marginTop: spacing.md },
