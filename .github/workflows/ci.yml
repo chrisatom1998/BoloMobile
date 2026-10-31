@@ -133,9 +133,13 @@ jobs:
     env:
       CI: 1
       EXPO_NO_TELEMETRY: 1
-      # The generated Podfile routes C, C++ and Objective-C compiles through ccache.
-      USE_CCACHE: 1
+      # ccache settings for the C, C++ and Objective-C compiles (same options
+      # React Native's own ccache.conf uses). Swift is not cached.
       CCACHE_MAXSIZE: 2G
+      CCACHE_SLOPPINESS: clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
+      CCACHE_FILECLONE: "true"
+      CCACHE_DEPEND: "true"
+      CCACHE_INODECACHE: "true"
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
     steps:
@@ -155,6 +159,7 @@ jobs:
         run: |
           command -v ccache >/dev/null || brew install ccache
           echo "CCACHE_DIR=$HOME/Library/Caches/ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_BIN=$(command -v ccache)" >> "$GITHUB_ENV"
       - name: Restore the compiler cache
         id: ccache-restore
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -170,8 +175,11 @@ jobs:
         run: node scripts/validate-native-project.mjs --require-workspace
       # arm64 only: the hosted macOS runners and the smoke-test simulator are Apple
       # silicon. Release would otherwise compile every file twice (arm64 + x86_64).
+      # Xcode 26 builds with explicit modules, so ccache goes in as a compiler
+      # launcher; the Podfile's CC override is silently bypassed.
       - name: Build unsigned Release app for the simulator
         run: |
+          ccache --zero-stats
           xcodebuild \
             -workspace ios/Bolo.xcworkspace \
             -scheme Bolo \
@@ -180,12 +188,14 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/BoloDerivedData" \
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
+            C_COMPILER_LAUNCHER="$CCACHE_BIN" \
+            CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
       - name: Show compiler cache hit rate
         if: always()
-        run: ccache --show-stats || true
+        run: ccache --show-stats --verbose || true
       - name: Save the compiler cache
         if: always() && steps.ccache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

@@ -117,7 +117,8 @@ describe('fail-closed merge verification', () => {
     const nativeJob = matchingBlock(ciWorkflow, '  ios-native-build:', '  maestro-smoke:');
 
     expect(nativeJob).not.toMatch(/^    needs:/m);
-    expect(nativeJob).toContain('USE_CCACHE: 1');
+    expect(nativeJob).toContain('C_COMPILER_LAUNCHER="$CCACHE_BIN"');
+    expect(nativeJob).not.toContain('USE_CCACHE');
     expect(nativeJob).toContain('actions/cache/restore@');
     expect(nativeJob).toContain('actions/cache/save@');
     expect(nativeJob).toContain('ARCHS=arm64');
