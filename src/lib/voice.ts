@@ -2,7 +2,7 @@ import { setAudioModeAsync } from 'expo-audio';
 
 import { noteLiveAudioEvent } from '@/lib/live-diagnostics';
 import type { VoiceAudioMode } from '@/lib/voice-profile';
-import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '@/lib/voice-session';
+import { activateVoiceChatSession, releaseAudioSessionBeforeCall, restoreDefaultAudioSessionMode } from '@/lib/voice-session';
 
 export { ASHA_VOICE_PROFILE, type VoiceAudioMode } from '@/lib/voice-profile';
 export { drainAudioSessionEvents, readAudioSessionState } from '@/lib/voice-session';
@@ -85,6 +85,8 @@ export function setVoiceAudioMode(mode: VoiceAudioMode) {
       currentVoiceAudioMode = mode;
       return;
     }
+    // A fresh call starts from an inactive session, as it does after a typed reply has played.
+    if (realtime) noteLiveAudioEvent(`release ${await releaseAudioSessionBeforeCall()}`);
     await setAudioModeAsync(VOICE_AUDIO_MODES[mode]);
     // expo-audio just rewrote the category; take the session back for the call.
     // This transition is before the peer exists, so do not tell WebRTC yet.
