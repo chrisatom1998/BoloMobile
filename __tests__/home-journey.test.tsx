@@ -130,8 +130,9 @@ describe('HomeScreen primary journey', () => {
 
     expect(view.getByText('STEP 2 OF 3 · NEXT LESSON')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
-    expect(view.getByText(scene.subtitle)).toBeTruthy();
-    expect(view.getByText(scene.place)).toBeTruthy();
+    // The subtitle names the phrase being taught instead of repeating the title.
+    expect(view.getByText(`New phrase: “${scene.subtitle.replace(/[.!?]$/u, '')}”`)).toBeTruthy();
+    expect(view.getByText('Start speaking · Lesson 1 of 10')).toBeTruthy();
     for (const word of scene.words) expect(view.getAllByText(word).length).toBeGreaterThanOrEqual(1);
     expect(view.getByTestId('today-step-review').props.accessibilityLabel).toBe('Step 1 of 3, Reviewed phrases, done');
 
@@ -143,8 +144,10 @@ describe('HomeScreen primary journey', () => {
     mockAppState.phrases = [];
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('STEP 2 OF 3 · NEXT LESSON')).toBeTruthy();
-    expect(view.getByTestId('today-step-review').props.accessibilityLabel).toBe('Step 1 of 3, No phrases due, skipped');
+    // With nothing due the review step is left out, so a new learner never sees a struck-out "Skipped" row.
+    expect(view.getByText('STEP 1 OF 2 · NEXT LESSON')).toBeTruthy();
+    expect(view.queryByTestId('today-step-review')).toBeNull();
+    expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toMatch(/^Step 1 of 2, /u);
     expect(view.queryByTestId('today-review-preview')).toBeNull();
   });
 
@@ -153,10 +156,10 @@ describe('HomeScreen primary journey', () => {
     mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('STEP 3 OF 3 · SPEAK')).toBeTruthy();
+    expect(view.getByText('STEP 2 OF 2 · SPEAK')).toBeTruthy();
     expect(view.getByText('Say it out loud')).toBeTruthy();
     expect(view.getByTestId('today-asha-portrait')).toBeTruthy();
-    expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 2 of 3, Finished a lesson, done');
+    expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 1 of 2, Finished a lesson, done');
 
     await fireEvent.press(view.getByTestId('today-next-step'));
     expect(mockRouterPush).toHaveBeenCalledWith('/live');
@@ -173,7 +176,7 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('Shabaash!')).toBeTruthy();
     expect(view.getByText('Today’s practice is complete. 7 days in a row. More is optional.')).toBeTruthy();
     expect(StyleSheet.flatten(view.getByTestId('today-primary-motion').props.style).backgroundColor).toBe(colors.forest);
-    expect(view.getByTestId('today-step-asha').props.accessibilityLabel).toBe('Step 3 of 3, Spoke with Asha, done');
+    expect(view.getByTestId('today-step-asha').props.accessibilityLabel).toBe('Step 2 of 2, Spoke with Asha, done');
 
     await fireEvent.press(view.getByLabelText('Keep going'));
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
@@ -235,7 +238,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('STEP 2 OF 3 · CONTINUE LESSON')).toBeTruthy();
+    expect(view.getByText('STEP 1 OF 2 · CONTINUE LESSON')).toBeTruthy();
     expect(view.getByText('Say you are new')).toBeTruthy();
     expect(view.getByText('Lesson 2 in progress')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, lesson 2 in progress, 0 of 10 lessons complete')).toBeTruthy();

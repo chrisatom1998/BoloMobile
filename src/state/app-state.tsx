@@ -17,6 +17,7 @@ import {
   dateKey,
   defaultLearnerProfile,
   defaultPhraseReview,
+  nextDate,
   defaultReminderSettings,
   defaultSceneProgress,
   emptyPractice,
@@ -324,7 +325,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         : [...current.phrases, phrase].slice(-100);
       const phraseReviews = { ...current.phraseReviews };
       if (exists) delete phraseReviews[phrase.hi];
-      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
+      // A phrase saved during a lesson was just practiced, so its first recall is tomorrow, not "Due now".
+      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview(nextDate(dateKey()));
       // The 100-phrase cap can drop the oldest phrase; drop its review entry too
       // so orphans never accumulate in storage.
       const kept = new Set(phrases.map((saved) => saved.hi));

@@ -147,7 +147,13 @@ describe('SceneScreen primary journey', () => {
     const wrong = view.getByLabelText(choiceLabel('chai', 0, 1));
 
     await fireEvent.press(wrong);
-    expect(view.getByText('Not quite—notice the pattern.')).toBeTruthy();
+    expect(view.getByText('Not that one.')).toBeTruthy();
+    // The right answer stays hidden after a miss, so the learner can try again or ask for it.
+    expect(view.queryByLabelText(choiceLabel('chai', 0, 0, 1))).toBeNull();
+    expect(view.queryByRole('button', { name: 'Continue' })).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.getByText('Here’s the natural answer.')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(view.getByLabelText(choiceLabel('chai', 0, 1, 1)).props.accessibilityState).toEqual({ disabled: true, selected: true });
     expect(view.getByLabelText(choiceLabel('chai', 0, 0, 1)).props.accessibilityState).toEqual({ disabled: true, selected: false });
 
@@ -155,7 +161,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('Turn 2 of 2')).toBeTruthy();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     expect(view.getByText('Natural choice!')).toBeTruthy();
-    expect(view.getByText('50')).toBeTruthy();
+    expect(view.queryByText('50')).toBeNull();
 
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
@@ -181,7 +187,7 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Back to Today' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
 
-    await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
   });
@@ -257,7 +263,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.queryByText(beat.tip)).toBeNull();
   });
 
-  it('reveals natural word order and keeps Asha’s coach note separate across a no-score retry', async () => {
+  it('reveals natural word order across a no-score retry', async () => {
     mockSceneId = 'plan-essentials-06';
     mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
     const target = getScene(mockSceneId)!.beats[4]!.choices.find((choice) => choice.correct)!;
@@ -276,10 +282,8 @@ describe('SceneScreen primary journey', () => {
     expect(solution.getByText(target.hi)).toBeTruthy();
     expect(solution.getByText(target.latin)).toBeTruthy();
     expect(solution.queryByText(ALTERNATE_COACH_HINDI)).toBeNull();
-    const coach = within(view.getByTestId('scene-alternate-coach-note'));
-    expect(coach.getByText(ALTERNATE_COACH_HINDI)).toBeTruthy();
-    expect(coach.getByText('Karib hai—phir se koshish kijiye.')).toBeTruthy();
-    expect(coach.getByText('Close—try again.')).toBeTruthy();
+    // Asha's generic "close, try again" note was retired; the natural order above is the coaching.
+    expect(view.queryByTestId('scene-alternate-coach-note')).toBeNull();
     const recoveryActions = within(view.getByTestId('scene-answer-actions'));
     expect(recoveryActions.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(recoveryActions.getByRole('button', { name: 'Continue' })).toBeTruthy();
@@ -341,7 +345,10 @@ describe('SceneScreen primary journey', () => {
 
     expect(view.queryByTestId('scene-result-feedback')).toBeNull();
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrong)));
+    expect(view.getByTestId('scene-result-feedback').props.children)
+      .toBe(`That line means “${wrong.en.replace(/[.!?。]+$/, '')}.” Try once more, or show the answer.`);
 
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByTestId('scene-result-feedback').props.children).toBe(wrong.feedback);
   });
 
@@ -378,7 +385,7 @@ describe('SceneScreen primary journey', () => {
       weakPhrases: [],
     });
 
-    await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
@@ -428,6 +435,8 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByLabelText('Hide Asha’s hint').props.accessibilityState).toEqual({ expanded: true });
 
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0, 1)));
+    expect(view.queryByText('Keep the natural answer')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByText('Keep the natural answer')).toBeTruthy();
     expect(view.getByText('Unpack the answer')).toBeTruthy();
     expect(view.getByRole('button', { name: 'Continue' }).props.style).toEqual(expect.objectContaining({
@@ -441,7 +450,7 @@ describe('SceneScreen primary journey', () => {
     expect(testIds.indexOf('scene-words')).toBeLessThan(testIds.indexOf('scene-pronunciation'));
   });
 
-  it('shows Devanagari and Romanized Hindi before a choice and reveals English for every option after a tap', async () => {
+  it('shows Devanagari and Romanized Hindi before a choice and reveals English for every option once the answer is shown', async () => {
     const beat = getScene('chai')!.beats[0]!;
     const view = await render(<SceneScreen />);
     const choicesBefore = view.getByTestId('scene-choices');
@@ -458,6 +467,12 @@ describe('SceneScreen primary journey', () => {
     }
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(beat.choices[1]!)));
+    // Before the answer is shown, only the learner's own pick explains itself in English.
+    const choicesMissed = view.getByTestId('scene-choices');
+    for (const choice of beat.choices) {
+      expect(within(choicesMissed).queryAllByText(choice.en)).toHaveLength(choice === beat.choices[1] ? 1 : 0);
+    }
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     const choicesAfter = view.getByTestId('scene-choices');
     const buttonsAfter = within(choicesAfter).getAllByRole('button');
@@ -502,6 +517,7 @@ describe('SceneScreen primary journey', () => {
     });
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrongChoice)));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(wrongChoice, wrongChoice)).props.style)).toMatchObject({
       backgroundColor: lightColors.dangerSoft,
@@ -533,12 +549,14 @@ describe('SceneScreen primary journey', () => {
       .map((button) => String(button.props.accessibilityLabel))).toEqual(displayOrder);
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor)));
+    expect(view.getByText('Not that one.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     expect(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor, selectedDistractor)).props.accessibilityState)
       .toEqual({ disabled: true, selected: true });
     expect(view.getByLabelText(choiceAccessibilityLabel(target, selectedDistractor)).props.accessibilityState)
       .toEqual({ disabled: true, selected: false });
-    expect(view.getByText('Not quite—notice the pattern.')).toBeTruthy();
+    expect(view.getByText('Here’s the natural answer.')).toBeTruthy();
     expect(view.getByText('0 correct')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Save phrase'));
     expect(mockTogglePhrase).toHaveBeenCalledWith(target);
@@ -570,7 +588,7 @@ describe('SceneScreen primary journey', () => {
       expect(shuffleSpy).toHaveBeenCalledTimes(1);
       await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
       await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
-      await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+      await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
 
       expect(view.getByText('Turn 1 of 1')).toBeTruthy();
       expect(shuffleSpy).toHaveBeenCalledTimes(2);
@@ -748,7 +766,8 @@ describe('lesson audit regressions', () => {
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 27, {
       attemptId: 'new-attempt', correct: 1, total: 2, score: 50, weakPhrases: ['एक चाय दीजिए।'],
     });
-    expect(final.getByText('points')).toBeTruthy();
+    expect(final.getByText('right first try')).toBeTruthy();
+    expect(final.queryByText('points')).toBeNull();
   });
 
   it('does not count a correct answer twice when reloading before Continue', async () => {
@@ -831,13 +850,15 @@ describe('lesson audit regressions', () => {
     expect(view.getByText('Practicing as Chris')).toBeTruthy();
   });
 
-  it('offers an offline action and keeps the consent details optional', async () => {
+  it('works offline by default and keeps the consent details optional', async () => {
     mockAppState.aiConsent = false;
     const view = await render(<SceneScreen />);
     expect(view.getByTestId('scene-ai-details').props.accessibilityState.expanded).toBe(false);
-    await fireEvent.press(view.getByTestId('scene-offline-continue'));
+    expect(view.getByText('Works offline · Add Asha coaching')).toBeTruthy();
+    expect(view.queryByTestId('scene-offline-continue')).toBeNull();
     await fireEvent.press(view.getByTestId('scene-choice-0'));
     expect(view.getByTestId('scene-continue')).toBeTruthy();
-    expect(view.getByText('Offline lesson ready — no AI consent needed.')).toBeTruthy();
+    await fireEvent.press(view.getByTestId('scene-ai-details'));
+    expect(view.getByTestId('scene-ai-details').props.accessibilityState.expanded).toBe(true);
   });
 });

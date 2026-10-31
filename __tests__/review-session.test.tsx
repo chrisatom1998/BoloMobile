@@ -3,6 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 const mockRouterReplace = jest.fn();
 
 jest.mock('expo-router', () => ({
+  Stack: { Screen: () => null },
   useRouter: () => ({ replace: mockRouterReplace }),
 }));
 
@@ -207,8 +208,10 @@ describe('ReviewScreen say it aloud', () => {
     const view = await render(<ReviewScreen />);
     await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
 
-    expect(view.getByText('Before using Asha')).toBeTruthy();
     expect(view.queryByLabelText('Record pronunciation')).toBeNull();
+    // The full privacy notice stays one tap away instead of filling the card.
+    await fireEvent.press(view.getByRole('button', { name: 'Turn on Asha coaching' }));
+    expect(view.getByText('Before using Asha')).toBeTruthy();
 
     await fireEvent.press(view.getByRole('button', { name: 'I agree and want to continue' }));
     expect(mockAppState.setAiConsent).toHaveBeenCalledWith(true);

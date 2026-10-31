@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
-import { lessonPlans } from '@/data/lesson-plans';
+import { selectNextLesson } from '@/lib/lesson-path';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
@@ -25,14 +25,14 @@ import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Filter = 'All' | SceneCategory;
 
+// Below half speed Hindi stops sounding like speech, so the slowest choice is 0.5×.
 const replaySpeeds = [
-  { label: '0.1×', rate: 0.1 },
-  { label: '0.25×', rate: 0.25 },
-  { label: '0.5×', rate: 0.5 },
-  { label: '0.75×', rate: 0.75 },
-  { label: '1×', rate: 1 },
+  { label: 'Slower', rate: 0.5 },
+  { label: 'Slow', rate: 0.75 },
+  { label: 'Normal', rate: 1 },
 ] as const;
-const speedOptions = replaySpeeds.map(({ label, rate }) => ({ accessibilityLabel: rate === 1 ? 'Normal' : label, label, value: String(rate) }));
+const speedOptions = replaySpeeds.map(({ label, rate }) => ({ accessibilityLabel: label, label, value: String(rate) }));
+const categoryLabels: Record<SceneCategory, string> = { Everyday: 'Everyday', Food: 'Food', Health: 'Health', Social: 'Social', Travel: 'Travel', Work: 'Work' };
 
 const phraseCategories = new Map<string, SceneCategory>();
 for (const scene of scenes) {
@@ -68,43 +68,33 @@ export default function PhrasesScreen() {
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const nextLesson = useMemo(() => {
-    const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));
-    const resumed = catalog
-      .filter(({ lessonId }) => {
-        const progress = sceneProgress[lessonId];
-        return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-      })
-      .reduce<(typeof catalog)[number] | undefined>((selected, candidate) => {
-        if (!selected) return candidate;
-        const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-        const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-        const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-        const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-        return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-      }, undefined);
-    const incompletePlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
-    const plan = resumed?.plan ?? incompletePlan ?? lessonPlans[lessonPlans.length - 1]!;
-    const lessonId = resumed?.lessonId
-      ?? plan.lessonIds.find((id) => (sceneProgress[id]?.completions ?? 0) === 0)
-      ?? plan.lessonIds[0]!;
+    const { lessonId, mode } = selectNextLesson(sceneProgress, learnerProfile);
 
     return {
-      action: resumed ? 'Continue lesson' : incompletePlan ? 'Start next lesson' : 'Review a lesson',
+      action: mode === 'continue' ? 'Continue lesson' : mode === 'next' ? 'Start next lesson' : 'Review a lesson',
       lessonId,
     };
-  }, [sceneProgress]);
+  }, [learnerProfile, sceneProgress]);
   const dueSet = useMemo(() => new Set(due.map((phrase) => phrase.hi)), [due]);
+  // Filters list only the categories the learner has actually saved phrases from.
+  const filterOptions = useMemo(() => {
+    const present = new Set(phrases.map((phrase) => phraseCategories.get(phrase.hi)).filter((category): category is SceneCategory => Boolean(category)));
+    return (Object.keys(categoryLabels) as SceneCategory[]).filter((category) => present.has(category)).map((category) => ({ label: categoryLabels[category], value: category as Filter }));
+  }, [phrases]);
+  // A filter whose last phrase was removed falls back to All instead of showing an empty list.
+  const activeFilter: Filter = filter !== 'All' && filterOptions.some((option) => option.value === filter) ? filter : 'All';
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return phrases.filter((phrase) => {
-      if (filter !== 'All' && phraseCategories.get(phrase.hi) !== filter) return false;
+      if (activeFilter !== 'All' && phraseCategories.get(phrase.hi) !== activeFilter) return false;
       return !normalized || `${phrase.hi} ${phrase.latin} ${phrase.en}`.toLocaleLowerCase().includes(normalized);
     });
-  }, [filter, phrases, query]);
+  }, [activeFilter, phrases, query]);
 
   useFocusEffect(useCallback(() => () => { void stopSpeaking(); }, []));
 
-  const playbackRate = profile.phrasePlaybackRate ?? 1;
+  // Older builds offered 0.1× and 0.25×; those settings play at the new slowest speed.
+  const playbackRate = Math.max(0.5, profile.phrasePlaybackRate ?? 1);
 
   function playPhrase(text: string) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
@@ -150,20 +140,17 @@ export default function PhrasesScreen() {
               <SearchField.ClearButton iconProps={{ color: colors.muted }} />
             </SearchField.Group>
           </SearchField>
-          <SegmentedControl
-            accessibilityLabel="Phrase category"
-            compact
-            onValueChange={setFilter}
-            options={[
-              { label: 'All', value: 'All' },
-              { label: 'Café', value: 'Food' },
-              { label: 'Social', value: 'Social' },
-              { label: 'Travel', value: 'Travel' },
-            ]}
-            stackedAtLargeText
-            style={styles.segmentedControl}
-            value={filter}
-          />
+          {filterOptions.length >= 2 ? (
+            <SegmentedControl
+              accessibilityLabel="Phrase category"
+              compact
+              onValueChange={setFilter}
+              options={[{ label: 'All', value: 'All' as Filter }, ...filterOptions]}
+              stackedAtLargeText
+              style={styles.segmentedControl}
+              value={activeFilter}
+            />
+          ) : null}
           {!aiConsent && phrases.some((phrase) => !hasOfflineSpeech(phrase.hi)) ? (
             <Pressable accessibilityHint="Opens Settings" accessibilityRole="link" onPress={() => router.push('/settings')} style={styles.consentNote} testID="phrases-consent-note">
               <Text style={styles.consentNoteText}>Some phrases need Asha&apos;s voice to play. <Text style={styles.consentNoteLink}>Turn on AI coaching in Settings</Text></Text>
@@ -248,7 +235,7 @@ export default function PhrasesScreen() {
                   </View>
                 </View>
                 <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
-                  <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: playbackRate === 1 ? 'Normal speed' : `${playbackRate}× speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
+                  <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: `${replaySpeeds.find((speed) => speed.rate === playbackRate)?.label ?? 'Normal'} speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
                     <Volume2 color={colors.brandText} size={18} />
                   </PressableFeedback>
                   <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
