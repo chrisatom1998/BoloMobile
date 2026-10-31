@@ -47,7 +47,16 @@ tags:
     visible: "Settings"
     timeout: 60000
 - assertNotVisible: "Hear this"
-- tapOn: "Settings"
+# A press highlight can satisfy Maestro's tap without opening Settings. Try once more.
+- tapOn:
+    id: "today-settings"
+- extendedWaitUntil:
+    optional: true
+    visible: "Learning preferences"
+    timeout: 8000
+- tapOn:
+    optional: true
+    id: "today-settings"
 - assertVisible: "Learning preferences"
 - scrollUntilVisible:
     element:

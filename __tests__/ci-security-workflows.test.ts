@@ -196,7 +196,7 @@ describe('fail-closed merge verification', () => {
     expect(smokeJob).toContain('timeout-minutes: 30');
     expect(smokeJob).toContain('com.apple.CoreSimulator.SimRuntime.iOS-26-5');
     expect(smokeJob).not.toContain('sort_by(.version');
-    expect(smokeStep).toContain('timeout-minutes: 15');
+    expect(smokeStep).toContain('timeout-minutes: 22');
     expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
     expect(smokeStep).toContain('rebooting the simulator and retrying once');
     expect(smokeStep).toContain('GITHUB_STEP_SUMMARY');
