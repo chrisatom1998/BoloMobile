@@ -1,0 +1,64 @@
+appId: com.bolo.hindi
+name: Reminder offer after the first lesson
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: reminder
+- openLink: "bolo://scene/chai"
+- tapOn:
+    text: "Open"
+    optional: true
+- scrollUntilVisible:
+    element:
+      id: "scene-choice-0"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: false
+- tapOn:
+    id: "scene-choice-0"
+    retryTapIfNoChange: true
+- scrollUntilVisible:
+    element:
+      text: "Continue"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: false
+- tapOn: "Continue"
+- scrollUntilVisible:
+    element:
+      id: "scene-choice-0"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: false
+- tapOn:
+    id: "scene-choice-0"
+    retryTapIfNoChange: true
+- scrollUntilVisible:
+    element:
+      text: "Finish"
+    direction: DOWN
+    timeout: 30000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: false
+- tapOn: "Finish"
+- extendedWaitUntil:
+    visible:
+      id: "scene-completion-title"
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: "Remind me tomorrow at this time?"
+    direction: DOWN
+    timeout: 20000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: true
+- takeScreenshot: reminder

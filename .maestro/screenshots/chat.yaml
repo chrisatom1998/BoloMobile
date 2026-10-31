@@ -1,0 +1,18 @@
+appId: com.bolo.hindi
+name: Asha chat phrase card
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: chat
+- tapOn: "Asha"
+- scrollUntilVisible:
+    element:
+      text: "Greet them like this."
+    direction: DOWN
+    timeout: 45000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: true
+- assertVisible: "Hello"
+- takeScreenshot: chat-phrase-card
