@@ -90,8 +90,8 @@ jobs:
 
   ios-simulator-build:
     needs: gate
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true'
-    runs-on: macos-26
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.SCREENSHOT_RUNNER == 'hosted' && 'macos-26' || fromJSON('["self-hosted","macOS","bolo-screenshots"]') }}
     timeout-minutes: 75
     env:
       CI: 1
@@ -135,11 +135,17 @@ jobs:
           path: ${{ runner.temp }}/Bolo-simulator.zip
           if-no-files-found: error
           retention-days: 3
+      - name: Clean up simulator and DerivedData
+        if: always()
+        run: |
+          xcrun simctl shutdown all || true
+          xcrun simctl delete "$SIM_UDID" || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData/Bolo* || true
 
   capture:
     needs: [gate, ios-simulator-build]
-    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true' && needs.ios-simulator-build.result == 'success'
-    runs-on: macos-26
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true' && needs.ios-simulator-build.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.SCREENSHOT_RUNNER == 'hosted' && 'macos-26' || fromJSON('["self-hosted","macOS","bolo-screenshots"]') }}
     timeout-minutes: 45
     env:
       CI: 1
@@ -174,19 +180,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pinned_runtime="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
-          runtime_id="$(xcrun simctl list runtimes --json | jq -r --arg id "$pinned_runtime" '[.runtimes[] | select(.isAvailable and .identifier == $id)] | first | .identifier // empty')"
-          device_type_id=""
-          device_name=""
-          for candidate in "iPhone 17 Pro Max" "iPhone 17 Pro" "iPhone 16 Pro Max" "iPhone 16 Pro"; do
-            device_type_id="$(xcrun simctl list devicetypes --json | jq -r --arg name "$candidate" '[.devicetypes[] | select(.name == $name) | .identifier] | first // empty')"
-            if [[ -n "$device_type_id" ]]; then
-              device_name="$candidate"
-              break
-            fi
-          done
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable == true and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')"
+          device_name="iPhone 15"
+          device_type_id="$(xcrun simctl list devicetypes --json | jq -r --arg name "$device_name" '[.devicetypes[] | select(.name == $name) | .identifier] | first // empty')"
           if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
-            echo "::error::Pinned iOS 26.5 runtime (${pinned_runtime}) or an iPhone 17/16 Pro simulator is not available."
+            echo "::error::No available iOS runtime or iPhone 15 simulator device type."
             xcrun simctl list runtimes
             xcrun simctl list devicetypes
             exit 1
@@ -195,7 +193,7 @@ jobs:
           echo "### Simulator" >> "$GITHUB_STEP_SUMMARY"
           echo "${device_name} on ${runtime_id}" >> "$GITHUB_STEP_SUMMARY"
           udid="$(xcrun simctl create "Bolo screenshots $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
-          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid"
           open -a Simulator --args -CurrentDeviceUDID "$udid"
           xcrun simctl bootstatus "$udid" -b
@@ -203,8 +201,8 @@ jobs:
           xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
       - name: Install the app
         run: |
-          xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
-          xcrun simctl get_app_container "$SIMULATOR_UDID" com.bolo.hindi app
+          xcrun simctl install "$SIM_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+          xcrun simctl get_app_container "$SIM_UDID" com.bolo.hindi app
       - name: Install pinned Maestro CLI
         run: |
           curl --fail --silent --show-error --location \
@@ -230,7 +228,7 @@ jobs:
           capture() {
             rm -rf maestro-junit.xml maestro-artifacts ios-simulator-screenshots
             maestro test \
-              --device "$SIMULATOR_UDID" \
+              --device "$SIM_UDID" \
               --format junit \
               --output maestro-junit.xml \
               --debug-output maestro-artifacts/driver-logs \
@@ -238,13 +236,13 @@ jobs:
               "${flows[@]}"
           }
           reboot_simulator() {
-            xcrun simctl shutdown "$SIMULATOR_UDID" || true
-            xcrun simctl boot "$SIMULATOR_UDID" || true
-            open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_UDID" || true
-            xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-            xcrun simctl ui "$SIMULATOR_UDID" appearance light || true
-            xcrun simctl status_bar "$SIMULATOR_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
-            xcrun simctl install "$SIMULATOR_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+            xcrun simctl shutdown "$SIM_UDID" || true
+            xcrun simctl boot "$SIM_UDID" || true
+            open -a Simulator --args -CurrentDeviceUDID "$SIM_UDID" || true
+            xcrun simctl bootstatus "$SIM_UDID" -b
+            xcrun simctl ui "$SIM_UDID" appearance light || true
+            xcrun simctl status_bar "$SIM_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
+            xcrun simctl install "$SIM_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
           }
           if ! capture; then
             echo "::warning::Screenshot flows failed; rebooting the simulator and retrying once."
@@ -286,8 +284,9 @@ jobs:
             maestro-attempt-1
           if-no-files-found: warn
           retention-days: 7
-      - name: Remove simulator
-        if: always() && env.SIMULATOR_UDID != ''
+      - name: Clean up simulator and DerivedData
+        if: always()
         run: |
-          xcrun simctl shutdown "$SIMULATOR_UDID" || true
-          xcrun simctl delete "$SIMULATOR_UDID" || true
+          xcrun simctl shutdown all || true
+          xcrun simctl delete "$SIM_UDID" || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData/Bolo* || true
