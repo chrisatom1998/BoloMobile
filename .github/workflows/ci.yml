@@ -125,12 +125,23 @@ jobs:
       - run: npm run production:validate
 
   ios-native-build:
-    needs: [verify, expo-doctor, ios-prebuild, production-config]
+    # No `needs:` on purpose. This is the slowest job, so it starts right away
+    # instead of waiting for the quick Linux checks. `required-checks` still
+    # fails the merge if any of those checks fail.
     runs-on: macos-26
     timeout-minutes: 75
     env:
       CI: 1
       EXPO_NO_TELEMETRY: 1
+      # ccache settings for the C, C++ and Objective-C compiles (same options
+      # React Native's own ccache.conf uses). Swift is not cached.
+      CCACHE_MAXSIZE: 2G
+      CCACHE_SLOPPINESS: clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
+      CCACHE_FILECLONE: "true"
+      CCACHE_DEPEND: "true"
+      CCACHE_INODECACHE: "true"
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -144,21 +155,53 @@ jobs:
       - run: npm ci
       - name: Generate the iOS project
         run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install ccache
+        run: |
+          command -v ccache >/dev/null || brew install ccache
+          echo "CCACHE_DIR=$HOME/Library/Caches/ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_BIN=$(command -v ccache)" >> "$GITHUB_ENV"
+      - name: Restore the compiler cache
+        id: ccache-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-ios-xcode26.6-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            ccache-ios-xcode26.6-${{ hashFiles('package-lock.json') }}-
+            ccache-ios-xcode26.6-
       - name: Install CocoaPods dependencies
         run: pod install --project-directory=ios --repo-update
       - name: Validate App Intents and the local Expo module
         run: node scripts/validate-native-project.mjs --require-workspace
+      # arm64 only: the hosted macOS runners and the smoke-test simulator are Apple
+      # silicon. Release would otherwise compile every file twice (arm64 + x86_64).
+      # Xcode 26 builds with explicit modules, so ccache goes in as a compiler
+      # launcher; the Podfile's CC override is silently bypassed.
       - name: Build unsigned Release app for the simulator
         run: |
+          ccache --zero-stats
           xcodebuild \
             -workspace ios/Bolo.xcworkspace \
             -scheme Bolo \
             -configuration Release \
             -destination "generic/platform=iOS Simulator" \
             -derivedDataPath "$RUNNER_TEMP/BoloDerivedData" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            C_COMPILER_LAUNCHER="$CCACHE_BIN" \
+            CLANG_ENABLE_EXPLICIT_MODULES_WITH_COMPILER_LAUNCHER=YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
+      - name: Show compiler cache hit rate
+        if: always()
+        run: ccache --show-stats --verbose || true
+      - name: Save the compiler cache
+        if: always() && steps.ccache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/ccache
+          key: ccache-ios-xcode26.6-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
       - name: Package simulator app
         run: |
           app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
@@ -238,7 +281,7 @@ jobs:
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
           echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
       - name: Run the dedicated iOS smoke flow
-        timeout-minutes: 15
+        timeout-minutes: 22
         run: |
           set -euo pipefail
           smoke() {

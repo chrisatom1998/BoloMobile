@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import type { LiveSessionSetup } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
+import { logAshaSessionTool } from '@/lib/asha-session-log-store';
 import { buildLiveSessionContext, type LiveToolEnvironment, type LiveToolSnapshot } from '@/lib/live-tools';
 import { dateKey } from '@/lib/storage';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
@@ -60,13 +61,19 @@ export function createAshaToolEnvironment(stateRef: { readonly current: AppState
     // anything else is prepared by the Bolo service.
     preparePhrase: ({ originalText, devanagari }, signal) => prepareSavedPhraseFromText({ clientId: stateRef.current.clientId, text: devanagari ?? originalText }, signal),
     confirmSave: confirmPhraseSave,
-    savePhrase: (phrase) => stateRef.current.togglePhrase(phrase),
+    savePhrase: async (phrase) => {
+      const saved = await stateRef.current.togglePhrase(phrase);
+      // The session log remembers what Asha changed, once the change is stored.
+      if (saved) logAshaSessionTool({ savedPhrase: phrase.hi });
+      return saved;
+    },
     recordLessonPractice: (lessonId) => {
       const current = stateRef.current;
       // Mark the lesson as practiced without moving its resume point or
       // counting a scored completion, and record today's live practice.
       current.checkpointScene(lessonId, current.sceneProgress[lessonId]?.lastBeatIndex ?? 0);
       current.markLiveTurn();
+      logAshaSessionTool({ lessonId });
     },
   };
 }

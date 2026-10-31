@@ -122,6 +122,12 @@ export function previousDate(key: string): string {
   return dateKey(value);
 }
 
+export function nextDate(key: string): string {
+  const value = new Date(`${key}T12:00:00`);
+  value.setDate(value.getDate() + 1);
+  return dateKey(value);
+}
+
 export function emptyPractice(today = dateKey()): PracticeState {
   return { date: today, chaiDone: false, liveDone: false, seconds: 0 };
 }
@@ -367,6 +373,7 @@ export function sanitizeReminder(value: string | null): ReminderSettings {
     hour: Number.isInteger(reminder.hour) ? Math.min(23, Math.max(0, reminder.hour as number)) : 19,
     minute: Number.isInteger(reminder.minute) ? Math.min(59, Math.max(0, reminder.minute as number)) : 0,
     notificationId: typeof reminder.notificationId === 'string' && reminder.notificationId.length <= 200 ? reminder.notificationId : null,
+    ...(reminder.offerAnswered === true ? { offerAnswered: true } : {}),
   };
 }
 
@@ -394,6 +401,11 @@ function secureUuid(): string | null {
     // expo-crypto is unavailable outside a native runtime.
   }
   return null;
+}
+
+/** A random local identifier for on-device records such as Asha session log entries. */
+export function createLocalId(): string {
+  return (secureUuid() ?? `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`).slice(0, 64);
 }
 
 export function sanitizeClientId(value: string | null): string {

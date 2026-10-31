@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
@@ -7,11 +7,12 @@ import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
+import { reviewCardMode } from '@/lib/learning';
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -21,18 +22,43 @@ export default function ReviewScreen() {
   const { aiConsent, duePhrases, learnerProfile, phraseReviews, phrases, reviewPhrase } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const gradedPhraseRef = useRef<string | null>(null);
+  const supportedRecallRef = useRef(false);
+  // Monotonic so a finished card's late result cannot match the next card's run.
+  const hintRunRef = useRef(0);
+  // A hint clip that actually finished on this card. A later failure must not
+  // erase that. grade() clears it before the next card is shown.
+  const hintHeardRef = useRef(false);
   // Grading a phrase re-derives duePhrases, and a live list would shift under the
   // advancing index. Lock the displayed session at the first grade instead of at
   // mount so a screen rendered before hydration still picks up the due list.
   const [lockedSession, setLockedSession] = useState<typeof duePhrases | null>(null);
   const session = lockedSession ?? (duePhrases.length ? duePhrases : [...phrases].sort((a, b) => (phraseReviews[a.hi]?.mastery ?? 0) - (phraseReviews[b.hi]?.mastery ?? 0)).slice(0, 5));
   const [index, setIndex] = useState(0);
+  // Mirrors supportedRecallRef for the screen, so sighted learners see why Got it counts as Again.
+  const [hintUsed, setHintUsed] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [correct, setCorrect] = useState(0);
   const [recorderBusy, setRecorderBusy] = useState(false);
   const phrase = session[index];
+  const phraseHi = phrase?.hi;
+  const mastery = phraseHi ? (phraseReviews[phraseHi]?.mastery ?? 0) : 0;
+  const canListen = !!phraseHi && (aiConsent || hasOfflineSpeech(phraseHi));
+  // Choose the mix once per presented card. Granting consent can enable audio,
+  // but must not change an English prompt into listen-first mid-card.
+  const [presentedCard, setPresentedCard] = useState(() => ({
+    index, phraseHi, mode: reviewCardMode(mastery, index, canListen),
+  }));
+  if (index !== presentedCard.index || phraseHi !== presentedCard.phraseHi) {
+    setPresentedCard({ index, phraseHi, mode: reviewCardMode(mastery, index, canListen) });
+  }
+  const listenFirst = presentedCard.mode === 'listen-first';
 
   useEffect(() => () => { void stopSpeaking(); }, []);
+  useEffect(() => {
+    // Depend on the phrase text, not the re-derived session array, so revealing
+    // the answer or checking pronunciation never restarts the reference audio.
+    if (listenFirst && phraseHi) void speak(phraseHi, undefined, 1);
+  }, [listenFirst, phraseHi, speak]);
   useEffect(() => {
     if (session.length > 0 && index >= session.length) observe('review_completed');
   }, [index, session.length]);
@@ -45,10 +71,16 @@ export default function ReviewScreen() {
     void stopSpeaking();
     if (!lockedSession) setLockedSession(session);
     clearAudioError();
-    reviewPhrase(phrase.hi, remembered);
-    if (remembered) hapticSuccess();
+    // Hearing the answer before a speak-first reveal is supported recall.
+    // Reuse Again's scheduling so it cannot raise mastery or the recall score.
+    const recalled = remembered && (listenFirst || !supportedRecallRef.current);
+    reviewPhrase(phrase.hi, recalled);
+    if (recalled) hapticSuccess();
     else hapticWarning();
-    if (remembered) setCorrect((value) => value + 1);
+    if (recalled) setCorrect((value) => value + 1);
+    supportedRecallRef.current = false;
+    hintHeardRef.current = false;
+    setHintUsed(false);
     setRevealed(false);
     setIndex((value) => value + 1);
   }
@@ -60,16 +92,37 @@ export default function ReviewScreen() {
   }
 
   function playPhrase(playbackRate = 1) {
-    if (!phrase || (!aiConsent && !hasOfflineSpeech(phrase.hi))) return;
-    void speak(phrase.hi, undefined, playbackRate);
+    if (!phrase || !canListen || recorderBusy) return;
+    // Listen, Slow, and a second hint tap all stop the clip that is already
+    // playing. Bump the run first so that cancel cannot clear a hint the
+    // learner already started. Only the latest hint run may clear, and only
+    // when it fails and no earlier hint on this card finished.
+    const run = ++hintRunRef.current;
+    if (listenFirst || revealed) {
+      void speak(phrase.hi, undefined, playbackRate);
+      return;
+    }
+    const hintedPhrase = phrase.hi;
+    supportedRecallRef.current = true;
+    setHintUsed(true);
+    void speak(hintedPhrase, undefined, playbackRate).then((played) => {
+      if (gradedPhraseRef.current === hintedPhrase || run !== hintRunRef.current) return;
+      if (played) {
+        hintHeardRef.current = true;
+        return;
+      }
+      if (hintHeardRef.current) return;
+      supportedRecallRef.current = false;
+      setHintUsed(false);
+    });
   }
 
   if (session.length === 0) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
         <Text accessibilityRole="header" style={styles.title}>Save a phrase to start reviewing</Text>
-        <Text style={styles.body}>Natural answers saved from scenes will become quick recall cards here.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose a scene</Text></Pressable>
+        <Text style={styles.body}>Tap the bookmark on an answer during a lesson, and it becomes a quick recall card here.</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </ScrollView>
     );
   }
@@ -77,6 +130,8 @@ export default function ReviewScreen() {
   if (!phrase) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
+        {/* The body button is the way out here; a second "Done" in the header only doubled it. */}
+        <Stack.Screen options={{ headerRight: () => null }} />
         <View style={styles.doneMark}><Check color={colors.white} size={34} /></View>
         <Text style={sharedStyles.eyebrow}>Review complete</Text>
         <Text accessibilityRole="header" style={styles.title}>{correct} of {session.length} remembered</Text>
@@ -88,8 +143,6 @@ export default function ReviewScreen() {
 
   const showHindi = learnerProfile.scriptPreference !== 'latin';
   const showLatin = learnerProfile.scriptPreference !== 'devanagari';
-  const mastery = phraseReviews[phrase.hi]?.mastery ?? 0;
-  const canListen = aiConsent || hasOfflineSpeech(phrase.hi);
   // Keep reference audio out of the microphone while a practice clip is recording or being checked.
   const listenEnabled = canListen && !recorderBusy;
 
@@ -98,8 +151,13 @@ export default function ReviewScreen() {
       <View style={styles.header}><Text style={styles.progress}>Phrase {index + 1} of {session.length}</Text><Text style={styles.mastery}>Mastery {mastery}/5</Text></View>
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}><View style={[styles.trackFill, { width: `${(index + 1) / session.length * 100}%` }]} /></View>
       <View style={styles.card}>
-        <Text style={sharedStyles.eyebrow}>Say this naturally</Text>
-        <Text style={styles.prompt}>{phrase.en}</Text>
+        <Text style={sharedStyles.eyebrow}>{listenFirst ? 'Listen, then say what it means' : 'Say it in Hindi'}</Text>
+        {!listenFirst || revealed ? <Text style={styles.prompt}>{phrase.en}</Text> : null}
+        {!revealed ? (
+          <View style={styles.audioRow}>
+            <Pressable accessibilityHint={listenFirst ? undefined : 'Hearing a hint counts as Again for scheduling, even if you tap Got it.'} accessibilityLabel={listenFirst ? 'Replay phrase' : 'Hear a hint'} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>{listenFirst ? 'Replay' : 'Hear a hint'}</Text></Pressable>
+          </View>
+        ) : null}
         {revealed ? (
           <View style={styles.answer}>
             {showHindi ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{phrase.hi}</Text> : null}
@@ -108,22 +166,24 @@ export default function ReviewScreen() {
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
               <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
-            {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
           </View>
         ) : (
           <Pressable accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
         )}
+        {hintUsed && !listenFirst ? <Text style={styles.hintNote} testID="review-hint-note">Hint used, so this card counts as Again.</Text> : null}
+        {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
       </View>
-      {revealed ? (
-        // Optional practice: grading never waits on a recording. Keying by card
-        // remounts the recorder so feedback never carries over to the next phrase.
-        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
-      ) : null}
+      {/* Grading sits right under the answer so it is never pushed below optional pronunciation practice. */}
       {revealed ? (
         <View style={styles.grades}>
           <Pressable accessibilityRole="button" onPress={() => grade(false)} style={[styles.gradeButton, styles.againButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => grade(true)} style={[styles.gradeButton, styles.gotItButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
         </View>
+      ) : null}
+      {revealed ? (
+        // Optional practice: grading never waits on a recording. Keying by card
+        // remounts the recorder so feedback never carries over to the next phrase.
+        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
       ) : null}
     </ScrollView>
   );
@@ -137,14 +197,15 @@ const useStyles = makeStyles((c) => ({
   mastery: { color: c.muted, fontSize: 14, fontWeight: '700' },
   track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
   trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
-  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 300, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
-  prompt: { color: c.ink, fontSize: 29, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
+  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 240, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  prompt: { color: c.ink, fontFamily: displayFont, fontSize: 29, lineHeight: 37, fontWeight: '700', textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
   hindi: { ...hindiType(34), color: c.ink, textAlign: 'center' },
   latin: { color: c.forestText, fontSize: 18, lineHeight: 25, fontWeight: '700', textAlign: 'center' },
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
   audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   audioText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  hintNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
   error: { color: c.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
   disabled: { opacity: 0.4 },
   revealButton: { minHeight: 52, borderRadius: radius.md, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
@@ -156,6 +217,6 @@ const useStyles = makeStyles((c) => ({
   againText: { color: c.danger, fontSize: 16, fontWeight: '900' },
   gotItText: { color: c.white, fontSize: 16, fontWeight: '900' },
   doneMark: { width: 72, height: 72, borderRadius: 25, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
-  title: { color: c.ink, fontSize: 27, lineHeight: 34, fontWeight: '900', textAlign: 'center' },
+  title: { color: c.ink, fontFamily: displayFont, fontSize: 27, lineHeight: 34, fontWeight: '700', textAlign: 'center' },
   body: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
 }));

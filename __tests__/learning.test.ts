@@ -1,5 +1,5 @@
 import { scenes } from '../src/data/scenes';
-import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, weeklyPractice } from '../src/lib/learning';
+import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, reviewCardMode, weeklyPractice } from '../src/lib/learning';
 import { defaultLearnerProfile } from '../src/lib/storage';
 import type { PhraseReview, SavedPhrase, SceneProgress } from '../src/state/app-state-types';
 
@@ -18,6 +18,27 @@ const progress = (overrides: Partial<SceneProgress> = {}): SceneProgress => ({
   lastBeatIndex: 0,
   weakPhrases: [],
   ...overrides,
+});
+
+describe('review card mode', () => {
+  it.each([0, 1, 2])('always uses speak-first below mastery 3 (mastery %i)', (mastery) => {
+    for (const index of [0, 1, 2, 3, 4, 5]) {
+      for (const canListen of [false, true]) {
+        expect(reviewCardMode(mastery, index, canListen)).toBe('speak-first');
+      }
+    }
+  });
+
+  it.each([3, 4, 5])('alternates capable cards by zero-based session index (mastery %i)', (mastery) => {
+    expect([0, 1, 2, 3, 4, 5].map((index) => reviewCardMode(mastery, index, true)))
+      .toEqual(['speak-first', 'listen-first', 'speak-first', 'listen-first', 'speak-first', 'listen-first']);
+  });
+
+  it.each([3, 4, 5])('always uses speak-first without audio (mastery %i)', (mastery) => {
+    for (const index of [0, 1, 2, 3, 4, 5]) {
+      expect(reviewCardMode(mastery, index, false)).toBe('speak-first');
+    }
+  });
 });
 
 describe('adaptive learning', () => {

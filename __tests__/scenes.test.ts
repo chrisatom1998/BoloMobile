@@ -43,17 +43,17 @@ describe('Bolo scenario catalog', () => {
     }
   });
 
-  it('keeps every planned lesson focused on its titled phrase while varying supporting practice', () => {
+  it('keeps every planned lesson on its titled phrase and only practices phrases already taught', () => {
     const plannedScenes = scenes.filter((scene) => scene.id.startsWith('plan-'));
     const activities = [
       { marker: 'Listen first', mode: 'choice' },
       { marker: 'Before revealing', mode: 'recallReveal' },
       { marker: 'Match the meaning', mode: 'choice' },
-      { marker: 'Set the tone', mode: 'choice' },
+      { marker: 'then say it out loud once', mode: 'choice' },
       { marker: 'Piece it together', mode: 'wordOrder' },
-      { marker: 'Whisper it', mode: 'choice' },
-      { marker: 'Picture yourself', mode: 'choice' },
-      { marker: 'Say the whole thought', mode: 'choice' },
+      { marker: 'From memory', mode: 'choice' },
+      { marker: 'Picture the moment', mode: 'choice' },
+      { marker: 'complete Hindi line', mode: 'choice' },
       { marker: 'Rule out', mode: 'choice' },
       { marker: 'Lock it in', mode: 'choice' },
     ];
@@ -66,48 +66,40 @@ describe('Bolo scenario catalog', () => {
         const activity = activities[(4 * lessonIndex + turnIndex) % activities.length]!;
         expect(beat.prompt).toContain(activity.marker);
         expect(beat.mode ?? 'choice').toBe(activity.mode);
+        // Prompts never promise a microphone check or spell out the romanized answer.
+        expect(beat.prompt).not.toMatch(/Whisper it|Set the tone/u);
       }
 
       const correctChoices = scene.beats.map((beat) => beat.choices.find((choice) => choice.correct)!);
-      const practicePhrases = correctChoices.map((choice) => choice.hi);
-      const titledPhrase = correctChoices[0]!.hi;
       expect(correctChoices[0]!.en).toBe(scene.subtitle);
-      const expectedTitledTurns = scene.beats.flatMap((beat, turnIndex) => (
-        turnIndex === 0
-          || turnIndex === scene.beats.length - 1
-          || beat.mode === 'recallReveal'
-          || beat.mode === 'wordOrder'
-          ? [turnIndex]
-          : []
-      ));
-      const titledTurns = practicePhrases.flatMap((phrase, turnIndex) => phrase === titledPhrase ? [turnIndex] : []);
-      expect(titledTurns).toEqual(expectedTitledTurns);
-      for (const turnIndex of expectedTitledTurns) {
-        expect(correctChoices[turnIndex]!.en).toBe(scene.subtitle);
+      for (const [turnIndex, beat] of scene.beats.entries()) {
+        if (turnIndex === 0 || turnIndex === scene.beats.length - 1 || beat.mode === 'recallReveal' || beat.mode === 'wordOrder') {
+          expect(correctChoices[turnIndex]!.en).toBe(scene.subtitle);
+        }
       }
-      expect(titledTurns.length).toBeGreaterThanOrEqual(3);
-      expect(titledTurns.length).toBeLessThanOrEqual(4);
-      expect(new Set(practicePhrases).size).toBeGreaterThanOrEqual(7);
-      expect(new Set(practicePhrases).size).toBeLessThanOrEqual(8);
     }
 
     for (let planIndex = 0; planIndex < lessonPlans.length; planIndex += 1) {
       const planScenes = plannedScenes.slice(planIndex * 10, planIndex * 10 + 10);
-      const titledPhrases = planScenes.map((scene) => {
-        const { hi, latin, en } = scene.beats[0]!.choices.find((choice) => choice.correct)!;
-        return { hi, latin, en };
-      });
-      for (const scene of planScenes) {
+      const titledPhrases = planScenes.map((scene) => scene.beats[0]!.choices.find((choice) => choice.correct)!.hi);
+      for (const [lessonIndex, scene] of planScenes.entries()) {
+        const practiced = new Set<string>();
         for (const beat of scene.beats) {
           const target = beat.choices.find((choice) => choice.correct)!;
-          const targetIndex = titledPhrases.findIndex((phrase) => phrase.hi === target.hi);
+          const targetIndex = titledPhrases.indexOf(target.hi);
+          // Nothing is tested before the lesson that teaches it.
           expect(targetIndex).toBeGreaterThanOrEqual(0);
-          expect(beat.choices.filter((choice) => !choice.correct)).toEqual([
-            expect.objectContaining(titledPhrases[(targetIndex + 3) % titledPhrases.length]),
-            expect.objectContaining(titledPhrases[(targetIndex + 7) % titledPhrases.length]),
-          ]);
+          expect(targetIndex).toBeLessThanOrEqual(lessonIndex);
+          practiced.add(target.hi);
+          for (const wrong of beat.choices.filter((choice) => !choice.correct)) {
+            expect(titledPhrases).toContain(wrong.hi);
+          }
         }
+        if (lessonIndex > 0) expect(practiced.size).toBeGreaterThanOrEqual(2);
       }
+      // Repeated turns on one phrase rotate their wrong answers instead of showing the same three cards.
+      const firstLessonChoiceSets = new Set(planScenes[0]!.beats.map((beat) => beat.choices.map((choice) => choice.hi).sort().join('|')));
+      expect(firstLessonChoiceSets.size).toBeGreaterThan(1);
     }
   });
 

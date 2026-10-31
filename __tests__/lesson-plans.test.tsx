@@ -1,3 +1,4 @@
+jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 // Keep built-in journey fixtures independent of locally imported lessons.
 jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 

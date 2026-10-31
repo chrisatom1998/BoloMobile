@@ -1,11 +1,12 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
 import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
+import type { OutboxEntry } from '@/lib/sync-outbox';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
 import type { ChatMessage } from '@/state/app-state-types';
 import { spacing, useTheme } from '@/theme';
@@ -16,6 +17,8 @@ const actionHitSlop = { bottom: 0, left: spacing.xs / 2, right: spacing.xs / 2, 
 
 // Web textareas draw a resize grip, which makes a chat line look editable.
 const webChatText = { resize: 'none' } as TextStyle;
+const selectableTextFrame: ViewStyle = { alignSelf: 'stretch', minHeight: 23 };
+const hiddenSizer: TextStyle = { opacity: 0 };
 
 function messageActionExcerpt(text: string) {
   const normalized = text.replace(/\s+/gu, ' ').trim();
@@ -44,11 +47,6 @@ function SelectableChatText({
   style: StyleProp<TextStyle>;
   text: string;
 }) {
-  const [measurement, setMeasurement] = useState<{ height?: number; text: string }>({ text });
-  // A new or recycled message must measure at its natural height before the
-  // measured value is pinned; a one-line initial height clips long turns.
-  const height = measurement.text === text ? measurement.height : undefined;
-
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
     if (end <= start) {
@@ -63,25 +61,26 @@ function SelectableChatText({
     });
   }, [onSelectedText, onSelectionCollapsed, sourceText, text]);
 
+  // A hidden Text sizes the bubble; the selectable TextInput sits on top. Pinning
+  // the input to its own contentSize kept stale tall heights from narrow layouts.
   return (
-    <TextInput
-      accessibilityHint={accessibilityHint}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityLiveRegion={accessibilityLiveRegion}
-      accessibilityRole="text"
-      contextMenuHidden={false}
-      multiline
-      onContentSizeChange={(event) => {
-        const nextHeight = Math.max(23, Math.ceil(event.nativeEvent.contentSize.height));
-        setMeasurement((current) => current.text === text && current.height === nextHeight ? current : { height: nextHeight, text });
-      }}
-      onSelectionChange={selectionChanged}
-      readOnly
-      scrollEnabled={false}
-      selectionColor={selectionColor}
-      style={[style, Platform.OS === 'web' ? webChatText : null, { minHeight: 23 }, height === undefined ? undefined : { height }]}
-      value={text}
-    />
+    <View style={selectableTextFrame}>
+      <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[style, hiddenSizer]}>{text}</Text>
+      <TextInput
+        accessibilityHint={accessibilityHint}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityLiveRegion={accessibilityLiveRegion}
+        accessibilityRole="text"
+        contextMenuHidden={false}
+        multiline
+        onSelectionChange={selectionChanged}
+        readOnly
+        scrollEnabled={false}
+        selectionColor={selectionColor}
+        style={[style, Platform.OS === 'web' ? webChatText : null, StyleSheet.absoluteFill]}
+        value={text}
+      />
+    </View>
   );
 }
 
@@ -95,10 +94,13 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenPhrasePicker,
   onOpenWordDefinition,
   onPlayReply,
+  onDiscardReport,
   onReport,
+  onRetryReport,
   onSelectionCollapsed,
   onSelectedText,
   playbackLocked,
+  queuedReport,
   reported,
   reporting,
   styles,
@@ -112,10 +114,14 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenPhrasePicker: (message: ChatMessage) => void;
   onOpenWordDefinition: (sourcePhrase: string) => void;
   onPlayReply: (message: ChatMessage) => void;
+  onDiscardReport?: (entryId: string) => void;
   onReport: (message: ChatMessage) => void;
+  onRetryReport?: (entryId: string) => void;
   onSelectedText: (messageId: string, selection: { sourceText: string; text: string }) => void;
   onSelectionCollapsed: (messageId: string) => void;
   playbackLocked: boolean;
+  /** A report for this reply waiting in the sync outbox, or one the outbox gave up on. */
+  queuedReport?: Pick<OutboxEntry, 'id' | 'state' | 'lastError'>;
   reported: boolean;
   reporting: boolean;
   styles: ReturnType<typeof createLiveStyles>;
@@ -139,7 +145,20 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const openWordDefinition = useCallback(() => { if (sourcePhrase) onOpenWordDefinition(sourcePhrase); }, [onOpenWordDefinition, sourcePhrase]);
   const playReply = useCallback(() => onPlayReply(message), [message, onPlayReply]);
   const report = useCallback(() => onReport(message), [message, onReport]);
+  const retryReport = useCallback(() => { if (queuedReport) onRetryReport?.(queuedReport.id); }, [onRetryReport, queuedReport]);
+  const discardReport = useCallback(() => { if (queuedReport) onDiscardReport?.(queuedReport.id); }, [onDiscardReport, queuedReport]);
   const showActions = !isPending && !isWelcome;
+  const reportControl = isWelcome ? null : queuedReport?.state === 'failed' ? (
+    <>
+      <View accessibilityLabel={`Report could not be sent: ${excerpt}. ${queuedReport.lastError ?? ''}`.trim()} accessibilityRole="text" style={styles.smallAction}><Flag color={colors.dangerSoft} size={15} /><Text style={[styles.smallActionText, styles.failedReportText]}>Couldn’t send</Text></View>
+      <Pressable accessibilityHint="Sends this report again when Bolo is reachable." accessibilityLabel={`Retry report: ${excerpt}`} accessibilityRole="button" hitSlop={actionHitSlop} onPress={retryReport} style={styles.smallAction}><Text style={styles.smallActionText}>Retry</Text></Pressable>
+      <Pressable accessibilityHint="Removes this unsent report from the device." accessibilityLabel={`Discard report: ${excerpt}`} accessibilityRole="button" hitSlop={actionHitSlop} onPress={discardReport} style={styles.smallAction}><Text style={styles.smallActionText}>Discard</Text></Pressable>
+    </>
+  ) : queuedReport ? (
+    <Pressable accessibilityHint="Saved on this device and sent when you are back online." accessibilityLabel={`Report queued: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: true }} disabled hitSlop={actionHitSlop} style={[styles.smallAction, styles.disabled]}><Flag color={colors.muted} size={15} /><Text style={styles.smallActionText}>Waiting to send</Text></Pressable>
+  ) : (
+    <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} hitSlop={actionHitSlop} onPress={report} style={[styles.smallAction, reporting && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable>
+  );
 
   return (
     <View style={[styles.messageRow, isYou && styles.messageRowYou, isWelcome && styles.welcomeRow, continuesNext && styles.messageRowStacked]} testID={!isWelcome && !isPending ? (isYou ? 'live-transcript-user' : 'live-transcript-assistant') : undefined}>
@@ -168,7 +187,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             {message.role === 'asha' ? (
               <>
                 <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || playbackLocked }} disabled={!aiConsent || playbackLocked} hitSlop={actionHitSlop} onPress={playReply} style={[styles.smallAction, (!aiConsent || playbackLocked) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
-                {!isWelcome ? <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} hitSlop={actionHitSlop} onPress={report} style={[styles.smallAction, reporting && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable> : null}
+                {reportControl}
               </>
             ) : null}
           </View>
