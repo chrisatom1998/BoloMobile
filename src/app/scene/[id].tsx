@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -442,55 +442,61 @@ function SceneScreen() {
       setNameStepOpen(false);
     };
     return (
-      <ScrollView
+      // iOS: pad the whole step above the keyboard so the scroll view itself shrinks and the flexGrow content keeps
+      // Continue at the visible bottom. Android resizes the window (softwareKeyboardLayoutMode), so no behavior there.
+      <KeyboardAvoidingView
         key="scene-name-step"
-        // iOS: grow the bottom inset with the keyboard so the bottom-pinned Continue rides above it. Android resizes the window instead.
-        automaticallyAdjustKeyboardInsets
-        contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
-        keyboardShouldPersistTaps="handled"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={sharedStyles.screen}
-        testID="scene-name-step"
+        testID="scene-name-step-keyboard"
       >
         <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
-        <Pressable accessibilityLabel="Close lesson" accessibilityRole="button" onPress={closeLesson} style={styles.closeButton} testID="scene-close">
-          <X color={colors.ink} size={18} strokeWidth={2.2} />
-        </Pressable>
-        <View style={styles.nameStepBody}>
-          <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.nameStepAsha} transition={0} />
-          <Text accessibilityRole="header" style={styles.nameStepTitle}>What’s your name?</Text>
-          <Text style={styles.nameStepBody2}>You’ll learn to say it in Hindi.</Text>
-          <TextInput
-            accessibilityLabel="Your name for Hindi practice"
-            autoCapitalize="words"
-            autoComplete="given-name"
-            autoCorrect={false}
-            autoFocus
-            maxLength={40}
-            onChangeText={setNameDraft}
-            onSubmitEditing={saveName}
-            placeholder="Your name"
-            placeholderTextColor={colors.muted}
-            returnKeyType="done"
-            style={styles.nameInput}
-            testID="scene-practice-name"
-            textContentType="givenName"
-            value={nameDraft}
-          />
-          <Text style={styles.nameStepNote}>Stays on this device.</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: !draft }}
-          disabled={!draft}
-          onPress={saveName}
-          style={[sharedStyles.primaryButton, !draft && styles.disabled]}
-          testID="scene-name-continue"
+        <ScrollView
+          contentInsetAdjustmentBehavior="never"
+          contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
+          keyboardShouldPersistTaps="handled"
+          style={styles.nameStepScroll}
+          testID="scene-name-step"
         >
-          <Text style={sharedStyles.primaryButtonText}>Continue</Text>
-          <ChevronRight color={colors.white} size={18} />
-        </Pressable>
-      </ScrollView>
+          <Pressable accessibilityLabel="Close lesson" accessibilityRole="button" onPress={closeLesson} style={styles.closeButton} testID="scene-close">
+            <X color={colors.ink} size={18} strokeWidth={2.2} />
+          </Pressable>
+          <View style={styles.nameStepBody}>
+            <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.nameStepAsha} transition={0} />
+            <Text accessibilityRole="header" style={styles.nameStepTitle}>What’s your name?</Text>
+            <Text style={styles.nameStepBody2}>You’ll learn to say it in Hindi.</Text>
+            <TextInput
+              accessibilityLabel="Your name for Hindi practice"
+              autoCapitalize="words"
+              autoComplete="given-name"
+              autoCorrect={false}
+              autoFocus
+              maxLength={40}
+              onChangeText={setNameDraft}
+              onSubmitEditing={saveName}
+              placeholder="Your name"
+              placeholderTextColor={colors.muted}
+              returnKeyType="done"
+              style={styles.nameInput}
+              testID="scene-practice-name"
+              textContentType="givenName"
+              value={nameDraft}
+            />
+            <Text style={styles.nameStepNote}>Stays on this device.</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !draft }}
+            disabled={!draft}
+            onPress={saveName}
+            style={[sharedStyles.primaryButton, !draft && styles.disabled]}
+            testID="scene-name-continue"
+          >
+            <Text style={sharedStyles.primaryButtonText}>Continue</Text>
+            <ChevronRight color={colors.white} size={18} />
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     );
   }
 
@@ -870,6 +876,7 @@ const useStyles = makeStyles((c) => ({
   setupHindi: { color: c.muted, fontSize: 14, lineHeight: 20 },
   setupHindiScript: { ...hindiType(15), color: c.muted },
   nameStep: { flexGrow: 1 },
+  nameStepScroll: { flex: 1 },
   nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
   nameStepTitle: { color: c.ink, fontFamily: displayFont, fontSize: 30, lineHeight: 36, fontWeight: '700', letterSpacing: -0.3 },

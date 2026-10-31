@@ -876,11 +876,22 @@ describe('lesson audit regressions', () => {
   it('keeps Continue reachable above the keyboard on the name step', async () => {
     mockSceneId = 'plan-essentials-02';
     const view = await render(<SceneScreen />);
+    // iOS: a padding KeyboardAvoidingView shrinks the scroll view above the keyboard, so the flexGrow content keeps
+    // the bottom-pinned Continue visible instead of only adding scroll inset under it.
+    // KeyboardAvoidingView keeps `behavior` on the composite element; its host View only shows the padding branch
+    // through a paddingBottom entry (0 while the keyboard is hidden), which the default branch never adds.
+    const avoider = view.getByTestId('scene-name-step-keyboard');
+    const avoiderStyle = StyleSheet.flatten(avoider.props.style);
+    expect(avoiderStyle.paddingBottom).toBe(0);
+    expect(avoiderStyle.flex).toBe(1);
+    expect(avoiderStyle.backgroundColor).toBe(lightColors.background);
     const nameStep = view.getByTestId('scene-name-step');
-    // iOS: the scroll view grows its bottom inset with the keyboard so the bottom-pinned Continue slides up with it.
-    expect(nameStep.props.automaticallyAdjustKeyboardInsets).toBe(true);
+    expect(nameStep.parent).toBe(avoider);
+    expect(nameStep.props.automaticallyAdjustKeyboardInsets).toBeUndefined();
+    expect(StyleSheet.flatten(nameStep.props.style).flex).toBe(1);
     // A tap on Continue must land while the keyboard is up instead of only dismissing it.
     expect(nameStep.props.keyboardShouldPersistTaps).toBe('handled');
+    expect(view.getByTestId('scene-name-continue')).toBeTruthy();
   });
 
   it('gives the Change name link a 44pt tap target without growing the text', async () => {
