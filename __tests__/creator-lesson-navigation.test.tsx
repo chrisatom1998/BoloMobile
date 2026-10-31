@@ -1,3 +1,4 @@
+jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 import { fireEvent, render } from '@testing-library/react-native';
 import { getScene, scenes } from '../src/data/scenes';
 import { lessonPlans } from '../src/data/lesson-plans';
@@ -46,10 +47,26 @@ describe('creator lesson integration', () => {
   it('shows the creator plan in the catalog with updated counts', async () => {
     mockPlanId = undefined;
     const view = await render(<LessonPlansScreen />);
-    expect(view.getByText('One path, 101 small wins.')).toBeTruthy();
+    // The headline counts the guided path only; creator drafts are extra.
+    expect(view.getByText('One path, 100 small wins.')).toBeTruthy();
     expect(view.getByLabelText('11 ordered lesson plans')).toBeTruthy();
     await fireEvent.press(view.getByTestId('lesson-plan-creator'));
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/lesson-plans', params: { planId: 'creator' } });
+  });
+
+  it('leaves creator drafts out of release builds', () => {
+    const devFlag = (globalThis as { __DEV__?: boolean }).__DEV__;
+    (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+    try {
+      jest.isolateModules(() => {
+        const { lessonPlans: releasePlans } = require('../src/data/lesson-plans') as typeof import('../src/data/lesson-plans');
+        const { scenes: releaseScenes } = require('../src/data/scenes') as typeof import('../src/data/scenes');
+        expect(releasePlans.some((plan) => plan.id === 'creator')).toBe(false);
+        expect(releaseScenes.some((scene) => scene.id.startsWith('plan-creator-'))).toBe(false);
+      });
+    } finally {
+      (globalThis as { __DEV__?: boolean }).__DEV__ = devFlag;
+    }
   });
 
   it('opens the imported lesson through the normal Bolo lesson screen', async () => {

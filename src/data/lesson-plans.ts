@@ -1,6 +1,6 @@
 import { creatorLessons } from './creator-lessons';
 import type { BeatMode, Choice, Scene, SceneCategory } from './scenes';
-import { buildLessonFeedback } from './lesson-feedback';
+import { buildLessonFeedback, englishMeaningsOverlap } from './lesson-feedback';
 import { trimTerminalPunctuation } from '../lib/text';
 
 type LessonSeed = {
@@ -63,7 +63,7 @@ type PracticeActivity = {
 const practiceActivities: readonly PracticeActivity[] = [
   { mode: 'choice', build: ({ target }) => ({
     prompt: `Listen first, then pick the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
-    tip: `Let the shape of “${target.latin}” guide you—you are matching a sound here, not a spelling.`,
+    tip: `Tap Listen to hear Asha again, then choose the line that sounds like “${trimTerminalPunctuation(target.en)}”.`,
   }) },
   { mode: 'recallReveal', build: ({ target }) => ({
     prompt: `Before revealing, recall the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
@@ -74,24 +74,24 @@ const practiceActivities: readonly PracticeActivity[] = [
     tip: `The other two are real ${plan.category.toLowerCase()} phrases for different moments—compare the Hindi lines before you choose.`,
   }) },
   { mode: 'choice', build: ({ target }) => ({
-    prompt: `Set the tone: say the Hindi for “${trimTerminalPunctuation(target.en)}” out loud.`,
-    tip: `Say “${target.latin}” evenly and without rushing; courtesy in Hindi comes through in your delivery as much as in your words.`,
+    prompt: `Tap the Hindi for “${trimTerminalPunctuation(target.en)}”, then say it out loud once.`,
+    tip: `Saying it aloud after you tap helps it stick; there is no microphone check on this turn.`,
   }) },
   { mode: 'wordOrder', build: ({ target }) => ({
     prompt: `Piece it together: build the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
     tip: `Track “${target.latin}” from front to back; Hindi usually saves its verb for the very end.`,
   }) },
   { mode: 'choice', build: ({ target }) => ({
-    prompt: `Whisper it: “${trimTerminalPunctuation(target.latin)}”, then match the script.`,
-    tip: `Hearing yourself say it first makes the right script jump out instead of needing to be decoded.`,
+    prompt: `From memory: which Hindi line means “${trimTerminalPunctuation(target.en)}”?`,
+    tip: `Think of the first word before you look at the choices.`,
   }) },
   { mode: 'choice', build: ({ target }) => ({
-    prompt: `Picture yourself there, then say “${trimTerminalPunctuation(target.en)}” in Hindi.`,
-    tip: `Pin “${target.latin}” to this exact scene; a phrase with a moment attached is much harder to lose.`,
+    prompt: `Picture the moment, then choose how to say “${trimTerminalPunctuation(target.en)}”.`,
+    tip: `Read Asha’s setup again; a phrase with a moment attached is much harder to lose.`,
   }) },
   { mode: 'choice', build: ({ target }) => ({
-    prompt: `Say the whole thought—the full line for “${trimTerminalPunctuation(target.en)}”.`,
-    tip: `A single keyword only points at the idea; “${target.latin}” delivers all of it.`,
+    prompt: `Choose the complete Hindi line for “${trimTerminalPunctuation(target.en)}”.`,
+    tip: `A single keyword only points at the idea; the right answer says all of it.`,
   }) },
   { mode: 'choice', build: ({ target }) => ({
     prompt: `Rule out the other two, then keep “${trimTerminalPunctuation(target.en)}”.`,
@@ -99,32 +99,42 @@ const practiceActivities: readonly PracticeActivity[] = [
   }) },
   { mode: 'choice', build: ({ target }) => ({
     prompt: `Lock it in: tap the Hindi for “${trimTerminalPunctuation(target.en)}”.`,
-    tip: `Aim for “${target.latin}” to arrive on its own next time, before you have to reach for it.`,
+    tip: `Aim for it to arrive on its own next time, before you have to reach for it.`,
   }) },
 ];
 
+/** Distractor offsets tried in turn order, so repeated turns on one phrase do not show the same three cards. */
+const distractorOffsets: readonly (readonly [number, number])[] = [[3, 7], [1, 5], [2, 6], [4, 8], [1, 6], [2, 7], [3, 8], [4, 9], [1, 9]];
+
+function distinctMeanings(phrases: readonly LessonSeed[]) {
+  return phrases.every((first, index) => phrases.slice(index + 1).every((second) => !englishMeaningsOverlap(first.en, second.en)));
+}
+
 /**
  * Every lesson keeps its titled phrase as the anchor: learners meet it first and last, and use it
- * for both alternate practice modes. The remaining choice turns rotate through the plan so the
- * lesson still introduces a broad supporting vocabulary. Activities advance one step per turn;
- * the four-step lesson offset varies where each lesson enters that shared sequence.
+ * for both alternate practice modes. The remaining choice turns only practice phrases this plan has
+ * already taught (this lesson's and earlier lessons'), so nothing is tested before it is introduced.
+ * Wrong answers may come from anywhere in the plan; they are shown with their meaning after answering.
  */
 function guidedPracticeTurns(plan: LessonPlanSeed, lessonIndex: number): GuidedPracticeBeat[] {
   const phraseCount = plan.lessons.length;
+  const taughtCount = lessonIndex + 1;
   return plan.lessons.map((_, turnIndex) => {
     const activity = practiceActivities[(4 * lessonIndex + turnIndex) % practiceActivities.length]!;
     const targetsTitledPhrase = turnIndex === 0
       || turnIndex === phraseCount - 1
       || activity.mode === 'recallReveal'
       || activity.mode === 'wordOrder';
-    const targetIndex = targetsTitledPhrase ? lessonIndex : (lessonIndex + turnIndex) % phraseCount;
+    const targetIndex = targetsTitledPhrase ? lessonIndex : (lessonIndex + turnIndex) % taughtCount;
     const target = plan.lessons[targetIndex]!;
+    const offsets = [...distractorOffsets.slice(turnIndex % distractorOffsets.length), ...distractorOffsets.slice(0, turnIndex % distractorOffsets.length)];
+    const [first, second] = offsets
+      .map(([a, b]) => [plan.lessons[(targetIndex + a) % phraseCount]!, plan.lessons[(targetIndex + b) % phraseCount]!] as const)
+      .find((pair) => distinctMeanings([target, ...pair]))
+      ?? [plan.lessons[(targetIndex + 3) % phraseCount]!, plan.lessons[(targetIndex + 7) % phraseCount]!] as const;
     return {
       target,
-      distractors: [
-        plan.lessons[(targetIndex + 3) % phraseCount]!,
-        plan.lessons[(targetIndex + 7) % phraseCount]!,
-      ] as const,
+      distractors: [first, second] as const,
       mode: activity.mode,
       ...activity.build({ plan, target }),
     };
@@ -324,9 +334,11 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
   })),
 })));
 
-// Bolo Lesson Creator: local imported lessons.
-plannedLessons.push(...creatorLessons);
-if (creatorLessons.length) {
+// Bolo Lesson Creator: local imported lessons. They are authoring drafts, so only development
+// builds show them; a release build never presents someone else's test lessons as "yours".
+const showCreatorLessons = typeof __DEV__ !== 'undefined' && __DEV__;
+if (showCreatorLessons) plannedLessons.push(...creatorLessons);
+if (showCreatorLessons && creatorLessons.length) {
   lessonPlans.push({
     id: 'creator', category: 'Everyday', title: 'My created lessons',
     subtitle: 'Practice made in Bolo Lesson Creator', level: 'Mixed', emoji: '✨', color: '#285b47',

@@ -53,6 +53,10 @@ jest.mock('@/services/bolo-api', () => ({
   deleteMobileData: jest.fn(),
 }));
 
+jest.mock('@/lib/sync-outbox', () => ({
+  syncOutbox: { clear: jest.fn(async () => undefined) },
+}));
+
 jest.mock('@/state/app-state', () => ({
   useAppState: () => mockUseAppState(),
 }));
@@ -60,6 +64,7 @@ jest.mock('@/state/app-state', () => ({
 import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
 import { clearAllPracticeReminders } from '../src/lib/practice-reminder';
+import { syncOutbox } from '../src/lib/sync-outbox';
 import { deleteMobileData } from '../src/services/bolo-api';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
@@ -124,20 +129,29 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(formatReminderTime(12)).toBe('12:00 PM');
   });
 
-  it('offers four accessible movement choices and saves the selected option', async () => {
+  it('offers two plain movement choices and saves the selected option', async () => {
     const view = await render(<SettingsScreen />);
     const gentle = view.getByLabelText('Movement preference: Gentle');
-    const lively = view.getByLabelText('Movement preference: Lively');
+    const reduced = view.getByLabelText('Movement preference: Reduced');
 
     expect(gentle.props.accessibilityState).toEqual({ disabled: false, selected: true });
-    expect(StyleSheet.flatten(lively.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(reduced.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(view.queryByLabelText('Movement preference: Lively')).toBeNull();
+    expect(view.queryByLabelText('Movement preference: System')).toBeNull();
     expect(view.getByText('Your iPhone’s Reduce Motion setting always takes priority.')).toBeTruthy();
 
-    await fireEvent.press(lively);
-    expect(mockSetMotionPreference).toHaveBeenCalledWith('lively');
+    await fireEvent.press(reduced);
+    expect(mockSetMotionPreference).toHaveBeenCalledWith('reduced');
   });
 
-  it('gives dense movement and reminder choices two balanced rows at default iPhone text size', async () => {
+  it('keeps a previously saved Lively choice visible so it can be changed', async () => {
+    mockUseAppState.mockReturnValue({ ...mockUseAppState(), motionPreference: 'lively' });
+    const view = await render(<SettingsScreen />);
+    expect(view.getByLabelText('Movement preference: Lively').props.accessibilityState).toEqual({ disabled: false, selected: true });
+    expect(view.queryByLabelText('Movement preference: System')).toBeNull();
+  });
+
+  it('gives reminder choices balanced rows of two at default iPhone text size', async () => {
     const originalWindow = Dimensions.get('window');
     const originalScreen = Dimensions.get('screen');
     const defaultIPhone = { fontScale: 1, height: 852, scale: 3, width: 393 };
@@ -145,14 +159,14 @@ describe('SettingsScreen lifecycle and UI', () => {
       Dimensions.set({ screen: defaultIPhone, window: defaultIPhone });
       const view = await render(<SettingsScreen />);
 
-      for (const controlID of ['motion-preference-control', 'practice-reminder-control']) {
-        expect(view.getByTestId(`${controlID}-row-1`).children).toHaveLength(2);
-        expect(view.getByTestId(`${controlID}-row-2`).children).toHaveLength(2);
-      }
+      expect(view.getByTestId('practice-reminder-control-row-1').children).toHaveLength(2);
+      expect(view.getByTestId('practice-reminder-control-row-2').children).toHaveLength(2);
 
       for (const label of [
-        'Movement preference: Lively',
+        'Movement preference: Gentle',
         'Movement preference: Reduced',
+        'Practice reminder time: 7:00 AM',
+        'Practice reminder time: 9:00 AM',
         'Practice reminder time: 7:00 PM',
         'Practice reminder time: 8:00 PM',
       ]) {
@@ -165,7 +179,7 @@ describe('SettingsScreen lifecycle and UI', () => {
     }
   });
 
-  it('stacks all four movement choices at moderate Dynamic Type on a narrow phone', async () => {
+  it('stacks the movement choices at moderate Dynamic Type on a narrow phone', async () => {
     const originalWindow = Dimensions.get('window');
     const originalScreen = Dimensions.get('screen');
     const narrow = { fontScale: 1.25, height: 844, scale: 1, width: 320 };
@@ -173,10 +187,10 @@ describe('SettingsScreen lifecycle and UI', () => {
       Dimensions.set({ screen: narrow, window: narrow });
       const view = await render(<SettingsScreen />);
 
-      const lively = view.getByLabelText('Movement preference: Lively');
-      expect(StyleSheet.flatten(lively.props.style).minHeight).toBeGreaterThanOrEqual(48);
+      const reduced = view.getByLabelText('Movement preference: Reduced');
+      expect(StyleSheet.flatten(reduced.props.style).minHeight).toBeGreaterThanOrEqual(48);
       expect(view.queryByTestId('motion-preference-control-row-1')).toBeNull();
-      expect(view.getByTestId('motion-preference-control').children).toHaveLength(4);
+      expect(view.getByTestId('motion-preference-control').children).toHaveLength(2);
       await view.unmount();
     } finally {
       Dimensions.set({ screen: originalScreen, window: originalWindow });
@@ -193,6 +207,9 @@ describe('SettingsScreen lifecycle and UI', () => {
 
     expect(deleteMobileDataMock).toHaveBeenCalledTimes(1);
     expect(deleteMobileDataMock).toHaveBeenCalledWith('client-12345678', expect.any(AbortSignal));
+    // Queued reports are dropped first, so no retry can file one after the server deletion.
+    expect(syncOutbox.clear).toHaveBeenCalledTimes(1);
+    expect((syncOutbox.clear as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(deleteMobileDataMock.mock.invocationCallOrder[0]!);
     expect(clearAllData).not.toHaveBeenCalled();
     expect(view.getByRole('button', { name: 'Deleting…' }).props.accessibilityState).toEqual({ disabled: true });
 
