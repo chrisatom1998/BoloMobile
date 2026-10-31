@@ -139,6 +139,16 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(mockSetMotionPreference).toHaveBeenCalledWith('reduced');
   });
 
+  it('keeps Asha’s reply language and the daily practice goal editable', async () => {
+    const view = await render(<SettingsScreen />);
+
+    expect(view.getByLabelText('Asha reply language preference: English')).toBeTruthy();
+    expect(view.getByLabelText('Asha reply language preference: Hindi')).toBeTruthy();
+    expect(view.getByLabelText('Daily practice goal: 5 minutes a day')).toBeTruthy();
+    expect(view.getByLabelText('Daily practice goal: 10 minutes a day')).toBeTruthy();
+    expect(view.getByLabelText('Daily practice goal: 15 minutes a day')).toBeTruthy();
+  });
+
   it('keeps a previously saved Lively choice visible so it can be changed', async () => {
     mockUseAppState.mockReturnValue({ ...mockUseAppState(), motionPreference: 'lively' });
     const view = await render(<SettingsScreen />);

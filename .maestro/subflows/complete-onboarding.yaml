@@ -1,14 +1,22 @@
 appId: com.bolo.hindi
 ---
-- scrollUntilVisible:
-    element:
-      text: "Build my practice plan"
-    direction: DOWN
-    speed: 60
-    visibilityPercentage: 80
-    centerElement: false
-    timeout: 45000
-- tapOn: "Build my practice plan"
 - extendedWaitUntil:
-    visible: "Bolo"
+    visible: "Hear this"
+    timeout: 20000
+- tapOn:
+    id: "onboarding-reply-namaste"
+- tapOn:
+    id: "onboarding-continue"
+- extendedWaitUntil:
+    visible: "Where are you starting?"
+    timeout: 15000
+- tapOn:
+    id: "onboarding-continue"
+- extendedWaitUntil:
+    visible: "Meet Asha"
+    timeout: 15000
+- tapOn:
+    id: "onboarding-start"
+- extendedWaitUntil:
+    visible: "Namaste"
     timeout: 15000

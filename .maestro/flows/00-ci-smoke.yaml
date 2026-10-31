@@ -14,45 +14,7 @@ tags:
     permissions:
       microphone: deny
 - runFlow: ../subflows/enter-development-build.yaml
-- assertVisible: "Your Hindi plan in one minute"
-- scrollUntilVisible:
-    element:
-      text: "Check microphone access"
-    direction: DOWN
-    speed: 60
-    visibilityPercentage: 80
-    centerElement: false
-    timeout: 45000
-# The row can be on screen before it accepts a tap. Retry until the hierarchy
-# changes, and give the permission sheet up to 30s to settle.
-- tapOn:
-    text: "Check microphone access"
-    retryTapIfNoChange: true
-    waitToSettleTimeoutMs: 30000
-# Preset microphone: deny usually skips the prompt. The denied copy is below
-# the button, and the scroll above only requires that button to be 80% visible,
-# so the copy can still be off-screen. Wait for the system prompt or for the
-# same button to read "Check again". Either one is optional: the scroll below
-# is what requires the denied copy.
-- extendedWaitUntil:
-    visible: "Don.t Allow|Check again"
-    timeout: 20000
-    optional: true
-- runFlow:
-    label: Dismiss the microphone prompt when iOS shows it
-    when:
-      visible: "Don.t Allow"
-    commands:
-      - tapOn: "Don.t Allow"
-- scrollUntilVisible:
-    element:
-      text: "Microphone access is off. Typed and written practice still work."
-    direction: DOWN
-    speed: 60
-    visibilityPercentage: 80
-    centerElement: false
-    timeout: 45000
-- assertVisible: "Microphone access is off. Typed and written practice still work."
+- assertVisible: "Hear this"
 - runFlow: ../subflows/complete-onboarding.yaml
 - tapOn: "Asha"
 - scrollUntilVisible:
@@ -84,8 +46,17 @@ tags:
 - extendedWaitUntil:
     visible: "Settings"
     timeout: 60000
-- assertNotVisible: "Your Hindi plan in one minute"
-- tapOn: "Settings"
+- assertNotVisible: "Hear this"
+# A press highlight can satisfy Maestro's tap without opening Settings. Try once more.
+- tapOn:
+    id: "today-settings"
+- extendedWaitUntil:
+    optional: true
+    visible: "Learning preferences"
+    timeout: 8000
+- tapOn:
+    optional: true
+    id: "today-settings"
 - assertVisible: "Learning preferences"
 - scrollUntilVisible:
     element:

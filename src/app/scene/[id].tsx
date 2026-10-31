@@ -7,6 +7,7 @@ import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, Vie
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { LessonReminderOffer } from '@/components/lesson-reminder-offer';
 import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { isWordOrderPracticeable } from '@/components/practice-mode';
@@ -30,7 +31,7 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { shuffleChoices } from '@/lib/shuffle-choices';
 import { trimTerminalPunctuation } from '@/lib/text';
-import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
+import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
@@ -52,7 +53,8 @@ function SceneScreen() {
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
   const sceneId = Array.isArray(id) ? id[0] : id;
-  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, sceneProgress, togglePhrase } = useAppState();
+  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, reminder: storedReminder, sceneProgress, setReminder, togglePhrase } = useAppState();
+  const reminder = storedReminder ?? defaultReminderSettings();
   const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
   const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
   const sourceScene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
@@ -110,6 +112,7 @@ function SceneScreen() {
   const [correctCount, setCorrectCount] = useState(initialAttempt?.correct ?? 0);
   const [answerCount, setAnswerCount] = useState(initialAttempt?.total ?? 0);
   const [done, setDone] = useState(false);
+  const [reminderOffer, setReminderOffer] = useState<'hidden' | 'open' | 'closed'>('hidden');
   const [showHint, setShowHint] = useState(false);
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
   // A first wrong pick keeps the right answer hidden so "Try again" means something.
@@ -322,6 +325,10 @@ function SceneScreen() {
     clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
       completedRef.current = true;
+      const completions = Object.values(sceneProgress ?? {}).reduce((sum, progress) => sum + (progress.completions ?? 0), 0);
+      if (completions === 0 && reminder.enabled !== true && reminder.offerAnswered !== true) {
+        setReminderOffer((current) => (current === 'closed' ? current : 'open'));
+      }
       markSceneComplete(activeScene.id, elapsedBeforeResumeRef.current + elapsedSeconds(), {
         attemptId: attemptRef.current.id,
         score: attemptRef.current.score,
@@ -421,6 +428,15 @@ function SceneScreen() {
           <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{answerCount}</Text><Text style={styles.finishLabel}>right first try</Text></View>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{Math.max(1, Math.round(finishedSeconds / 60))} min</Text><Text style={styles.finishLabel}>practiced</Text></View>
         </View>
+        {reminderOffer === 'open' ? (
+          <LessonReminderOffer
+            onAnswered={(next) => {
+              setReminderOffer('closed');
+              void setReminder(next);
+            }}
+            reminder={reminder}
+          />
+        ) : null}
         <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
         <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
