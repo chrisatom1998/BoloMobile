@@ -4,7 +4,13 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 # Model roles
 
-Use Claude Code first for all coding work. Use Cursor (grok-4.7, fast off, medium effort) only as a backup when Claude Code can't do the task, and ask Chris before using any pricier model.
+- Claude Code builds features, pages, multi-file changes, and refactors.
+- Codex reviews every Claude Code build and handles bugs, failing tests, small changes, and code review.
+- Agent Desk (Grok Bot) handles routing, research, specs, docs, and planning.
+- Whichever agent didn't build a change reviews it.
+- Claude Code and Codex cover for each other on the same branch, picking up from a handoff note. If both are unavailable, use a Cursor cloud agent (grok-4.7, fast off, medium effort).
+- Every task gets its own `desk/` branch and ends as a pull request. Nothing merges to main without Chris's yes.
+- Ask Chris before using any pricier model.
 
 # Cloud Agent
 

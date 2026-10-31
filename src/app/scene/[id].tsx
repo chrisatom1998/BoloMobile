@@ -85,7 +85,7 @@ function SceneScreen() {
     };
   }, [scene]);
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
-  const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
+  const { elapsedSeconds, reset: resetTimer, touch: touchTimer } = useForegroundTimer();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const savedProgress = scene ? sceneProgress?.[scene.id] : undefined;
   const [legacyCheckpoint] = useState(() => !savedProgress?.attempt && (savedProgress?.lastBeatIndex ?? 0) > 0);
@@ -246,6 +246,7 @@ function SceneScreen() {
 
   function recordAnswer(isCorrect: boolean) {
     if (attemptRef.current.answeredBeatIndex === beatIndex) return;
+    touchTimer();
     if (currentUsesName) updateLearnerProfile?.({ displayName: practiceName.trim() });
     const previous = attemptRef.current;
     const attempt = { ...previous, score: previous.score + (isCorrect ? 50 : 0), correct: previous.correct + Number(isCorrect), total: previous.total + 1,
