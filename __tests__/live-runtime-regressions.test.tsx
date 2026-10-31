@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
-import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
+import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
@@ -66,16 +66,26 @@ jest.mock('@/components/ai-consent-gate', () => {
   return {
     AiConsentGate: ({
       actionLabel = 'I agree and want to continue',
+      children,
+      presentation = 'card',
+      sheetVisible = false,
       title = 'Before using Asha',
     }: {
       actionLabel?: string;
+      children?: import('react').ReactNode;
+      presentation?: 'card' | 'sheet';
+      sheetVisible?: boolean;
       title?: string;
-    }) => mockReact.createElement(
-      mockReact.Fragment,
-      null,
-      mockReact.createElement(MockText, { testID: 'mock-ai-consent-gate' }, title),
-      mockReact.createElement(MockText, null, actionLabel),
-    ),
+    }) => {
+      if (mockAiConsent) return children ?? null;
+      if (presentation === 'sheet' && !sheetVisible) return null;
+      return mockReact.createElement(
+        mockReact.Fragment,
+        null,
+        mockReact.createElement(MockText, { testID: 'mock-ai-consent-gate' }, title),
+        mockReact.createElement(MockText, null, actionLabel),
+      );
+    },
   };
 });
 
@@ -93,6 +103,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onConnectionStart,
       onError,
       onInputTranscriptComplete,
+      onMicrophonePhase,
       onSessionEvent,
       onStatusChange,
       onTranscriptChange,
@@ -106,6 +117,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
       onError: (message: string, details?: { kind?: string }) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
+      onMicrophonePhase?: (phase: 'idle' | 'explaining' | 'denied') => void;
       onSessionEvent?: (event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
@@ -250,6 +262,22 @@ jest.mock('@/components/realtime-voice-button', () => {
           onPress: () => onStatusChange?.('disconnected'),
         },
         mockReact.createElement(MockText, null, 'Mock disconnected'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Show microphone explainer',
+          onPress: () => onMicrophonePhase?.('explaining'),
+        },
+        mockReact.createElement(MockText, null, 'Show explainer'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Show microphone denied',
+          onPress: () => onMicrophonePhase?.('denied'),
+        },
+        mockReact.createElement(MockText, null, 'Show denied'),
       ),
       mockReact.createElement(
         MockPressable,
@@ -553,20 +581,25 @@ describe('live consent layout', () => {
     jest.restoreAllMocks();
   });
 
-  it('puts consent before visibly disabled live controls instead of scrolling to chat', async () => {
+  it('leads with Asha and keeps a live session closed until the consent sheet is accepted', async () => {
     const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    mockVoiceButtonProps.onConnectionStart = undefined;
     const view = await render(<LiveScreen />);
     const list = view.getByTestId('live-chat-list');
 
-    expect(view.getByTestId('mock-ai-consent-gate')).toBeTruthy();
-    expect(view.getByText('Before your first live conversation')).toBeTruthy();
-    expect(view.getByText('Enable live practice')).toBeTruthy();
+    expect(view.getByTestId('asha-header-portrait')).toBeTruthy();
+    expect(view.getByText('Greet me like a neighbor and tell me your name')).toBeTruthy();
+    expect(view.getByText('Your voice and a few lesson details are shared with Asha so she can answer.')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Talk with Asha' })).toBeTruthy();
+    expect(view.queryByTestId('mock-ai-consent-gate')).toBeNull();
+    expect(view.queryByText('WebRTC')).toBeNull();
+    expect(view.queryByText(/GPT-Live/u)).toBeNull();
     const testIds = collectTestIds(view.toJSON());
-    expect(testIds.indexOf('live-consent-section')).toBeLessThan(testIds.indexOf('live-voice-controls'));
+    expect(testIds.indexOf('asha-header-portrait')).toBeLessThan(testIds.indexOf('talk-with-asha'));
     // The voice-language switch only appears once Asha is turned on, so it never shows greyed out.
     expect(view.queryAllByRole('tab', { name: /Asha voice language/u })).toHaveLength(0);
-    expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
-    expect(view.getByText('Live voice unlocks here')).toBeTruthy();
+    expect(view.queryByLabelText('Create Asha reply')).toBeNull();
+    expect(mockVoiceButtonProps.onConnectionStart).toBeUndefined();
     expect(view.queryByTestId('live-input-caption')).toBeNull();
     expect(view.queryByTestId('live-output-caption')).toBeNull();
     expect(view.queryByText('Your words appear here as you speak.')).toBeNull();
@@ -582,6 +615,17 @@ describe('live consent layout', () => {
     });
 
     expect(scrollToEnd).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Talk with Asha' }));
+    expect(view.getByTestId('mock-ai-consent-gate')).toBeTruthy();
+    expect(view.getByText('Before your first live conversation')).toBeTruthy();
+    expect(view.getByText('Enable live practice')).toBeTruthy();
+    expect(view.queryByLabelText('Mock realtime connecting')).toBeNull();
+
+    mockAiConsent = true;
+    await view.rerender(<LiveScreen />);
+    expect(view.queryByTestId('mock-ai-consent-gate')).toBeNull();
+    expect(view.getByLabelText('Mock realtime connecting')).toBeTruthy();
     await view.unmount();
   }, 20_000);
 
@@ -595,7 +639,7 @@ describe('live consent layout', () => {
     await view.unmount();
   });
 
-  it('keeps the unlock copy when consent is off and chat history is already stored', async () => {
+  it('keeps the invite when consent is off and chat history is already stored', async () => {
     mockAiConsent = true;
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
@@ -607,12 +651,35 @@ describe('live consent layout', () => {
       await Promise.resolve();
     });
 
-    expect(view.getByText('Live voice unlocks here')).toBeTruthy();
-    expect(view.getByText('Enable live practice above to use voice coaching.')).toBeTruthy();
+    expect(view.getByText('Greet me like a neighbor and tell me your name')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Talk with Asha' })).toBeTruthy();
     expect(view.queryByText('Ready when you are')).toBeNull();
     expect(view.queryByTestId('composer-mic-toggle')).toBeNull();
     await view.unmount();
     await flushMicrotasks();
+  });
+});
+
+describe('live microphone denial', () => {
+  beforeEach(() => {
+    mockAiConsent = true;
+  });
+
+  it('shows an Open Settings action when the microphone is denied', async () => {
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined as never);
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.press(view.getByLabelText('Show microphone denied'));
+
+    expect(view.getByText('The microphone is off')).toBeTruthy();
+    expect(view.getByText('Microphone access is required for live voice practice.')).toBeTruthy();
+    await fireEvent.press(view.getByTestId('mic-open-settings'));
+    expect(openSettings).toHaveBeenCalledTimes(1);
+
+    await fireEvent.press(view.getByLabelText('Show microphone explainer'));
+    expect(view.getByText('Asha needs the microphone to hear you.')).toBeTruthy();
+    expect(view.queryByTestId('mic-open-settings')).toBeNull();
+    await view.unmount();
   });
 });
 
@@ -959,18 +1026,19 @@ describe('immersive live conversation design', () => {
     if (!message) throw new Error('The Romanized Asha message was not rendered.');
     expect(message.props.value).toBe(displayReply);
     expect(view.queryByDisplayValue(longDevanagariReply)).toBeNull();
-    const initialStyle = StyleSheet.flatten(message.props.style);
-    expect(initialStyle.height).toBeUndefined();
-    expect(initialStyle.minHeight).toBe(23);
-
-    await act(async () => {
-      message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
-      await Promise.resolve();
-    });
-    const resizedMessage = view.getAllByLabelText(/^(?:You|Asha): /u)
-      .find((candidate) => candidate.props.value === displayReply);
-    if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
-    expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
+    // The bubble is sized by a hidden Text twin, never by a pinned input height
+    // that can go stale after a narrow first layout.
+    const inputStyle = StyleSheet.flatten(message.props.style);
+    expect(inputStyle.height).toBeUndefined();
+    expect(inputStyle.position).toBe('absolute');
+    expect(message.props.onContentSizeChange).toBeUndefined();
+    // The sizer itself must exist, stay invisible, and stay out of the
+    // accessibility tree, so removing it fails this test.
+    const sizer = view.getAllByText(displayReply, { includeHiddenElements: true })
+      .find((candidate) => StyleSheet.flatten(candidate.props.style).opacity === 0);
+    if (!sizer) throw new Error('The hidden sizer Text for the Asha message was not rendered.');
+    expect(sizer.props.accessibilityElementsHidden).toBe(true);
+    expect(sizer.props.importantForAccessibility).toBe('no-hide-descendants');
     expect(speech.preloadSpeech).not.toHaveBeenCalled();
 
     await view.unmount();
