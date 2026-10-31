@@ -12,6 +12,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { reviewCardMode } from '@/lib/learning';
 import { observe } from '@/lib/observability';
+import { phraseCardLines } from '@/lib/phrase-card-lines';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
@@ -184,6 +185,10 @@ export default function ReviewScreen() {
   // Keep reference audio out of the microphone while a practice clip is recording or being checked.
   const listenEnabled = canListen && !recorderBusy;
   const listenHint = canListen ? undefined : 'Agree to connected AI processing to enable Listen.';
+  // Name the Listen controls with the same script-safe lines PhraseCard shows,
+  // so a Latin-script learner never meets Devanagari through a screen reader.
+  const answerLines = phraseCardLines({ devanagari: phrase.hi, romanized: phrase.latin, scriptPreference: learnerProfile.scriptPreference });
+  const answerName = answerLines.devanagari ?? answerLines.romanized ?? 'this phrase';
   // Never pre-reveal an answer: upcoming speak-first cards show only their
   // English prompt, and upcoming listen-first cards (where English is the
   // answer) show a neutral placeholder. No Hindi script or romanization here.
@@ -212,8 +217,8 @@ export default function ReviewScreen() {
           <MotionReveal mode={motionMode} motionKey={`${index}-${phrase.hi}`} style={styles.answer}>
             <PhraseCard devanagari={phrase.hi} romanized={phrase.latin} scriptPreference={learnerProfile.scriptPreference} style={styles.answerCard} testID="review-answer" />
             <View style={styles.audioRow}>
-              <Pressable accessibilityHint={listenHint} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
-              <Pressable accessibilityHint={listenHint} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
+              <Pressable accessibilityHint={listenHint} accessibilityLabel={`Hear ${answerName}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
+              <Pressable accessibilityHint={listenHint} accessibilityLabel={`Hear ${answerName} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
           </MotionReveal>
         ) : null}
