@@ -84,12 +84,23 @@ describe('PhraseCard', () => {
     expect(view.getByRole('button').props.accessibilityLabel).not.toMatch(DEVANAGARI);
   });
 
-  it('renders no Devanagari for "latin" when only a mislabeled Devanagari romanization is supplied', async () => {
-    const view = await render(<PhraseCard onListen={jest.fn()} romanized="नमस्ते" scriptPreference="latin" />);
+  it('never invents a Devanagari line from a romanized-only mixed-script value', async () => {
+    for (const scriptPreference of ['both', 'devanagari', 'latin'] as const) {
+      const view = await render(<PhraseCard english="Less chai" onListen={jest.fn()} romanized="chai कम" scriptPreference={scriptPreference} />);
+      expect(view.queryByTestId('phrase-card-devanagari')).toBeNull();
+      expect(view.getByTestId('phrase-card-romanized')).toHaveTextContent('Chai kam');
+      expect(renderedText(view)).not.toMatch(DEVANAGARI);
+      expect(view.getByRole('button').props.accessibilityLabel).toBe('Listen to Less chai');
+      await view.unmount();
+    }
+  });
+
+  it('renders no Devanagari for "latin" with loanword vowels such as ऑटो', async () => {
+    const view = await render(<PhraseCard devanagari="ऑटो वाले से पूछो।" english="Ask the auto driver." onListen={jest.fn()} scriptPreference="latin" />);
     expect(view.queryByTestId('phrase-card-devanagari')).toBeNull();
-    expect(view.getByTestId('phrase-card-romanized')).toHaveTextContent('Namaste');
+    expect(view.getByTestId('phrase-card-romanized')).toHaveTextContent('Oto vaale se poochho.');
     expect(renderedText(view)).not.toMatch(DEVANAGARI);
-    expect(view.getByRole('button').props.accessibilityLabel).toBe('Listen to Namaste');
+    expect(view.getByRole('button').props.accessibilityLabel).not.toMatch(DEVANAGARI);
   });
 
   it('derives the romanization from Devanagari when none is supplied', async () => {

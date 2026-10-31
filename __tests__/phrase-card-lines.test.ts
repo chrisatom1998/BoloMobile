@@ -64,10 +64,32 @@ describe('phraseCardLines', () => {
     expect(phraseCardLines({ devanagari: 'चाय कम', romanized: 'chai कम', scriptPreference: 'both' })).toEqual({ devanagari: 'चाय कम', romanized: 'Chai kam', primary: 'devanagari' });
   });
 
-  it('treats a Devanagari-only "romanized" field as the Hindi source', () => {
-    expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'latin' })).toEqual({ romanized: 'Namaste', english: 'Hello', primary: 'romanized' });
-    expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'both' })).toEqual({ devanagari: 'नमस्ते', romanized: 'Namaste', english: 'Hello', primary: 'devanagari' });
-    expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference: 'devanagari' })).toEqual({ devanagari: 'नमस्ते', english: 'Hello', primary: 'devanagari' });
+  it('romanizes a romanized-only mixed-script value without inventing a Devanagari line', () => {
+    for (const scriptPreference of ['both', 'devanagari', 'latin'] as const) {
+      expect(phraseCardLines({ romanized: 'chai कम', english: 'Less chai', scriptPreference })).toEqual({
+        romanized: 'Chai kam',
+        english: 'Less chai',
+        primary: 'romanized',
+      });
+      expect(phraseCardLines({ romanized: 'नमस्ते', english: 'Hello', scriptPreference })).toEqual({
+        romanized: 'Namaste',
+        english: 'Hello',
+        primary: 'romanized',
+      });
+    }
+  });
+
+  it('emits Latin letters only for loanword vowels and rare signs in "latin" mode', () => {
+    expect(phraseCardLines({ devanagari: 'ऑटो वाले से पूछो।', english: 'Ask the auto driver.', scriptPreference: 'latin' })).toEqual({
+      romanized: 'Oto vaale se poochho.',
+      english: 'Ask the auto driver.',
+      primary: 'romanized',
+    });
+    for (const sample of ['ऑटो', 'डॉक्टर', 'ऍप', 'ॐ शांति', 'अ॑ग्नि', 'क॰']) {
+      const lines = phraseCardLines({ devanagari: sample, romanized: sample, scriptPreference: 'latin' });
+      expect(JSON.stringify(lines)).not.toMatch(/[\u0900-\u097f]/u);
+      expect(lines.romanized).toMatch(/[A-Za-z]/u);
+    }
   });
 
   it('omits empty or whitespace-only lines', () => {

@@ -43,13 +43,10 @@ export function phraseCardLines({ devanagari, romanized, english, scriptPreferen
     hindi = undefined;
   }
 
-  // Devanagari in the romanized field (mislabeled or mixed-script input) must
-  // never reach a 'latin' learner. With no Hindi field it is the Hindi source;
-  // either way the romanized line is re-derived so it holds Latin letters only.
-  if (latin && DEVANAGARI.test(latin)) {
-    hindi ??= latin;
-    latin = displayHindiTranscript(latin);
-  }
+  // Devanagari in the romanized field (mislabeled or mixed-script input) is
+  // romanized in place so the line holds Latin letters only. It is never
+  // promoted to the Devanagari line: a Hindi line comes only from `devanagari`.
+  if (latin && DEVANAGARI.test(latin)) latin = displayHindiTranscript(latin);
 
   if (hindi && !latin) latin = displayHindiTranscript(hindi);
   else if (hindi && latin) latin = learnerPhraseLatin(hindi, latin);
