@@ -53,6 +53,10 @@ jest.mock('@/services/bolo-api', () => ({
   deleteMobileData: jest.fn(),
 }));
 
+jest.mock('@/lib/sync-outbox', () => ({
+  syncOutbox: { clear: jest.fn(async () => undefined) },
+}));
+
 jest.mock('@/state/app-state', () => ({
   useAppState: () => mockUseAppState(),
 }));
@@ -60,6 +64,7 @@ jest.mock('@/state/app-state', () => ({
 import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
 import { clearAllPracticeReminders } from '../src/lib/practice-reminder';
+import { syncOutbox } from '../src/lib/sync-outbox';
 import { deleteMobileData } from '../src/services/bolo-api';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
@@ -202,6 +207,9 @@ describe('SettingsScreen lifecycle and UI', () => {
 
     expect(deleteMobileDataMock).toHaveBeenCalledTimes(1);
     expect(deleteMobileDataMock).toHaveBeenCalledWith('client-12345678', expect.any(AbortSignal));
+    // Queued reports are dropped first, so no retry can file one after the server deletion.
+    expect(syncOutbox.clear).toHaveBeenCalledTimes(1);
+    expect((syncOutbox.clear as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(deleteMobileDataMock.mock.invocationCallOrder[0]!);
     expect(clearAllData).not.toHaveBeenCalled();
     expect(view.getByRole('button', { name: 'Deleting…' }).props.accessibilityState).toEqual({ disabled: true });
 

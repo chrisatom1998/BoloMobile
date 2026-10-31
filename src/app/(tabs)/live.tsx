@@ -1,8 +1,8 @@
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { AlertCircle, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
+import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,8 @@ import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/c
 import { AshaTypingRow, ChatMessageRow, phrasePlaybackKey } from '@/components/chat-message-row';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { LiveComposer } from '@/components/live-composer';
-import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
+import { QueuedReportRow } from '@/components/queued-report-row';
+import { RealtimeVoiceButton, type RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
@@ -24,12 +25,15 @@ import { type EffectiveMotion, useMotionPreference } from '@/hooks/use-motion-pr
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
+import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
+import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hapticTap } from '@/lib/haptics';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
+import { classifyOutboxError, outboxRetryAfterMs, syncOutbox, useSyncOutbox, type OutboxEntry } from '@/lib/sync-outbox';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
@@ -44,6 +48,15 @@ const welcome: ChatMessage = {
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const tailFollowThreshold = 48;
+/** Shown instead of the generic network error when a live call cannot even start. */
+export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Lessons and saved phrases work offline.';
+/** The learner's explicit Clear removes saved transcripts but keeps queued reports and their retries. */
+export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
+type InterruptedReason = Extract<AshaSessionEndReason, 'connection_lost' | 'backgrounded'>;
+const interruptedCopy: Record<InterruptedReason, string> = {
+  connection_lost: 'Connection lost. This conversation is saved on your device.',
+  backgrounded: 'The session ended when you left Bolo. This conversation is saved on your device.',
+};
 
 function sharesSpeaker(left: ChatMessage | undefined, right: ChatMessage | undefined) {
   if (!left || !right || left.id === welcome.id || right.id === welcome.id) return false;
@@ -111,6 +124,22 @@ export default function LiveScreen() {
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>(resumedStatus);
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
+  const [interruptedReason, setInterruptedReason] = useState<InterruptedReason | null>(null);
+  const outboxEntries = useSyncOutbox();
+  // Reports waiting in the sync outbox, by the reply they belong to.
+  const queuedReports = useMemo(() => {
+    const byMessage = new Map<string, OutboxEntry>();
+    for (const entry of outboxEntries) {
+      if (entry.kind === 'report_message' && entry.payload.messageId) byMessage.set(entry.payload.messageId, entry);
+    }
+    return byMessage;
+  }, [outboxEntries]);
+  // Queued reports whose reply is no longer on screen (cleared chat, an earlier
+  // session) still need their Retry and Discard actions somewhere.
+  const unassociatedReports = useMemo(
+    () => outboxEntries.filter((entry) => !entry.payload.messageId || !chatHistory.some((message) => message.id === entry.payload.messageId)),
+    [chatHistory, outboxEntries],
+  );
   const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; prefill?: StructuredPhrase; selectedText?: string; sourceText?: string } | null>(null);
   const [playingPhrase, setPlayingPhrase] = useState<string | null>(null);
   const [phraseSheetVisible, setPhraseSheetVisible] = useState(false);
@@ -310,6 +339,15 @@ export default function LiveScreen() {
     };
   }, [aiConsent, messageCount]);
 
+  // Only the outbox's explicit delivery says a queued report was received; an entry
+  // that disappears through Discard, consent withdrawal, or Delete Bolo data was not.
+  // The provider announces the delivery once for the whole app; this only marks the row.
+  useEffect(() => syncOutbox.subscribeDelivered((entry) => {
+    const messageId = entry.payload.messageId;
+    if (!messageId || !mountedRef.current) return;
+    setReported((existing) => (existing.has(messageId) ? existing : new Set([...existing, messageId])));
+  }), []);
+
   useEffect(() => {
     mountedRef.current = true;
     const reportControllers = reportControllersRef.current;
@@ -424,6 +462,7 @@ export default function LiveScreen() {
     setPhraseMessage(null);
     setWordSheetVisible(false);
     setWordDefinitionPhrase(null);
+    setInterruptedReason(null);
     setError('');
     clearAudioError();
     const pending = clearChatHistory().finally(() => {
@@ -440,7 +479,9 @@ export default function LiveScreen() {
     // not the state captured when the alert was originally displayed.
     if (!mountedRef.current || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return;
     const activity = ++chatActivityRef.current;
-    const cleared = await resetChat();
+    // Learner-initiated only: the automatic reset before a new session never touches
+    // saved sessions, and this explicit delete keeps queued reports and their retries.
+    const cleared = await Promise.all([resetChat(), clearAshaSessionContent().then(() => true, () => false)]).then((results) => results.every(Boolean));
     if (mountedRef.current && chatActivityRef.current === activity && !cleared) {
       setError('The chat could not be cleared. Please try again.');
     }
@@ -483,7 +524,7 @@ export default function LiveScreen() {
     const activity = chatActivityRef.current;
     showAppAlert(
       'Clear Asha chat?',
-      'This removes the saved typed and voice chat from this device. Saved phrases, lesson progress, and reports you already submitted are not deleted.',
+      CLEAR_CHAT_CONFIRMATION,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Clear chat', style: 'destructive', onPress: () => {
@@ -557,15 +598,44 @@ export default function LiveScreen() {
     // Claim the screen synchronously rather than waiting for the button's
     // status effect, so a stale text/clear action cannot race connection start.
     updateRealtimeStatus('connecting');
+    // A session left active by a killed app is recovered and saved before this
+    // connection may create a new record; the automatic reset keeps saved sessions.
+    await ensureAshaSessionLogLoaded();
+    if (!mountedRef.current || signal.aborted) return;
     const cleared = await resetChat();
     if (!mountedRef.current || signal.aborted) return;
     if (!cleared) throw new Error('The previous chat could not be cleared. Please try starting a new conversation again.');
   }, [resetChat, updateRealtimeStatus]);
-  const showRealtimeError = useCallback((message: string) => {
+  const showRealtimeError = useCallback((message: string, details?: RealtimeErrorDetails) => {
     // Turn-level errors (unreadable audio, transcription) also arrive here; only
     // count failures that happen while a connection attempt is in flight.
-    if (realtimeStatusRef.current === 'connecting') observe('voice_connection_failed');
-    setError(message);
+    const connecting = realtimeStatusRef.current === 'connecting';
+    if (connecting) observe('voice_connection_failed');
+    // Only a transport failure or timeout before the call started proves there is no
+    // connection. Configuration, rejected payloads, microphone, and peer errors keep their copy.
+    const offline = connecting && (details?.kind === 'network' || details?.kind === 'timeout');
+    setError(offline ? LIVE_OFFLINE_MESSAGE : message);
+  }, []);
+  // Interrupted sessions keep their transcript on screen with a note that it is saved.
+  const handleSessionEvent = useCallback((event: AshaSessionEvent) => {
+    if (!mountedRef.current) return;
+    if (event.type === 'starting') setInterruptedReason(null);
+    if (event.type === 'ended' && (event.reason === 'connection_lost' || event.reason === 'backgrounded')) setInterruptedReason(event.reason);
+  }, []);
+  // When this screen owns the voice hook (no floating host), it is the one writer of the session log.
+  const recordOwnedSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
+    logAshaSessionSnapshot(rows);
+    recordLiveSnapshot(rows);
+  }, [recordLiveSnapshot]);
+  const recordOwnedSessionEvent = useCallback((event: AshaSessionEvent) => {
+    logAshaSessionEvent(event, responseLanguage);
+    handleSessionEvent(event);
+  }, [handleSessionEvent, responseLanguage]);
+  // Delete Bolo data ends the owned call as `data_deleted` before it removes the log.
+  const unregisterLiveCallEnderRef = useRef<(() => void) | null>(null);
+  const bindOwnedDisconnect = useCallback((disconnect: ((reason?: AshaSessionEndReason) => void) | null) => {
+    unregisterLiveCallEnderRef.current?.();
+    unregisterLiveCallEnderRef.current = disconnect ? registerLiveCallEnder(disconnect) : null;
   }, []);
   const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {
     if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
@@ -585,17 +655,21 @@ export default function LiveScreen() {
     setFloatingListeners({
       onError: showRealtimeError,
       onConnectionStart: startNewConversation,
+      onSessionEvent: handleSessionEvent,
       onTranscriptChange: updateLiveTranscript,
       onTranscriptSnapshot: recordLiveSnapshot,
     });
     return () => setFloatingListeners(null);
-  }, [floatingAvailable, recordLiveSnapshot, setFloatingListeners, showRealtimeError, startNewConversation, updateLiveTranscript]);
+  }, [floatingAvailable, handleSessionEvent, recordLiveSnapshot, setFloatingListeners, showRealtimeError, startNewConversation, updateLiveTranscript]);
   const report = useCallback((message: ChatMessage) => {
     const submit = (reason: ReportReason) => void (async () => {
       // The controller map is the in-flight record, so it also guards against a
       // duplicate submission before the pending state has committed.
       if (reportControllersRef.current.has(message.id) || reported.has(message.id)) return;
       const controller = new AbortController();
+      // Captured before the first attempt: if Bolo data is deleted or consent is withdrawn
+      // while this request is pending, the outbox refuses to queue the report afterwards.
+      const outboxGeneration = syncOutbox.generation();
       reportControllersRef.current.set(message.id, controller);
       if (mountedRef.current) setPendingReports((current) => new Set(current).add(message.id));
       try {
@@ -604,7 +678,21 @@ export default function LiveScreen() {
         setReported((current) => new Set(current).add(message.id));
         showAppAlert('Report received', 'Thank you. This reply was sent for review.');
       } catch (cause) {
-        if (mountedRef.current && !controller.signal.aborted) showAppAlert('Could not send report', cause instanceof Error ? cause.message : 'Please try again.');
+        if (!mountedRef.current || controller.signal.aborted) return;
+        // No connection: keep the report on the device and let the outbox send it later.
+        // The session association and row id stay local; neither is ever sent.
+        if (classifyOutboxError(cause) === 'transient') {
+          const sessionId = findAshaSessionIdForRow(message.id);
+          // A 429 Retry-After from this attempt travels with the report so the outbox waits it out.
+          const retryAfterMs = outboxRetryAfterMs(cause);
+          const queued = await syncOutbox.enqueue({ kind: 'report_message', ...(sessionId ? { sessionId } : {}), payload: { message: message.text, reason, messageId: message.id } }, { generation: outboxGeneration, ...(retryAfterMs ? { retryAfterMs } : {}) }).then(() => true, () => false);
+          if (!mountedRef.current) return;
+          if (queued) {
+            showAppAlert('Report saved', 'It will be sent when you’re back online.');
+            return;
+          }
+        }
+        showAppAlert('Could not send report', cause instanceof Error ? cause.message : 'Please try again.');
       } finally {
         if (reportControllersRef.current.get(message.id) === controller) reportControllersRef.current.delete(message.id);
         if (mountedRef.current) {
@@ -623,6 +711,30 @@ export default function LiveScreen() {
       { text: 'Cancel', style: 'cancel' },
     ]);
   }, [clientId, reported]);
+
+  const retryReport = useCallback((entryId: string) => {
+    void syncOutbox.retry(entryId);
+  }, []);
+  const discardReport = useCallback((entryId: string) => {
+    void syncOutbox.discard(entryId);
+  }, []);
+  const openLastSession = useCallback(() => {
+    router.push('/last-session' as Href);
+  }, [router]);
+  // Saved transcripts stay available offline and after consent is withdrawn, so this
+  // entry point renders with or without AI consent.
+  const lastSessionButton = ashaSessionLogEnabled ? (
+    <Pressable
+      accessibilityHint="Opens the transcript of your most recent live voice session, saved on this device."
+      accessibilityLabel="View last Asha session"
+      accessibilityRole="button"
+      onPress={openLastSession}
+      style={[styles.lastSessionButton, !aiConsent && styles.lastSessionButtonConsent]}
+    >
+      <History color={colors.gold} size={17} />
+      <Text style={styles.lastSessionText}>Last session</Text>
+    </Pressable>
+  ) : null;
 
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
@@ -737,6 +849,7 @@ export default function LiveScreen() {
               {!aiConsent ? (
                 <View style={[styles.heroConsent, { width: heroContentWidth }]} testID="live-consent-section">
                   <AiConsentGate actionLabel="Enable live practice" title="Before your first live conversation" />
+                  {lastSessionButton}
                 </View>
               ) : null}
               <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
@@ -771,7 +884,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -829,9 +942,10 @@ export default function LiveScreen() {
                     <Text style={styles.askEyebrow}>Ask Asha</Text>
                     <Text style={styles.askTitle}>How do I say…?</Text>
                   </View>
+                  {lastSessionButton}
                   {chatHistory.length > 0 ? (
                     <Pressable
-                      accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases or lesson progress."
+                      accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
                       accessibilityLabel="Clear Asha chat history"
                       accessibilityRole="button"
                       accessibilityState={{ disabled: clearChatDisabled }}
@@ -844,6 +958,14 @@ export default function LiveScreen() {
                     </Pressable>
                   ) : null}
                 </View>
+                {unassociatedReports.length ? (
+                  <View style={styles.queuedReports} testID="queued-reports">
+                    <Text accessibilityRole="header" style={styles.queuedReportsTitle}>Reports waiting to send</Text>
+                    {unassociatedReports.map((entry) => (
+                      <QueuedReportRow entry={entry} key={entry.id} onDiscard={discardReport} onRetry={retryReport} tone="dark" />
+                    ))}
+                  </View>
+                ) : null}
             </View> : null}
           </View>
         )}
@@ -863,13 +985,16 @@ export default function LiveScreen() {
             onOpenPhrasePicker={openPhrasePicker}
             onOpenWordDefinition={(phrase) => { setWordDefinitionPhrase(phrase); setWordSheetVisible(true); }}
             onPlayPhrase={playPhrase}
+            onDiscardReport={discardReport}
             onPlayReply={playReply}
             onReport={report}
+            onRetryReport={retryReport}
             onSelectedText={rememberSelectedChatText}
             onSelectionCollapsed={forgetSelectedChatText}
             playbackLocked={replyPlaybackLocked}
             playingPhrase={playingPhrase}
             reducedMotion={reducedMotion}
+            queuedReport={queuedReports.get(item.id)}
             reported={reported.has(item.id)}
             reporting={pendingReports.has(item.id)}
             scriptPreference={learnerProfile.scriptPreference}
@@ -902,6 +1027,14 @@ export default function LiveScreen() {
             <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>Asha is thinking…</Text>
           </View>
         ) : null}
+        {interruptedReason && hasTranscriptMessages ? (
+          <View accessibilityLiveRegion="polite" style={styles.noticeBanner} testID="live-interrupted-banner">
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <AlertCircle color={colors.gold} size={16} />
+            </View>
+            <Text style={styles.noticeText}>{interruptedCopy[interruptedReason]}</Text>
+          </View>
+        ) : null}
         {error ? (
           <View style={styles.errorBanner}>
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -913,6 +1046,11 @@ export default function LiveScreen() {
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
+        ) : null}
+        {error === LIVE_OFFLINE_MESSAGE ? (
+          <Pressable accessibilityRole="link" accessibilityLabel="Go to today’s lesson" hitSlop={8} onPress={() => router.push('/' as Href)} style={styles.settingsLink}>
+            <Text style={styles.settingsLinkText}>Go to today’s lesson</Text>
+          </Pressable>
         ) : null}
         {error === LIVE_MIC_PERMISSION_MESSAGE && Platform.OS !== 'web' ? (
           <Pressable accessibilityRole="link" accessibilityLabel="Open Settings to allow microphone access" hitSlop={8} onPress={() => void Linking.openSettings()} style={styles.settingsLink}>
@@ -1050,6 +1188,12 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
   clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
   clearChatText: { flexShrink: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
+  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
+  lastSessionText: { flexShrink: 1, color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
+  failedReportText: { color: c.dangerSoft },
+  queuedReports: { gap: spacing.sm, marginTop: spacing.md },
+  queuedReportsTitle: { color: c.heroSubtle, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
   messageRow: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'flex-start', backgroundColor: c.night, paddingHorizontal: 20, marginBottom: spacing.md },
   messageRowStacked: { marginBottom: spacing.xs },
   messageRowYou: { alignItems: 'flex-end' },
@@ -1113,6 +1257,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   requestStatus: { color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
   errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.danger, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  noticeBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.nightLine, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  noticeText: { flex: 1, color: c.white, fontSize: 13, lineHeight: 18 },
   error: { flex: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
   settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
   settingsLinkText: { color: c.white, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },

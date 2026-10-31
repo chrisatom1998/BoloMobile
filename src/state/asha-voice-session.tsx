@@ -5,13 +5,16 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { FullWindowOverlay } from 'react-native-screens';
 
 import type { FloatingAshaBubble } from '@/components/floating-asha-bubble';
+import type { RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
+import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { floatingAshaEnabled } from '@/lib/floating-asha';
 import { useAppState } from '@/state/app-state';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 export type AshaVoiceControls = {
-  disconnect: () => void;
+  disconnect: (reason?: AshaSessionEndReason) => void;
   finishTurn: () => void | Promise<void>;
   startTurn: () => Promise<void>;
   status: RealtimeVoiceStatus;
@@ -20,8 +23,9 @@ export type AshaVoiceControls = {
 };
 
 export type AshaVoiceListeners = {
-  onError?: (message: string) => void;
+  onError?: (message: string, details?: RealtimeErrorDetails) => void;
   onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
+  onSessionEvent?: (event: AshaSessionEvent) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
 };
@@ -154,15 +158,30 @@ function AshaVoiceSessionHost({
     enabled: app.aiConsent,
     responseLanguage: app.learnerProfile.responseLanguage,
     liveSession,
-    onConnectionStart: (signal) => listenersRef.current?.onConnectionStart?.(signal),
-    onError: (message) => listenersRef.current?.onError?.(message),
+    onConnectionStart: async (signal) => {
+      // A record left active by a killed app must be recovered and saved before
+      // this connection can create a new active record.
+      await ensureAshaSessionLogLoaded();
+      if (signal.aborted) return;
+      await listenersRef.current?.onConnectionStart?.(signal);
+    },
+    onError: (message: string, details?: RealtimeErrorDetails) => listenersRef.current?.onError?.(message, details),
+    // This host owns the hook, so it alone writes the session log; the screen only listens.
+    onSessionEvent: (event) => {
+      logAshaSessionEvent(event, appRef.current.learnerProfile.responseLanguage);
+      listenersRef.current?.onSessionEvent?.(event);
+    },
     onTranscriptChange: (update) => listenersRef.current?.onTranscriptChange?.(update),
     onTranscriptSnapshot: (rows) => {
+      logAshaSessionSnapshot(rows);
       const listener = listenersRef.current?.onTranscriptSnapshot;
       if (listener) listener(rows);
       else persistSnapshot(rows);
     },
   });
+
+  // Delete Bolo data ends this call as `data_deleted` before it removes the log.
+  useEffect(() => registerLiveCallEnder(voice.disconnect), [voice.disconnect]);
 
   useEffect(() => {
     onVoice({

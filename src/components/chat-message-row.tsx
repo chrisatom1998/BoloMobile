@@ -1,6 +1,6 @@
 import { BookmarkPlus, Ellipsis, Flag } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { ChatMessageMenu, type ChatMessageMenuItem } from '@/components/chat-message-menu';
@@ -13,6 +13,7 @@ import { phraseCardLines } from '@/lib/phrase-card-lines';
 import { structuredHindiSource, structuredSaveCandidates } from '@/lib/structured-reply';
 import { sourceTextForLegacySelection } from '@/lib/transcript-selection';
 import type { ChatMessage, ScriptPreference, StructuredCorrection, StructuredPhrase } from '@/state/app-state-types';
+import type { OutboxEntry } from '@/lib/sync-outbox';
 import { spacing, useTheme } from '@/theme';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
@@ -21,6 +22,8 @@ const actionHitSlop = { bottom: 0, left: spacing.xs / 2, right: spacing.xs / 2, 
 
 // Web textareas draw a resize grip, which makes a chat line look editable.
 const webChatText = { resize: 'none' } as TextStyle;
+const selectableTextFrame: ViewStyle = { alignSelf: 'stretch', minHeight: 23 };
+const hiddenSizer: TextStyle = { opacity: 0 };
 
 export function phrasePlaybackKey(messageId: string, phrase: Pick<StructuredPhrase, 'devanagari'>) {
   return `${messageId}\u0000${phrase.devanagari}`;
@@ -62,10 +65,6 @@ function SelectableChatText({
   testID?: string;
 }) {
   const text = display.displayText;
-  const [measurement, setMeasurement] = useState<{ height?: number; text: string }>({ text });
-  // A new or recycled message must measure at its natural height before the
-  // measured value is pinned; a one-line initial height clips long turns.
-  const height = measurement.text === text ? measurement.height : undefined;
   const useSpans = Platform.OS !== 'web' && display.hasDevanagari;
 
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
@@ -82,32 +81,34 @@ function SelectableChatText({
     });
   }, [display, onSelectedText, onSelectionCollapsed, text]);
 
+  // A hidden Text sizes the bubble; the selectable TextInput sits on top. Pinning
+  // the input to its own contentSize kept stale tall heights from narrow layouts.
+  const renderContent = (withTestID: boolean) => useSpans ? display.spans.map((span, index) => (
+    span.script === 'devanagari'
+      ? <Text accessibilityLanguage="hi-IN" key={index} style={hindiStyle} testID={withTestID && testID ? `${testID}-devanagari` : undefined}>{span.text}</Text>
+      : <Text key={index}>{span.text}</Text>
+  )) : text;
   return (
-    <TextInput
-      accessibilityHint={accessibilityHint}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityLiveRegion={accessibilityLiveRegion}
-      accessibilityRole="text"
-      contextMenuHidden={false}
-      multiline
-      onContentSizeChange={(event) => {
-        const nextHeight = Math.max(23, Math.ceil(event.nativeEvent.contentSize.height));
-        setMeasurement((current) => current.text === text && current.height === nextHeight ? current : { height: nextHeight, text });
-      }}
-      onSelectionChange={selectionChanged}
-      readOnly
-      scrollEnabled={false}
-      selectionColor={selectionColor}
-      style={[style, Platform.OS === 'web' ? webChatText : null, { minHeight: 23 }, height === undefined ? undefined : { height }]}
-      testID={testID}
-      {...(useSpans ? {} : { value: text })}
-    >
-      {useSpans ? display.spans.map((span, index) => (
-        span.script === 'devanagari'
-          ? <Text accessibilityLanguage="hi-IN" key={index} style={hindiStyle} testID={testID ? `${testID}-devanagari` : undefined}>{span.text}</Text>
-          : <Text key={index}>{span.text}</Text>
-      )) : null}
-    </TextInput>
+    <View style={selectableTextFrame}>
+      <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[style, hiddenSizer]}>{renderContent(false)}</Text>
+      <TextInput
+        accessibilityHint={accessibilityHint}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityLiveRegion={accessibilityLiveRegion}
+        accessibilityRole="text"
+        contextMenuHidden={false}
+        multiline
+        onSelectionChange={selectionChanged}
+        readOnly
+        scrollEnabled={false}
+        selectionColor={selectionColor}
+        style={[style, Platform.OS === 'web' ? webChatText : null, StyleSheet.absoluteFill]}
+        testID={testID}
+        {...(useSpans ? {} : { value: text })}
+      >
+        {useSpans ? renderContent(true) : null}
+      </TextInput>
+    </View>
   );
 }
 
@@ -166,12 +167,15 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onOpenWordDefinition,
   onPlayPhrase,
   onPlayReply,
+  onDiscardReport,
   onReport,
+  onRetryReport,
   onSelectionCollapsed,
   onSelectedText,
   playbackLocked,
   playingPhrase = null,
   reducedMotion = false,
+  queuedReport,
   reported,
   reporting,
   scriptPreference,
@@ -189,12 +193,16 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   /** Speaks one phrase's Devanagari (not the whole reply). */
   onPlayPhrase?: (message: ChatMessage, phrase: StructuredPhrase) => void;
   onPlayReply: (message: ChatMessage) => void;
+  onDiscardReport?: (entryId: string) => void;
   onReport: (message: ChatMessage) => void;
+  onRetryReport?: (entryId: string) => void;
   onSelectedText: (messageId: string, selection: { sourceText: string; text: string }) => void;
   onSelectionCollapsed: (messageId: string) => void;
   playbackLocked: boolean;
   /** `phrasePlaybackKey` of the phrase whose audio is loading or playing. */
   playingPhrase?: string | null;
+  /** A report for this reply waiting in the sync outbox, or one the outbox gave up on. */
+  queuedReport?: Pick<OutboxEntry, 'id' | 'state' | 'lastError'>;
   reducedMotion?: boolean;
   reported: boolean;
   reporting: boolean;
@@ -235,6 +243,8 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const openWordDefinition = useCallback(() => { if (sourcePhrase) onOpenWordDefinition(sourcePhrase); }, [onOpenWordDefinition, sourcePhrase]);
   const playReply = useCallback(() => onPlayReply(message), [message, onPlayReply]);
   const report = useCallback(() => onReport(message), [message, onReport]);
+  const retryReport = useCallback(() => { if (queuedReport) onRetryReport?.(queuedReport.id); }, [onRetryReport, queuedReport]);
+  const discardReport = useCallback(() => { if (queuedReport) onDiscardReport?.(queuedReport.id); }, [onDiscardReport, queuedReport]);
   const showActions = !isPending && !isWelcome;
   const hindiStyle = useMemo(() => [styles.messageHindi, isYou && styles.userText], [isYou, styles.messageHindi, styles.userText]);
 
@@ -259,17 +269,35 @@ export const ChatMessageRow = memo(function ChatMessageRow({
         disabled: !aiConsent || playbackLocked,
         onPress: playReply,
       });
-      items.push({
-        key: 'report',
-        label: reported ? 'Reported' : reporting ? 'Reporting…' : 'Report',
-        accessibilityLabel: `Report reply: ${excerpt}`,
-        destructive: !reported,
-        disabled: reported || reporting,
-        onPress: report,
-      });
+      if (queuedReport?.state === 'failed') {
+        items.push({
+          key: 'retry-report',
+          label: 'Retry report',
+          accessibilityLabel: `Retry report: ${excerpt}`,
+          accessibilityHint: 'Sends this report again when Bolo is reachable.',
+          onPress: retryReport,
+        });
+        items.push({
+          key: 'discard-report',
+          label: 'Discard report',
+          accessibilityLabel: `Discard report: ${excerpt}`,
+          accessibilityHint: 'Removes this unsent report from the device.',
+          destructive: true,
+          onPress: discardReport,
+        });
+      } else {
+        items.push({
+          key: 'report',
+          label: reported ? 'Reported' : queuedReport ? 'Report queued' : reporting ? 'Reporting…' : 'Report',
+          accessibilityLabel: `Report reply: ${excerpt}`,
+          destructive: !reported && !queuedReport,
+          disabled: reported || reporting || Boolean(queuedReport),
+          onPress: report,
+        });
+      }
     }
     return items;
-  }, [aiConsent, excerpt, isYou, openWordDefinition, playReply, playbackLocked, report, reported, reporting, sourcePhrase]);
+  }, [aiConsent, excerpt, isYou, openWordDefinition, playReply, playbackLocked, queuedReport, report, reported, reporting, retryReport, discardReport, sourcePhrase]);
 
   const saveItems = useMemo<ChatMessageMenuItem[]>(() => saveCandidates.map((phrase, index) => ({
     key: `save-${index}`,
@@ -378,10 +406,12 @@ export const ChatMessageRow = memo(function ChatMessageRow({
                 <Ellipsis color={isYou ? colors.white : colors.muted} size={20} />
               </Pressable>
             ) : null}
-            {reported || reporting ? (
-              <View style={styles.reportStatus}>
-                <Flag color={reported ? colors.success : colors.muted} size={14} />
-                <Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : 'Reporting…'}</Text>
+            {reported || reporting || queuedReport ? (
+              <View accessibilityState={queuedReport && queuedReport.state !== 'failed' ? { disabled: true } : undefined} accessibilityLabel={queuedReport ? (queuedReport.state === 'failed' ? `Report could not be sent: ${excerpt}. ${queuedReport.lastError ?? ''}`.trim() : `Report queued: ${excerpt}`) : undefined} style={styles.reportStatus}>
+                <Flag color={reported ? colors.success : queuedReport?.state === 'failed' ? colors.dangerSoft : colors.muted} size={14} />
+                <Text style={[styles.smallActionText, reported && styles.reportedText, queuedReport?.state === 'failed' && styles.failedReportText]}>
+                  {reported ? 'Reported' : queuedReport?.state === 'failed' ? 'Couldn’t send' : queuedReport ? 'Waiting to send' : 'Reporting…'}
+                </Text>
               </View>
             ) : null}
           </View>

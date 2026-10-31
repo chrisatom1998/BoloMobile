@@ -50,6 +50,7 @@ jest.mock('lucide-react-native', () => ({
   ChevronDown: () => null,
   Ellipsis: () => null,
   Flag: () => null,
+  History: () => null,
   Lock: () => null,
   MessageCircle: () => null,
   Mic: () => null,
@@ -93,6 +94,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onConnectionStart,
       onError,
       onInputTranscriptComplete,
+      onSessionEvent,
       onStatusChange,
       onTranscriptChange,
       onTurnActionReady,
@@ -103,8 +105,9 @@ jest.mock('@/components/realtime-voice-button', () => {
       disabled?: boolean;
       history?: unknown;
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
-      onError: (message: string) => void;
+      onError: (message: string, details?: { kind?: string }) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
+      onSessionEvent?: (event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
       onTurnActionReady?: (action: (() => void) | null) => void;
@@ -249,6 +252,57 @@ jest.mock('@/components/realtime-voice-button', () => {
         },
         mockReact.createElement(MockText, null, 'Mock disconnected'),
       ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock realtime offline',
+          onPress: () => onError('Bolo is unavailable right now. Check your connection and try again.', { kind: 'network' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock offline'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock realtime timeout',
+          onPress: () => onError('The request timed out. Check your connection and try again.', { kind: 'timeout' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock timeout'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock realtime unconfigured',
+          onPress: () => onError('Live voice isn’t available right now. You can still type to Asha.', { kind: 'config' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock unconfigured'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock realtime offline wording',
+          onPress: () => onError('Bolo is unavailable right now. Check your connection and try again.', { kind: 'invalid_payload' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock offline wording'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock session interrupted',
+          onPress: () => {
+            onSessionEvent?.({ type: 'ended', reason: 'connection_lost' });
+            onStatusChange?.('disconnected');
+          },
+        },
+        mockReact.createElement(MockText, null, 'Mock interrupted'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock session starting',
+          onPress: () => onSessionEvent?.({ type: 'starting' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock starting'),
+      ),
       );
     },
   };
@@ -377,12 +431,67 @@ jest.mock('@/lib/speech', () => ({
   stopSpeaking: jest.fn(async () => undefined),
 }));
 
+let mockRecoveryPending: Promise<void> | null = null;
+
+jest.mock('@/lib/asha-session-log-store', () => ({
+  clearAshaSessionContent: jest.fn(async () => undefined),
+  ensureAshaSessionLogLoaded: jest.fn(() => mockRecoveryPending ?? Promise.resolve()),
+  findAshaSessionIdForRow: jest.fn(() => undefined),
+  logAshaSessionEvent: jest.fn(),
+  logAshaSessionSnapshot: jest.fn(),
+  registerLiveCallEnder: jest.fn(() => jest.fn()),
+}));
+
+const sessionLog = jest.requireMock('@/lib/asha-session-log-store') as {
+  clearAshaSessionContent: jest.Mock;
+  ensureAshaSessionLogLoaded: jest.Mock;
+  findAshaSessionIdForRow: jest.Mock;
+  logAshaSessionEvent: jest.Mock;
+  logAshaSessionSnapshot: jest.Mock;
+  registerLiveCallEnder: jest.Mock;
+};
+
 jest.mock('@/services/bolo-api', () => ({
   getContextualWordDefinition: jest.fn(),
   prepareSavedPhraseFromText: jest.fn(),
   reportGeneratedMessage: jest.fn(),
   sendMobileChat: jest.fn(),
 }));
+
+let mockOutboxEntries: { id: string; kind: 'report_message'; sessionId?: string; payload: { message: string; reason: string; messageId?: string }; createdAt: string; attempts: number; nextAttemptAt: string; state: 'pending' | 'in_flight' | 'failed'; lastError?: string }[] = [];
+const queuedEntry = (overrides: Partial<(typeof mockOutboxEntries)[number]> = {}): (typeof mockOutboxEntries)[number] => ({
+  id: 'entry-1',
+  kind: 'report_message',
+  payload: { message: 'Hello there.', reason: 'incorrect_or_misleading', messageId: 'live-asha' },
+  createdAt: '2026-10-31T10:00:00.000Z',
+  attempts: 1,
+  nextAttemptAt: '2026-10-31T10:00:02.000Z',
+  state: 'pending',
+  ...overrides,
+});
+let mockOutboxClassification: 'transient' | 'permanent' = 'permanent';
+const mockDeliveredListeners = new Set<(entry: (typeof mockOutboxEntries)[number]) => void>();
+const mockOutboxGeneration = 7;
+
+jest.mock('@/lib/sync-outbox', () => ({
+  classifyOutboxError: () => mockOutboxClassification,
+  outboxRetryAfterMs: (error: unknown) => (error as { retryAfterMs?: number } | null)?.retryAfterMs,
+  syncOutbox: {
+    discard: jest.fn(async () => undefined),
+    enqueue: jest.fn(async (op: unknown) => ({ ...(op as object), id: 'entry-1', state: 'pending' })),
+    generation: () => mockOutboxGeneration,
+    retry: jest.fn(async () => undefined),
+    subscribeDelivered: (listener: (entry: (typeof mockOutboxEntries)[number]) => void) => {
+      mockDeliveredListeners.add(listener);
+      return () => mockDeliveredListeners.delete(listener);
+    },
+  },
+  useSyncOutbox: () => mockOutboxEntries,
+}));
+
+const outbox = jest.requireMock('@/lib/sync-outbox') as {
+  syncOutbox: { discard: jest.Mock; enqueue: jest.Mock; retry: jest.Mock };
+};
 
 const boloApi = jest.requireMock('@/services/bolo-api') as {
   getContextualWordDefinition: jest.Mock;
@@ -503,6 +612,16 @@ describe('live consent layout', () => {
     expect(scrollToEnd).not.toHaveBeenCalled();
     await view.unmount();
   }, 20_000);
+
+  it('keeps the Last session entry reachable while consent is off, outside the consent-only section', async () => {
+    const view = await render(<LiveScreen />);
+    expect(view.queryByTestId('ask-asha-sheet')).toBeNull();
+    const entry = view.getByLabelText('View last Asha session');
+    expect(entry.props.accessibilityRole).toBe('button');
+    await fireEvent.press(entry);
+    expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
+    await view.unmount();
+  });
 
   it('keeps the unlock copy when consent is off and chat history is already stored', async () => {
     mockAiConsent = true;
@@ -872,16 +991,25 @@ describe('immersive live conversation design', () => {
     const learnerLine = expectDefined(view.getAllByLabelText(/^You: /u).find((candidate) => lineText(candidate).includes('क्रिस')));
     expect(lineText(learnerLine)).toMatch(/^मेरा नाम क्रिस है \([A-Za-z ]+\)।$/u);
     expect(String(learnerLine.props.accessibilityLabel)).not.toMatch(/[\u0900-\u097F]/u);
-    const initialStyle = StyleSheet.flatten(message.props.style);
-    expect(initialStyle.height).toBeUndefined();
-    expect(initialStyle.minHeight).toBe(23);
-
-    await act(async () => {
-      message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
-      await Promise.resolve();
-    });
-    const resizedMessage = view.getByLabelText(`Asha: ${displayReply}`);
-    expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
+    // The bubble is sized by a hidden Text twin, never by a pinned input height
+    // that can go stale after a narrow first layout.
+    const inputStyle = StyleSheet.flatten(message.props.style);
+    expect(inputStyle.height).toBeUndefined();
+    expect(inputStyle.position).toBe('absolute');
+    expect(message.props.onContentSizeChange).toBeUndefined();
+    // The sizer itself must exist, stay invisible, and stay out of the
+    // accessibility tree, so removing it fails this test.
+    // The nested Devanagari span is what the query matches; the sizer is its hidden parent Text.
+    const sizer = view.getAllByText(/आप कैसे हैं/u, { includeHiddenElements: true })
+      .map((span) => {
+        let node = span.parent;
+        while (node && StyleSheet.flatten(node.props.style)?.opacity !== 0) node = node.parent;
+        return node;
+      })
+      .find(Boolean);
+    if (!sizer) throw new Error('The hidden sizer Text for the Asha message was not rendered.');
+    expect(sizer.props.accessibilityElementsHidden).toBe(true);
+    expect(sizer.props.importantForAccessibility).toBe('no-hide-descendants');
     expect(speech.preloadSpeech).not.toHaveBeenCalled();
 
     await view.unmount();
@@ -1034,6 +1162,240 @@ describe('generated-message reporting', () => {
     await flushMicrotasks();
     expect(alert).not.toHaveBeenCalledWith('Report received', expect.any(String));
     alert.mockRestore();
+  });
+});
+
+describe('offline capture and queued reports', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOutboxEntries = [];
+    mockOutboxClassification = 'permanent';
+  });
+
+  it('explains that live voice needs a connection only when a transport failure or timeout stops a call from starting', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime offline'));
+    expect(view.getByText('Bolo is unavailable right now. Check your connection and try again.')).toBeTruthy();
+    expect(view.queryByLabelText('Go to today’s lesson')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock realtime offline'));
+    const notice = view.getByText('Live voice needs an internet connection. Lessons and saved phrases work offline.');
+    expect(notice.props.accessibilityRole).toBe('alert');
+    const link = view.getByLabelText('Go to today’s lesson');
+    expect(link.props.accessibilityRole).toBe('link');
+    await fireEvent.press(link);
+    expect(mockRouterPush).toHaveBeenCalledWith('/');
+
+    await fireEvent.press(view.getByLabelText('Mock realtime timeout'));
+    expect(view.getByText('Live voice needs an internet connection. Lessons and saved phrases work offline.')).toBeTruthy();
+
+    // A missing Live URL, a rejected payload, and offline-sounding wording with another kind keep their own copy.
+    await fireEvent.press(view.getByLabelText('Mock realtime unconfigured'));
+    expect(view.getByText('Live voice isn’t available right now. You can still type to Asha.')).toBeTruthy();
+    expect(view.queryByLabelText('Go to today’s lesson')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Mock realtime offline wording'));
+    expect(view.getByText('Bolo is unavailable right now. Check your connection and try again.')).toBeTruthy();
+    expect(view.queryByLabelText('Go to today’s lesson')).toBeNull();
+    await view.unmount();
+  });
+
+  it('waits for session log recovery before resetting chat for a new conversation', async () => {
+    let finishRecovery!: () => void;
+    mockRecoveryPending = new Promise<void>((resolve) => { finishRecovery = resolve; });
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    let settled = false;
+    let connection!: Promise<void> | void;
+    await act(async () => {
+      connection = mockVoiceButtonProps.onConnectionStart?.(new AbortController().signal);
+      void Promise.resolve(connection).then(() => { settled = true; });
+      await flushMicrotasks();
+    });
+    expect(sessionLog.ensureAshaSessionLogLoaded).toHaveBeenCalled();
+    expect(appState.__clearChatHistoryMock).not.toHaveBeenCalled();
+    expect(settled).toBe(false);
+    await act(async () => {
+      finishRecovery();
+      await connection;
+    });
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    mockRecoveryPending = null;
+    await view.unmount();
+  });
+
+  it('keeps the transcript and shows an interrupted banner after a lost connection until the next session starts', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.queryByTestId('live-interrupted-banner')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Mock session interrupted'));
+    const banner = view.getByTestId('live-interrupted-banner');
+    expect(within(banner).getByText('Connection lost. This conversation is saved on your device.')).toBeTruthy();
+    expect(banner.props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock session starting'));
+    expect(view.queryByTestId('live-interrupted-banner')).toBeNull();
+    await view.unmount();
+  });
+
+  it('queues a report that fails without a connection and shows its progress on the reply', async () => {
+    mockOutboxClassification = 'transient';
+    boloApi.reportGeneratedMessage.mockRejectedValueOnce(new Error('Bolo is unavailable right now. Check your connection and try again.'));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await pressReplyAction(view, /Report reply:/u);
+    const reason = (alert.mock.calls[0]?.[2] as { onPress?: () => void }[] | undefined)?.[1]?.onPress;
+    await act(async () => {
+      reason?.();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    // The clear generation captured before the first attempt travels with the enqueue.
+    expect(outbox.syncOutbox.enqueue).toHaveBeenCalledWith({ kind: 'report_message', payload: { message: 'Hello there.', reason: 'incorrect_or_misleading', messageId: 'live-asha' } }, { generation: mockOutboxGeneration });
+    expect(alert).toHaveBeenCalledWith('Report saved', 'It will be sent when you’re back online.');
+    expect(alert).not.toHaveBeenCalledWith('Could not send report', expect.any(String));
+
+    mockOutboxEntries = [queuedEntry()];
+    await act(async () => { view.rerender(<LiveScreen />); });
+    const waiting = view.getByLabelText(/Report queued:/u);
+    expect(within(waiting).getByText('Waiting to send')).toBeTruthy();
+    expect(waiting.props.accessibilityState).toEqual({ disabled: true });
+
+    mockOutboxEntries = [{ ...mockOutboxEntries[0]!, state: 'failed', lastError: 'Bolo stopped retrying after too many attempts.' }];
+    await act(async () => { view.rerender(<LiveScreen />); });
+    expect(view.getByText('Couldn’t send')).toBeTruthy();
+    await pressReplyAction(view, /Retry report:/u);
+    expect(outbox.syncOutbox.retry).toHaveBeenCalledWith('entry-1');
+    await pressReplyAction(view, /Discard report:/u);
+    expect(outbox.syncOutbox.discard).toHaveBeenCalledWith('entry-1');
+
+    mockOutboxEntries = [];
+    await act(async () => { view.rerender(<LiveScreen />); });
+    await openMoreMenu(view);
+    expect(view.getByLabelText(/Report reply:/u).props.accessibilityState).toMatchObject({ disabled: false });
+    expect(alert).not.toHaveBeenCalledWith('Report received', expect.any(String));
+    await view.unmount();
+    alert.mockRestore();
+  });
+
+  it('carries the Retry-After of the first attempt into the queued report', async () => {
+    mockOutboxClassification = 'transient';
+    boloApi.reportGeneratedMessage.mockRejectedValueOnce(Object.assign(new Error('Slow down'), { retryAfterMs: 60 * 60 * 1000 }));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await pressReplyAction(view, /Report reply:/u);
+    const reason = (alert.mock.calls[0]?.[2] as { onPress?: () => void }[] | undefined)?.[1]?.onPress;
+    await act(async () => {
+      reason?.();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    // A 429 cooldown from the screen's own attempt must hold for the outbox's first retry too.
+    expect(outbox.syncOutbox.enqueue).toHaveBeenCalledWith(expect.objectContaining({ kind: 'report_message' }), { generation: mockOutboxGeneration, retryAfterMs: 60 * 60 * 1000 });
+    expect(alert).toHaveBeenCalledWith('Report saved', 'It will be sent when you’re back online.');
+    await view.unmount();
+    alert.mockRestore();
+  });
+
+  it('associates a queued report with the saved session that holds the reply', async () => {
+    mockOutboxClassification = 'transient';
+    sessionLog.findAshaSessionIdForRow.mockReturnValueOnce('session-7');
+    boloApi.reportGeneratedMessage.mockRejectedValueOnce(new Error('offline'));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await pressReplyAction(view, /Report reply:/u);
+    const reason = (alert.mock.calls[0]?.[2] as { onPress?: () => void }[] | undefined)?.[1]?.onPress;
+    await act(async () => {
+      reason?.();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    expect(sessionLog.findAshaSessionIdForRow).toHaveBeenCalledWith('live-asha');
+    expect(outbox.syncOutbox.enqueue).toHaveBeenCalledWith({ kind: 'report_message', sessionId: 'session-7', payload: { message: 'Hello there.', reason: 'incorrect_or_misleading', messageId: 'live-asha' } }, { generation: mockOutboxGeneration });
+    await view.unmount();
+    alert.mockRestore();
+  });
+
+  it('lists queued reports whose reply is no longer on screen, with Retry and Discard', async () => {
+    mockOutboxEntries = [
+      queuedEntry({ id: 'orphan-failed', state: 'failed', lastError: 'Bolo stopped retrying after too many attempts.', payload: { message: 'An earlier reply that was cleared.', reason: 'incorrect_or_misleading', messageId: 'gone-row' } }),
+      queuedEntry({ id: 'typed', payload: { message: 'A typed reply without a row id.', reason: 'unsafe_or_inappropriate' } }),
+    ];
+    const view = await render(<LiveScreen />);
+    const list = view.getByTestId('queued-reports');
+    expect(within(list).getByRole('header', { name: 'Reports waiting to send' })).toBeTruthy();
+    expect(within(list).getAllByTestId('queued-report-row')).toHaveLength(2);
+    expect(within(list).getByText(/Couldn’t send\. Bolo stopped retrying/u)).toBeTruthy();
+    expect(within(list).getByText(/Waiting to send\./u)).toBeTruthy();
+    await fireEvent.press(view.getByLabelText(/^Retry report: An earlier reply/u));
+    expect(outbox.syncOutbox.retry).toHaveBeenCalledWith('orphan-failed');
+    await fireEvent.press(view.getByLabelText(/^Discard report: A typed reply/u));
+    expect(outbox.syncOutbox.discard).toHaveBeenCalledWith('typed');
+
+    // Once the reply is on screen again, its report shows on the row instead of in the list.
+    mockOutboxEntries = [queuedEntry()];
+    await act(async () => { view.rerender(<LiveScreen />); });
+    expect(view.queryByTestId('queued-reports')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.queryByTestId('queued-reports')).toBeNull();
+    expect(view.getByLabelText(/Report queued:/u)).toBeTruthy();
+    await view.unmount();
+  });
+
+  it('marks a queued report as received only when the outbox reports its delivery, not when it merely disappears', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const entry = queuedEntry();
+    mockOutboxEntries = [entry];
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.getByText('Waiting to send')).toBeTruthy();
+    // Removed without a delivery (consent withdrawn, data deleted, or discarded elsewhere): not received.
+    mockOutboxEntries = [];
+    await act(async () => { view.rerender(<LiveScreen />); });
+    expect(view.queryByText('Reported')).toBeNull();
+    expect(alert).not.toHaveBeenCalledWith('Report received', expect.any(String));
+    // An explicit delivery is.
+    await act(async () => {
+      mockDeliveredListeners.forEach((listener) => listener(entry));
+    });
+    expect(view.getByText('Reported')).toBeTruthy();
+    // The provider announces a delivery once for the whole app; a screen must not repeat it.
+    expect(alert).not.toHaveBeenCalledWith('Report received', expect.any(String));
+    await view.unmount();
+    expect(mockDeliveredListeners.size).toBe(0);
+    alert.mockRestore();
+  });
+
+  it('still reports a permanent failure immediately', async () => {
+    boloApi.reportGeneratedMessage.mockRejectedValueOnce(new Error('Bad request'));
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await pressReplyAction(view, /Report reply:/u);
+    const reason = (alert.mock.calls[0]?.[2] as { onPress?: () => void }[] | undefined)?.[0]?.onPress;
+    await act(async () => {
+      reason?.();
+      for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    });
+    expect(outbox.syncOutbox.enqueue).not.toHaveBeenCalled();
+    expect(alert).toHaveBeenCalledWith('Could not send report', 'Bad request');
+    await view.unmount();
+    alert.mockRestore();
+  });
+
+  it('links to the last saved session from the Asha screen', async () => {
+    const view = await render(<LiveScreen />);
+    const link = view.getByLabelText('View last Asha session');
+    expect(link.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(link.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    await fireEvent.press(link);
+    expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
+    await view.unmount();
   });
 });
 
@@ -1505,6 +1867,10 @@ describe('live coaching state', () => {
     });
 
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    // The learner's explicit Clear removes saved session content too, but keeps queued reports.
+    expect(sessionLog.clearAshaSessionContent).toHaveBeenCalledTimes(1);
+    expect(confirmPrompt?.[1]).toBe('Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.');
+    expect(outbox.syncOutbox.discard).not.toHaveBeenCalled();
     expect(view.queryByLabelText('You: Namaste')).toBeNull();
     expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
     expect(view.getByDisplayValue('Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.').props.accessibilityHint).toBe('Read-only message.');

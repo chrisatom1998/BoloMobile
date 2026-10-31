@@ -9,6 +9,9 @@ import { useAppState } from '../src/state/app-state';
 jest.mock('@/services/bolo-api', () => ({ prepareSavedPhraseFromText: jest.fn() }));
 jest.mock('@/state/app-state', () => ({ useAppState: jest.fn() }));
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
+jest.mock('@/lib/asha-session-log-store', () => ({ logAshaSessionTool: jest.fn() }));
+
+import { logAshaSessionTool } from '../src/lib/asha-session-log-store';
 
 type AppStateValue = ReturnType<typeof useAppState>;
 
@@ -51,6 +54,21 @@ describe('Asha live session setup', () => {
     expect(prepareSavedPhraseFromText).toHaveBeenCalledWith({ clientId: 'client-12345678', text: 'नया' }, signal);
     await environment.preparePhrase({ originalText: 'Naya' }, signal);
     expect(prepareSavedPhraseFromText).toHaveBeenLastCalledWith({ clientId: 'client-12345678', text: 'Naya' }, signal);
+  });
+
+  it('records saved phrases and practiced lessons on the active session record', async () => {
+    const state = appState({ togglePhrase: jest.fn(async () => true) });
+    const environment = createAshaToolEnvironment({ current: state });
+    const phrase = { hi: 'नया', latin: 'Naya', en: 'New' };
+    await expect(environment.savePhrase(phrase)).resolves.toBe(true);
+    expect(logAshaSessionTool).toHaveBeenCalledWith({ savedPhrase: 'नया' });
+    environment.recordLessonPractice('chai');
+    expect(logAshaSessionTool).toHaveBeenLastCalledWith({ lessonId: 'chai' });
+
+    const failing = createAshaToolEnvironment({ current: appState({ togglePhrase: jest.fn(async () => false) }) });
+    jest.mocked(logAshaSessionTool).mockClear();
+    await expect(failing.savePhrase(phrase)).resolves.toBe(false);
+    expect(logAshaSessionTool).not.toHaveBeenCalled();
   });
 
   it('builds mode, context and a tool environment from the latest state', async () => {
