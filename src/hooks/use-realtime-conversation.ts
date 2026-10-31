@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { isAshaSessionEndReason, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
 import { countLiveEvent, liveDiagnosticsEnabled, noteLiveAudioEvent, recordLiveMicStats, resetLiveDiagnostics, updateLiveDiagnostics } from '@/lib/live-diagnostics';
 import { createLiveToolExecutor,type LiveToolEnvironment, type LiveToolExecutor } from '@/lib/live-tools';
 import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
@@ -35,6 +36,8 @@ type Options = {
   /** Runs once per new connection, before any transport or transcript can arrive. */
   onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
   onError: (message: string) => void;
+  /** Session lifecycle for the on-device session log: once per start, ready, and end. */
+  onSessionEvent?: (event: AshaSessionEvent) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   // Kept for existing callers; Live has no authoritative completed-turn event.
@@ -97,6 +100,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   const startRef = useRef<Promise<void> | null>(null);
   const transcriptsRef = useRef(createLiveTranscriptStore('live'));
   const toolExecutorRef = useRef<LiveToolExecutor | null>(null);
+  // True from a connection attempt's start until its end has been reported.
+  const sessionOpenRef = useRef(false);
 
   const updateStatus = useCallback((next?: RealtimeVoiceStatus) => {
     const value = next ?? (microphoneRef.current ? 'recording' : playingRef.current ? 'responding' : 'ready');
@@ -104,8 +109,13 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     setStatus(value);
   }, []);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback((reason?: AshaSessionEndReason) => {
     lifecycleRef.current += 1;
+    if (sessionOpenRef.current) {
+      sessionOpenRef.current = false;
+      // Callers may pass this straight to a press handler, so only accept real reasons.
+      callbacksRef.current.onSessionEvent?.({ type: 'ended', reason: isAshaSessionEndReason(reason) ? reason : 'user_ended' });
+    }
     const pending = pendingCommandRef.current;
     pendingCommandRef.current = null;
     if (pending) {
@@ -179,7 +189,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
         pending.reject(new Error(message));
       } else callbacksRef.current.onError(message);
     } else if (event.type === 'session.closed') {
-      disconnect();
+      disconnect('connection_lost');
     }
   }, [disconnect, updateStatus]);
 
@@ -205,6 +215,9 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     toolExecutorRef.current?.dispose();
     const executor = setup?.toolEnvironment ? createLiveToolExecutor(setup.toolEnvironment) : null;
     toolExecutorRef.current = executor;
+    let serverSessionId: string | undefined;
+    sessionOpenRef.current = true;
+    callbacksRef.current.onSessionEvent?.({ type: 'starting', mode: setup?.mode, lessonId: setup?.context?.lessonId });
     const promise = (async () => {
       await callbacksRef.current.onConnectionStart?.(controller.signal);
       if (!current()) return;
@@ -232,6 +245,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
             ...(setup?.context ? { context: setup.context } : {}),
             ...(executor ? { clientTools: true } : {}),
           }, signal);
+          serverSessionId = call.sessionId;
           return call.answerSdp;
         },
         signal: controller.signal,
@@ -268,7 +282,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
           if (!current()) return;
           startupError = new Error('The live voice connection closed. Start a new session to continue.');
           failStartup?.(startupError);
-          if (live) { disconnect(); callbacksRef.current.onError(startupError.message); }
+          if (live) { disconnect('connection_lost'); callbacksRef.current.onError(startupError.message); }
         },
       });
       if (!current()) { attemptPeer.close(); return; }
@@ -295,12 +309,13 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       if (!current()) return;
       live = true;
       updateStatus();
+      callbacksRef.current.onSessionEvent?.({ type: 'ready', serverSessionId });
       queued.splice(0).forEach(handleEvent);
     })();
     const tracked = promise.catch((cause: unknown) => {
       attemptPeer?.close();
       if (!current()) return;
-      disconnect();
+      disconnect(live ? 'connection_lost' : 'start_failed');
       throw cause;
     }).finally(() => {
       if (connectRef.current === tracked) connectRef.current = null;
@@ -331,7 +346,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       const timer = setTimeout(() => {
         if (pendingCommandRef.current?.id !== id) return;
         pendingCommandRef.current = null;
-        disconnect();
+        disconnect('connection_lost');
         reject(new Error('The live voice service did not confirm the microphone change. Reconnect to continue.'));
       }, COMMAND_TIMEOUT_MS);
       pendingCommandRef.current = { id, enabled, resolve, reject, timer };
@@ -339,7 +354,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       catch (error) {
         clearTimeout(timer);
         pendingCommandRef.current = null;
-        disconnect();
+        disconnect('connection_lost');
         reject(error);
       }
     });
@@ -355,7 +370,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       // Read the live value: this hook can mount at launch (floating Asha) before
       // the iOS scene is active, and a missed 'change' event would leave the ref stale.
       appStateRef.current = AppState.currentState;
-      if (appStateRef.current !== 'active') { disconnect(); return; }
+      if (appStateRef.current !== 'active') { disconnect('backgrounded'); return; }
       // Another player's deferred deactivate may have switched the session off since the call began.
       await reactivateRealtimeAudio().catch(() => undefined);
       if (lifecycleRef.current !== lifecycle || !peerRef.current) return;
@@ -371,7 +386,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   // While connected, this call owns the shared audio session. Another recorder (a lesson's
   // pronunciation check while Asha is minimized) ends the call through this before recording.
   const connected = status !== 'disconnected';
-  useEffect(() => (connected ? registerRealtimeVoiceOwner(disconnect) : undefined), [connected, disconnect]);
+  useEffect(() => (connected ? registerRealtimeVoiceOwner(() => disconnect('user_ended')) : undefined), [connected, disconnect]);
 
   // Preview builds only: sample the mic track and outbound audio so the Asha screen shows where audio stops.
   useEffect(() => {
@@ -399,14 +414,14 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
       // An idle hook (the floating session stays mounted between calls) must not
       // reset the shared audio route while another screen is playing.
       if (statusRef.current === 'disconnected' && !peerRef.current) return;
-      disconnect();
+      disconnect('backgrounded');
     });
     return () => subscription.remove();
   }, [disconnect]);
   // Startup-only language and identity fields require a fresh Live session.
-  useEffect(() => () => disconnect(), [clientId, responseLanguage, disconnect]);
+  useEffect(() => () => disconnect('config_changed'), [clientId, responseLanguage, disconnect]);
   // Withdrawn consent must end a session that is still mounted.
-  useEffect(() => enabled ? () => disconnect() : undefined, [enabled, disconnect]);
+  useEffect(() => enabled ? () => disconnect('config_changed') : undefined, [enabled, disconnect]);
 
   return { connect, disconnect, finishTurn, startTurn, status, microphoneEnabled, isPlaying };
 }

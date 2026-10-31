@@ -15,6 +15,7 @@ import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminder
 import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
+import { syncOutbox } from '@/lib/sync-outbox';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { MotionPreference, ReminderSettings } from '@/state/app-state-types';
@@ -111,6 +112,13 @@ export default function SettingsScreen() {
     const controller = new AbortController();
     deletionRef.current = controller;
     try {
+      // Drop queued reports before asking the server to delete: otherwise a retry could
+      // file one after the deletion (a successful request wakes the outbox), recreating
+      // a report the learner just deleted. clear() blocks sending synchronously; if its
+      // storage removal fails, sending stays blocked and clearAllData() retries it.
+      void syncOutbox.clear().catch((error: unknown) => {
+        console.warn('Bolo could not clear queued reports before deletion.', error);
+      });
       await deleteMobileData(clientId, controller.signal);
       await clearAllPracticeReminders();
       await clearAllData();
