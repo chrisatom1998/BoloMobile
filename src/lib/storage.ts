@@ -373,6 +373,7 @@ export function sanitizeReminder(value: string | null): ReminderSettings {
     hour: Number.isInteger(reminder.hour) ? Math.min(23, Math.max(0, reminder.hour as number)) : 19,
     minute: Number.isInteger(reminder.minute) ? Math.min(59, Math.max(0, reminder.minute as number)) : 0,
     notificationId: typeof reminder.notificationId === 'string' && reminder.notificationId.length <= 200 ? reminder.notificationId : null,
+    ...(reminder.offerAnswered === true ? { offerAnswered: true } : {}),
   };
 }
 
