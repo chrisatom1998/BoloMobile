@@ -11,7 +11,7 @@ import { lessonPlans } from '@/data/lesson-plans';
 import { selectNextLesson } from '@/lib/lesson-path';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
-import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
+import { completedLessonCount, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
@@ -32,7 +32,7 @@ export default function ProgressScreen() {
     accuracy: learningAccuracy(sceneProgress),
     answeredTurns: Object.values(sceneProgress).reduce((total, item) => total + item.totalAnswers, 0),
     milestones: milestoneProgress(sceneProgress),
-    completedScenes: Object.values(sceneProgress).filter((item) => item.completions > 0).length,
+    completedScenes: completedLessonCount(sceneProgress),
   }), [sceneProgress]);
   const reviewedThisWeek = week.reduce((total, day) => total + day.reviews, 0);
   const minutesThisWeek = week.reduce((total, day) => total + Math.floor(day.seconds / 60), 0);

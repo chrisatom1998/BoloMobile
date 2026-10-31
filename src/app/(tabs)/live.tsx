@@ -102,7 +102,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   // 390 and wider fit the title and Private badge on one row. Narrower phones stack them.
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < 390;
-  const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
+  const { elapsedSeconds, reset: resetPracticeTimer, touch: touchPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const floatingAsha = useAshaVoiceSession();
@@ -371,6 +371,7 @@ export default function LiveScreen() {
     if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
     additions.push({ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language });
     appendChatMessages(additions);
+    touchPracticeTimer();
     if (!practiced.current) {
       practiced.current = true;
       markLiveTurn();
@@ -394,6 +395,7 @@ export default function LiveScreen() {
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
     // Row order stays stable while speakers overlap, so the last snapshot row
     // is not the line that just changed. The transcript event chooses the speaker.
+    if (messages.some((row) => row.role === 'you')) touchPracticeTimer();
     if (messages.some((row) => row.role === 'you') && !practiced.current) {
       practiced.current = true;
       markLiveTurn();
