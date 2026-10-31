@@ -116,7 +116,7 @@ describe('HomeScreen primary journey', () => {
     const strip = view.getByTestId('today-due-strip');
     expect(within(strip).getAllByTestId(/^today-due-card-\d+$/u)).toHaveLength(4);
     expect(within(strip).getByText('पानी, कृपया')).toBeTruthy();
-    expect(view.getByTestId('today-due-meta')).toHaveTextContent('4 phrases due');
+    expect(view.getByTestId('today-due-meta')).toHaveTextContent('Preview · 4 phrases due');
     expect(view.getByTestId('today-step-review').props.accessibilityLabel).toBe('Step 1 of 3, Review 4 saved phrases, up next');
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 2 of 3, Lesson: A warm hello, later');
     expect(view.getByTestId('today-step-asha').props.accessibilityLabel).toBe('Step 3 of 3, Say it out loud with Asha, later');
@@ -146,7 +146,8 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByTestId('today-hero-kicker')).toHaveTextContent('Step 2 of 3 · Next lesson');
     expect(view.getByText('A warm hello')).toBeTruthy();
     expect(view.getByText(scene.subtitle)).toBeTruthy();
-    expect(view.getByText(scene.place)).toBeTruthy();
+    // The hero carries only kicker, title, subtitle, ring and button: no location line, no word chips.
+    expect(view.queryByText(scene.place)).toBeNull();
     expect(view.queryByTestId('today-lesson-words')).toBeNull();
     expect(view.getByTestId('today-step-review').props.accessibilityLabel).toBe('Step 1 of 3, Reviewed phrases, done');
     expect(view.getByTestId('today-plan-next')).toHaveTextContent('Next lesson: A warm hello');
@@ -172,7 +173,8 @@ describe('HomeScreen primary journey', () => {
 
     expect(view.getByTestId('today-hero-kicker')).toHaveTextContent('Step 3 of 3 · Speak');
     expect(view.getByText('Say it out loud')).toBeTruthy();
-    expect(view.getByTestId('today-asha-portrait')).toBeTruthy();
+    expect(view.queryByTestId('today-asha-portrait')).toBeNull();
+    expect(view.queryByText(/Greet me like a neighbor/u)).toBeNull();
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 2 of 3, Finished a lesson, done');
 
     await fireEvent.press(view.getByTestId('today-next-step'));

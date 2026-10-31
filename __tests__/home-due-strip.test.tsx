@@ -108,7 +108,7 @@ describe('Today due strip', () => {
     expect(within(reviewed).getByTestId('today-due-card-2-devanagari')).toHaveTextContent('चाय में चीनी कम');
     expect(view.getByTestId('today-due-card-2-mastery').props.accessibilityLabel).toBe('Mastery 2 of 5');
     expect(view.getByTestId('today-due-card-2-mastery').children).toHaveLength(5);
-    expect(view.getByTestId('today-due-meta')).toHaveTextContent('3 phrases due');
+    expect(view.getByTestId('today-due-meta')).toHaveTextContent('Preview · 3 phrases due');
   });
 
   it('drops the romanization for "devanagari" learners', async () => {
@@ -138,7 +138,7 @@ describe('Today due strip', () => {
     const strip = view.getByTestId('today-due-strip');
     expect(within(strip).getAllByTestId(/^today-due-card-\d+$/u)).toHaveLength(duePreviewLimit);
     expect(duePreviewLimit).toBe(5);
-    expect(view.getByTestId('today-due-meta')).toHaveTextContent('7 phrases due · showing 5');
+    expect(view.getByTestId('today-due-meta')).toHaveTextContent('Preview · 5 of 7 due phrases');
     expect(view.getByText('Due today').props.accessibilityRole).toBe('header');
 
     const reviewAll = view.getByLabelText('Review all 7 due phrases');
@@ -191,6 +191,24 @@ describe('Today due strip', () => {
     await act(async () => { finish(true); });
     expect(view.getByLabelText('Listen to Hello').props.accessibilityState).toMatchObject({ busy: false });
     expect(view.queryByTestId('today-due-card-0-listen-busy')).toBeNull();
+  });
+
+  it('keeps the latest tap busy when an earlier, cancelled clip finishes late', async () => {
+    const pending: ((value: boolean) => void)[] = [];
+    speakTextMock.mockImplementation(() => new Promise<boolean>((resolve) => { pending.push(resolve); }));
+    const view = await render(<HomeScreen />);
+
+    await fireEvent.press(view.getByLabelText('Listen to Hello'));
+    await fireEvent.press(view.getByLabelText('Listen to Hello'));
+    expect(pending).toHaveLength(2);
+    expect(view.getByLabelText('Listen to Hello').props.accessibilityState).toMatchObject({ busy: true });
+
+    // The first (superseded) clip resolving must not clear the second run's busy state.
+    await act(async () => { pending[0]!(false); });
+    expect(view.getByLabelText('Listen to Hello').props.accessibilityState).toMatchObject({ busy: true });
+
+    await act(async () => { pending[1]!(true); });
+    expect(view.getByLabelText('Listen to Hello').props.accessibilityState).toMatchObject({ busy: false });
   });
 
   it('disables Listen without AI consent unless bundled audio exists offline', async () => {

@@ -1,8 +1,7 @@
 import { Redirect, useFocusEffect, useRouter, type Href } from 'expo-router';
-import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ArrowRight, Check, Flame, Settings } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, ScrollView, StatusBar, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
@@ -25,7 +24,6 @@ import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
-const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const goalRingRadius = 27;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
 /**
@@ -128,7 +126,6 @@ export default function HomeScreen() {
     const lessonStep = {
       action: lessonSelection.action,
       kicker: `Step 2 of 3 · ${lessonSelection.kicker}`,
-      meta: heroScene?.place,
       onPress: () => openLesson(lessonSelection.lessonId),
       subtitle: heroScene?.subtitle,
       title: lessonSelection.title,
@@ -138,7 +135,6 @@ export default function HomeScreen() {
         return {
           action: 'Start review',
           kicker: 'Step 1 of 3 · Review',
-          meta: undefined,
           onPress: openReview,
           subtitle: `${plural(dueCount, 'phrase')} ${dueCount === 1 ? 'is' : 'are'} due. Two minutes keeps them fresh.`,
           title: 'Review your phrases',
@@ -149,7 +145,6 @@ export default function HomeScreen() {
         return {
           action: 'Talk with Asha',
           kicker: 'Step 3 of 3 · Speak',
-          meta: undefined,
           onPress: () => router.push('/live' as Href),
           subtitle: 'Try today’s lesson lines out loud in a short chat with Asha.',
           title: 'Say it out loud',
@@ -159,7 +154,6 @@ export default function HomeScreen() {
           ...lessonStep,
           action: 'Keep going',
           kicker: 'Done for today',
-          meta: undefined,
           subtitle: `Today’s practice is complete. ${streak > 0 ? `${plural(streak, 'day')} in a row. ` : ''}More is optional.`,
           title: 'Shabaash!',
         };
@@ -183,23 +177,30 @@ export default function HomeScreen() {
   // service, same consent rule, same remembered playback speed.
   const { audioError, clearAudioError, speak } = useSpeakText();
   const [playingPhrase, setPlayingPhrase] = useState('');
+  // Each tap is a new run; only the latest run may clear the busy state, so a
+  // cancelled earlier clip finishing late cannot blank out the one still playing.
+  const playbackRun = useRef(0);
   useFocusEffect(useCallback(() => () => {
+    playbackRun.current += 1;
     void stopSpeaking();
     setPlayingPhrase('');
   }, []));
   const playPhrase = useCallback(async (text: string) => {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
+    const run = playbackRun.current + 1;
+    playbackRun.current = run;
     clearAudioError();
     setPlayingPhrase(text);
     await speak(text, undefined, playbackRate);
-    setPlayingPhrase((current) => (current === text ? '' : current));
+    if (playbackRun.current === run) setPlayingPhrase('');
   }, [aiConsent, clearAudioError, playbackRate, speak]);
 
+  // Always labelled as a preview: the strip is a peek at the queue, not the review itself.
   const dueMeta = dueCount === 0
     ? 'All caught up'
     : dueCount > duePreviewLimit
-      ? `${plural(dueCount, 'phrase')} due · showing ${duePreviewLimit}`
-      : `${plural(dueCount, 'phrase')} due`;
+      ? `Preview · ${duePreviewLimit} of ${plural(dueCount, 'due phrase')}`
+      : `Preview · ${plural(dueCount, 'phrase')} due`;
   const dueCards = duePreview.map((phrase, index) => {
     const canListen = Boolean(aiConsent) || hasOfflineSpeech(phrase.hi);
     return (
@@ -248,10 +249,7 @@ export default function HomeScreen() {
         {watermark ? <Text accessibilityElementsHidden accessible={false} aria-hidden ellipsizeMode="clip" importantForAccessibility="no-hide-descendants" numberOfLines={1} style={styles.heroWatermark}>{watermark}</Text> : null}
         <View style={[styles.heroHeader, largeTextLayout && styles.heroHeaderLarge]}>
           <View style={styles.heroCopy} testID="today-next-practice">
-            <View style={styles.heroTopline}>
-              <Text style={styles.heroKicker} testID="today-hero-kicker">{hero.kicker}</Text>
-              {hero.meta ? <Text numberOfLines={2} style={styles.heroMeta}>{hero.meta}</Text> : null}
-            </View>
+            <Text style={styles.heroKicker} testID="today-hero-kicker">{hero.kicker}</Text>
             <Text style={styles.heroTitle}>{hero.title}</Text>
             {hero.subtitle ? <Text style={styles.heroSubtitle}>{hero.subtitle}</Text> : null}
           </View>
@@ -284,13 +282,6 @@ export default function HomeScreen() {
             </View>
           </View>
         </View>
-
-        {currentStep === 'asha' ? (
-          <View style={styles.ashaInvite}>
-            <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.ashaPortrait} testID="today-asha-portrait" transition={0} />
-            <Text style={styles.ashaInviteText}>“Ready? Greet me like a neighbor and tell me your name.”</Text>
-          </View>
-        ) : null}
 
         <View style={[styles.heroFooter, largeTextLayout && styles.heroFooterLarge]} testID="today-hero-footer">
           <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.heroButton} testID="today-next-step">
@@ -451,10 +442,8 @@ const useStyles = makeStyles((c) => ({
   heroHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   heroHeaderLarge: { flexDirection: 'column-reverse', alignItems: 'flex-start' },
   heroCopy: { minWidth: 0, flex: 1, gap: 6 },
-  heroTopline: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
   // Every text on the rust card is full-opacity #FBEFE8 or white (>= 5:1 on brand and forest).
   heroKicker: { color: '#FBEFE8', fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  heroMeta: { color: '#FBEFE8', fontSize: 13, lineHeight: 18 },
   heroTitle: { color: c.white, fontFamily: displayFont, fontSize: 30, lineHeight: 34, fontWeight: '700', letterSpacing: -0.3 },
   heroSubtitle: { maxWidth: 300, color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
   goalDial: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
@@ -463,9 +452,6 @@ const useStyles = makeStyles((c) => ({
   goalValue: { position: 'absolute', alignItems: 'center' },
   goalMinutes: { color: c.white, fontFamily: displayFont, fontSize: 17, lineHeight: 19, fontWeight: '700', fontVariant: ['tabular-nums'] },
   goalUnit: { color: '#FBEFE8', fontSize: 9, lineHeight: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  ashaInvite: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: 'rgba(255, 255, 255, 0.10)', paddingVertical: 10, paddingHorizontal: spacing.md },
-  ashaPortrait: { width: 48, height: 48, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  ashaInviteText: { minWidth: 0, flex: 1, color: '#FBEFE8', fontSize: 14, lineHeight: 19 },
   heroFooter: { flexDirection: 'row' },
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
   heroButton: { minHeight: 52, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },
