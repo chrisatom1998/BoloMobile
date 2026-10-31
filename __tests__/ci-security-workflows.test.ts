@@ -113,6 +113,18 @@ describe('fail-closed merge verification', () => {
     expect(jobSource).toContain('BOLO_LIVE_API_URL: https://live.example.test');
   });
 
+  test('starts the native build immediately and keeps it fast', () => {
+    const nativeJob = matchingBlock(ciWorkflow, '  ios-native-build:', '  maestro-smoke:');
+
+    expect(nativeJob).not.toMatch(/^    needs:/m);
+    expect(nativeJob).toContain('C_COMPILER_LAUNCHER="$CCACHE_BIN"');
+    expect(nativeJob).not.toContain('USE_CCACHE');
+    expect(nativeJob).toContain('actions/cache/restore@');
+    expect(nativeJob).toContain('actions/cache/save@');
+    expect(nativeJob).toContain('ARCHS=arm64');
+    expect(requiredChecks).toContain("needs['ios-native-build'].result");
+  });
+
   test('restores static validation of every committed Maestro flow', () => {
     const manifest = JSON.parse(read('package.json')) as {
       scripts: Record<string, string>;
@@ -126,7 +138,7 @@ describe('fail-closed merge verification', () => {
     const scrolls = [...smoke.matchAll(/^- scrollUntilVisible:\n((?: {4,}[^\n]+\n?)*)/gmu)]
       .map((match) => match[1]);
 
-    expect(scrolls).toHaveLength(5);
+    expect(scrolls).toHaveLength(3);
     for (const scroll of scrolls) {
       expect(scroll).toContain('direction: DOWN');
       expect(scroll).toContain('speed: 60');
@@ -199,7 +211,7 @@ describe('fail-closed merge verification', () => {
     expect(smokeJob).toContain('timeout-minutes: 30');
     expect(smokeJob).toContain('com.apple.CoreSimulator.SimRuntime.iOS-26-5');
     expect(smokeJob).not.toContain('sort_by(.version');
-    expect(smokeStep).toContain('timeout-minutes: 15');
+    expect(smokeStep).toContain('timeout-minutes: 22');
     expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
     expect(smokeStep).toContain('rebooting the simulator and retrying once');
     expect(smokeStep).toContain('GITHUB_STEP_SUMMARY');
