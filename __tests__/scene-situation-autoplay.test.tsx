@@ -71,7 +71,7 @@ describe('scene situation auto-play', () => {
     mockAppState.phrases = [];
     mockAppState.sceneProgress = {};
     hasOfflineSpeechMock.mockReturnValue(true);
-    speakTextMock.mockResolvedValue();
+    speakTextMock.mockResolvedValue(true);
   });
 
   it('speaks the Hindi situation followed by its exact English translation on mount', async () => {

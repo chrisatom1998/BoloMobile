@@ -139,7 +139,7 @@ describe('SceneScreen primary journey', () => {
     mockAppState.phrases = [];
     mockAppState.sceneProgress = {};
     mockElapsedSeconds.mockReturnValue(42);
-    speakTextMock.mockResolvedValue();
+    speakTextMock.mockResolvedValue(true);
   });
 
   it('locks answers after a wrong choice, completes a correct final turn, and replays', async () => {
