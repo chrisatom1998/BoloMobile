@@ -53,6 +53,33 @@ describe('practice reminders', () => {
     expect(result).toEqual({ enabled: true, hour: 15, minute: 42, notificationId: 'reminder-1', offerAnswered: true });
   });
 
+  it('schedules the replacement before cancelling the previous reminder', async () => {
+    const order: string[] = [];
+    mockSchedule.mockImplementationOnce(async () => { order.push('schedule'); return 'reminder-2'; });
+    mockCancel.mockImplementationOnce(async () => { order.push('cancel'); });
+
+    const result = await schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20);
+
+    expect(order).toEqual(['schedule', 'cancel']);
+    expect(mockCancel).toHaveBeenCalledWith('reminder-1');
+    expect(result).toEqual({ enabled: true, hour: 20, minute: 0, notificationId: 'reminder-2' });
+  });
+
+  it('keeps the previous reminder when scheduling the replacement fails', async () => {
+    mockSchedule.mockRejectedValueOnce(new Error('native failure'));
+
+    await expect(schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20)).rejects.toThrow('native failure');
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('drops the replacement when the previous reminder cannot be cancelled', async () => {
+    mockSchedule.mockResolvedValueOnce('reminder-2');
+    mockCancel.mockRejectedValueOnce(new Error('cancel failed'));
+
+    await expect(schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20)).rejects.toThrow('cancel failed');
+    expect(mockCancel.mock.calls.map(([id]) => id)).toEqual(['reminder-1', 'reminder-2']);
+  });
+
   it('requests permission when needed and rejects a denied request', async () => {
     mockGetPermissions.mockResolvedValue({ granted: false });
     mockRequestPermissions.mockResolvedValue({ granted: false, ios: { status: 1 } });

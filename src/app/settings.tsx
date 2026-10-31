@@ -156,10 +156,31 @@ export default function SettingsScreen() {
     if (savingReminder) return;
     setSavingReminder(true);
     try {
-      const next = hour === undefined
-        ? await cancelPracticeReminder(reminder)
-        : await schedulePracticeReminder(reminder, hour);
-      setReminder(next);
+      // The current notification is only cancelled once the new setting is
+      // stored: a failed save is already reported and rolls the setting back,
+      // so the previous reminder must still be scheduled. A rejected save
+      // counts as a failed one.
+      if (hour === undefined) {
+        const disabled = { ...reminder, enabled: false, notificationId: null };
+        if (!(await setReminder(disabled).catch(() => false))) return;
+        try {
+          await cancelPracticeReminder(reminder);
+        } catch (error) {
+          // The notification is still scheduled, so put the saved setting back to match it.
+          await setReminder(reminder).catch(() => false);
+          throw error;
+        }
+        return;
+      }
+      // Schedule the new time alongside the current notification rather than replacing it.
+      const next = await schedulePracticeReminder({ ...reminder, notificationId: null }, hour);
+      if (!(await setReminder(next).catch(() => false))) {
+        await cancelPracticeReminder(next).catch(() => undefined);
+        return;
+      }
+      if (reminder.notificationId && reminder.notificationId !== next.notificationId) {
+        await cancelPracticeReminder(reminder).catch(() => undefined);
+      }
     } catch (error) {
       if (error instanceof NotificationPermissionError) {
         showAppAlert('Could not update reminder', error.message, [

@@ -33,7 +33,8 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
   if (!permission.granted && permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
     throw new NotificationPermissionError();
   }
-  if (current.notificationId) await Notifications.cancelScheduledNotificationAsync(current.notificationId);
+  // Schedule the replacement first so a scheduling failure leaves the existing
+  // reminder in place instead of leaving none while settings still show one.
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       title: 'A little Hindi goes a long way',
@@ -47,6 +48,19 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
       ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
   });
+  if (current.notificationId && current.notificationId !== notificationId) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(current.notificationId);
+    } catch (error) {
+      // Keep the device at the old reminder rather than two: drop the new one and report.
+      try {
+        await Notifications.cancelScheduledNotificationAsync(notificationId);
+      } catch {
+        // The original failure is the one worth reporting.
+      }
+      throw error;
+    }
+  }
   return { ...current, enabled: true, hour, minute, notificationId };
 }
 

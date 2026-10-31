@@ -57,7 +57,7 @@ describe('Asha live session setup', () => {
   });
 
   it('records saved phrases and practiced lessons on the active session record', async () => {
-    const state = appState({ togglePhrase: jest.fn(async () => true) });
+    const state = appState({ togglePhrase: jest.fn(async () => 'saved' as const) });
     const environment = createAshaToolEnvironment({ current: state });
     const phrase = { hi: 'नया', latin: 'Naya', en: 'New' };
     await expect(environment.savePhrase(phrase)).resolves.toBe(true);
@@ -65,9 +65,17 @@ describe('Asha live session setup', () => {
     environment.recordLessonPractice('chai');
     expect(logAshaSessionTool).toHaveBeenLastCalledWith({ lessonId: 'chai' });
 
-    const failing = createAshaToolEnvironment({ current: appState({ togglePhrase: jest.fn(async () => false) }) });
+    const failing = createAshaToolEnvironment({ current: appState({ togglePhrase: jest.fn(async () => 'failed' as const) }) });
     jest.mocked(logAshaSessionTool).mockClear();
     await expect(failing.savePhrase(phrase)).resolves.toBe(false);
+    expect(logAshaSessionTool).not.toHaveBeenCalled();
+  });
+
+  it('tells the learner when the saved-phrase collection is full instead of saving', async () => {
+    const full = createAshaToolEnvironment({ current: appState({ togglePhrase: jest.fn(async () => 'full' as const) }) });
+    const phrase = { hi: 'नया', latin: 'Naya', en: 'New' };
+    await expect(full.savePhrase(phrase)).resolves.toBe(false);
+    expect(showAppAlert).toHaveBeenCalledWith('Saved phrases full', 'You have 100 saved phrases. Remove one in Phrases to save another.');
     expect(logAshaSessionTool).not.toHaveBeenCalled();
   });
 

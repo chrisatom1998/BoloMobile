@@ -32,7 +32,7 @@ import { hapticTap } from '@/lib/haptics';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
-import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
+import { DEFAULT_MOTION_PREFERENCE, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { classifyOutboxError, outboxRetryAfterMs, syncOutbox, useSyncOutbox, type OutboxEntry } from '@/lib/sync-outbox';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
@@ -715,7 +715,6 @@ export default function LiveScreen() {
 
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
-    if (!alreadySaved) togglePhrase(phrase);
     const session = phraseSheetSessionRef.current;
     closingPhraseSessionRef.current = session;
     pendingPhraseAlertRef.current = {
@@ -724,6 +723,18 @@ export default function LiveScreen() {
       message: `${phrase.latin} — ${phrase.en}`,
     };
     setPhraseSheetVisible(false);
+    if (alreadySaved) return;
+    void togglePhrase(phrase).then((result) => {
+      if (result !== 'full') return;
+      // Nothing was saved. Replace the queued "Phrase saved" notice while the
+      // sheet is still closing, or tell the learner now if it already closed.
+      const pending = pendingPhraseAlertRef.current;
+      if (pending && pending.session === session) {
+        pendingPhraseAlertRef.current = { session, title: SAVED_PHRASES_FULL_TITLE, message: SAVED_PHRASES_FULL_MESSAGE };
+      } else if (closingPhraseSessionRef.current === session && phraseSheetSessionRef.current === session) {
+        showAppAlert(SAVED_PHRASES_FULL_TITLE, SAVED_PHRASES_FULL_MESSAGE);
+      }
+    });
   }, [phrases, togglePhrase]);
 
   const closePhraseSheet = useCallback(() => {

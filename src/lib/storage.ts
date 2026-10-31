@@ -32,6 +32,9 @@ export const AI_CONSENT_VERSION = 10 as const;
 export const MAX_CHAT_HISTORY_MESSAGES = 100;
 export const MAX_CHAT_MESSAGE_CHARACTERS = 2_400;
 export const MAX_DAILY_PRACTICE_SECONDS = 24 * 60 * 60;
+export const MAX_SAVED_PHRASES = 100;
+export const SAVED_PHRASES_FULL_TITLE = 'Saved phrases full';
+export const SAVED_PHRASES_FULL_MESSAGE = `You have ${MAX_SAVED_PHRASES} saved phrases. Remove one in Phrases to save another.`;
 
 const MAX_CHAT_MESSAGE_ID_CHARACTERS = 128;
 

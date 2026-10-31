@@ -39,6 +39,7 @@ jest.mock('@/lib/public-pages', () => ({
 }));
 
 jest.mock('@/lib/practice-reminder', () => ({
+  NotificationPermissionError: class NotificationPermissionError extends Error {},
   cancelPracticeReminder: jest.fn(async (current) => ({ ...current, enabled: false, notificationId: null })),
   clearAllPracticeReminders: jest.fn(async () => undefined),
   schedulePracticeReminder: jest.fn(async (_current, hour, minute = 0) => ({
@@ -63,12 +64,14 @@ jest.mock('@/state/app-state', () => ({
 
 import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
-import { clearAllPracticeReminders } from '../src/lib/practice-reminder';
+import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
 import { syncOutbox } from '../src/lib/sync-outbox';
 import { deleteMobileData } from '../src/services/bolo-api';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 const clearAllPracticeRemindersMock = clearAllPracticeReminders as jest.MockedFunction<typeof clearAllPracticeReminders>;
+const cancelPracticeReminderMock = cancelPracticeReminder as jest.MockedFunction<typeof cancelPracticeReminder>;
+const schedulePracticeReminderMock = schedulePracticeReminder as jest.MockedFunction<typeof schedulePracticeReminder>;
 const deleteMobileDataMock = deleteMobileData as jest.MockedFunction<typeof deleteMobileData>;
 
 type AlertAction = {
@@ -159,6 +162,78 @@ describe('SettingsScreen lifecycle and UI', () => {
     const view = await render(<SettingsScreen />);
     expect(view.getByLabelText('Movement preference: Lively').props.accessibilityState).toEqual({ disabled: false, selected: true });
     expect(view.queryByLabelText('Movement preference: System')).toBeNull();
+  });
+
+  describe('reminder changes stay consistent with the scheduled notification', () => {
+    const current = { enabled: true, hour: 19, minute: 0, notificationId: 'old-reminder' };
+
+    async function renderWithReminder(setReminder: jest.Mock) {
+      mockUseAppState.mockReturnValue({ ...mockUseAppState(), reminder: current, setReminder });
+      return render(<SettingsScreen />);
+    }
+
+    it('keeps the previous notification when saving a new time fails', async () => {
+      const setReminder = jest.fn(async () => false);
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: 7:00 AM'));
+      await flushMicrotasks();
+
+      // Scheduled alongside the current notification, never replacing it.
+      expect(schedulePracticeReminderMock).toHaveBeenCalledWith({ ...current, notificationId: null }, 7);
+      expect(setReminder).toHaveBeenCalledWith({ enabled: true, hour: 7, minute: 0, notificationId: 'test-reminder' });
+      // Only the orphaned replacement is cancelled; the saved setting rolled back to the old one, which still fires.
+      expect(cancelPracticeReminderMock.mock.calls.map(([settings]) => settings.notificationId)).toEqual(['test-reminder']);
+    });
+
+    it('cancels the previous notification only after the new time is stored', async () => {
+      const setReminder = jest.fn(async () => true);
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: 7:00 AM'));
+      await flushMicrotasks();
+
+      expect(setReminder).toHaveBeenCalledWith({ enabled: true, hour: 7, minute: 0, notificationId: 'test-reminder' });
+      expect(cancelPracticeReminderMock).toHaveBeenCalledTimes(1);
+      expect(cancelPracticeReminderMock).toHaveBeenCalledWith(current);
+      expect(setReminder.mock.invocationCallOrder[0]).toBeLessThan(cancelPracticeReminderMock.mock.invocationCallOrder[0] ?? 0);
+    });
+
+    it('leaves the notification scheduled when saving the off setting fails', async () => {
+      const setReminder = jest.fn(async () => false);
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: Off'));
+      await flushMicrotasks();
+
+      expect(setReminder).toHaveBeenCalledWith({ ...current, enabled: false, notificationId: null });
+      expect(cancelPracticeReminderMock).not.toHaveBeenCalled();
+      expect(schedulePracticeReminderMock).not.toHaveBeenCalled();
+    });
+
+    it('cancels the notification once the off setting is stored', async () => {
+      const setReminder = jest.fn(async () => true);
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: Off'));
+      await flushMicrotasks();
+
+      expect(setReminder).toHaveBeenCalledWith({ ...current, enabled: false, notificationId: null });
+      expect(cancelPracticeReminderMock).toHaveBeenCalledWith(current);
+    });
+
+    it('restores the saved reminder when the notification cannot be cancelled after turning off', async () => {
+      const setReminder = jest.fn(async () => true);
+      cancelPracticeReminderMock.mockRejectedValueOnce(new Error('native failure'));
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: Off'));
+      await flushMicrotasks();
+
+      await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Could not update reminder', 'native failure'));
+      expect(setReminder).toHaveBeenNthCalledWith(1, { ...current, enabled: false, notificationId: null });
+      expect(setReminder).toHaveBeenNthCalledWith(2, current);
+    });
   });
 
   it('gives reminder choices balanced rows of two at default iPhone text size', async () => {

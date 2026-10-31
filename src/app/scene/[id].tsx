@@ -24,6 +24,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { SceneAttempt } from '@/state/app-state-types';
+import { showAppAlert } from '@/lib/app-alert';
 import { observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -32,7 +33,7 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { shuffleChoices } from '@/lib/shuffle-choices';
 import { trimTerminalPunctuation } from '@/lib/text';
-import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings } from '@/lib/storage';
+import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 
@@ -223,6 +224,18 @@ function SceneScreen() {
     ? `Look for “${target.latin},” the Hindi response for “${target.en}”`
     : beat.tip;
   const saved = phrases.some((phrase) => phrase.hi === target.hi);
+  const toggleSavedPhrase = () => {
+    if (saved) {
+      hapticSelect();
+      void togglePhrase(target);
+      return;
+    }
+    hapticSuccess();
+    void togglePhrase(target).then((result) => {
+      // Nothing was evicted or saved; tell the learner where to make room.
+      if (result === 'full') showAppAlert(SAVED_PHRASES_FULL_TITLE, SAVED_PHRASES_FULL_MESSAGE);
+    });
+  };
   const correct = resolution === 'correct';
   // Asha only replies in Hindi to a right answer; a wrong one gets plain English, not a blanket "close".
   const feedbackReply = resolution === 'correct'
@@ -779,7 +792,7 @@ function SceneScreen() {
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
                 <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => { if (saved) hapticSelect(); else hapticSuccess(); togglePhrase(target); }} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
+                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={toggleSavedPhrase} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
                   <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
                 </Pressable>
               </View>
