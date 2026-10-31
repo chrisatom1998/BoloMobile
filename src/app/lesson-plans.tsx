@@ -86,7 +86,7 @@ export default function LessonPlansScreen() {
               <View style={[styles.planAccent, { backgroundColor: plan.color }]} />
               <View style={styles.planTopline}>
                 <Text style={[styles.planOrder, isCurrent && styles.planOrderCurrent]}>Plan {String(plan.order).padStart(2, '0')}{status ? ` · ${status}` : ''}</Text>
-                <Text style={styles.planMeta}>{completed}/{plan.lessonIds.length} complete</Text>
+                {completed > 0 || isCurrent ? <Text style={styles.planMeta}>{completed}/{plan.lessonIds.length} complete</Text> : null}
               </View>
               <View style={styles.planTitleRow}>
                 <PlanIcon planId={plan.id} />

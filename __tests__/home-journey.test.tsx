@@ -202,7 +202,7 @@ describe('HomeScreen primary journey', () => {
     const view = await render(<HomeScreen />);
 
     expect(view.getByText('Your path')).toBeTruthy();
-    expect(view.getByText('Plan 01 of 10')).toBeTruthy();
+    expect(view.getByText('Plan 01')).toBeTruthy();
     expect(view.getByText('0 of 10 lessons')).toBeTruthy();
     expect(view.getByTestId('today-plan-segments').children).toHaveLength(10);
     expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.goldIcon);
@@ -224,7 +224,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('Plan 02 of 10')).toBeTruthy();
+    expect(view.getByText('Plan 02')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeTruthy();
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 2 of 3, Lesson: Ask where someone lives, later');
   });

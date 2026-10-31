@@ -132,7 +132,7 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    expect(view.getByText('Everything is reviewed for today.')).toBeTruthy();
+    expect(view.getByText('New phrases come back for review tomorrow.')).toBeTruthy();
     expect(view.getByText('नमस्ते')).toBeTruthy();
     expect(view.getByText(learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin))).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();

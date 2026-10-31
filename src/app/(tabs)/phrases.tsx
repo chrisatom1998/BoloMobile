@@ -128,10 +128,10 @@ export default function PhrasesScreen() {
           <PressableFeedback accessibilityLabel={due.length ? `Review ${due.length} phrase${due.length === 1 ? '' : 's'} due today` : 'All phrases reviewed for today. Practice them again'} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
             <Text style={styles.dueCount}>{due.length}</Text>
             <View style={styles.dueCopy}>
-              <Text style={styles.dueTitle}>Ready for review</Text>
-              <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'Everything is reviewed for today.'}</Text>
+              <Text style={styles.dueTitle}>{due.length ? 'Ready for review' : 'All caught up'}</Text>
+              <Text style={styles.dueBody}>{due.length ? `A quick practice keeps ${due.length} phrase${due.length === 1 ? '' : 's'} fresh.` : 'New phrases come back for review tomorrow.'}</Text>
             </View>
-            <View style={styles.dueAction}><Text style={styles.dueActionText}>Review</Text></View>
+            <View style={styles.dueAction}><Text style={styles.dueActionText}>{due.length ? 'Review' : 'Practice'}</Text></View>
           </PressableFeedback>
           <SearchField onChange={setQuery} style={styles.searchField} value={query}>
             <SearchField.Group style={styles.searchRow}>

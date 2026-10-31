@@ -325,7 +325,7 @@ export default function HomeScreen() {
             <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
               <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
                 <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')} of {lessonPlans.length}</Text>
+                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')}</Text>
               </View>
               <PressableFeedback
                 accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
