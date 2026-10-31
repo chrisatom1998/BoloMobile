@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -22,6 +22,31 @@ const requiredFiles = {
   reminder: ['reminder.png'],
   chat: ['chat-phrase-card.png'],
 };
+
+const screenshotWorkflow = '.github/workflows/ios-simulator-screenshots.yml';
+
+export function changesNeedScreenshots(files) {
+  return files.some((file) => {
+    if (file.startsWith('src/') || file.startsWith('assets/') || file.startsWith('.maestro/')) return true;
+    if (file === 'app.json' || file === 'package.json' || file === 'package-lock.json' || file === screenshotWorkflow) return true;
+    return /^app\.config\.[^/]+$/.test(file);
+  });
+}
+
+export function shouldRunScreenshotWorkflow({
+  eventName,
+  draft = false,
+  user = '',
+  labels = [],
+  changedFiles = [],
+} = {}) {
+  if (eventName === 'workflow_dispatch' || eventName === 'push') return true;
+  if (eventName !== 'pull_request') return false;
+  if (user === 'dependabot[bot]' || user === 'dependabot') return false;
+  const optedIn = labels.includes('screenshots');
+  if (draft && !optedIn) return false;
+  return optedIn || changesNeedScreenshots(changedFiles);
+}
 
 export function planScreens({ branch = '', input = '' } = {}) {
   const requested = input.trim();
@@ -83,7 +108,26 @@ function readArg(name) {
   return process.argv[index + 1] ?? '';
 }
 
+async function changedFilesFromArg() {
+  const file = readArg('--files');
+  if (!file) return [];
+  const text = await readFile(file, 'utf8');
+  return text.split('\n').map((line) => line.trim()).filter(Boolean);
+}
+
 async function main() {
+  if (process.argv.includes('--should-run')) {
+    const labels = readArg('--labels').split(',').map((label) => label.trim()).filter(Boolean);
+    const run = shouldRunScreenshotWorkflow({
+      eventName: readArg('--event'),
+      draft: readArg('--draft') === 'true',
+      user: readArg('--user'),
+      labels,
+      changedFiles: await changedFilesFromArg(),
+    });
+    console.log(run ? 'true' : 'false');
+    return;
+  }
   const branch = readArg('--branch');
   const input = readArg('--input');
   const screens = planScreens({ branch, input });

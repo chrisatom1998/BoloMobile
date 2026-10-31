@@ -2,6 +2,7 @@ name: iOS simulator screenshots
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches:
       - 'screenshots/pr-*'
@@ -14,28 +15,58 @@ on:
         type: string
 
 concurrency:
-  group: ios-simulator-screenshots-${{ github.ref }}
+  group: ios-simulator-screenshots-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  plan:
+  gate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
+      run: ${{ steps.decide.outputs.run }}
       screens: ${{ steps.plan.outputs.screens }}
       build: ${{ steps.plan.outputs.build }}
       prefix: ${{ steps.plan.outputs.prefix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version-file: '.nvmrc'
+      - id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true && 'true' || 'false' }}
+          PR_USER: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}
+          PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
+          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          set -euo pipefail
+          changed="$RUNNER_TEMP/screenshot-changed-files.txt"
+          : > "$changed"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git diff --name-only "$PR_BASE_SHA" HEAD > "$changed"
+          fi
+          decision="$(node scripts/ios-screenshot-plan.mjs --should-run --event "$EVENT_NAME" --draft "$PR_DRAFT" --user "$PR_USER" --labels "$PR_LABELS" --files "$changed")"
+          echo "run=$decision" >> "$GITHUB_OUTPUT"
+          {
+            echo "### iOS simulator screenshots"
+            if [[ "$decision" == "true" ]]; then
+              echo "Gate passed."
+            else
+              echo "Skipped the macOS build."
+              echo "A pull request runs screenshots when it changes \`src/**\`, \`assets/**\`, \`app.json\`, \`app.config.*\`, \`package.json\`, \`package-lock.json\`, \`.maestro/**\`, or this workflow."
+              echo "The \`screenshots\` label also opts a pull request in, including a draft."
+              echo "Dependabot pull requests are skipped."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
       - id: plan
+        if: steps.decide.outputs.run == 'true'
         env:
           SCREENSHOT_BRANCH: ${{ github.head_ref || github.ref_name }}
           SCREENSHOT_SCREENS_INPUT: ${{ github.event.inputs.screens || '' }}
@@ -54,13 +85,12 @@ jobs:
             echo "prefix=main" >> "$GITHUB_OUTPUT"
           fi
           {
-            echo "### iOS simulator screenshots"
             echo "Branch \`$SCREENSHOT_BRANCH\` captures \`$screens\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
   ios-simulator-build:
-    needs: plan
-    if: needs.plan.outputs.build == 'true'
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true'
     runs-on: macos-26
     timeout-minutes: 75
     env:
@@ -107,8 +137,8 @@ jobs:
           retention-days: 3
 
   capture:
-    needs: [plan, ios-simulator-build]
-    if: needs.plan.outputs.build == 'true' && needs.ios-simulator-build.result == 'success'
+    needs: [gate, ios-simulator-build]
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true' && needs.ios-simulator-build.result == 'success'
     runs-on: macos-26
     timeout-minutes: 45
     env:
@@ -117,8 +147,8 @@ jobs:
       MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000
       MAESTRO_VERSION: 2.8.0
       MAESTRO_SHA256: b3e561161904fb391875ca5834d5b22cf0b01c052dd1b408ad83e30d8f8951b3
-      SCREENSHOT_SCREENS: ${{ needs.plan.outputs.screens }}
-      SCREENSHOT_PREFIX: ${{ needs.plan.outputs.prefix }}
+      SCREENSHOT_SCREENS: ${{ needs.gate.outputs.screens }}
+      SCREENSHOT_PREFIX: ${{ needs.gate.outputs.prefix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -242,14 +272,14 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
-          name: ios-simulator-screenshots-${{ needs.plan.outputs.prefix }}-${{ github.run_id }}
+          name: ios-simulator-screenshots-${{ needs.gate.outputs.prefix }}-${{ github.run_id }}
           path: named-screenshots
           if-no-files-found: warn
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
-          name: ios-simulator-screenshot-logs-${{ needs.plan.outputs.prefix }}-${{ github.run_id }}
+          name: ios-simulator-screenshot-logs-${{ needs.gate.outputs.prefix }}-${{ github.run_id }}
           path: |
             maestro-junit.xml
             maestro-artifacts

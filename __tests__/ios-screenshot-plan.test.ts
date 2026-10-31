@@ -47,6 +47,33 @@ describe('iOS screenshot plan', () => {
     ]);
   });
 
+  it('runs a pull request only when screens can change or the screenshots label is present', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'bolo-shot-files-'));
+    const files = join(directory, 'changed.txt');
+    const decide = (changed: string, options: { draft?: string; user?: string; labels?: string } = {}) => {
+      writeFileSync(files, changed);
+      const args = ['--should-run', '--event', 'pull_request', '--draft', options.draft ?? 'false', '--files', files];
+      if (options.user) args.push('--user', options.user);
+      if (options.labels) args.push('--labels', options.labels);
+      return run(args);
+    };
+
+    expect(decide('website/index.tsx\ndocs/guide.md\n.github/workflows/ci.yml\n').stdout.trim()).toBe('false');
+    expect(decide('src/app/(tabs)/index.tsx\n').stdout.trim()).toBe('true');
+    expect(decide('assets/icon.png\n').stdout.trim()).toBe('true');
+    expect(decide('app.json\n').stdout.trim()).toBe('true');
+    expect(decide('app.config.ts\n').stdout.trim()).toBe('true');
+    expect(decide('package.json\npackage-lock.json\n').stdout.trim()).toBe('true');
+    expect(decide('.maestro/screenshots/today.yaml\n').stdout.trim()).toBe('true');
+    expect(decide('.github/workflows/ios-simulator-screenshots.yml\n').stdout.trim()).toBe('true');
+    expect(decide('README.md\n', { labels: 'screenshots' }).stdout.trim()).toBe('true');
+    expect(decide('src/app/onboarding.tsx\n', { draft: 'true' }).stdout.trim()).toBe('false');
+    expect(decide('README.md\n', { draft: 'true', labels: 'screenshots' }).stdout.trim()).toBe('true');
+    expect(decide('src/app/onboarding.tsx\n', { user: 'dependabot[bot]', labels: 'screenshots' }).stdout.trim()).toBe('false');
+    expect(run(['--should-run', '--event', 'workflow_dispatch']).stdout.trim()).toBe('true');
+    expect(run(['--should-run', '--event', 'push']).stdout.trim()).toBe('true');
+  });
+
   it('fails the check until every required PNG is present', () => {
     const directory = mkdtempSync(join(tmpdir(), 'bolo-shots-'));
     const missing = run(['--check', '--dir', directory, '--input', 'review', '--prefix', 'pr109']);
