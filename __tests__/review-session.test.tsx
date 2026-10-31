@@ -1,4 +1,5 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 const mockRouterReplace = jest.fn();
 
@@ -10,6 +11,7 @@ jest.mock('expo-router', () => ({
 jest.mock('lucide-react-native', () => ({
   Check: () => null,
   Flag: () => null,
+  Mic: () => null,
   RotateCcw: () => null,
   ShieldCheck: () => null,
   Sparkles: () => null,
@@ -21,13 +23,25 @@ jest.mock('@/components/voice-turn-button', () => {
   const { createElement } = jest.requireActual('react') as typeof import('react');
   const { Pressable, Text } = jest.requireActual('react-native') as typeof import('react-native');
   return {
-    VoiceTurnButton: ({ idleLabel, onActivityChange, onRecordingReady }: Parameters<typeof import('../src/components/voice-turn-button').VoiceTurnButton>[0]) => createElement(Pressable, {
+    VoiceTurnButton: ({ accessibilityHint, disabled = false, idleLabel, onActivityChange, onRecordingReady }: Parameters<typeof import('../src/components/voice-turn-button').VoiceTurnButton>[0]) => createElement(Pressable, {
+      accessibilityHint,
       accessibilityLabel: idleLabel,
       accessibilityRole: 'button',
+      accessibilityState: { disabled },
+      disabled,
       onPress: () => {
+        if (disabled) return;
         onActivityChange?.(true);
         void onRecordingReady({ audioBase64: 'YXVkaW8=', mimeType: 'audio/mp4' }).finally(() => onActivityChange?.(false));
       },
+    }, createElement(Text, null, idleLabel)),
+    VoiceTurnPlaceholder: ({ accessibilityHint, idleLabel }: Parameters<typeof import('../src/components/voice-turn-button').VoiceTurnPlaceholder>[0]) => createElement(Pressable, {
+      accessibilityHint,
+      accessibilityLabel: idleLabel,
+      accessibilityRole: 'button',
+      accessibilityState: { disabled: true },
+      disabled: true,
+      testID: 'review-say-it',
     }, createElement(Text, null, idleLabel)),
   };
 });
@@ -56,11 +70,13 @@ const phraseA: Phrase = { en: 'Hello', hi: 'नमस्ते', latin: 'namaste
 const phraseB: Phrase = { en: 'Thank you', hi: 'धन्यवाद', latin: 'dhanyavaad' };
 const phraseC: Phrase = { en: 'One tea, please.', hi: 'एक चाय दीजिए।', latin: 'ek chai dijiye' };
 
+const DEVANAGARI = /[ऀ-ॿ]/u;
+
 const mockAppState = {
   aiConsent: true,
   clientId: 'client-12345678',
   duePhrases: [] as Phrase[],
-  learnerProfile: { scriptPreference: 'both' },
+  learnerProfile: { scriptPreference: 'both' as 'both' | 'devanagari' | 'latin' },
   phraseReviews: {} as Record<string, { mastery: number }>,
   phrases: [] as Phrase[],
   // Mimics the provider: remembering a phrase re-derives duePhrases without it.
@@ -84,7 +100,7 @@ const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking
 const checkPronunciationMock = checkPronunciation as jest.MockedFunction<typeof checkPronunciation>;
 
 async function gradeCurrentPhrase(view: Awaited<ReturnType<typeof render>>, remembered: boolean) {
-  await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+  await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
   await fireEvent.press(view.getByRole('button', { name: remembered ? 'Got it' : 'Again' }));
 }
 
@@ -97,10 +113,22 @@ async function renderTargetCard(mastery: number) {
   return view;
 }
 
+async function withFontScale<T>(fontScale: number, run: () => Promise<T>) {
+  const window = Dimensions.get('window');
+  const screen = Dimensions.get('screen');
+  await act(async () => Dimensions.set({ screen: { ...screen, fontScale }, window: { ...window, fontScale } }));
+  try {
+    return await run();
+  } finally {
+    await act(async () => Dimensions.set({ screen, window }));
+  }
+}
+
 describe('ReviewScreen session stability', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockAppState.aiConsent = true;
+    mockAppState.learnerProfile = { scriptPreference: 'both' };
     mockAppState.duePhrases = [phraseA, phraseB, phraseC];
     mockAppState.phrases = [phraseA, phraseB, phraseC];
     mockAppState.phraseReviews = {};
@@ -111,15 +139,15 @@ describe('ReviewScreen session stability', () => {
 
   it('reviews every due phrase exactly once even as grading shrinks the due list', async () => {
     const view = await render(<ReviewScreen />);
-    expect(view.getByText('Phrase 1 of 3')).toBeTruthy();
+    expect(view.getByText('1 of 3')).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();
 
     await gradeCurrentPhrase(view, true);
-    expect(view.getByText('Phrase 2 of 3')).toBeTruthy();
+    expect(view.getByText('2 of 3')).toBeTruthy();
     expect(view.getByText('Thank you')).toBeTruthy();
 
     await gradeCurrentPhrase(view, true);
-    expect(view.getByText('Phrase 3 of 3')).toBeTruthy();
+    expect(view.getByText('3 of 3')).toBeTruthy();
     expect(view.getByText('One tea, please.')).toBeTruthy();
 
     await gradeCurrentPhrase(view, true);
@@ -131,7 +159,7 @@ describe('ReviewScreen session stability', () => {
   it('completes a single-phrase session instead of falling into the low-mastery list', async () => {
     mockAppState.duePhrases = [phraseA];
     const view = await render(<ReviewScreen />);
-    expect(view.getByText('Phrase 1 of 1')).toBeTruthy();
+    expect(view.getByText('1 of 1')).toBeTruthy();
 
     await gradeCurrentPhrase(view, true);
     expect(view.getByText('Review complete')).toBeTruthy();
@@ -141,21 +169,21 @@ describe('ReviewScreen session stability', () => {
   it('ignores a repeated grade from the same rendered phrase', async () => {
     mockAppState.duePhrases = [phraseA, phraseB];
     const view = await render(<ReviewScreen />);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     const gotIt = view.getByRole('button', { name: 'Got it' });
 
     await fireEvent.press(gotIt);
     await fireEvent.press(gotIt);
 
     expect(mockAppState.reviewPhrase).toHaveBeenCalledTimes(1);
-    expect(view.getByText('Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText('2 of 2')).toBeTruthy();
   });
 
   it('disables Listen without consent or bundled audio and surfaces playback failures', async () => {
     mockAppState.aiConsent = false;
     mockAppState.duePhrases = [phraseA];
     const view = await render(<ReviewScreen />);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     const listen = view.getByLabelText(`Hear ${phraseA.hi}`);
     expect(listen.props.accessibilityState).toEqual({ disabled: true });
@@ -186,7 +214,7 @@ describe('ReviewScreen session stability', () => {
     expect(speakTextMock).toHaveBeenCalledTimes(2);
     expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByText(phraseA.en)).toBeTruthy();
     expect(view.getByText(phraseA.hi)).toBeTruthy();
     expect(view.getByText(/namaste/i)).toBeTruthy();
@@ -238,7 +266,7 @@ describe('ReviewScreen session stability', () => {
 
     expect(view.getByText('Say it in Hindi')).toBeTruthy();
     expect(view.getByText(phraseA.en)).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     mockAppState.aiConsent = true;
     await view.rerender(<ReviewScreen />);
@@ -259,10 +287,10 @@ describe('ReviewScreen session stability', () => {
   it.each([false, true])('keeps an odd-index fallback card stable when consent changes (revealed=%s)', async (revealed) => {
     mockAppState.aiConsent = false;
     const view = await renderTargetCard(3);
-    expect(view.getByText('Phrase 2 of 3')).toBeTruthy();
+    expect(view.getByText('2 of 3')).toBeTruthy();
     expect(view.getByText('Say it in Hindi')).toBeTruthy();
     expect(view.getByText(phraseA.en)).toBeTruthy();
-    if (revealed) await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    if (revealed) await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     mockAppState.aiConsent = true;
     await view.rerender(<ReviewScreen />);
@@ -273,7 +301,7 @@ describe('ReviewScreen session stability', () => {
     expect(speakTextMock).not.toHaveBeenCalled();
     if (!revealed) {
       expect(view.getByRole('button', { name: 'Hear a hint' }).props.accessibilityState).toEqual({ disabled: false });
-      await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+      await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     }
     expect(view.getByLabelText(`Hear ${phraseA.hi}`).props.accessibilityState).toEqual({ disabled: false });
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
@@ -332,7 +360,7 @@ describe('ReviewScreen session stability', () => {
 
   it.each(['Listen', 'Slow'])('grades speak-first normally after using %s after Reveal', async (button) => {
     const view = await render(<ReviewScreen />);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByLabelText(`Hear ${phraseA.hi}${button === 'Slow' ? ' slowly' : ''}`));
     expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, button === 'Slow' ? 0.72 : 1);
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
@@ -352,50 +380,85 @@ describe('ReviewScreen say it aloud', () => {
     checkPronunciationMock.mockResolvedValue({ outcome: 'speech', transcript: 'namaste', feedback: 'Keep the first vowel short.' });
   });
 
-  it.each([0, 3])('offers recording only after Reveal, shows feedback, and resets on the next card (mastery %i)', async (mastery) => {
-    const view = await renderTargetCard(mastery);
+  it('offers Say it before Reveal on a speak-first card, keeps feedback through Reveal, and resets on the next card', async () => {
+    const view = await renderTargetCard(0);
     expect(view.queryByLabelText('Record pronunciation')).toBeNull();
+    const sayIt = view.getByLabelText('Say it');
+    expect(sayIt.props.accessibilityState).toEqual({ disabled: false });
+    expect(view.getByText('Say it in Hindi')).toBeTruthy();
+    expect(view.queryByText(phraseA.hi)).toBeNull();
 
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
-    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await fireEvent.press(sayIt);
+    expect(await view.findByText('Keep the first vowel short.')).toBeTruthy();
+    expect(checkPronunciationMock).toHaveBeenCalledWith(expect.objectContaining({ target: phraseA }), expect.any(Object));
 
+    // Feedback is not an answer: Show answer still has to be tapped, and the feedback stays put.
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.getByText('Keep the first vowel short.')).toBeTruthy();
+    expect(view.getByText(phraseA.hi)).toBeTruthy();
+    expect(view.getByLabelText('Say it')).toBeTruthy();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, true);
+    expect(view.getByText('2 of 2')).toBeTruthy();
+    expect(view.getByLabelText('Say it')).toBeTruthy();
+    expect(view.queryByText('Keep the first vowel short.')).toBeNull();
+  });
+
+  it('keeps the mic off a listen-first card until Reveal so Asha cannot describe the hidden answer', async () => {
+    const view = await renderTargetCard(3);
+    expect(view.getByText('Listen, then say what it means')).toBeTruthy();
+    expect(view.queryByLabelText('Say it')).toBeNull();
+    expect(view.queryByLabelText('Record pronunciation')).toBeNull();
+    expect(view.queryByTestId('pronunciation-recorder-hero')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    await fireEvent.press(view.getByLabelText('Say it'));
     expect(await view.findByText('Keep the first vowel short.')).toBeTruthy();
     expect(checkPronunciationMock).toHaveBeenCalledWith(expect.objectContaining({ target: phraseA }), expect.any(Object));
 
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, true);
-    expect(view.getByText(mastery >= 3 ? 'Phrase 3 of 3' : 'Phrase 2 of 2')).toBeTruthy();
-    expect(view.queryByLabelText('Record pronunciation')).toBeNull();
-
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
-    expect(view.getByLabelText('Record pronunciation')).toBeTruthy();
+    expect(view.getByText('3 of 3')).toBeTruthy();
+    expect(view.getByLabelText('Say it')).toBeTruthy();
     expect(view.queryByText('Keep the first vowel short.')).toBeNull();
   });
 
   it.each([0, 3])('grades without a recording (mastery %i)', async (mastery) => {
     const view = await renderTargetCard(mastery);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
-    expect(view.getByLabelText('Record pronunciation')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.getByLabelText('Say it')).toBeTruthy();
 
     await fireEvent.press(view.getByRole('button', { name: 'Again' }));
     expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, false);
     expect(checkPronunciationMock).not.toHaveBeenCalled();
-    expect(view.getByText(mastery >= 3 ? 'Phrase 3 of 3' : 'Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText(mastery >= 3 ? '3 of 3' : '2 of 2')).toBeTruthy();
   });
 
-  it('keeps the recorder behind the AI consent gate while grading still works', async () => {
+  it('shows a disabled Say it without consent, opens the notice on request, and still grades', async () => {
     mockAppState.aiConsent = false;
     const view = await render(<ReviewScreen />);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
 
     expect(view.queryByLabelText('Record pronunciation')).toBeNull();
-    // The full privacy notice stays one tap away instead of filling the card.
-    await fireEvent.press(view.getByRole('button', { name: 'Turn on Asha coaching' }));
-    expect(view.getByText('Before using Asha')).toBeTruthy();
+    const sayIt = view.getByLabelText('Say it');
+    expect(sayIt.props.accessibilityState).toEqual({ disabled: true });
+    expect(sayIt.props.accessibilityHint).toBe('Pronunciation checks need your consent to connected AI processing.');
+    await fireEvent.press(sayIt);
+    expect(checkPronunciationMock).not.toHaveBeenCalled();
+    expect(view.queryByText('Before checking pronunciation')).toBeNull();
 
+    await fireEvent.press(view.getByRole('button', { name: 'Allow pronunciation checks' }));
+    expect(view.getByText('Before checking pronunciation')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'I agree and want to continue' }));
     expect(mockAppState.setAiConsent).toHaveBeenCalledWith(true);
 
+    mockAppState.aiConsent = true;
+    await view.rerender(<ReviewScreen />);
+    expect(view.queryByText('Before checking pronunciation')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Allow pronunciation checks' })).toBeNull();
+    expect(view.getByLabelText('Say it').props.accessibilityState).toEqual({ disabled: false });
+
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, true);
     expect(checkPronunciationMock).not.toHaveBeenCalled();
@@ -405,9 +468,9 @@ describe('ReviewScreen say it aloud', () => {
     let finish!: (value: Awaited<ReturnType<typeof checkPronunciation>>) => void;
     checkPronunciationMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const view = await renderTargetCard(mastery);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
-    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await fireEvent.press(view.getByLabelText('Say it'));
     await waitFor(() => expect(view.getByLabelText(`Hear ${phraseA.hi}`).props.accessibilityState).toEqual({ disabled: true }));
 
     finish({ outcome: 'speech', transcript: 'namaste', feedback: 'Nice and clear.' });
@@ -420,8 +483,8 @@ describe('ReviewScreen say it aloud', () => {
     { mastery: 3, remembered: false }, { mastery: 3, remembered: true },
   ])('stops pronunciation feedback when grading mastery $mastery as remembered=$remembered', async ({ mastery, remembered }) => {
     const view = await renderTargetCard(mastery);
-    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
-    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    await fireEvent.press(view.getByLabelText('Say it'));
     expect(await view.findByText('Keep the first vowel short.')).toBeTruthy();
     expect(speakTextMock).toHaveBeenLastCalledWith('Keep the first vowel short.', expect.any(AbortSignal));
     const stopsBeforeGrading = stopSpeakingMock.mock.calls.length;
@@ -430,6 +493,176 @@ describe('ReviewScreen say it aloud', () => {
 
     expect(stopSpeakingMock).toHaveBeenCalledTimes(stopsBeforeGrading + 1);
     expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, remembered);
-    expect(view.getByText(mastery >= 3 ? 'Phrase 3 of 3' : 'Phrase 2 of 2')).toBeTruthy();
+    expect(view.getByText(mastery >= 3 ? '3 of 3' : '2 of 2')).toBeTruthy();
+  });
+});
+
+describe('ReviewScreen speak-first layout', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAppState.aiConsent = true;
+    mockAppState.learnerProfile = { scriptPreference: 'both' };
+    mockAppState.duePhrases = [phraseA, phraseB, phraseC];
+    mockAppState.phrases = [phraseA, phraseB, phraseC];
+    mockAppState.phraseReviews = {};
+    hasOfflineSpeechMock.mockReturnValue(false);
+    speakTextMock.mockResolvedValue(true);
+  });
+
+  // The bar is decorative (hidden from assistive tech; the "Phrase 1 of N"
+  // text carries the meaning), so queries must opt in to hidden elements.
+  const decorative = { includeHiddenElements: true };
+
+  it('renders one progress segment per card and fills them as the session advances', async () => {
+    const view = await render(<ReviewScreen />);
+    expect(view.getByLabelText('Phrase 1 of 3')).toHaveTextContent('1 of 3');
+    expect(view.getByTestId('review-progress-segments', decorative).props.accessibilityElementsHidden).toBe(true);
+    expect(view.getAllByTestId('review-progress-segment-done', decorative)).toHaveLength(1);
+    expect(view.getAllByTestId('review-progress-segment', decorative)).toHaveLength(2);
+
+    await gradeCurrentPhrase(view, true);
+    expect(view.getAllByTestId('review-progress-segment-done', decorative)).toHaveLength(2);
+    expect(view.getAllByTestId('review-progress-segment', decorative)).toHaveLength(1);
+
+    await gradeCurrentPhrase(view, true);
+    expect(view.getAllByTestId('review-progress-segment-done', decorative)).toHaveLength(3);
+    expect(view.queryAllByTestId('review-progress-segment', decorative)).toHaveLength(0);
+  });
+
+  it('sizes the progress to a single-card session and falls back to one bar for long sessions', async () => {
+    mockAppState.duePhrases = [phraseA];
+    const single = await render(<ReviewScreen />);
+    expect(single.getAllByTestId('review-progress-segment-done', decorative)).toHaveLength(1);
+    expect(single.queryAllByTestId('review-progress-segment', decorative)).toHaveLength(0);
+    await single.unmount();
+
+    mockAppState.duePhrases = Array.from({ length: 13 }, (_, index) => ({ en: `Prompt ${index}`, hi: `${phraseA.hi}${index}`, latin: `namaste ${index}` }));
+    const long = await render(<ReviewScreen />);
+    expect(long.getByText('1 of 13')).toBeTruthy();
+    expect(long.getByTestId('review-progress-bar', decorative)).toBeTruthy();
+    expect(long.queryByTestId('review-progress-segments', decorative)).toBeNull();
+  });
+
+  it('shows mastery as five dots with an accessible progress value', async () => {
+    mockAppState.phraseReviews = { [phraseA.hi]: { mastery: 2 } };
+    const view = await render(<ReviewScreen />);
+    const meter = view.getByLabelText('Mastery 2 of 5');
+    expect(meter.props.accessibilityRole).toBe('progressbar');
+    expect(meter.props.accessibilityValue).toEqual({ min: 0, max: 5, now: 2 });
+    expect(within(meter).getAllByTestId('review-mastery-dot-filled')).toHaveLength(2);
+    expect(within(meter).getAllByTestId('review-mastery-dot')).toHaveLength(3);
+    expect(within(meter).getByText('2 / 5')).toBeTruthy();
+    expect(view.queryByText(/Mastery/u)).toBeNull();
+  });
+
+  it('previews upcoming speak-first prompts in English only, never their Hindi', async () => {
+    const view = await render(<ReviewScreen />);
+    const upNext = view.getByTestId('review-up-next');
+    expect(within(upNext).getByText('Up next')).toBeTruthy();
+    expect(within(upNext).getByText(phraseB.en)).toBeTruthy();
+    expect(within(upNext).getByText(phraseC.en)).toBeTruthy();
+    expect(within(upNext).queryByText(phraseA.en)).toBeNull();
+    const rows = within(upNext).getAllByTestId('review-up-next-prompt');
+    expect(rows.map((row) => row.props.accessibilityLabel)).toEqual([`2 of 3: ${phraseB.en}`, `3 of 3: ${phraseC.en}`]);
+    // Before Reveal nothing on the screen, including this list, may carry Hindi script.
+    expect(JSON.stringify(view.toJSON())).not.toMatch(DEVANAGARI);
+    expect(within(upNext).queryByText(phraseB.hi)).toBeNull();
+    expect(within(upNext).queryByText(/dhanyavaad|chai dijiye/iu)).toBeNull();
+
+    await gradeCurrentPhrase(view, true);
+    expect(within(view.getByTestId('review-up-next')).queryByText(phraseB.en)).toBeNull();
+    expect(within(view.getByTestId('review-up-next')).getByText(phraseC.en)).toBeTruthy();
+
+    await gradeCurrentPhrase(view, true);
+    expect(view.queryByTestId('review-up-next')).toBeNull();
+  });
+
+  it('previews an upcoming listen-first card as a neutral listening card with no English or Hindi', async () => {
+    mockAppState.phraseReviews = Object.fromEntries([phraseA, phraseB, phraseC].map((phrase) => [phrase.hi, { mastery: 3 }]));
+    const view = await render(<ReviewScreen />);
+    const upNext = view.getByTestId('review-up-next');
+    const listening = within(upNext).getByTestId('review-up-next-listening');
+    expect(listening.props.accessibilityLabel).toBe('2 of 3: Listening card');
+    expect(within(listening).getByText('Listening card')).toBeTruthy();
+    expect(within(upNext).queryByText(phraseB.en)).toBeNull();
+    expect(within(upNext).queryByText(phraseB.hi)).toBeNull();
+    expect(within(upNext).queryByText(/dhanyavaad/iu)).toBeNull();
+    expect(within(upNext).getByText(phraseC.en)).toBeTruthy();
+  });
+
+  it('caps the preview at four rows and counts the rest', async () => {
+    mockAppState.duePhrases = Array.from({ length: 7 }, (_, index) => ({ en: `Prompt ${index}`, hi: `${phraseA.hi}${index}`, latin: `namaste ${index}` }));
+    const view = await render(<ReviewScreen />);
+    const upNext = view.getByTestId('review-up-next');
+    expect(within(upNext).getAllByTestId('review-up-next-prompt')).toHaveLength(4);
+    expect(within(upNext).getByText('Prompt 4')).toBeTruthy();
+    expect(within(upNext).queryByText('Prompt 5')).toBeNull();
+    expect(within(upNext).getByText('+2 more after these')).toBeTruthy();
+  });
+
+  it('shows no Devanagari anywhere for a Latin-script learner until the romanized answer is revealed', async () => {
+    mockAppState.learnerProfile = { scriptPreference: 'latin' };
+    const view = await render(<ReviewScreen />);
+    expect(JSON.stringify(view.toJSON())).not.toMatch(DEVANAGARI);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.queryByTestId('review-answer-devanagari')).toBeNull();
+    expect(view.getByTestId('review-answer-romanized')).toHaveTextContent(/namaste/iu);
+    expect(view.getByTestId('review-answer').props.accessibilityRole).toBeUndefined();
+
+    // The Listen and Slow names come from the same script-safe lines as the card.
+    const listen = view.getByRole('button', { name: /^Hear namaste$/iu });
+    const slow = view.getByRole('button', { name: /^Hear namaste slowly$/iu });
+    expect(listen.props.accessibilityLabel).not.toMatch(DEVANAGARI);
+    expect(slow.props.accessibilityLabel).not.toMatch(DEVANAGARI);
+    expect(view.queryByLabelText(`Hear ${phraseA.hi}`)).toBeNull();
+    expect(view.queryByLabelText(`Hear ${phraseA.hi} slowly`)).toBeNull();
+    expect(JSON.stringify(view.toJSON())).not.toMatch(DEVANAGARI);
+
+    await fireEvent.press(slow);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 0.72);
+    await fireEvent.press(listen);
+    expect(speakTextMock).toHaveBeenLastCalledWith(phraseA.hi, undefined, 1);
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenLastCalledWith(phraseA.hi, true);
+  });
+
+  it('names Listen with the Devanagari line for Devanagari-only and both-script learners', async () => {
+    mockAppState.learnerProfile = { scriptPreference: 'devanagari' };
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.getByLabelText(`Hear ${phraseA.hi}`)).toBeTruthy();
+    expect(view.getByLabelText(`Hear ${phraseA.hi} slowly`)).toBeTruthy();
+  });
+
+  it('reveals the answer through the shared PhraseCard and respects the Devanagari-only preference', async () => {
+    mockAppState.learnerProfile = { scriptPreference: 'devanagari' };
+    const view = await render(<ReviewScreen />);
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    const devanagari = view.getByTestId('review-answer-devanagari');
+    expect(devanagari).toHaveTextContent(phraseA.hi);
+    expect(devanagari.props.accessibilityLanguage).toBe('hi-IN');
+    expect(view.queryByTestId('review-answer-romanized')).toBeNull();
+    // The English prompt stays above the card; PhraseCard does not repeat it.
+    expect(view.getAllByText(phraseA.en)).toHaveLength(1);
+    expect(view.queryByTestId('review-answer-english')).toBeNull();
+  });
+
+  it('stacks the progress row and the hint/answer pills at accessibility text sizes', async () => {
+    await withFontScale(1, async () => {
+      const view = await render(<ReviewScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('review-header').props.style)).toMatchObject({ flexDirection: 'row' });
+      expect(StyleSheet.flatten(view.getByTestId('review-pills').props.style)).toMatchObject({ flexDirection: 'row' });
+      await view.unmount();
+    });
+    await withFontScale(2, async () => {
+      const view = await render(<ReviewScreen />);
+      expect(StyleSheet.flatten(view.getByTestId('review-header').props.style)).toMatchObject({ flexDirection: 'column', alignItems: 'stretch' });
+      expect(StyleSheet.flatten(view.getByTestId('review-pills').props.style)).toMatchObject({ flexDirection: 'column' });
+      const showAnswer = view.getByRole('button', { name: 'Show answer' });
+      expect(StyleSheet.flatten(showAnswer.props.style)).toMatchObject({ minHeight: 48 });
+      await fireEvent.press(showAnswer);
+      expect(view.getByRole('button', { name: 'Got it' })).toBeTruthy();
+    });
   });
 });
