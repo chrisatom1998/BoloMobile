@@ -1,5 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 
+import { sanitizeStructuredReply } from '@/lib/structured-reply';
 import type {
   ChatMessage,
   LearnerProfile,
@@ -170,9 +171,16 @@ function normalizeChatMessage(value: unknown, truncateText: boolean): ChatMessag
 
   const text = truncateText ? rawText.slice(0, MAX_CHAT_MESSAGE_CHARACTERS) : rawText;
   const role: ChatMessage['role'] = rawRole === 'mira' || rawRole === 'arjun' ? 'asha' : rawRole;
-  return message.language === undefined
-    ? { id, role, text }
-    : { id, role, text, language: message.language };
+  // A malformed or oversized structured block is dropped, never the message:
+  // the plain text always renders through the legacy path.
+  const structured = role === 'asha' ? sanitizeStructuredReply((value as { structured?: unknown }).structured) : undefined;
+  return {
+    id,
+    role,
+    text,
+    ...(message.language === undefined ? {} : { language: message.language }),
+    ...(structured ? { structured } : {}),
+  };
 }
 
 function newestUniqueMessages(messages: ChatMessage[]): ChatMessage[] {
