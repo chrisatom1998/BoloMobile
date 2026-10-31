@@ -528,7 +528,10 @@ async function flushMicrotasks() {
 }
 
 function scrollLiveChat(view: { getByTestId: (id: string) => { props: Record<string, unknown> } }, offsetY: number) {
-  const onScroll = view.getByTestId('live-chat-list').props.onScroll;
+  const list = view.getByTestId('live-chat-list');
+  const beginDrag = list.props.onScrollBeginDrag;
+  if (typeof beginDrag === 'function') beginDrag();
+  const onScroll = list.props.onScroll;
   if (typeof onScroll !== 'function') throw new Error('Expected the live chat list to handle scroll.');
   onScroll({
     nativeEvent: {
@@ -803,7 +806,8 @@ describe('immersive live conversation design', () => {
       expect(scrollToEnd).not.toHaveBeenCalled();
 
       await flushScrollFrames();
-      expect(scrollToEnd).toHaveBeenCalledTimes(2);
+      expect(scrollToEnd).toHaveBeenNthCalledWith(1, { animated: true });
+      expect(scrollToEnd).toHaveBeenNthCalledWith(2, { animated: true });
       expect(tailHadNewTurn).toEqual([true, true]);
     } finally {
       await act(async () => {
@@ -833,7 +837,8 @@ describe('immersive live conversation design', () => {
       expect(scrollToEnd).not.toHaveBeenCalled();
 
       await flushScrollFrames();
-      expect(scrollToEnd).toHaveBeenCalledTimes(2);
+      expect(scrollToEnd).toHaveBeenNthCalledWith(1, { animated: true });
+      expect(scrollToEnd).toHaveBeenNthCalledWith(2, { animated: true });
       expect(chipVisibleAtScroll).toEqual([true, true]);
     } finally {
       await act(async () => {
@@ -883,6 +888,35 @@ describe('immersive live conversation design', () => {
       await flushScrollFrames();
 
       const list = within(view.getByTestId('live-chat-list'));
+      expect(list.getByLabelText('You: Namaste')).toBeTruthy();
+      expect(list.getByLabelText('Asha: Hello there.')).toBeTruthy();
+      expect(scrollToEnd).not.toHaveBeenCalled();
+    } finally {
+      scrollToEnd.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+    }
+  });
+
+  it('does not follow an unrelated voice turn after a failed send while scrolled up', async () => {
+    boloApi.sendMobileChat.mockRejectedValueOnce(new Error('Asha is unavailable.'));
+    const view = await render(<LiveScreen />);
+    const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
+    try {
+      scrollLiveChat(view, 0);
+      scrollToEnd.mockClear();
+      await fireEvent.changeText(view.getByLabelText('Message Asha'), 'This send fails.');
+      await fireEvent.press(view.getByLabelText('Send message'));
+      await flushScrollFrames();
+
+      const list = within(view.getByTestId('live-chat-list'));
+      expect(list.queryByLabelText('You: This send fails.')).toBeNull();
+      expect(view.getByText('Asha is unavailable.')).toBeTruthy();
+      scrollToEnd.mockClear();
+      scrollLiveChat(view, 0);
+
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      await flushScrollFrames();
       expect(list.getByLabelText('You: Namaste')).toBeTruthy();
       expect(list.getByLabelText('Asha: Hello there.')).toBeTruthy();
       expect(scrollToEnd).not.toHaveBeenCalled();

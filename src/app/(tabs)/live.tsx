@@ -167,9 +167,12 @@ export default function LiveScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const nearBottomRef = useRef(true);
   const followedMessageCountRef = useRef(0);
-  // A typed send or example chip asks the next message-count follow to run even
-  // when the reader has scrolled up. Cleared once that follow's layout settles.
-  const forceFollowRef = useRef(false);
+  // Pending learner row that should be brought into view. Honored only while
+  // that row is on screen, or for the commit that replaces it with Asha's turn.
+  const forceFollowIdRef = useRef<string | null>(null);
+  // Animated send-follow emits onScroll from mid-flight offsets. Ignore those
+  // until the list is near the tail or the reader drags, so they can't cancel it.
+  const animatedFollowRef = useRef(false);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
   const visibleMessages = useMemo(
@@ -323,31 +326,43 @@ export default function LiveScreen() {
   }, [reducedMotion, screenFocused, scrollTailIntoView]);
 
   // A new message follows the tail when the reader is already near it. A send
-  // sets forceFollowRef so the same follow runs after the new row commits, even
+  // names its pending row so the same follow runs after that row commits, even
   // if they had scrolled up. The first scrollToEnd can run before layout, so
-  // retry once on the next frame, then release the forced follow.
+  // retry once on the next frame. A send animates only after that decision;
+  // mid-flight onScroll is ignored until the tail is reached or the reader drags.
   useEffect(() => {
-    const countChanged = messageCount !== followedMessageCountRef.current;
+    const previousCount = followedMessageCountRef.current;
+    const countChanged = messageCount !== previousCount;
     followedMessageCountRef.current = messageCount;
-    const forceFollow = forceFollowRef.current;
+    const forceId = forceFollowIdRef.current;
+    const showsForcedRow = forceId !== null && pendingUserMessage?.id === forceId;
+    // A fast success replaces the pending row in the same commit the count grows.
+    // A failure clears the id before that, so a later voice turn cannot inherit it.
+    const forcedSendLanded = forceId !== null && !showsForcedRow && messageCount > previousCount;
+    if (forceId !== null && !showsForcedRow) forceFollowIdRef.current = null;
+    const forceFollow = showsForcedRow || forcedSendLanded;
     if (!aiConsent || messageCount === 0 || !countChanged || (!nearBottomRef.current && !forceFollow)) return;
+    const animate = forceFollow && !reducedMotion;
+    let settled = false;
     let secondFrame = 0;
     const firstFrame = requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
+      if (animate) animatedFollowRef.current = true;
+      listRef.current?.scrollToEnd({ animated: animate });
       secondFrame = requestAnimationFrame(() => {
-        listRef.current?.scrollToEnd({ animated: false });
+        if (animate) animatedFollowRef.current = true;
+        listRef.current?.scrollToEnd({ animated: animate });
+        settled = true;
         if (!forceFollow) return;
-        forceFollowRef.current = false;
-        // This follow landed on the new tail. Later assistant lines keep
-        // following until the reader scrolls away.
+        forceFollowIdRef.current = null;
         nearBottomRef.current = true;
       });
     });
     return () => {
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
+      if (!settled) animatedFollowRef.current = false;
     };
-  }, [aiConsent, messageCount]);
+  }, [aiConsent, messageCount, pendingUserMessage, reducedMotion]);
 
   // Only the outbox's explicit delivery says a queued report was received; an entry
   // that disappears through Discard, consent withdrawal, or Delete Bolo data was not.
@@ -526,11 +541,11 @@ export default function LiveScreen() {
     const text = raw.trim().slice(0, 500);
     if (!aiConsent || !text || busy || realtimeLocked || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return false;
     hapticTap();
-    // The new row is not committed yet. The message-count effect follows once
-    // it renders, including when the reader had scrolled up.
-    forceFollowRef.current = true;
     chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
+    // Tie the follow to this row. A failure clears it before the next paint, so
+    // a later voice turn cannot inherit a send that never stayed on screen.
+    forceFollowIdRef.current = userMessage.id;
     setPendingUserMessage(userMessage);
     setBusy(true);
     setError('');
@@ -539,6 +554,7 @@ export default function LiveScreen() {
     try {
       const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) {
+        if (forceFollowIdRef.current === userMessage.id) forceFollowIdRef.current = null;
         if (mountedRef.current) clearPendingUserMessage(userMessage.id);
         return false;
       }
@@ -557,6 +573,7 @@ export default function LiveScreen() {
       }
       return true;
     } catch (cause) {
+      if (forceFollowIdRef.current === userMessage.id) forceFollowIdRef.current = null;
       if (mountedRef.current) clearPendingUserMessage(userMessage.id);
       if (mountedRef.current && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
@@ -801,7 +818,13 @@ export default function LiveScreen() {
         onScroll={(event) => {
           const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
           const distanceFromEnd = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-          nearBottomRef.current = distanceFromEnd <= tailFollowThreshold;
+          const nearBottom = distanceFromEnd <= tailFollowThreshold;
+          if (animatedFollowRef.current && !nearBottom) return;
+          animatedFollowRef.current = false;
+          nearBottomRef.current = nearBottom;
+        }}
+        onScrollBeginDrag={() => {
+          animatedFollowRef.current = false;
         }}
         scrollEventThrottle={16}
         data={aiConsent ? visibleMessages : []}
