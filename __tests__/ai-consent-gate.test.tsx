@@ -8,6 +8,10 @@ jest.mock('lucide-react-native', () => ({
   ShieldCheck: () => null,
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+}));
+
 jest.mock('@/lib/app-alert', () => ({
   showAppAlert: jest.fn(),
 }));
@@ -110,6 +114,45 @@ describe('AiConsentGate', () => {
     openPublicPageMock.mockRejectedValueOnce(new Error('Browser unavailable.'));
     await fireEvent.press(view.getByRole('link', { name: 'Read the public Privacy Policy' }));
     await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Could not open Privacy Policy', 'Browser unavailable.'));
+  });
+
+  it('keeps the full notice in a sheet and records agreement only from that notice', async () => {
+    const view = await render(
+      <AiConsentGate actionLabel="Enable live practice" onCloseSheet={jest.fn()} presentation="sheet" sheetVisible={false} title="Before your first live conversation">
+        <Text>Connected feature</Text>
+      </AiConsentGate>,
+    );
+
+    expect(view.queryByText('Connected feature')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Enable live practice' })).toBeNull();
+    expect(view.queryByText(/WebRTC/u)).toBeNull();
+
+    await view.rerender(
+      <AiConsentGate actionLabel="Enable live practice" onCloseSheet={jest.fn()} presentation="sheet" sheetVisible title="Before your first live conversation">
+        <Text>Connected feature</Text>
+      </AiConsentGate>,
+    );
+
+    expect(view.getByTestId('consent-sheet')).toBeTruthy();
+    expect(view.getByText('Before your first live conversation')).toBeTruthy();
+    expect(view.queryByText(/WebRTC/u)).toBeNull();
+    await fireEvent.press(view.getByTestId('consent-notice-toggle'));
+    expect(view.getByText(/WebRTC media stream/u)).toBeTruthy();
+    expect(view.getByText(/AI data-use consent notice version/u)).toBeTruthy();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Close consent notice' }));
+    expect(mockSetAiConsent).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Enable live practice' }));
+    await waitFor(() => expect(mockSetAiConsent).toHaveBeenCalledWith(true));
+    mockAiConsent = true;
+    await view.rerender(
+      <AiConsentGate actionLabel="Enable live practice" presentation="sheet" sheetVisible title="Before your first live conversation">
+        <Text>Connected feature</Text>
+      </AiConsentGate>,
+    );
+    expect(view.getByText('Connected feature')).toBeTruthy();
+    expect(view.queryByTestId('consent-sheet')).toBeNull();
   });
 
   it('supports screen-specific consent wording without changing the shared defaults', async () => {
