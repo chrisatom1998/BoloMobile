@@ -57,12 +57,15 @@ tags:
 - tapOn: "Asha"
 - scrollUntilVisible:
     element:
-      text: "Before your first live conversation"
+      text: "Talk with Asha"
     direction: DOWN
     speed: 60
     visibilityPercentage: 80
     centerElement: false
     timeout: 45000
+- assertVisible: "Greet me like a neighbor and tell me your name"
+- assertVisible: "Talk with Asha"
+- tapOn: "Talk with Asha"
 - assertVisible: "Before your first live conversation"
 - scrollUntilVisible:
     element:
