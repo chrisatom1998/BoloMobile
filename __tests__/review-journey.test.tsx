@@ -25,6 +25,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 });
 
 jest.mock('expo-router', () => ({
+  Stack: { Screen: () => null },
   useRouter: () => ({ back: jest.fn(), canGoBack: () => false, replace: mockRouterReplace }),
 }));
 
@@ -118,7 +119,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
     const view = await renderReview();
 
     expect(view.getByText('Save a phrase to start reviewing')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Choose a scene' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Back to Today' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });
 

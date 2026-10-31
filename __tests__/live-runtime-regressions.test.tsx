@@ -454,9 +454,8 @@ describe('live consent layout', () => {
     expect(view.getByText('Enable live practice')).toBeTruthy();
     const testIds = collectTestIds(view.toJSON());
     expect(testIds.indexOf('live-consent-section')).toBeLessThan(testIds.indexOf('live-voice-controls'));
-    const languageTabs = view.getAllByRole('tab', { name: /Asha voice language/u });
-    expect(languageTabs).toHaveLength(2);
-    languageTabs.forEach((tab) => expect(tab.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true })));
+    // The voice-language switch only appears once Asha is turned on, so it never shows greyed out.
+    expect(view.queryAllByRole('tab', { name: /Asha voice language/u })).toHaveLength(0);
     expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
     expect(view.getByText('Live voice unlocks here')).toBeTruthy();
     expect(view.queryByTestId('live-input-caption')).toBeNull();
