@@ -21,21 +21,19 @@ type TodayPlanInput = {
   practice: Pick<PersistedState['practice'], 'date' | 'liveDone'>;
   practiceHistory?: PersistedState['practiceHistory'];
   reviewStreakDays?: PersistedState['reviewStreakDays'];
+  /** Ignored for the lesson step. A beat-0 checkpoint refreshes this without finishing a lesson. */
   sceneProgress?: PersistedState['sceneProgress'];
   now?: Date;
 };
 
 const stepOrder: TodayStepKey[] = ['review', 'lesson', 'asha'];
 
-function lessonFinishedToday({ practiceHistory = [], sceneProgress = {} }: TodayPlanInput, today: string) {
+function lessonFinishedToday({ practiceHistory = [] }: TodayPlanInput, today: string) {
   // Review answers also count toward `answers`, so only the remainder came from lessons.
+  // A completed scene left at beat 0 is not enough: reopening it, or Asha checkpointing
+  // it, refreshes `lastPracticedAt` without recording a lesson finished today.
   const history = practiceHistory.find((day) => day.date === today);
-  if (history && history.answers - history.reviews > 0) return true;
-  return Object.values(sceneProgress).some((progress) => {
-    if (progress.completions <= 0 || progress.lastBeatIndex !== 0 || !progress.lastPracticedAt) return false;
-    const practicedAt = new Date(progress.lastPracticedAt);
-    return !Number.isNaN(practicedAt.getTime()) && dateKey(practicedAt) === today;
-  });
+  return Boolean(history && history.answers - history.reviews > 0);
 }
 
 /**

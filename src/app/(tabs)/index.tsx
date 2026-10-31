@@ -76,9 +76,9 @@ export default function HomeScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay is the only input to today's date line.
   const dateLine = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), [calendarDay]);
   const todayPlan = useMemo(
-    () => buildTodayPlan({ dueCount, practice, practiceHistory, reviewStreakDays, sceneProgress }),
+    () => buildTodayPlan({ dueCount, practice, practiceHistory, reviewStreakDays }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay rolls the plan over at midnight.
-    [calendarDay, dueCount, practice, practiceHistory, reviewStreakDays, sceneProgress],
+    [calendarDay, dueCount, practice, practiceHistory, reviewStreakDays],
   );
   const lessonSelection = useMemo(() => {
     const catalog = lessonPlans.flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })));

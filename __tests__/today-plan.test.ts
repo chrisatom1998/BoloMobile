@@ -44,12 +44,21 @@ describe('buildTodayPlan', () => {
     expect(withLesson.nextStep).toBe('asha');
   });
 
-  it('marks the lesson done from a scene completed earlier today', () => {
-    const completedAt = new Date(2026, 9, 31, 9, 30).toISOString();
+  it('does not treat a revisited completed scene as a lesson finished today', () => {
+    const revisitedAt = new Date(2026, 9, 31, 9, 30).toISOString();
     const yesterday = new Date(2026, 9, 30, 21, 0).toISOString();
     const base = { completions: 1, bestScore: 0, bestAccuracy: 0, totalCorrect: 0, totalAnswers: 0, weakPhrases: [] };
-    expect(buildTodayPlan({ dueCount: 0, now, practice, sceneProgress: { a: { ...base, lastBeatIndex: 0, lastPracticedAt: yesterday } } }).nextStep).toBe('lesson');
-    expect(buildTodayPlan({ dueCount: 0, now, practice, sceneProgress: { a: { ...base, lastBeatIndex: 0, lastPracticedAt: completedAt } } }).nextStep).toBe('asha');
+    const revisited = buildTodayPlan({
+      dueCount: 0, now, practice,
+      practiceHistory: [{ answers: 4, correct: 3, date: today, reviews: 4, seconds: 0 }],
+      sceneProgress: { a: { ...base, lastBeatIndex: 0, lastPracticedAt: revisitedAt } },
+    });
+    const untouched = buildTodayPlan({
+      dueCount: 0, now, practice,
+      sceneProgress: { a: { ...base, lastBeatIndex: 0, lastPracticedAt: yesterday } },
+    });
+    expect(revisited.nextStep).toBe('lesson');
+    expect(untouched.nextStep).toBe('lesson');
   });
 
   it('finishes the day once Asha has heard from the learner', () => {
