@@ -59,9 +59,17 @@ describe('WebRTC audio-session notifications', () => {
     expect(didDeactivate).toHaveBeenCalledTimes(1);
   });
 
-  it('cycles the session off before a call but leaves expo-audio enabled for later playback', async () => {
+  it('turns the session off before a call and only turns expo-audio back on after voiceChat is active', async () => {
     await expect(releaseAudioSessionBeforeCall()).resolves.toBe('ok');
+    // Re-activating here would bring back the pre-call session and a silent iPhone mic.
+    expect(jest.mocked(setIsAudioActiveAsync).mock.calls).toEqual([[false]]);
 
+    await activateVoiceChatSession({ notifyWebRtc: false });
+    expect(jest.mocked(setIsAudioActiveAsync).mock.calls).toEqual([[false], [true]]);
+
+    // Later activations in the same call (foreground, unmute) leave expo-audio alone.
+    await activateVoiceChatSession();
+    await restoreDefaultAudioSessionMode();
     expect(jest.mocked(setIsAudioActiveAsync).mock.calls).toEqual([[false], [true]]);
   });
 });

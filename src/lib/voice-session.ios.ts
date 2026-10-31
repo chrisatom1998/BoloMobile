@@ -55,6 +55,21 @@ function notifyWebRtcSessionDeactivated() {
   }
 }
 
+// Set by releaseAudioSessionBeforeCall, cleared once the voice-chat session is active again.
+let expoAudioReleased = false;
+
+/**
+ * Turns expo-audio back on after a pre-call release. Runs only after activateVoiceChat, when the
+ * session is already active in PlayAndRecord + voiceChat, so it cannot re-activate the old
+ * category under WebRTC. Best effort: playback later activates the session on its own.
+ */
+async function reenableExpoAudioAfterRelease() {
+  if (!expoAudioReleased) return;
+  expoAudioReleased = false;
+  if (typeof ExpoAudio.setIsAudioActiveAsync !== 'function') return;
+  await ExpoAudio.setIsAudioActiveAsync(true).catch(() => undefined);
+}
+
 /**
  * Puts the iOS audio session in PlayAndRecord + voiceChat and makes it active.
  * Resolves with a short description of the session for the preview debug line.
@@ -66,10 +81,12 @@ export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolea
   const reportToWebRtc = options?.notifyWebRtc !== false;
   if (session) {
     const status = await session.activateVoiceChat();
+    await reenableExpoAudioAfterRelease();
     return reportToWebRtc ? `${status} ${notifyWebRtcSessionActivated()}` : `${status} rtc:skip`;
   }
   if (typeof ExpoAudio.setIsAudioActiveAsync === 'function') {
     await ExpoAudio.setIsAudioActiveAsync(true);
+    expoAudioReleased = false;
     const tag = reportToWebRtc ? notifyWebRtcSessionActivated() : 'rtc:skip';
     return `active (no voiceChat module) ${tag}`;
   }
@@ -80,15 +97,19 @@ export async function activateVoiceChatSession(options?: { notifyWebRtc?: boolea
  * Turns the audio session off before a call configures it. A typed reply leaves it this way
  * (expo-audio deactivates after playback), and only then did Asha hear the first call; a session
  * still active from launch or an earlier call gave WebRTC a mic that sent silence.
- * expo-audio's inactive flag also blocks all later playback app-wide, so turn it straight back on:
- * the session still cycles off, and lesson audio and spoken replies keep working after the call.
+ *
+ * The session must stay off until activateVoiceChat has set PlayAndRecord + voiceChat.
+ * expo-audio's setIsAudioActiveAsync(true) calls AVAudioSession.setActive(true) right away, so
+ * turning it back on here re-activated the old session before the call configured it, and the
+ * iPhone mic went silent again. activateVoiceChatSession turns expo-audio back on once the
+ * voice-chat session is active, so later lesson audio and spoken replies still work.
  * Returns a short tag for the debug line.
  */
 export async function releaseAudioSessionBeforeCall(): Promise<string> {
   if (typeof ExpoAudio.setIsAudioActiveAsync !== 'function') return 'none';
   try {
     await ExpoAudio.setIsAudioActiveAsync(false);
-    await ExpoAudio.setIsAudioActiveAsync(true);
+    expoAudioReleased = true;
     return 'ok';
   } catch (cause) {
     return `failed: ${cause instanceof Error ? cause.message.slice(0, 40) : 'unknown'}`;
