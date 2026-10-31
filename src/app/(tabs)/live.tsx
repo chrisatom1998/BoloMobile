@@ -100,6 +100,7 @@ export default function LiveScreen() {
   const [error, setError] = useState('');
   const [liveAshaTranscript, setLiveAshaTranscript] = useState('');
   const [liveUserTranscript, setLiveUserTranscript] = useState('');
+  const [latestCaptionSpeaker, setLatestCaptionSpeaker] = useState<'you' | 'asha' | null>(null);
   const resumedStatus = floatingAsha.available ? floatingAsha.status : 'disconnected';
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>(resumedStatus);
   const [reported, setReported] = useState<Set<string>>(new Set());
@@ -124,7 +125,6 @@ export default function LiveScreen() {
   const reportControllersRef = useRef<Map<string, AbortController>>(new Map());
   const selectedChatTextRef = useRef<Map<string, { sourceText: string; text: string }>>(new Map());
   const selectionClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const transcriptTurnActionRef = useRef<(() => void) | null>(null);
   const backgroundCheckpointedRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
@@ -136,19 +136,20 @@ export default function LiveScreen() {
   const realtimeOwnsAudio = realtimeLocked;
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
+  const youCaption = romanizeDevanagari(liveUserTranscript).trim();
+  const ashaCaption = romanizeDevanagari(liveAshaTranscript).trim();
+  const speechCaption = latestCaptionSpeaker === 'asha' && ashaCaption
+    ? { speaker: 'asha' as const, text: ashaCaption }
+    : latestCaptionSpeaker === 'you' && youCaption
+      ? { speaker: 'you' as const, text: youCaption }
+      : ashaCaption
+        ? { speaker: 'asha' as const, text: ashaCaption }
+        : youCaption
+          ? { speaker: 'you' as const, text: youCaption }
+          : null;
+  const conversationStarted = hasTranscriptMessages || speechCaption !== null;
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
-  const transcriptTurnDisabled = !aiConsent || !screenFocused || busy || clearingChat || realtimeStatus === 'connecting';
-  const transcriptTurnLabel = {
-    disconnected: 'Connect with Asha',
-    connecting: 'Connecting to Asha…',
-    ready: 'Unmute microphone',
-    recording: 'Mute microphone',
-    responding: 'Unmute microphone',
-  }[realtimeStatus];
-  const transcriptTurnHint = realtimeStatus === 'recording'
-    ? 'Mutes your microphone. Asha can continue speaking.'
-    : 'Opens your microphone for continuous conversation. You can speak while Asha is speaking.';
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
   const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
@@ -170,15 +171,6 @@ export default function LiveScreen() {
   const scrollToChat = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: !reducedMotion });
   }, [reducedMotion]);
-
-  const bindTranscriptTurnAction = useCallback((action: (() => void) | null) => {
-    transcriptTurnActionRef.current = action;
-  }, []);
-
-  const startTranscriptTurn = useCallback(() => {
-    if (transcriptTurnDisabled) return;
-    transcriptTurnActionRef.current?.();
-  }, [transcriptTurnDisabled]);
 
   const clearPendingUserMessage = useCallback((expectedId: string) => {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
@@ -268,8 +260,10 @@ export default function LiveScreen() {
     replaceLiveChatSnapshot(ids.current, messages);
     ids.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
+    const lastSpoken = [...messages].reverse().find((row) => row.text.trim());
     setLiveUserTranscript([...messages].reverse().find((row) => row.role === 'you')?.text ?? '');
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
+    setLatestCaptionSpeaker(lastSpoken ? lastSpoken.role : null);
     if (messages.some((row) => row.role === 'you') && !practiced.current) {
       practiced.current = true;
       markLiveTurn();
@@ -288,6 +282,7 @@ export default function LiveScreen() {
     void stopSpeaking();
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
+    setLatestCaptionSpeaker(null);
     setError('');
     clearAudioError();
     updateLearnerProfile({ responseLanguage: nextLanguage });
@@ -307,6 +302,7 @@ export default function LiveScreen() {
     scrollAfterContentChangeRef.current = false;
     setLiveUserTranscript('');
     setLiveAshaTranscript('');
+    setLatestCaptionSpeaker(null);
     selectionClearTimersRef.current.forEach(clearTimeout);
     selectionClearTimersRef.current.clear();
     selectedChatTextRef.current.clear();
@@ -460,6 +456,7 @@ export default function LiveScreen() {
   const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {
     if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
     else setLiveUserTranscript(update.text);
+    if (update.text.trim()) setLatestCaptionSpeaker(update.speaker);
   }, []);
 
   const floatingAvailable = floatingAsha.available;
@@ -653,7 +650,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindTranscriptTurnAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -672,34 +669,39 @@ export default function LiveScreen() {
                     ) : null}
                   </View>
                   <View style={styles.heroCopy}>
-                    <View style={styles.statusRow}>
+                    <View style={styles.statusRow} testID="asha-voice-status">
                       <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
-                      <Text style={styles.liveVoiceText}>{statusKicker}</Text>
+                      <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} style={styles.liveVoiceText}>{statusKicker}</Text>
                     </View>
-                    <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
-                    <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
+                    {conversationStarted ? null : (
+                      <>
+                        <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
+                        <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
+                      </>
+                    )}
                     {liveDiagnosticsEnabled ? <Text selectable style={styles.diagnosticsLine} testID="live-diagnostics">{formatLiveDiagnostics(liveDiagnostics)}</Text> : null}
                   </View>
                 </View>
-                <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
-                  <View style={[styles.captionCard, styles.captionCardYou]}>
-                    <View style={styles.captionLabelBadge} testID="live-caption-label-badge">
-                      <Text style={styles.captionLabel}>You</Text>
+                {speechCaption ? (
+                  <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
+                    <View style={[styles.captionCard, speechCaption.speaker === 'you' ? styles.captionCardYou : styles.captionCardAsha]}>
+                      <View style={styles.captionLabelBadge} testID="live-caption-label-badge">
+                        <Text style={[styles.captionLabel, speechCaption.speaker === 'asha' && styles.captionLabelAsha]}>{speechCaption.speaker === 'you' ? 'You' : 'Asha'}</Text>
+                      </View>
+                      <Text
+                        accessibilityLiveRegion="polite"
+                        style={[styles.captionText, speechCaption.speaker === 'asha' && styles.captionTextAsha]}
+                        testID={speechCaption.speaker === 'you' ? 'live-input-caption' : 'live-output-caption'}
+                      >
+                        {speechCaption.text}
+                      </Text>
                     </View>
-                    <Text accessibilityLiveRegion="polite" style={styles.captionText} testID="live-input-caption">{aiConsent ? romanizeDevanagari(liveUserTranscript) || 'Your words appear here as you speak.' : 'Enable live practice to see captions.'}</Text>
-                  </View>
-                  <View style={[styles.captionCard, styles.captionCardAsha]}>
-                    <View style={styles.captionLabelBadge}>
-                      <Text style={[styles.captionLabel, styles.captionLabelAsha]}>Asha</Text>
-                    </View>
-                    <Text accessibilityLiveRegion="polite" style={[styles.captionText, styles.captionTextAsha]} testID="live-output-caption">{aiConsent ? romanizeDevanagari(liveAshaTranscript) || 'Asha’s words appear here as she speaks.' : 'Enable live practice to see captions.'}</Text>
-                  </View>
-                </CaptionReveal>
+                  </CaptionReveal>
+                ) : null}
               </View>
             </View>
 
             {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact]} testID="ask-asha-sheet">
-                <View style={styles.sheetHandle} testID="ask-asha-sheet-handle" />
                 <View style={[styles.askHeadingRow, largeTextLayout && styles.askHeadingRowLarge]}>
                   <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
                     <Text style={styles.askEyebrow}>Ask Asha</Text>
@@ -748,29 +750,7 @@ export default function LiveScreen() {
             styles={styles}
           />
         )}
-        ListFooterComponent={aiConsent ? (
-          <>
-            {hasTranscriptMessages ? (
-              <View style={styles.transcriptFooter}>
-                <View style={styles.transcriptTurnCard}>
-                  <Text style={styles.transcriptTurnEyebrow}>Live microphone</Text>
-                  <PressableFeedback
-                    accessibilityHint={transcriptTurnHint}
-                    accessibilityLabel={transcriptTurnLabel}
-                    accessibilityRole="button"
-                    accessibilityState={{ disabled: transcriptTurnDisabled }}
-                    isDisabled={transcriptTurnDisabled}
-                    onPress={startTranscriptTurn}
-                    style={[styles.transcriptTurnButton, transcriptTurnDisabled && styles.disabled]}
-                  >
-                    <Text style={styles.transcriptTurnButtonText}>{transcriptTurnLabel}</Text>
-                  </PressableFeedback>
-                </View>
-              </View>
-            ) : null}
-            {featuredPhrase}
-          </>
-        ) : null}
+        ListFooterComponent={aiConsent ? featuredPhrase : null}
       />
 
       {aiConsent ? <View style={[styles.composer, { paddingBottom: Math.max(spacing.md, insets.bottom + 52) }]}>
@@ -810,7 +790,6 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   list: { flex: 1, backgroundColor: c.night },
   listContent: { backgroundColor: c.night, paddingBottom: spacing.lg },
   voiceHero: {
-    minHeight: 492,
     alignItems: 'center',
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -818,9 +797,9 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
     backgroundColor: c.night,
     overflow: 'hidden',
   },
-  voiceHeroCompact: { gap: spacing.xs, minHeight: 430, paddingBottom: spacing.md },
-  voiceHeroLarge: { minHeight: 0, overflow: 'visible' },
-  voiceHeroConsent: { minHeight: 0, overflow: 'visible', paddingBottom: spacing.xl },
+  voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.md },
+  voiceHeroLarge: { overflow: 'visible' },
+  voiceHeroConsent: { overflow: 'visible', paddingBottom: spacing.xl },
   topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
   headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
@@ -874,9 +853,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
   studioMasteryText: { color: c.goldText, fontSize: 11, fontWeight: '700' },
   featuredPhraseSection: { alignItems: 'center', backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  askSection: { minHeight: 116, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
+  askSection: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.lg },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
-  sheetHandle: { alignSelf: 'center', width: 44, height: 5, borderRadius: radius.pill, backgroundColor: c.nightLine },
   askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   askHeadingRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
   askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: 3 },
@@ -898,11 +876,6 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
   reportedText: { color: c.success },
-  transcriptFooter: { backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  transcriptTurnCard: { borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, gap: spacing.sm, padding: spacing.md },
-  transcriptTurnEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.75, textTransform: 'uppercase' },
-  transcriptTurnButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  transcriptTurnButtonText: { color: c.ink, fontSize: 14, fontWeight: '600', textAlign: 'center' },
   composer: { backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
   examples: { justifyContent: 'center', gap: spacing.sm, paddingRight: spacing.xl },
   example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },

@@ -400,7 +400,9 @@ describe('live consent layout', () => {
     languageTabs.forEach((tab) => expect(tab.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true })));
     expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
     expect(view.getByText('Live voice unlocks here')).toBeTruthy();
-    expect(view.getAllByText('Enable live practice to see captions.')).toHaveLength(2);
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
+    expect(view.queryByText('Your words appear here as you speak.')).toBeNull();
     expect(view.queryByLabelText('Open chat history')).toBeNull();
     expect(view.queryByText('Ask Asha')).toBeNull();
     expect(view.queryByLabelText('Message Asha')).toBeNull();
@@ -435,6 +437,8 @@ describe('live theme styles', () => {
     expect(styles.captionLabel.fontWeight).toBe('800');
     expect(styles.captionLabel.letterSpacing).toBeLessThanOrEqual(0.25);
     expect('textTransform' in styles.captionLabel).toBe(false);
+    expect('minHeight' in styles.voiceHero).toBe(false);
+    expect('minHeight' in styles.voiceHeroCompact).toBe(false);
     expect(styles.examples.paddingRight).toBe(spacing.xl);
   });
 });
@@ -450,19 +454,25 @@ describe('immersive live conversation design', () => {
     const hero = view.getByTestId('voice-conversation-hero');
 
     expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#10201E');
+    expect(StyleSheet.flatten(hero.props.style).minHeight).toBeUndefined();
     expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
     expect(view.getByText('Ready when you are')).toBeTruthy();
     expect(view.getByText('Tap Asha to start talking with her.')).toBeTruthy();
     expect(view.getAllByText(/Tap Asha/u)).toHaveLength(1);
     expect(view.queryByText(/orb/u)).toBeNull();
-    const captionBadge = view.getByTestId('live-caption-label-badge');
-    expect(within(captionBadge).getByText('You')).toBeTruthy();
+    expect(view.queryByTestId('live-caption-label-badge')).toBeNull();
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
+    expect(view.queryByText('Your words appear here as you speak.')).toBeNull();
+    expect(view.queryByText('Asha’s words appear here as she speaks.')).toBeNull();
     expect(view.queryByText('LIVE')).toBeNull();
-    expect(view.getByText('Your words appear here as you speak.').props.accessibilityLiveRegion).toBe('polite');
     expect(view.queryByText('Tap the orb and ask anything in Hindi.')).toBeNull();
     expect(view.queryByText('Live Asha caption')).toBeNull();
     expect(view.queryByLabelText('Open text phrase help')).toBeNull();
+    expect(view.queryByLabelText('Connect with Asha')).toBeNull();
+    expect(view.queryByLabelText('Unmute microphone')).toBeNull();
+    expect(view.queryByText('Live microphone')).toBeNull();
     expect(view.getByText('Ask Asha')).toBeTruthy();
     expect(view.getByText('How do I say…?')).toBeTruthy();
     expect(view.getByLabelText('Open chat history')).toBeTruthy();
@@ -474,7 +484,7 @@ describe('immersive live conversation design', () => {
     const sheetStyle = StyleSheet.flatten(sheet.props.style);
     expect(sheetStyle.marginTop).toBeLessThan(0);
     expect(sheetStyle.borderTopLeftRadius).toBeGreaterThanOrEqual(30);
-    expect(view.getByTestId('ask-asha-sheet-handle')).toBeTruthy();
+    expect(view.queryByTestId('ask-asha-sheet-handle')).toBeNull();
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
     expect(view.getByText('Connecting to Asha')).toBeTruthy();
@@ -486,8 +496,15 @@ describe('immersive live conversation design', () => {
     expect(view.queryByText('Live Asha caption')).toBeNull();
 
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
-    expect(view.getByTestId('live-output-caption')).toBeTruthy();
+    expect(view.queryByText('Ready when you are')).toBeNull();
+    expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
+    expect(view.getByTestId('asha-voice-status')).toBeTruthy();
+    expect(view.getByText('How do I say…?')).toBeTruthy();
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
+    expect(view.getByTestId('live-output-caption').props.accessibilityLiveRegion).toBe('polite');
+    expect(view.getByTestId('live-output-caption').props.children).toBe('Hello there.');
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
+    expect(view.queryByLabelText('Connect with Asha')).toBeNull();
 
     expect(view.getByLabelText('Message Asha')).toBeTruthy();
 
@@ -495,14 +512,18 @@ describe('immersive live conversation design', () => {
     await flushMicrotasks();
   });
 
-  it('keeps the live caption mounted from connection through the ready state', async () => {
+  it('hides caption cards until speech starts, then shows the latest line', async () => {
     const view = await render(<LiveScreen />);
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
-    expect(view.getByTestId('live-output-caption')).toBeTruthy();
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByTestId('live-output-caption')).toBeTruthy();
-    expect(view.getByText('Your words appear here as you speak.')).toBeTruthy();
+    expect(view.queryByText('Your words appear here as you speak.')).toBeNull();
+    expect(view.queryByText('Asha’s words appear here as she speaks.')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Mock learner transcript'));
+    expect(view.getByTestId('live-input-caption').props.children).toBe('Namaste, meraa naam Chris hai.');
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.queryByText('Live Asha caption')).toBeNull();
 
@@ -520,6 +541,7 @@ describe('immersive live conversation design', () => {
 
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
     expect(view.getByTestId('live-output-caption')).toBeTruthy();
     expect(view.getByText('Namaste Chris, aap kaise hain?')).toBeTruthy();
 
@@ -527,25 +549,29 @@ describe('immersive live conversation design', () => {
     await flushMicrotasks();
   });
 
-  it('keeps the compact Asha portrait and exposes one transcript-footer action that reuses the active voice turn', async () => {
+  it('keeps the compact Asha portrait as the only microphone control', async () => {
     const view = await render(<LiveScreen />);
 
     const portrait = view.getByTestId('asha-header-portrait');
     expect(StyleSheet.flatten(portrait.props.style)).toEqual(expect.objectContaining({ height: 112, width: 112 }));
     expect(view.getAllByText('Asha portrait')).toHaveLength(1);
     expect(view.queryByText('Continue with Asha')).toBeNull();
+    expect(view.queryByLabelText('Connect with Asha')).toBeNull();
+    expect(view.queryByLabelText('Unmute microphone')).toBeNull();
+    expect(view.queryByText('Live microphone')).toBeNull();
 
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
 
-    const nextTurn = view.getByLabelText('Unmute microphone');
-    expect(nextTurn.props.accessibilityState.disabled).toBe(false);
-    await fireEvent.press(nextTurn);
-    expect(view.getByText('Your microphone is on')).toBeTruthy();
+    expect(view.queryByLabelText('Connect with Asha')).toBeNull();
+    expect(view.queryByLabelText('Unmute microphone')).toBeNull();
+    expect(view.queryByText('Your microphone is muted')).toBeNull();
+    expect(within(view.getByTestId('asha-voice-status')).getByText('MUTED')).toBeTruthy();
+    expect(view.getByText('How do I say…?')).toBeTruthy();
 
-    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
-    const waiting = view.getByLabelText('Unmute microphone');
-    expect(waiting.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    expect(within(view.getByTestId('asha-voice-status')).getByText('LISTENING')).toBeTruthy();
+    expect(view.queryByLabelText('Mute microphone')).toBeNull();
 
     await view.unmount();
     await flushMicrotasks();
@@ -600,7 +626,7 @@ describe('immersive live conversation design', () => {
     const stopAnimation = jest.spyOn(Animated.Value.prototype, 'stopAnimation');
     const view = await render(<LiveScreen />);
 
-    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await fireEvent.press(view.getByLabelText('Mock learner transcript'));
     mockReducedMotion = true;
     await act(async () => {
       view.rerender(<LiveScreen />);
@@ -627,6 +653,7 @@ describe('immersive live conversation design', () => {
       const headingStyle = StyleSheet.flatten(view.getByTestId('ask-asha-heading').props.style);
 
       expect(heroStyle.gap).toBe(4);
+      expect(heroStyle.minHeight).toBeUndefined();
       expect(sheetStyle.gap).toBe(4);
       expect(sheetStyle.paddingTop).toBe(4);
       expect(headingStyle.gap).toBe(0);
@@ -837,7 +864,7 @@ describe('typed live coaching request control', () => {
     await flushMicrotasks();
 
     expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
-    expect(view.getByLabelText('Connect with Asha').props.accessibilityState).toEqual({ disabled: true });
+    expect(view.queryByLabelText('Connect with Asha')).toBeNull();
 
     await act(async () => {
       playback.resolve();
@@ -845,7 +872,7 @@ describe('typed live coaching request control', () => {
     });
 
     expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: false });
-    expect(view.getByLabelText('Connect with Asha').props.accessibilityState).toEqual({ disabled: false });
+    expect(view.queryByLabelText('Connect with Asha')).toBeNull();
     await view.unmount();
     await flushMicrotasks();
   });
@@ -1142,8 +1169,9 @@ describe('live coaching state', () => {
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
     expect(view.queryByLabelText('You: Namaste')).toBeNull();
     expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
-    expect(view.getByTestId('live-input-caption').props.children).toBe('Your words appear here as you speak.');
-    expect(view.getByTestId('live-output-caption').props.children).toBe('Asha’s words appear here as she speaks.');
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
+    expect(view.queryByText('Your words appear here as you speak.')).toBeNull();
 
     // A failed connection cannot restore the old transcript.
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
