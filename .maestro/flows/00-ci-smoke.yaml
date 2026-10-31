@@ -55,6 +55,9 @@ tags:
 - assertVisible: "Microphone access is off. Typed and written practice still work."
 - runFlow: ../subflows/complete-onboarding.yaml
 - tapOn: "Asha"
+# The invite sits above the button. Scrolling the button to 80% visible
+# pushes that line off the top, so check it first.
+- assertVisible: "Greet me like a neighbor and tell me your name"
 - scrollUntilVisible:
     element:
       text: "Talk with Asha"
@@ -63,7 +66,6 @@ tags:
     visibilityPercentage: 80
     centerElement: false
     timeout: 45000
-- assertVisible: "Greet me like a neighbor and tell me your name"
 - assertVisible: "Talk with Asha"
 - tapOn: "Talk with Asha"
 - assertVisible: "Before your first live conversation"
