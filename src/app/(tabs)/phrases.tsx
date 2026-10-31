@@ -1,12 +1,11 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
-import { BookOpen, Trash2, Volume2 } from 'lucide-react-native';
+import { BookOpen, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Platform, Text, View } from 'react-native';
+import { FlatList, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { selectNextLesson } from '@/lib/lesson-path';
@@ -31,7 +30,6 @@ const replaySpeeds = [
   { label: 'Slow', rate: 0.75 },
   { label: 'Normal', rate: 1 },
 ] as const;
-const speedOptions = replaySpeeds.map(({ label, rate }) => ({ accessibilityLabel: label, label, value: String(rate) }));
 const categoryLabels: Record<SceneCategory, string> = { Everyday: 'Everyday', Food: 'Food', Health: 'Health', Social: 'Social', Travel: 'Travel', Work: 'Work' };
 
 const phraseCategories = new Map<string, SceneCategory>();
@@ -97,6 +95,9 @@ export default function PhrasesScreen() {
 
   // Older builds offered 0.1× and 0.25×; those settings play at the new slowest speed.
   const playbackRate = Math.max(0.5, profile.phrasePlaybackRate ?? 1);
+  const speedIndex = Math.max(0, replaySpeeds.findIndex((speed) => speed.rate === playbackRate));
+  const currentSpeed = replaySpeeds[speedIndex] ?? replaySpeeds[2];
+  const nextSpeed = replaySpeeds[(speedIndex + 1) % replaySpeeds.length] ?? replaySpeeds[0];
 
   function playPhrase(text: string) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
@@ -121,9 +122,17 @@ export default function PhrasesScreen() {
       <View style={[styles.headerHero, largeTextLayout && styles.headerHeroLarge]} testID="phrases-header-hero">
         <View style={[styles.headerRow, largeTextLayout && styles.headerRowLarge]}>
           <JournalDisplay style={styles.headerTitle}>Phrases</JournalDisplay>
-          {phrases.length > 0 ? <Text style={styles.savedCount}>{savedCount}</Text> : null}
+          {phrases.length > 0 ? (
+            <View style={styles.headerMeta}>
+              <Text style={styles.savedCount}>{savedCount}</Text>
+              {/* One shared Listen speed, like a podcast player. Tapping cycles Slower, Slow, Normal. */}
+              <Pressable accessibilityHint="Changes how fast Listen plays" accessibilityLabel={`Playback speed: ${currentSpeed.label}`} accessibilityRole="button" onPress={() => updateLearnerProfile({ phrasePlaybackRate: nextSpeed.rate })} style={styles.speedButton} testID="phrases-playback-speed">
+                <Text style={styles.speedButtonText}>{currentSpeed.label} speed</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
-        <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep.</Text>
+        <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep. Press and hold one to remove it.</Text>
       </View>
       {phrases.length > 0 ? (
         <>
@@ -143,35 +152,22 @@ export default function PhrasesScreen() {
             </SearchField.Group>
           </SearchField>
           {filterOptions.length >= 2 ? (
-            <SegmentedControl
-              accessibilityLabel="Phrase category"
-              compact
-              onValueChange={setFilter}
-              options={[{ label: 'All', value: 'All' as Filter }, ...filterOptions]}
-              stackedAtLargeText
-              style={styles.segmentedControl}
-              value={activeFilter}
-            />
+            <ScrollView accessibilityLabel="Phrase category" contentContainerStyle={styles.chips} horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              {[{ label: 'All', value: 'All' as Filter }, ...filterOptions].map((option) => {
+                const selected = option.value === activeFilter;
+                return (
+                  <Pressable accessibilityLabel={`Phrase category: ${option.label}`} accessibilityRole="button" accessibilityState={{ selected }} key={option.value} onPress={() => setFilter(option.value)} style={[styles.chip, selected && styles.chipSelected]}>
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           ) : null}
           {!aiConsent && phrases.some((phrase) => !hasOfflineSpeech(phrase.hi)) ? (
             <Pressable accessibilityHint="Opens Settings" accessibilityRole="link" onPress={() => router.push('/settings')} style={styles.consentNote} testID="phrases-consent-note">
               <Text style={styles.consentNoteText}>Some phrases need Asha&apos;s voice to play. <Text style={styles.consentNoteLink}>Turn on AI coaching in Settings</Text></Text>
             </Pressable>
           ) : null}
-          <View style={styles.speedSetting}>
-            <Text style={styles.speedLabel}>Listen speed</Text>
-            {/* One shared speed, like a podcast player, instead of a row of speed chips on every card. */}
-            <SegmentedControl
-              accessibilityLabel="Playback speed"
-              compact
-              onValueChange={(value) => updateLearnerProfile({ phrasePlaybackRate: Number(value) })}
-              options={speedOptions}
-              stackedAtLargeText
-              style={styles.segmentedControl}
-              testID="phrases-playback-speed"
-              value={String(playbackRate)}
-            />
-          </View>
         </>
       ) : null}
     </View>
@@ -225,7 +221,14 @@ export default function PhrasesScreen() {
           const mastery = review?.mastery ?? 0;
           const isDue = dueSet.has(item.hi);
           return (
-            <View style={[styles.card, largeTextLayout && styles.cardLarge]}>
+            <Pressable
+              accessibilityActions={[{ name: 'remove', label: `Remove ${item.hi}` }]}
+              accessibilityHint="Press and hold to remove"
+              onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'remove') confirmRemove(item); }}
+              onLongPress={() => confirmRemove(item)}
+              style={[styles.card, largeTextLayout && styles.cardLarge]}
+              testID="saved-phrase-card"
+            >
               <View style={[styles.cardMain, largeTextLayout && styles.cardMainLarge]}>
                 <View style={styles.copy}>
                   {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{item.hi}</Text> : null}
@@ -240,11 +243,10 @@ export default function PhrasesScreen() {
                   <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: `${replaySpeeds.find((speed) => speed.rate === playbackRate)?.label ?? 'Normal'} speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
                     <Volume2 color={colors.brandText} size={18} />
                   </PressableFeedback>
-                  <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
                 </View>
               </View>
               {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
-            </View>
+            </Pressable>
           );
         }}
         style={sharedStyles.screen}
@@ -278,7 +280,6 @@ const useStyles = makeStyles((c) => ({
   searchField: { width: '100%', alignSelf: 'stretch' },
   searchRow: { width: '100%', minHeight: 48 },
   search: { ...type.body, minWidth: 0, flex: 1, minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.paperRaised, color: c.ink, paddingVertical: spacing.sm },
-  segmentedControl: { width: '100%', alignSelf: 'stretch' },
   error: { ...type.caption, color: c.danger },
   card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', gap: spacing.md, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.lg },
   cardLarge: { gap: spacing.md },
@@ -287,7 +288,6 @@ const useStyles = makeStyles((c) => ({
   cardActions: { alignItems: 'center', gap: spacing.xs },
   cardActionsLarge: { flexDirection: 'row', justifyContent: 'flex-end' },
   listenButton: { width: 44, height: 44, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
-  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   copy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs },
   hindi: { ...hindiType(20), color: c.ink, textAlign: 'left' },
   latin: { ...type.label, color: c.brand, textAlign: 'left' },
@@ -298,8 +298,15 @@ const useStyles = makeStyles((c) => ({
   masterySegmentFilled: { backgroundColor: c.forest },
   mastery: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   masteryDue: { color: c.brandText },
-  speedSetting: { width: '100%', gap: spacing.sm },
-  speedLabel: { ...type.caption, color: c.muted, fontWeight: '600' },
+  headerMeta: { alignItems: 'flex-end', gap: spacing.xs },
+  speedButton: { ...buttons.secondary, minHeight: 36, paddingHorizontal: spacing.md },
+  speedButtonText: { ...buttons.secondaryText, ...type.caption, fontWeight: '600' },
+  chipRow: { width: '100%', flexGrow: 0 },
+  chips: { gap: spacing.sm, paddingRight: spacing.lg },
+  chip: { minHeight: 36, justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.paper, paddingHorizontal: spacing.md },
+  chipSelected: { backgroundColor: c.ink, borderColor: c.ink },
+  chipText: { ...type.label, color: c.ink },
+  chipTextSelected: { color: c.white },
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
   emptyBody: { ...type.body, color: c.muted, textAlign: 'center' },

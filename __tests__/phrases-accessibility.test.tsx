@@ -35,15 +35,15 @@ describe('saved phrase accessibility', () => {
   it('exposes 44 point buttons and the disabled playback state', async () => {
     const view = await render(<PhrasesScreen />);
     const listen = view.getByTestId('saved-phrase-listen');
-    const remove = view.getByLabelText('Remove नमस्ते');
+    const card = view.getByTestId('saved-phrase-card');
 
     expect(listen.props.testID).toBe('saved-phrase-listen');
     expect(listen.props.accessibilityLabel).toBe('Hear नमस्ते');
     expect(listen.props.accessibilityRole).toBe('button');
     expect(listen.props.accessibilityState).toEqual({ disabled: true });
     expect(StyleSheet.flatten(listen.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    expect(remove.props.accessibilityRole).toBe('button');
-    expect(StyleSheet.flatten(remove.props.style)).toMatchObject({ height: 44, width: 44 });
+    // Remove lives on press-and-hold, and as a named action for screen readers.
+    expect(card.props.accessibilityActions).toEqual([{ name: 'remove', label: 'Remove नमस्ते' }]);
 
     const list = view.getByTestId('saved-phrase-list');
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });
@@ -57,7 +57,7 @@ describe('saved phrase accessibility', () => {
     try {
       const view = await render(<PhrasesScreen />);
       expect(StyleSheet.flatten(view.getByTestId('phrases-header-hero').props.style)).toMatchObject({ alignItems: 'stretch' });
-      expect(StyleSheet.flatten(view.getByText('Words you want to keep.').props.style).maxWidth).toBe('100%');
+      expect(StyleSheet.flatten(view.getByText('Words you want to keep. Press and hold one to remove it.').props.style).maxWidth).toBe('100%');
     }
     finally {
       await act(async () => Dimensions.set({ screen, window }));

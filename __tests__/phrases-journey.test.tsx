@@ -147,10 +147,9 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    for (const [label, rate] of [['Slower', 0.5], ['Slow', 0.75], ['Normal', 1]] as const) {
-      await fireEvent.press(view.getByLabelText(`Playback speed: ${label}`));
-      expect(mockUpdateLearnerProfile).toHaveBeenLastCalledWith({ phrasePlaybackRate: rate });
-    }
+    // One header button cycles Normal -> Slower -> Slow -> Normal.
+    await fireEvent.press(view.getByLabelText('Playback speed: Normal'));
+    expect(mockUpdateLearnerProfile).toHaveBeenLastCalledWith({ phrasePlaybackRate: 0.5 });
     expect(speakTextMock).not.toHaveBeenCalled();
     // Speeds below half were unintelligible, so they are no longer offered.
     expect(view.queryByLabelText('Playback speed: 0.1×')).toBeNull();
@@ -160,7 +159,7 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    await fireEvent.press(view.getByLabelText('Remove नमस्ते'));
+    await fireEvent(view.getByTestId('saved-phrase-card'), 'longPress');
     expect(showAppAlertMock).toHaveBeenCalledWith(
       'Remove saved phrase?',
       'नमस्ते',
@@ -192,7 +191,7 @@ it('uses the remembered playback speed for Listen and highlights it', async () =
   mockAppState.phrases = [mockPhrase];
   mockAppState.learnerProfile.phrasePlaybackRate = 0.75;
   const view = await render(<PhrasesScreen />);
-  expect(view.getByLabelText('Playback speed: Slow').props.accessibilityState.selected).toBe(true);
+  expect(view.getByLabelText('Playback speed: Slow')).toBeTruthy();
   await fireEvent.press(view.getByLabelText(`Hear ${mockPhrase.hi}`));
   await waitFor(() => expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, 0.75));
   mockAppState.learnerProfile.phrasePlaybackRate = 1;

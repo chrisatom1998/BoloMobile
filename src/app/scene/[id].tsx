@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -608,7 +608,7 @@ function SceneScreen() {
 
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
-      {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Picking up where you left off.</Text> : null}
+      {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <FadingNotice style={styles.resumeNoticeQuiet}>Picking up where you left off.</FadingNotice> : null}
 
       {!aiConsent ? (
         <View style={styles.offlineNote}>
@@ -820,6 +820,19 @@ function SceneScreen() {
   );
 }
 
+/** A one-line status that is read out, then fades away after 3 s so it does not linger above the turn. */
+function FadingNotice({ children, style }: { children: string; style: StyleProp<TextStyle> }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const animation = Animated.timing(opacity, { toValue: 0, duration: 400, delay: 3000, useNativeDriver: true });
+    animation.start(({ finished }) => { if (finished) setGone(true); });
+    return () => animation.stop();
+  }, [opacity]);
+  if (gone) return null;
+  return <Animated.Text accessibilityLiveRegion="polite" style={[style, { opacity }]}>{children}</Animated.Text>;
+}
+
 const useStyles = makeStyles((c) => ({
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: spacing.lg },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
@@ -836,7 +849,8 @@ const useStyles = makeStyles((c) => ({
   hudRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md },
   hudText: { ...type.caption, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
-  resumeNotice: { ...type.caption, color: c.forestText, textAlign: 'center', fontWeight: '700' },
+  resumeNotice: { ...type.caption, color: c.brandText, textAlign: 'left', fontWeight: '600' },
+  resumeNoticeQuiet: { ...type.caption, color: c.muted, textAlign: 'left' },
   // Asha's face sits at the top of her bubble; the tightened top-left corner reads as a chat tail.
   ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
@@ -849,7 +863,7 @@ const useStyles = makeStyles((c) => ({
   npcHindi: hindiType(20),
   npcLarge: {},
   npcLatin: { ...type.label, fontFamily: 'System', color: c.brandText },
-  translation: { ...type.caption, color: c.muted },
+  translation: { ...type.bodyLarge, color: c.muted },
   speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
