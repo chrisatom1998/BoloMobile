@@ -138,7 +138,7 @@ describe('fail-closed merge verification', () => {
     const scrolls = [...smoke.matchAll(/^- scrollUntilVisible:\n((?: {4,}[^\n]+\n?)*)/gmu)]
       .map((match) => match[1]);
 
-    expect(scrolls).toHaveLength(5);
+    expect(scrolls).toHaveLength(3);
     for (const scroll of scrolls) {
       expect(scroll).toContain('direction: DOWN');
       expect(scroll).toContain('speed: 60');
@@ -208,7 +208,7 @@ describe('fail-closed merge verification', () => {
     expect(smokeJob).toContain('timeout-minutes: 30');
     expect(smokeJob).toContain('com.apple.CoreSimulator.SimRuntime.iOS-26-5');
     expect(smokeJob).not.toContain('sort_by(.version');
-    expect(smokeStep).toContain('timeout-minutes: 15');
+    expect(smokeStep).toContain('timeout-minutes: 22');
     expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
     expect(smokeStep).toContain('rebooting the simulator and retrying once');
     expect(smokeStep).toContain('GITHUB_STEP_SUMMARY');
