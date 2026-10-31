@@ -13,6 +13,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
+import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
+import { boloApiErrorKind, type BoloApiErrorKind } from '@/services/bolo-api';
 import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
@@ -41,12 +43,15 @@ type Props = {
   children?: ReactNode;
   /** `dark` renders the saffron orb for the night-coloured Asha screen. Styling only. */
   tone?: 'light' | 'dark';
-  onError: (message: string) => void;
+  /** `details.kind` carries the typed Bolo API failure so screens never classify by message text. */
+  onError: (message: string, details?: RealtimeErrorDetails) => void;
   /** Reports the pre-prompt explainer and a denial that should offer Settings. */
   onMicrophonePhase?: (phase: LiveMicrophonePhase) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
+  /** Session start, ready, and end for the on-device session log. Only used when this control owns the session. */
+  onSessionEvent?: (event: AshaSessionEvent) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
-  onDisconnectReady?: (disconnect: (() => void) | null) => void;
+  onDisconnectReady?: (disconnect: ((reason?: AshaSessionEndReason) => void) | null) => void;
   /** Shares this exact control's turn action with a companion UI surface. */
   onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
@@ -60,8 +65,10 @@ type Props = {
   voice?: RealtimeVoiceControls;
 };
 
+export type RealtimeErrorDetails = { kind?: BoloApiErrorKind };
+
 export type RealtimeVoiceControls = {
-  disconnect: () => void;
+  disconnect: (reason?: AshaSessionEndReason) => void;
   finishTurn: () => void | Promise<void>;
   startTurn: () => Promise<void>;
   status: RealtimeVoiceStatus;
@@ -169,9 +176,15 @@ function useOrbMotion(status: RealtimeVoiceStatus, motionMode: EffectiveMotion) 
   return { orbStyle, rippleStyle };
 }
 
+/** Keeps the typed API failure next to its message; non-API errors (microphone, peer, startup) carry no kind. */
+function errorDetails(cause: unknown): RealtimeErrorDetails {
+  const kind = boloApiErrorKind(cause);
+  return kind ? { kind } : {};
+}
+
 function OwnedRealtimeVoiceButton(props: Props) {
-  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
-  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
+  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
+  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
   return <RealtimeVoiceButtonView {...props} owned voice={voice} />;
 }
 
@@ -227,7 +240,7 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
     if (blocked) return;
     if (voice.microphoneEnabled) {
       hapticTap();
-      void Promise.resolve().then(voice.finishTurn).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
+      void Promise.resolve().then(voice.finishTurn).catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.', errorDetails(cause)));
       return;
     }
     // Starting WebRTC reconfigures the native audio session. Keep the initial
@@ -251,7 +264,7 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
         }
       }
       await voice.startTurn();
-    })().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
+    })().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.', errorDetails(cause)));
   }, [blocked, onError, voice]);
 
   useEffect(() => {
