@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: Progress
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: progress
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "What is taking root."
+    timeout: 30000
+- takeScreenshot: progress
