@@ -228,6 +228,10 @@ describe('GPT-Live backend', () => {
     const { deps, call } = setup();
     deps.openAI.mockImplementation(() => new Promise(() => {}));
     const pending = call({ body: validBody });
+    // The safety identifier is a real (not fake-timer) SHA-256 digest, so wait for the
+    // upstream request to start before firing the timeout; otherwise a slow digest under
+    // coverage lets the timeout win before the request exists.
+    while (!deps.openAI.mock.calls.length) await new Promise<void>((resolve) => { jest.requireActual<{ setImmediate: (callback: () => void) => void }>('timers').setImmediate(() => resolve()); });
     await jest.advanceTimersByTimeAsync(LIVE_REQUEST_TIMEOUT_MS);
     expect((await pending).status).toBe(504);
     expect(deps.openAI.mock.calls[0]![2].signal?.aborted).toBe(true);

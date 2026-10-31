@@ -14,6 +14,20 @@ const mockClearChatHistory = jest.fn();
 let mockStatus: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding' = 'disconnected';
 let mockTranscriptSnapshot: ((rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void) | undefined;
 let mockConnectionStart: ((signal: AbortSignal) => void | Promise<void>) | undefined;
+let mockSessionEvent: ((event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void) | undefined;
+
+let mockRecovery: Promise<void> = Promise.resolve();
+let mockErrorListener: ((message: string, details?: { kind?: string }) => void) | undefined;
+const mockUnregisterEnder = jest.fn();
+
+jest.mock('@/lib/asha-session-log-store', () => ({
+  ensureAshaSessionLogLoaded: jest.fn(() => mockRecovery),
+  logAshaSessionEvent: jest.fn(),
+  logAshaSessionSnapshot: jest.fn(),
+  registerLiveCallEnder: jest.fn(() => mockUnregisterEnder),
+}));
+
+import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '../src/lib/asha-session-log-store';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ navigate: mockNavigate }),
@@ -40,9 +54,13 @@ jest.mock('@/hooks/use-asha-live-session', () => ({
 jest.mock('@/hooks/use-realtime-conversation', () => ({
   useRealtimeConversation: (options: {
     onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
+    onError?: (message: string, details?: { kind?: string }) => void;
+    onSessionEvent?: (event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void;
     onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void;
   }) => {
     mockConnectionStart = options.onConnectionStart;
+    mockErrorListener = options.onError;
+    mockSessionEvent = options.onSessionEvent;
     mockTranscriptSnapshot = options.onTranscriptSnapshot;
     return {
       disconnect: mockDisconnect,
@@ -96,7 +114,106 @@ describe('Asha voice session above the navigator', () => {
     mockMarkLiveTurn.mockClear();
     mockClearChatHistory.mockClear();
     mockConnectionStart = undefined;
+    mockSessionEvent = undefined;
     mockTranscriptSnapshot = undefined;
+    mockErrorListener = undefined;
+    mockRecovery = Promise.resolve();
+    jest.mocked(logAshaSessionEvent).mockClear();
+    jest.mocked(logAshaSessionSnapshot).mockClear();
+    jest.mocked(ensureAshaSessionLogLoaded).mockClear();
+    jest.mocked(registerLiveCallEnder).mockClear();
+    mockUnregisterEnder.mockClear();
+  });
+
+  it('waits for session log recovery before the screen may reset chat for a new connection', async () => {
+    let finishRecovery!: () => void;
+    mockRecovery = new Promise<void>((resolve) => { finishRecovery = resolve; });
+    const screenStart = jest.fn(async () => undefined);
+    function ListeningScreen() {
+      const { setListeners } = useAshaVoiceSession();
+      useEffect(() => {
+        setListeners({ onConnectionStart: screenStart });
+        return () => setListeners(null);
+      }, [setListeners]);
+      return null;
+    }
+    await renderSession(<ListeningScreen />);
+    let started = false;
+    const connection = mockConnectionStart?.(new AbortController().signal);
+    void Promise.resolve(connection).then(() => { started = true; });
+    for (let index = 0; index < 10; index += 1) await Promise.resolve();
+    expect(ensureAshaSessionLogLoaded).toHaveBeenCalledTimes(1);
+    expect(screenStart).not.toHaveBeenCalled();
+    expect(started).toBe(false);
+    finishRecovery();
+    await connection;
+    expect(screenStart).toHaveBeenCalledTimes(1);
+
+    // A connection canceled during recovery never reaches the screen's reset.
+    mockRecovery = new Promise<void>((resolve) => { finishRecovery = resolve; });
+    const controller = new AbortController();
+    const canceled = mockConnectionStart?.(controller.signal);
+    controller.abort();
+    finishRecovery();
+    await canceled;
+    expect(screenStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('registers the shared call so Delete Bolo data can end it, and forwards error kinds to the screen', async () => {
+    const screenError = jest.fn();
+    function ListeningScreen() {
+      const { setListeners } = useAshaVoiceSession();
+      useEffect(() => {
+        setListeners({ onError: screenError });
+        return () => setListeners(null);
+      }, [setListeners]);
+      return null;
+    }
+    const view = await renderSession(<ListeningScreen />);
+    expect(registerLiveCallEnder).toHaveBeenCalledWith(mockDisconnect);
+    mockErrorListener?.('Bolo is unavailable right now. Check your connection and try again.', { kind: 'network' });
+    expect(screenError).toHaveBeenCalledWith('Bolo is unavailable right now. Check your connection and try again.', { kind: 'network' });
+    await view.unmount();
+    expect(mockUnregisterEnder).toHaveBeenCalled();
+  });
+
+  it('writes every transcript snapshot to the session log, whether or not the screen is listening', async () => {
+    const screenSnapshot = jest.fn();
+    function ListeningScreen() {
+      const { setListeners } = useAshaVoiceSession();
+      useEffect(() => {
+        setListeners({ onTranscriptSnapshot: screenSnapshot });
+        return () => setListeners(null);
+      }, [setListeners]);
+      return null;
+    }
+    const rows = [{ id: 'you-1', speaker: 'you' as const, text: 'Namaste' }];
+    await renderSession();
+    mockTranscriptSnapshot?.(rows);
+    expect(logAshaSessionSnapshot).toHaveBeenCalledWith(rows);
+
+    await renderSession(<ListeningScreen />);
+    mockTranscriptSnapshot?.(rows);
+    expect(screenSnapshot).toHaveBeenCalledWith(rows);
+    expect(logAshaSessionSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs session events with the reply language and forwards them to the listening screen', async () => {
+    const screenEvent = jest.fn();
+    function ListeningScreen() {
+      const { setListeners } = useAshaVoiceSession();
+      useEffect(() => {
+        setListeners({ onSessionEvent: screenEvent });
+        return () => setListeners(null);
+      }, [setListeners]);
+      return null;
+    }
+    await renderSession(<ListeningScreen />);
+    mockSessionEvent?.({ type: 'starting' });
+    mockSessionEvent?.({ type: 'ended', reason: 'connection_lost' });
+    expect(logAshaSessionEvent).toHaveBeenNthCalledWith(1, { type: 'starting' }, 'en');
+    expect(logAshaSessionEvent).toHaveBeenNthCalledWith(2, { type: 'ended', reason: 'connection_lost' }, 'en');
+    expect(screenEvent).toHaveBeenCalledTimes(2);
   });
 
   it('keeps a minimized session available and restores it from the bubble', async () => {
