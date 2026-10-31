@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
+import { MasteryMeter } from '@/components/mastery-meter';
 import { selectNextLesson } from '@/lib/lesson-path';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
@@ -39,15 +40,6 @@ for (const scene of scenes) {
   for (const beat of scene.beats) {
     for (const choice of beat.choices) phraseCategories.set(choice.hi, scene.category);
   }
-}
-
-function MasteryMeter({ mastery }: { mastery: number }) {
-  const styles = useStyles();
-  return (
-    <View accessible accessibilityLabel={`Mastery ${mastery} of 5`} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 5, now: mastery }} style={styles.masteryMeter}>
-      {Array.from({ length: 5 }, (_, index) => <View key={index} style={[styles.masterySegment, index < mastery && styles.masterySegmentFilled]} />)}
-    </View>
-  );
 }
 
 export default function PhrasesScreen() {
@@ -293,9 +285,6 @@ const useStyles = makeStyles((c) => ({
   latin: { color: c.brand, fontSize: 14, lineHeight: 20, fontWeight: '500', textAlign: 'left' },
   english: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
   masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: 6 },
-  masteryMeter: { flexDirection: 'row', gap: 4 },
-  masterySegment: { width: 18, height: 4, borderRadius: radius.pill, backgroundColor: c.track },
-  masterySegmentFilled: { backgroundColor: c.forest },
   mastery: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   masteryDue: { color: c.brandText },
   speedSetting: { width: '100%', gap: spacing.sm },
