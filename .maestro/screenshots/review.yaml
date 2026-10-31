@@ -1,0 +1,34 @@
+appId: com.bolo.hindi
+name: Review before and after the answer
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: review
+- openLink: "bolo://review"
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "Say it in Hindi"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Reveal answer|Show answer"
+    direction: DOWN
+    timeout: 20000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: true
+- takeScreenshot: review-hidden
+- tapOn:
+    text: "Reveal answer|Show answer"
+- scrollUntilVisible:
+    element:
+      text: "एक चाय दीजिए।|Ek chai dijiye."
+    direction: DOWN
+    timeout: 20000
+    speed: 40
+    visibilityPercentage: 80
+    centerElement: true
+- takeScreenshot: review-revealed

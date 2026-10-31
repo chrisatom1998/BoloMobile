@@ -74,7 +74,7 @@ export default function SettingsScreen() {
     if (withdrawing) return;
     showAppAlert(
       'Withdraw AI processing consent?',
-      'AI Listen, typed coaching, live voice, and pronunciation feedback will stop working until you consent again. Written scenes and saved phrases still work offline.',
+      'AI Listen, typed coaching, live voice, and pronunciation feedback will stop working until you consent again. Lessons, reviews and saved phrases still work offline.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Withdraw', style: 'destructive', onPress: () => void performWithdrawal() },
@@ -216,7 +216,7 @@ export default function SettingsScreen() {
     const exported = new Date(backup.exportedAt).toLocaleDateString();
     showAppAlert(
       'Replace progress on this device?',
-      `Restoring the backup from ${exported} replaces the saved phrases, reviews, scene progress, streaks, goal, and learning preferences on this device. Your AI consent choice and Asha chat history are not changed.`,
+      `Restoring the backup from ${exported} replaces the saved phrases, reviews, lesson progress, streaks, goal, and learning preferences on this device. Your AI consent choice and Asha chat history are not changed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Restore', style: 'destructive', onPress: () => void performRestore(backup) },
@@ -412,7 +412,7 @@ export default function SettingsScreen() {
           <View style={styles.icon}><ArchiveRestore color={colors.forest} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Progress backup</Text><Text style={styles.body}>Keep your progress when you change phones</Text></View>
         </View>
-        <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, scene progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
+        <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, lesson progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
         <View style={[styles.buttonRow, largeTextLayout && styles.buttonRowLarge]}>
           <Pressable
             accessibilityHint="Opens the share sheet to save a backup file"
