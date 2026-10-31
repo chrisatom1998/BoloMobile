@@ -1,6 +1,11 @@
 import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet, Text } from 'react-native';
 
+jest.mock('expo-audio', () => ({
+  getRecordingPermissionsAsync: jest.fn(async () => ({ canAskAgain: true, granted: true, status: 'granted' })),
+  requestRecordingPermissionsAsync: jest.fn(async () => ({ canAskAgain: true, granted: true, status: 'granted' })),
+}));
+
 jest.mock('lucide-react-native', () => ({
   Mic: () => null,
   Radio: () => null,

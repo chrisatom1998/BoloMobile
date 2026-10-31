@@ -1,6 +1,7 @@
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { Mic, MicOff, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -14,6 +15,7 @@ import Animated, {
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
 import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
+import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
@@ -40,6 +42,8 @@ type Props = {
   /** `dark` renders the saffron orb for the night-coloured Asha screen. Styling only. */
   tone?: 'light' | 'dark';
   onError: (message: string) => void;
+  /** Reports the pre-prompt explainer and a denial that should offer Settings. */
+  onMicrophonePhase?: (phase: LiveMicrophonePhase) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
   onDisconnectReady?: (disconnect: (() => void) | null) => void;
@@ -176,8 +180,10 @@ export function RealtimeVoiceButton(props: Props) {
   return <OwnedRealtimeVoiceButton {...props} />;
 }
 
-function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
+function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
+  const onMicrophonePhaseRef = useRef(onMicrophonePhase);
+  const ensuringRef = useRef(false);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
@@ -192,6 +198,21 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
+
+  useEffect(() => {
+    onMicrophonePhaseRef.current = onMicrophonePhase;
+  }, [onMicrophonePhase]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void getRecordingPermissionsAsync().then((permission) => {
+        if (permission.granted) onMicrophonePhaseRef.current?.('idle');
+      }).catch(() => undefined);
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     onStatusChange?.(voice.status);
@@ -214,7 +235,23 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
     // deadlock RemoteIO while the peer applies its remote audio description.
     // Once connected, starting later turns is safe to acknowledge haptically.
     if (voice.status === 'ready' || voice.status === 'responding') hapticStartRecording();
-    void voice.startTurn().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
+    return (async () => {
+      if (voice.status === 'disconnected') {
+        if (ensuringRef.current) return;
+        ensuringRef.current = true;
+        try {
+          const allowed = await ensureLiveMicrophone({
+            getPermission: () => getRecordingPermissionsAsync(),
+            requestPermission: () => requestRecordingPermissionsAsync(),
+            onPhase: (phase) => onMicrophonePhaseRef.current?.(phase),
+          });
+          if (!allowed) return;
+        } finally {
+          ensuringRef.current = false;
+        }
+      }
+      await voice.startTurn();
+    })().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.'));
   }, [blocked, onError, voice]);
 
   useEffect(() => {
