@@ -822,7 +822,7 @@ function SceneScreen() {
 
 /** A one-line status that is read out, then fades away after 3 s so it does not linger above the turn. */
 function FadingNotice({ children, style }: { children: string; style: StyleProp<TextStyle> }) {
-  const opacity = useRef(new Animated.Value(1)).current;
+  const [opacity] = useState(() => new Animated.Value(1));
   const [gone, setGone] = useState(false);
   useEffect(() => {
     const animation = Animated.timing(opacity, { toValue: 0, duration: 400, delay: 3000, useNativeDriver: true });

@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { TapPressable } from '@/components/tap-pressable';
-import { displayFont, makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type MinimizeProps = {
   onPress: () => void;
