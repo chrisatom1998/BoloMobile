@@ -1,0 +1,37 @@
+appId: com.bolo.hindi
+name: Asha invite and consent
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: asha
+- tapOn: "Asha"
+- extendedWaitUntil:
+    visible: "Greet me like a neighbor.*|Live voice unlocks here|Before your first live conversation"
+    timeout: 30000
+- takeScreenshot: asha
+# PR 107 keeps consent behind this button. On main the notice is already on the tab.
+- tapOn:
+    id: "talk-with-asha"
+    optional: true
+- extendedWaitUntil:
+    visible: "Before your first live conversation"
+    timeout: 15000
+    optional: true
+- scrollUntilVisible:
+    element:
+      text: "Before your first live conversation"
+    direction: DOWN
+    timeout: 45000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: true
+- scrollUntilVisible:
+    element:
+      text: "Enable live practice"
+    direction: DOWN
+    timeout: 45000
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: false
+- takeScreenshot: asha-consent
