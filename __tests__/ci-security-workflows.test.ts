@@ -126,7 +126,7 @@ describe('fail-closed merge verification', () => {
     const scrolls = [...smoke.matchAll(/^- scrollUntilVisible:\n((?: {4,}[^\n]+\n?)*)/gmu)]
       .map((match) => match[1]);
 
-    expect(scrolls).toHaveLength(5);
+    expect(scrolls).toHaveLength(3);
     for (const scroll of scrolls) {
       expect(scroll).toContain('direction: DOWN');
       expect(scroll).toContain('speed: 60');
