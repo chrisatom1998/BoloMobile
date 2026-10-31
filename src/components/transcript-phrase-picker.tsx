@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSheetDismiss } from '@/components/sheet-exit';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
-import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
-import { displayHindiTranscript } from '@/lib/learner-phrase-display';
+import type { ChatMessage, SavedPhrase, StructuredPhrase } from '@/state/app-state-types';
+import { legacyTranscriptDisplay } from '@/lib/learner-phrase-display';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
@@ -18,22 +18,25 @@ type TranscriptPhrasePickerProps = {
   /** Fires once the close animation has finished and the sheet can unmount. */
   onDismissed?: () => void;
   onSave: (phrase: SavedPhrase) => void;
+  /** Canonical phrase from a structured Asha reply; fills all three fields so the learner can save at once. */
+  prefill?: StructuredPhrase;
   reducedMotion?: boolean;
   selectedText?: string;
   sourceText?: string;
   visible?: boolean;
 };
 
-export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onDismissed, onSave, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText, visible = true }: TranscriptPhrasePickerProps) {
+export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, onDismissed, onSave, prefill, reducedMotion = false, selectedText: highlightedText, sourceText: initialSourceText, visible = true }: TranscriptPhrasePickerProps) {
   const { colors } = useTheme();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const initialText = highlightedText?.trim() || displayHindiTranscript(message.text.trim(), message.role === 'asha' && message.language === 'hi');
+  const initialText = prefill?.romanized.trim() || highlightedText?.trim() || legacyTranscriptDisplay(message.text.trim(), { normalizeKnown: message.role === 'asha' && message.language === 'hi', scriptPreference: 'latin' }).displayText;
+  const initialSource = prefill?.devanagari.trim() || initialSourceText?.trim() || '';
   const [selectedText, setSelectedText] = useState(initialText);
-  const [sourceText, setSourceText] = useState(initialSourceText?.trim() || '');
-  const [hindi, setHindi] = useState('');
-  const [latin, setLatin] = useState('');
-  const [english, setEnglish] = useState('');
+  const [sourceText, setSourceText] = useState(initialSource);
+  const [hindi, setHindi] = useState(prefill?.devanagari.trim() ?? '');
+  const [latin, setLatin] = useState(prefill?.romanized.trim() ?? '');
+  const [english, setEnglish] = useState(prefill?.english.trim() ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const mountedRef = useRef(true);
@@ -42,7 +45,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const scrollRef = useRef<ScrollView>(null);
   const [saving, setSaving] = useState(false);
   const finishDismiss = useSheetDismiss(visible, onDismissed);
-  const openKey = `${message.id}\0${initialText}\0${initialSourceText ?? ''}`;
+  const openKey = `${message.id}\0${initialText}\0${initialSource}\0${prefill ? JSON.stringify(prefill) : ''}`;
   const [formSession, setFormSession] = useState({ key: openKey, open: visible, epoch: 0 });
   if (visible && (formSession.key !== openKey || !formSession.open)) {
     setFormSession({ key: openKey, open: true, epoch: formSession.epoch + 1 });
@@ -50,10 +53,10 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
     setBusy(false);
     setError('');
     setSelectedText(initialText);
-    setSourceText(initialSourceText?.trim() ?? '');
-    setHindi('');
-    setLatin('');
-    setEnglish('');
+    setSourceText(initialSource);
+    setHindi(prefill?.devanagari.trim() ?? '');
+    setLatin(prefill?.romanized.trim() ?? '');
+    setEnglish(prefill?.english.trim() ?? '');
   } else if (!visible && formSession.open) {
     setFormSession({ ...formSession, open: false });
   }
@@ -137,9 +140,11 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
             </Pressable>
           </View>
 
-          <Text style={styles.instructions}>{highlightedText?.trim()
-            ? 'Only the words you highlighted were copied here. Adjust them if needed, then let Bolo prepare the phrase details.'
-            : 'Highlight words in chat before tapping Save, or trim the transcript here. Bolo will add a Romanized Hindi version and English meaning.'}</Text>
+          <Text style={styles.instructions}>{prefill
+            ? 'Asha’s phrase is filled in below. Check the three fields, then save.'
+            : highlightedText?.trim()
+              ? 'Only the words you highlighted were copied here. Adjust them if needed, then let Bolo prepare the phrase details.'
+              : 'Highlight words in chat before tapping Save, or trim the transcript here. Bolo will add a Romanized Hindi version and English meaning.'}</Text>
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Selected transcript text</Text>
             <TextInput

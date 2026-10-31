@@ -9,7 +9,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/components/asha-minimize-control';
-import { AshaTypingRow, ChatMessageRow } from '@/components/chat-message-row';
+import { AshaTypingRow, ChatMessageRow, phrasePlaybackKey } from '@/components/chat-message-row';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { LiveComposer } from '@/components/live-composer';
 import { RealtimeVoiceButton } from '@/components/realtime-voice-button';
@@ -33,7 +33,7 @@ import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
-import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
+import type { ChatMessage, AshaResponseLanguage, SavedPhrase, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
@@ -111,7 +111,8 @@ export default function LiveScreen() {
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeVoiceStatus>(resumedStatus);
   const [reported, setReported] = useState<Set<string>>(new Set());
   const [pendingReports, setPendingReports] = useState<Set<string>>(new Set());
-  const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; selectedText?: string; sourceText?: string } | null>(null);
+  const [phraseMessage, setPhraseMessage] = useState<{ message: ChatMessage; prefill?: StructuredPhrase; selectedText?: string; sourceText?: string } | null>(null);
+  const [playingPhrase, setPlayingPhrase] = useState<string | null>(null);
   const [phraseSheetVisible, setPhraseSheetVisible] = useState(false);
   const pendingPhraseAlertRef = useRef<{ session: number; title: string; message: string } | null>(null);
   const phraseSheetSessionRef = useRef(0);
@@ -325,13 +326,19 @@ export default function LiveScreen() {
     };
   }, []);
 
-  const recordTurn = useCallback((result: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
+  const recordTurn = useCallback((result: { transcript: string; reply: string; language: 'en' | 'hi'; structured?: StructuredReply }) => {
     if (!mountedRef.current) return;
     const now = Date.now();
     void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     const additions: ChatMessage[] = [];
     if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
-    additions.push({ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language });
+    additions.push({
+      id: `asha-${now}`,
+      role: 'asha',
+      text: result.reply.trim(),
+      language: result.language,
+      ...(result.structured ? { structured: result.structured } : {}),
+    });
     appendChatMessages(additions);
     if (!practiced.current) {
       practiced.current = true;
@@ -367,6 +374,19 @@ export default function LiveScreen() {
     setError('');
     if (message.language === 'hi') void speak(message.text, undefined, 1, 'hi', 'playback', true);
     else void speak(message.text, undefined, 1, undefined, 'playback', true);
+  }, [aiConsent, replyPlaybackLocked, speak]);
+
+  // A phrase card's Listen speaks that phrase's Devanagari alone, as Hindi, never the English framing around it.
+  const playPhrase = useCallback(async (message: ChatMessage, phrase: StructuredPhrase) => {
+    if (!aiConsent || replyPlaybackLocked) return;
+    setError('');
+    const key = phrasePlaybackKey(message.id, phrase);
+    setPlayingPhrase(key);
+    try {
+      await speak(phrase.devanagari, undefined, 1, 'hi', 'playback');
+    } finally {
+      if (mountedRef.current) setPlayingPhrase((current) => current === key ? null : current);
+    }
   }, [aiConsent, replyPlaybackLocked, speak]);
 
   const changeResponseLanguage = useCallback((nextLanguage: AshaResponseLanguage) => {
@@ -443,7 +463,7 @@ export default function LiveScreen() {
     selectionClearTimersRef.current.set(messageId, timer);
   }, []);
 
-  const openPhrasePicker = useCallback((message: ChatMessage) => {
+  const openPhrasePicker = useCallback((message: ChatMessage, prefill?: StructuredPhrase) => {
     const selection = selectedChatTextRef.current.get(message.id);
     const pendingClear = selectionClearTimersRef.current.get(message.id);
     if (pendingClear) clearTimeout(pendingClear);
@@ -451,7 +471,10 @@ export default function LiveScreen() {
     selectedChatTextRef.current.delete(message.id);
     phraseSheetSessionRef.current += 1;
     pendingPhraseAlertRef.current = null;
-    setPhraseMessage({ message, selectedText: selection?.text, sourceText: selection?.sourceText || message.text });
+    // A structured phrase is canonical: it wins over any highlight in the prose around it.
+    setPhraseMessage(prefill
+      ? { message, prefill, selectedText: prefill.romanized, sourceText: prefill.devanagari }
+      : { message, selectedText: selection?.text, sourceText: selection?.sourceText || message.text });
     setPhraseSheetVisible(true);
   }, []);
 
@@ -488,7 +511,7 @@ export default function LiveScreen() {
         return false;
       }
       clearPendingUserMessage(userMessage.id);
-      recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language });
+      recordTurn({ transcript: userMessage.text, reply: result.reply, language: result.language, structured: result.structured });
       if (realtimeStatusRef.current === 'disconnected') {
         try {
           if (result.language === 'hi') await speakText(result.reply, controller.signal, 1, 'hi', 'playback', true);
@@ -839,13 +862,17 @@ export default function LiveScreen() {
             message={item}
             onOpenPhrasePicker={openPhrasePicker}
             onOpenWordDefinition={(phrase) => { setWordDefinitionPhrase(phrase); setWordSheetVisible(true); }}
+            onPlayPhrase={playPhrase}
             onPlayReply={playReply}
             onReport={report}
             onSelectedText={rememberSelectedChatText}
             onSelectionCollapsed={forgetSelectedChatText}
             playbackLocked={replyPlaybackLocked}
+            playingPhrase={playingPhrase}
+            reducedMotion={reducedMotion}
             reported={reported.has(item.id)}
             reporting={pendingReports.has(item.id)}
+            scriptPreference={learnerProfile.scriptPreference}
             styles={styles}
           />
         )}
@@ -935,7 +962,7 @@ export default function LiveScreen() {
           <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
         </View>
       </SafeAreaView> : null}
-      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
+      {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} prefill={phraseMessage.prefill} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
       {floatingAsha.minimized ? <AshaMinimizedCover onExpand={floatingAsha.expand} statusLabel={aiConsent ? statusKicker : 'LIVE VOICE'} /> : null}
     </KeyboardAvoidingView>
@@ -1048,6 +1075,26 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
   reportedText: { color: c.success },
+  moreAction: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  reportStatus: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
+  // Inline Devanagari inside a chat line: Tiro at the body size; 16 * 1.45 rounds to the 23pt body leading.
+  messageHindi: { ...hindiType(16), color: c.ink },
+  structuredBody: { alignSelf: 'stretch', gap: spacing.sm },
+  phraseCard: { alignSelf: 'stretch' },
+  correction: { alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, overflow: 'hidden' },
+  correctionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  correctionRowStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.xs },
+  correctionLabel: { width: 64, color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '700' },
+  correctionWords: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 2 },
+  correctionHindi: { ...hindiType(20), color: c.ink },
+  correctionRoman: { color: c.ink, fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  // RN cannot colour the strike itself, so the muted colour and the row label carry the meaning.
+  correctionStruck: { color: c.muted, textDecorationLine: 'line-through' },
+  correctionSay: { backgroundColor: c.forestSoft, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
+  correctionSayLabel: { color: c.forestText },
+  correctionSayRoman: { color: c.forestText },
+  correctionEnglish: { width: '100%', color: c.muted, fontSize: 13, lineHeight: 18 },
+  correctionNote: { color: c.muted, fontSize: 13, lineHeight: 18, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
   composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
   examples: { justifyContent: 'flex-start', gap: spacing.sm, paddingRight: spacing.xl },
   example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },

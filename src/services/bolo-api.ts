@@ -1,7 +1,8 @@
 import Constants from 'expo-constants';
 
-import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
+import type { AshaResponseLanguage, ChatMessage, SavedPhrase, StructuredReply } from '@/state/app-state-types';
 import { displayHindiTranscript, learnerPhraseLatin } from '@/lib/learner-phrase-display';
+import { sanitizeStructuredReply, STRUCTURED_REPLY_FORMAT } from '@/lib/structured-reply';
 import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { knownSavedPhrase } from '@/lib/known-hindi-phrases';
@@ -49,10 +50,12 @@ export type AiVoiceAudio = {
   mimeType: 'audio/mpeg';
 };
 
-type MobileChatResponse = {
+export type MobileChatResponse = {
   transcript: string;
   reply: string;
   language: 'en' | 'hi';
+  /** Only present when the server honoured `replyFormat` and the block validated. */
+  structured?: StructuredReply;
 };
 
 type VoiceCoachResponse = {
@@ -94,6 +97,11 @@ type MobileChatInput = {
   messages: ChatMessage[];
   clientId: string;
   responseLanguage?: AshaResponseLanguage;
+  /**
+   * Ask `/api/mobile-chat` for a structured-v1 block. Older servers ignore the field.
+   * Word explanations leave this false so they stay plain English prose.
+   */
+  structuredReply?: boolean;
 };
 
 type SavedPhrasePreparationInput = {
@@ -129,6 +137,21 @@ function isMobileChatResponse(value: unknown): value is MobileChatResponse {
     && isBoundedTextAllowingEmpty(value.transcript, MAX_TRANSCRIPT_CHARACTERS)
     && isBoundedText(value.reply, MAX_GENERATED_TEXT_CHARACTERS)
     && (value.language === 'en' || value.language === 'hi');
+}
+
+/**
+ * The plain `reply` stays required so old builds keep working. A `structured`
+ * block is optional: when present it is validated strictly and dropped (not
+ * rejected) if it is malformed or oversized, so the reply still renders.
+ */
+function normalizeMobileChatResponse(value: MobileChatResponse & { structured?: unknown }): MobileChatResponse {
+  const structured = sanitizeStructuredReply(value.structured);
+  return {
+    transcript: value.transcript,
+    reply: value.reply,
+    language: value.language,
+    ...(structured ? { structured } : {}),
+  };
 }
 
 function isVoiceCoachResponse(value: unknown): value is VoiceCoachResponse {
@@ -226,11 +249,16 @@ export function buildMobileChatPayload(input: MobileChatInput) {
     clientId: input.clientId,
     languageMode: MOBILE_LANGUAGE_MODE,
     responseLanguage: input.responseLanguage,
+    // Servers that predate the structured contract ignore this field.
+    // Omitted for plain-prose callers (word explanations) so a structured server
+    // does not turn those requests into phrase JSON.
+    ...(input.structuredReply === false ? {} : { replyFormat: STRUCTURED_REPLY_FORMAT }),
   };
 }
 
-export function sendMobileChat(input: MobileChatInput, signal?: AbortSignal) {
-  return post('/api/mobile-chat', buildMobileChatPayload(input), isMobileChatResponse, signal);
+export async function sendMobileChat(input: MobileChatInput, signal?: AbortSignal): Promise<MobileChatResponse> {
+  const result = await post('/api/mobile-chat', buildMobileChatPayload(input), isMobileChatResponse, signal);
+  return normalizeMobileChatResponse(result);
 }
 
 export async function getContextualWordDefinition(input: {
@@ -251,6 +279,7 @@ export async function getContextualWordDefinition(input: {
   const result = await sendMobileChat({
     clientId: input.clientId,
     messages: sourceMessages,
+    structuredReply: false,
     text: buildContextualWordDefinitionPrompt({ phrase, word }),
   }, signal);
   const explanation = result.reply.trim();
