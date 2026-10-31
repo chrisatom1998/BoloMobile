@@ -104,8 +104,32 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: npm
-      - name: Select Xcode 26.6
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - name: Use the Xcode installed on this runner
+        run: |
+          set -euo pipefail
+          developer=""
+          best=0
+          for app in /Applications/Xcode*.app; do
+            bin="$app/Contents/Developer/usr/bin/xcodebuild"
+            if [[ ! -x "$bin" ]]; then
+              continue
+            fi
+            version="$("$bin" -version | awk 'NR==1 { print $2 }')"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            score=$((major * 1000 + minor))
+            if (( score > best )); then
+              best="$score"
+              developer="$app/Contents/Developer"
+            fi
+          done
+          if [[ -z "$developer" ]]; then
+            developer="$(xcode-select -p)"
+          fi
+          echo "DEVELOPER_DIR=$developer" >> "$GITHUB_ENV"
+          echo "Using $developer"
+          "$developer/usr/bin/xcodebuild" -version
       - run: npm ci
       - name: Generate the iOS project
         run: npx expo prebuild --platform ios --clean --no-install
@@ -166,8 +190,32 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Select Xcode 26.6
-        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - name: Use the Xcode installed on this runner
+        run: |
+          set -euo pipefail
+          developer=""
+          best=0
+          for app in /Applications/Xcode*.app; do
+            bin="$app/Contents/Developer/usr/bin/xcodebuild"
+            if [[ ! -x "$bin" ]]; then
+              continue
+            fi
+            version="$("$bin" -version | awk 'NR==1 { print $2 }')"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            score=$((major * 1000 + minor))
+            if (( score > best )); then
+              best="$score"
+              developer="$app/Contents/Developer"
+            fi
+          done
+          if [[ -z "$developer" ]]; then
+            developer="$(xcode-select -p)"
+          fi
+          echo "DEVELOPER_DIR=$developer" >> "$GITHUB_ENV"
+          echo "Using $developer"
+          "$developer/usr/bin/xcodebuild" -version
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: bolo-ios-screenshots-app-${{ github.run_id }}
