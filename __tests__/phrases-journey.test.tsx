@@ -83,7 +83,7 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phraseReviews = reviewedTomorrow();
     mockAppState.phrases = [];
     mockAppState.sceneProgress = {};
-    speakTextMock.mockResolvedValue();
+    speakTextMock.mockResolvedValue(true);
   });
 
   it('replaces empty review tools with one next-lesson action', async () => {
