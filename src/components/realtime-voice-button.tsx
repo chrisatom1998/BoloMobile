@@ -45,6 +45,8 @@ type Props = {
   tone?: 'light' | 'dark';
   /** `details.kind` carries the typed Bolo API failure so screens never classify by message text. */
   onError: (message: string, details?: RealtimeErrorDetails) => void;
+  /** False while the hosting screen is out of view; a microphone check still pending then never starts a session. */
+  active?: boolean;
   /** Reports the pre-prompt explainer and a denial that should offer Settings. */
   onMicrophonePhase?: (phase: LiveMicrophonePhase) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
@@ -193,10 +195,13 @@ export function RealtimeVoiceButton(props: Props) {
   return <OwnedRealtimeVoiceButton {...props} />;
 }
 
-function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
+function RealtimeVoiceButtonView({ active = true, children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
   const onMicrophonePhaseRef = useRef(onMicrophonePhase);
   const ensuringRef = useRef(false);
+  // Bumped whenever a pending start must not go ahead: the screen leaves view,
+  // the control is disabled, or it unmounts.
+  const startAttemptRef = useRef(0);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
@@ -215,6 +220,16 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
   useEffect(() => {
     onMicrophonePhaseRef.current = onMicrophonePhase;
   }, [onMicrophonePhase]);
+
+  useEffect(() => {
+    if (active && !disabled) return undefined;
+    startAttemptRef.current += 1;
+    return undefined;
+  }, [active, disabled]);
+
+  useEffect(() => () => {
+    startAttemptRef.current += 1;
+  }, []);
 
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
@@ -252,6 +267,7 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
       if (voice.status === 'disconnected') {
         if (ensuringRef.current) return;
         ensuringRef.current = true;
+        const attempt = ++startAttemptRef.current;
         try {
           const allowed = await ensureLiveMicrophone({
             getPermission: () => getRecordingPermissionsAsync(),
@@ -259,6 +275,12 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
             onPhase: (phase) => onMicrophonePhaseRef.current?.(phase),
           });
           if (!allowed) return;
+          // The learner left the screen or the control was disabled while the
+          // permission check ran; starting now would open the mic off-screen.
+          if (attempt !== startAttemptRef.current) {
+            onMicrophonePhaseRef.current?.('idle');
+            return;
+          }
         } finally {
           ensuringRef.current = false;
         }

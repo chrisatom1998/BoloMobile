@@ -50,11 +50,11 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function Harness({ disabled = false }: { disabled?: boolean }) {
+function Harness({ active = true, disabled = false }: { active?: boolean; disabled?: boolean }) {
   const [phase, setPhase] = useState<'idle' | 'explaining' | 'denied'>('idle');
   return (
     <View>
-      <RealtimeVoiceButton clientId="client-12345678" disabled={disabled} onError={jest.fn()} onMicrophonePhase={setPhase} onTurnComplete={jest.fn()} />
+      <RealtimeVoiceButton active={active} clientId="client-12345678" disabled={disabled} onError={jest.fn()} onMicrophonePhase={setPhase} onTurnComplete={jest.fn()} />
       {phase === 'explaining' ? <Text>{LIVE_MIC_EXPLAINER}</Text> : null}
       {phase === 'denied' ? <Text>{LIVE_MIC_PERMISSION_MESSAGE}</Text> : null}
     </View>
@@ -96,6 +96,26 @@ describe('realtime voice microphone prompt', () => {
     pending.resolve({ canAskAgain: true, granted: true, status: 'granted' });
     await waitFor(() => expect(mockStartTurn).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(view.queryByText(LIVE_MIC_EXPLAINER)).toBeNull());
+  });
+
+  it('does not start a session when the screen leaves view during the microphone prompt', async () => {
+    const pending = deferred<{ canAskAgain: boolean; granted: boolean; status: string }>();
+    getPermission.mockResolvedValue({ canAskAgain: true, granted: false, status: 'undetermined' } as Awaited<ReturnType<typeof getRecordingPermissionsAsync>>);
+    requestPermission.mockReturnValue(pending.promise as ReturnType<typeof requestRecordingPermissionsAsync>);
+    const view = await render(<Harness />);
+
+    await act(async () => {
+      fireEvent.press(view.getByLabelText('Start a voice conversation'));
+    });
+    await waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(1));
+
+    await view.rerender(<Harness active={false} />);
+    await act(async () => {
+      pending.resolve({ canAskAgain: true, granted: true, status: 'granted' });
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(view.queryByText(LIVE_MIC_EXPLAINER)).toBeNull());
+    expect(mockStartTurn).not.toHaveBeenCalled();
   });
 
   it('offers no session when the microphone was already denied', async () => {
