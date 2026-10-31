@@ -8,7 +8,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { displayHindiTranscript } from '@/lib/learner-phrase-display';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
   aiConsent: boolean;
@@ -198,19 +198,19 @@ const useStyles = makeStyles((c) => ({
   footer: { borderTopColor: c.line, borderTopWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   headerCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
-  eyebrow: { color: c.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  title: { color: c.ink, fontSize: 28, lineHeight: 34, fontWeight: '900' },
+  eyebrow: { ...type.eyebrow, color: c.brandDark },
+  title: { ...type.display, color: c.ink },
   closeButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  instructions: { color: c.muted, fontSize: 15, lineHeight: 22 },
+  instructions: { ...type.body, color: c.muted },
   fieldGroup: { gap: spacing.sm },
-  label: { color: c.ink, fontSize: 13, fontWeight: '800' },
-  input: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.inputBorder, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, fontSize: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
+  label: { ...type.caption, color: c.ink, fontWeight: '700' },
+  input: { ...type.body, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.inputBorder, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
   sourceInput: { minHeight: 112, textAlignVertical: 'top' },
-  prepareButton: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  prepareButtonText: { color: c.white, fontSize: 15, fontWeight: '900' },
-  hint: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  prepareButton: buttons.primary,
+  prepareButtonText: buttons.primaryText,
+  hint: { ...type.caption, color: c.muted },
+  error: { ...type.caption, color: c.danger },
   saveButton: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  saveButtonText: { color: c.white, fontSize: 16, fontWeight: '900' },
+  saveButtonText: { ...type.label, color: c.white, fontWeight: '700' },
   disabled: { opacity: 0.45 },
 }));

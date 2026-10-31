@@ -345,8 +345,8 @@ const useStyles = makeStyles((c) => ({
   orbActive: { backgroundColor: c.orbActive, shadowOpacity: 0.56 },
   orbRecording: { backgroundColor: c.orbRecording },
   orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.17)' },
-  orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '900' },
-  orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },
+  orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '700' },  // Exception to the type scale: decorative orb glyph.
+  orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },  // Exception: decorative orb glyph.
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
   endButtonMinimal: { right: 0, top: 28, marginTop: 0 },

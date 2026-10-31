@@ -10,7 +10,7 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { alignedHindiWordLabels, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { getContextualWordDefinition } from '@/services/bolo-api';
 import type { ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, radius, spacing } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, type, buttons } from '@/theme';
 
 type DefinitionState = {
   explanation?: string;
@@ -205,31 +205,31 @@ const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, borderBottomColor: c.line, borderBottomWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   headerCopy: { minWidth: 0, flex: 1, gap: 2 },
-  eyebrow: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
-  title: { color: c.ink, fontFamily: 'Georgia', fontSize: 25, lineHeight: 31, fontWeight: '700' },
-  closeButton: { minWidth: 52, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  closeText: { color: c.white, fontSize: 14, fontWeight: '900' },
+  eyebrow: { ...type.eyebrow, color: c.brandText },
+  title: { ...type.title, color: c.ink },
+  closeButton: { ...buttons.quiet, minWidth: 52 },
+  closeText: buttons.quietText,
   content: { gap: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xxl },
   sourceCard: { gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, padding: spacing.lg },
   excerptEditor: { gap: spacing.sm },
-  excerptInput: { minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.md, color: c.ink, padding: spacing.sm, fontSize: 16 },
-  sourceLabel: { color: c.forestText, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
-  sourcePhrase: { color: c.ink, fontSize: 24, lineHeight: 34, fontWeight: '800' },
-  sourcePhraseHindi: hindiType(26),
-  romanization: { color: c.muted, fontSize: 16, lineHeight: 23, fontWeight: '700' },
+  excerptInput: { ...type.body, minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.md, color: c.ink, padding: spacing.sm },
+  sourceLabel: { ...type.eyebrow, color: c.brandText },
+  sourcePhrase: { ...type.title, color: c.ink },
+  sourcePhraseHindi: hindiType(28),
+  romanization: { ...type.label, color: c.muted, fontWeight: '700' },
   tray: { gap: spacing.sm },
-  trayLabel: { color: c.ink, fontSize: 17, lineHeight: 24, fontWeight: '900' },
+  trayLabel: { ...type.label, color: c.ink, fontWeight: '700' },
   tokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   token: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   tokenSelected: { backgroundColor: c.brand },
-  tokenText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
-  tokenHindi: hindiType(19),
+  tokenText: { ...type.label, color: c.brandText, fontWeight: '700' },
+  tokenHindi: hindiType(20),
   tokenTextSelected: { color: c.white },
-  definitionCard: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.forestSoft, borderColor: c.forest, borderWidth: 1, padding: spacing.lg },
-  definitionLabel: { color: c.forestText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
-  definitionBody: { color: c.ink, fontSize: 18, lineHeight: 27 },
-  guidance: { color: c.muted, fontSize: 15, lineHeight: 22 },
-  error: { color: c.danger, fontSize: 15, lineHeight: 21 },
+  definitionCard: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.brandSoft, borderColor: c.line, borderWidth: 1, padding: spacing.lg },
+  definitionLabel: { ...type.label, color: c.brandText, fontWeight: '700' },
+  definitionBody: { ...type.bodyLarge, color: c.ink },
+  guidance: { ...type.body, color: c.muted },
+  error: { ...type.body, color: c.danger },
   retryButton: { alignSelf: 'flex-start', minHeight: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  retryText: { color: c.forestText, fontSize: 14, fontWeight: '900' },
+  retryText: buttons.quietText,
 }));

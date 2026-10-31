@@ -11,7 +11,7 @@ import { speakText } from '@/lib/speech';
 import { checkPronunciation, reportGeneratedMessage, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type Props = {
   lessonTitle: string;
@@ -129,10 +129,10 @@ const useStyles = makeStyles((c) => ({
   },
   copy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   text: { flex: 1, gap: spacing.xs },
-  title: { color: c.brandText, fontSize: 15, fontWeight: '800' },
-  body: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  title: { ...type.label, color: c.brandText, fontWeight: '700' },
+  body: { ...type.caption, color: c.muted },
   feedbackCard: { gap: spacing.sm },
-  feedback: { color: c.ink, fontSize: 15, lineHeight: 22, fontWeight: '600' },
+  feedback: { ...type.label, color: c.ink },
   reportButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  reportText: { color: c.muted, fontSize: 12, fontWeight: '700' },
+  reportText: { ...type.caption, color: c.muted, fontWeight: '700' },
 }));

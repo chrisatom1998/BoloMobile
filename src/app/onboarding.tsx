@@ -10,7 +10,7 @@ import { playOfflineSpeech } from '@/lib/offline-voice-player';
 import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles } from '@/theme';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
@@ -228,31 +228,21 @@ const useStyles = makeStyles((c) => ({
     width: '100%',
   },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 44 },
-  brandMark: { ...hindiType(32), color: c.brand },
-  stepLabel: { color: c.brandText, fontSize: 12, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' },
+  brandMark: { ...hindiType(28), color: c.brand },
+  stepLabel: { ...type.eyebrow, color: c.brandText },
   cancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
-  cancelText: { color: c.ink, fontSize: 15, fontWeight: '600' },
+  cancelText: { ...type.label, color: c.ink },
   cancelSpacer: { width: 64 },
   body: { flex: 1, justifyContent: 'center' },
   stack: { gap: spacing.md },
-  heading: { color: c.ink, fontFamily: displayFont, fontSize: 34, fontWeight: '700', letterSpacing: -0.4, lineHeight: 40 },
-  subheading: { color: c.ink, fontFamily: displayFont, fontSize: 24, fontWeight: '700', lineHeight: 30, marginTop: spacing.sm },
+  heading: { ...type.display, color: c.ink },
+  subheading: { ...type.title, color: c.ink, marginTop: spacing.sm },
   hindi: { ...hindiType(56), color: c.ink },
-  latin: { color: c.brandText, fontSize: 18, lineHeight: 24 },
-  prompt: { color: c.ink, fontSize: 16, fontWeight: '700', lineHeight: 22, marginTop: spacing.sm },
-  hearButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderColor: SELECTED_ORANGE,
-    borderRadius: radius.pill,
-    borderCurve: 'continuous',
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: spacing.lg,
-  },
-  hearText: { color: SELECTED_ORANGE, fontSize: 15, fontWeight: '700' },
-  miss: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  latin: { ...type.bodyLarge, color: c.brandText },
+  prompt: { ...type.label, color: c.ink, marginTop: spacing.sm, fontWeight: '700' },
+  hearButton: { ...buttons.secondary, alignSelf: 'flex-start', minHeight: 44 },
+  hearText: buttons.secondaryText,
+  miss: { ...type.caption, color: c.muted },
   choices: { gap: spacing.sm },
   choice: {
     alignItems: 'center',
@@ -271,21 +261,13 @@ const useStyles = makeStyles((c) => ({
   mark: { borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 18, width: 18 },
   markSelected: { backgroundColor: SELECTED_ORANGE, borderColor: SELECTED_ORANGE },
   choiceCopy: { flex: 1, gap: 2, minWidth: 0 },
-  choiceLabel: { color: c.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  choiceLabel: { ...type.label, color: c.ink, fontWeight: '700' },
   choiceHindi: { ...hindiType(20) },
-  choiceDetail: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  choiceDetail: { ...type.caption, color: c.muted },
   ashaRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
   asha: { backgroundColor: c.brandSoft, borderColor: c.gold, borderRadius: radius.pill, borderWidth: 2, height: 72, width: 72 },
   ashaCopy: { flex: 1, gap: spacing.sm, minWidth: 0 },
-  continueButton: {
-    alignItems: 'center',
-    backgroundColor: c.gold,
-    borderRadius: radius.pill,
-    borderCurve: 'continuous',
-    justifyContent: 'center',
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
-  },
+  continueButton: buttons.primary,
   continueDisabled: { opacity: 0.45 },
-  continueText: { color: c.ink, fontSize: 17, fontWeight: '700' },
+  continueText: buttons.primaryText,
 }));

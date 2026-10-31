@@ -12,7 +12,7 @@ import { hapticStartRecording, hapticTap, hapticWarning } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
 import { endRealtimeVoiceSession, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { deleteRecordingUri, readRecordingUri } from '@/lib/recording-file';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 const MAX_RECORDING_MS = 15_000;
 const MAX_BASE64_CHARACTERS = 6_000_000;
@@ -280,8 +280,8 @@ const useStyles = makeStyles((c) => ({
   recording: { backgroundColor: c.neutralSurface },
   working: { backgroundColor: c.forestDark },
   disabled: { opacity: 0.5 },
-  label: { color: c.white, fontSize: 15, fontWeight: '800' },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  label: { ...type.label, color: c.white, fontWeight: '700' },
+  error: { ...type.caption, color: c.danger },
   settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
-  settingsLinkText: { color: c.forestText, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+  settingsLinkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
 }));

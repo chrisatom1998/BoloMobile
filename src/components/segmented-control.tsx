@@ -3,7 +3,7 @@ import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-nat
 
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { hapticSelect } from '@/lib/haptics';
-import { makeStyles, spacing } from '@/theme';
+import { makeStyles, spacing, type } from '@/theme';
 
 export type SegmentOption<T extends string> = {
   accessibilityLabel?: string;
@@ -206,12 +206,7 @@ const useStyles = makeStyles((c) => ({
   indicatorCompact: {
     borderRadius: 11,
   },
-  label: {
-    color: c.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  label: { ...type.label, color: c.muted, textAlign: 'center' },
   labelSelected: {
     color: c.neutralSurfaceText,
   },
@@ -251,12 +246,7 @@ const useStyles = makeStyles((c) => ({
   stackedTriggerPressed: {
     opacity: 0.82,
   },
-  stackedLabel: {
-    color: c.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  stackedLabel: { ...type.caption, color: c.muted, textAlign: 'center', fontWeight: '700' },
   stackedLabelSelected: {
     color: c.neutralSurfaceText,
   },
