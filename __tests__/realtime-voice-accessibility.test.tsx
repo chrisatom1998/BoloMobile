@@ -163,26 +163,35 @@ describe('realtime voice accessibility', () => {
       expect(start.props.testID).toBe('realtime-voice-orb');
       expect(view.getByTestId('portrait-face')).toBeTruthy();
       expect(start.props.accessibilityHint).toBe('Starts live conversation with your microphone on.');
-      expect(StyleSheet.flatten(start.props.style)).toMatchObject({ width: 112, height: 112 });
+      expect(StyleSheet.flatten(start.props.style)).toMatchObject({ width: 148, height: 148 });
       expect(view.queryByText('आ')).toBeNull();
       expect(view.queryByLabelText('End live voice session')).toBeNull();
+      expect(StyleSheet.flatten(view.getByTestId('realtime-voice-portrait-ring').props.style).borderColor).toBe(lightColors.portraitRingFaint);
       await fireEvent.press(start);
       expect(mockStartTurn).toHaveBeenCalledTimes(1);
     });
 
-    it('unmutes, mutes and ends the session from the portrait with status rings', async () => {
-      const ready = await renderPortrait();
-      expect(StyleSheet.flatten(ready.getByTestId('realtime-voice-portrait-ring').props.style).borderColor).toBe(lightColors.portraitRing);
+    it('unmutes and mutes from the portrait with status rings, leaving End to the hosting screen', async () => {
+      const onDisconnectReady = jest.fn();
+      const ready = await render(
+        <RealtimeVoiceButton clientId="client-12345678" onDisconnectReady={onDisconnectReady} onError={jest.fn()} onTurnComplete={jest.fn()} size="portrait" tone="dark">
+          <Text testID="portrait-face">Asha</Text>
+        </RealtimeVoiceButton>,
+      );
+      expect(StyleSheet.flatten(ready.getByTestId('realtime-voice-portrait-ring').props.style)).toMatchObject({ borderColor: lightColors.portraitRing, borderWidth: 3 });
+      expect(StyleSheet.flatten(ready.getByTestId('realtime-voice-portrait-ripple').props.style).borderColor).toBe(lightColors.portraitRing);
       await fireEvent.press(ready.getByLabelText('Unmute microphone'));
       expect(mockStartTurn).toHaveBeenCalledTimes(1);
-      await fireEvent.press(ready.getByLabelText('End live voice session'));
-      expect(mockDisconnect).toHaveBeenCalledTimes(1);
+      // The stage no longer carries its own End control; the screen's control bar ends the call.
+      expect(ready.queryByLabelText('End live voice session')).toBeNull();
+      expect(onDisconnectReady).toHaveBeenCalledWith(mockDisconnect);
       await ready.unmount();
+      expect(onDisconnectReady).toHaveBeenLastCalledWith(null);
 
       mockVoiceStatus = 'recording';
       const recording = await renderPortrait();
       expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-ring').props.style)).toMatchObject({ borderColor: lightColors.gold, borderWidth: 3 });
-      expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-badge').props.style).backgroundColor).toBe(lightColors.orbRecording);
+      expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-badge').props.style)).toMatchObject({ backgroundColor: lightColors.orbRecording, width: 40, height: 40 });
       await fireEvent.press(recording.getByLabelText('Mute microphone'));
       expect(mockFinishTurn).toHaveBeenCalledTimes(1);
     });
@@ -191,9 +200,9 @@ describe('realtime voice accessibility', () => {
       const view = await renderPortrait({ compact: true, disabled: true });
       const control = view.getByLabelText('Unmute microphone');
 
-      expect(StyleSheet.flatten(control.props.style)).toMatchObject({ width: 96, height: 96 });
+      expect(StyleSheet.flatten(control.props.style)).toMatchObject({ width: 120, height: 120 });
       expect(control.props.accessibilityState).toEqual({ disabled: true });
-      expect(StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style)).toMatchObject({ width: '100%', height: 124 });
+      expect(StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style)).toMatchObject({ width: '100%', height: 164 });
     });
   });
 });
