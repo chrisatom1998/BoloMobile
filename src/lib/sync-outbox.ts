@@ -73,7 +73,16 @@ type LocalStorage = {
   setItem(key: string, value: string): Promise<void>;
 };
 
-export type SyncOutboxContext = { clientId: string | null; enabled: boolean };
+export type SyncOutboxContext = {
+  clientId: string | null;
+  enabled: boolean;
+  /**
+   * When the current AI consent was given (its `acceptedAt`). A report queued before it
+   * was queued under an earlier consent that has since been withdrawn, so it is dropped
+   * and never sent. This holds across restarts even if removing the stored queue failed.
+   */
+  consentSince?: string;
+};
 
 export type SyncOutboxDeps = {
   storage: () => LocalStorage;
@@ -256,8 +265,10 @@ export function createSyncOutbox(deps: SyncOutboxDeps): SyncOutbox {
 
   /**
    * Removes the stored queue, marking the removal first so a restart in the middle
-   * of it finishes the job. The marker's own removal failing is only logged: the
-   * queue is gone, and a start that still finds the marker removes nothing real.
+   * of it finishes the job. A failure to write the marker is only logged: reports
+   * queued before the current consent are never sent anyway (`consentSince`).
+   * A failure to remove the marker rejects, so queueing stays blocked: a marker left
+   * on disk would make the next start delete reports queued after this removal.
    */
   const removeStored = async () => {
     const storage = deps.storage();
@@ -267,9 +278,7 @@ export function createSyncOutbox(deps: SyncOutboxDeps): SyncOutbox {
       console.warn('Bolo could not mark queued work for removal.', error);
     }
     await storage.removeItem(SYNC_OUTBOX_KEY);
-    await storage.removeItem(SYNC_OUTBOX_CLEARING_KEY).catch((error: unknown) => {
-      console.warn('Bolo could not unmark queued work removal.', error);
-    });
+    await storage.removeItem(SYNC_OUTBOX_CLEARING_KEY);
   };
 
   const load = () => {
@@ -342,6 +351,15 @@ export function createSyncOutbox(deps: SyncOutboxDeps): SyncOutbox {
     };
   };
 
+  /** True when the entry was queued before the current consent, so under one that was withdrawn. */
+  const predatesConsent = (entry: OutboxEntry) => {
+    const since = context.consentSince ? Date.parse(context.consentSince) : Number.NaN;
+    return Number.isFinite(since) && Date.parse(entry.createdAt) < since;
+  };
+
+  /** Drops reports queued under an earlier, withdrawn consent before anything can send them. */
+  const dropPredatingConsent = () => (entries.some(predatesConsent) ? replace(entries.filter((entry) => !predatesConsent(entry))) : Promise.resolve());
+
   /** Entries past the age cap fail before any send, however long the app kept them loaded. */
   const expirePending = () => {
     const at = now();
@@ -370,9 +388,11 @@ export function createSyncOutbox(deps: SyncOutboxDeps): SyncOutbox {
       // One entry at a time, oldest first; each is marked in flight before its request.
       for (;;) {
         if (stale() || !canSend()) break;
+        await dropPredatingConsent();
+        if (stale() || !canSend()) break;
         await expirePending();
         if (stale() || !canSend()) break;
-        const next = entries.find((entry) => entry.state === 'pending' && !unsaved.has(entry.id) && Date.parse(entry.nextAttemptAt) <= now());
+        const next = entries.find((entry) => entry.state === 'pending' && !unsaved.has(entry.id) && !predatesConsent(entry) && Date.parse(entry.nextAttemptAt) <= now());
         if (!next) break;
         const marked: OutboxEntry = { ...next, state: 'in_flight' };
         await replace(entries.map((entry) => (entry.id === next.id ? marked : entry)));
@@ -479,7 +499,7 @@ export function createSyncOutbox(deps: SyncOutboxDeps): SyncOutbox {
     async retry(id) {
       await load();
       const retryAt = new Date(now()).toISOString();
-      await replace(entries.map((entry) => (entry.id === id && entry.state === 'failed' ? { ...entry, state: 'pending', attempts: 0, nextAttemptAt: retryAt, createdAt: retryAt, lastError: undefined } : entry)));
+      await replace(entries.map((entry) => (entry.id === id && entry.state === 'failed' && !predatesConsent(entry) ? { ...entry, state: 'pending', attempts: 0, nextAttemptAt: retryAt, createdAt: retryAt, lastError: undefined } : entry)));
       void flush();
     },
     async discard(id) {

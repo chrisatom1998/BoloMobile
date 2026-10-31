@@ -578,6 +578,83 @@ describe('sync outbox', () => {
       warning.mockRestore();
     });
 
+    it('never sends reports from a withdrawn consent after a restart, even when the marker and the removal both failed', async () => {
+      const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const firstConsent = new Date(Date.now() - 60_000).toISOString();
+      const { box, send, storage } = outbox();
+      box.setContext({ clientId: 'client-12345678', enabled: true, consentSince: firstConsent });
+      send.mockRejectedValueOnce(networkError());
+      await box.enqueue(report);
+      await flush();
+      expect(stored(storage)).toHaveLength(1);
+      // Withdrawal: neither the marker nor the removal reaches the disk.
+      storage.setItem.mockRejectedValueOnce(new Error('disk full'));
+      storage.removeItem.mockRejectedValueOnce(new Error('disk full'));
+      await expect(box.clear()).rejects.toThrow('disk full');
+      expect(stored(storage)).toHaveLength(1);
+      expect(storage.store.has(SYNC_OUTBOX_CLEARING_KEY)).toBe(false);
+
+      // Restart, then consent is granted again: the old report is dropped, not sent.
+      jest.advanceTimersByTime(1_000);
+      const restarted = outbox([], { storage: () => storage });
+      restarted.box.setContext({ clientId: 'client-12345678', enabled: true, consentSince: new Date().toISOString() });
+      await restarted.box.load();
+      await flush();
+      jest.advanceTimersByTime(OUTBOX_MAX_DELAY_MS);
+      await flush();
+      expect(restarted.send).not.toHaveBeenCalled();
+      expect(restarted.box.getEntries()).toEqual([]);
+      expect(stored(storage)).toEqual([]);
+      // A report made under the new consent still sends.
+      jest.advanceTimersByTime(1_000);
+      await restarted.box.enqueue(report);
+      await flush();
+      expect(restarted.send).toHaveBeenCalledTimes(1);
+      warning.mockRestore();
+    });
+
+    it('will not retry a failed report from before the current consent', async () => {
+      const { box, send } = outbox();
+      box.setContext({ clientId: 'client-12345678', enabled: true, consentSince: new Date(Date.now() - 60_000).toISOString() });
+      send.mockRejectedValueOnce(new BoloApiError('Bad request', { kind: 'http', status: 400 }));
+      const entry = await box.enqueue(report);
+      await flush();
+      expect(box.getEntries()[0]?.state).toBe('failed');
+      box.setContext({ clientId: 'client-12345678', enabled: false });
+      box.setContext({ clientId: 'client-12345678', enabled: true, consentSince: new Date(Date.now() + 1_000).toISOString() });
+      await box.retry(entry.id);
+      await flush();
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps queueing blocked while the removal marker is still stored, so the next start cannot delete new reports', async () => {
+      const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const { box, send, storage } = outbox();
+      send.mockRejectedValueOnce(networkError());
+      await box.enqueue(report);
+      await flush();
+      // The queue is removed but the marker is not.
+      storage.removeItem
+        .mockImplementationOnce(async (key: string) => { storage.store.delete(key); })
+        .mockRejectedValueOnce(new Error('disk busy'));
+      await expect(box.clear()).rejects.toThrow('disk busy');
+      expect(storage.store.has(SYNC_OUTBOX_KEY)).toBe(false);
+      expect(storage.store.has(SYNC_OUTBOX_CLEARING_KEY)).toBe(true);
+      await expect(box.enqueue(report)).rejects.toThrow(OUTBOX_CLEARED_MESSAGE);
+      expect(storage.store.has(SYNC_OUTBOX_KEY)).toBe(false);
+
+      // Retrying succeeds; a report queued afterwards survives a restart and sends.
+      await box.clear();
+      expect(storage.store.has(SYNC_OUTBOX_CLEARING_KEY)).toBe(false);
+      box.setContext({ clientId: 'client-12345678', enabled: false });
+      await box.enqueue(report);
+      const restarted = outbox([], { storage: () => storage });
+      await restarted.box.load();
+      await flush();
+      expect(restarted.send).toHaveBeenCalledTimes(1);
+      warning.mockRestore();
+    });
+
     it('never recreates a report whose first attempt began before the clear, even when hydration resolves later', async () => {
       const storage = memoryStorage();
       let finishRead!: () => void;

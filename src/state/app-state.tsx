@@ -305,7 +305,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [hydrated]);
   useEffect(() => {
     if (!hydrated) return;
-    syncOutbox.setContext({ clientId: state.clientId, enabled: state.aiConsent !== null });
+    syncOutbox.setContext({ clientId: state.clientId, enabled: state.aiConsent !== null, consentSince: state.aiConsent?.acceptedAt });
   }, [hydrated, state.aiConsent, state.clientId]);
 
   useEffect(() => {
