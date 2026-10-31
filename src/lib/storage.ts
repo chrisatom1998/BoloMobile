@@ -402,6 +402,11 @@ function secureUuid(): string | null {
   return null;
 }
 
+/** A random local identifier for on-device records such as Asha session log entries. */
+export function createLocalId(): string {
+  return (secureUuid() ?? `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`).slice(0, 64);
+}
+
 export function sanitizeClientId(value: string | null): string {
   if (value && /^[A-Za-z0-9-]{8,64}$/.test(value)) return value;
   const generated = secureUuid() ?? `mobile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
