@@ -1,10 +1,10 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
-import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
+import { AccessibilityInfo, Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
-import { lightColors, spacing } from '../src/theme';
+import { lightColors, opacity, spacing } from '../src/theme';
 
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
@@ -48,6 +48,7 @@ jest.mock('lucide-react-native', () => ({
   ArrowDown: () => null,
   BookmarkPlus: () => null,
   ChevronDown: () => null,
+  Ellipsis: () => null,
   Flag: () => null,
   History: () => null,
   Lock: () => null,
@@ -93,6 +94,8 @@ const mockVoiceButtonProps: {
   history?: unknown;
   onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
 } = {};
+const mockLiveDisconnect = jest.fn();
+let mockScriptPreference: 'both' | 'devanagari' | 'latin' = 'both';
 
 jest.mock('@/components/realtime-voice-button', () => {
   return {
@@ -101,9 +104,11 @@ jest.mock('@/components/realtime-voice-button', () => {
       disabled,
       history,
       onConnectionStart,
+      onDisconnectReady,
       onError,
       onInputTranscriptComplete,
       onMicrophonePhase,
+      onPlaybackChange,
       onSessionEvent,
       onStatusChange,
       onTranscriptChange,
@@ -115,9 +120,11 @@ jest.mock('@/components/realtime-voice-button', () => {
       disabled?: boolean;
       history?: unknown;
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
+      onDisconnectReady?: (disconnect: ((reason?: string) => void) | null) => void;
       onError: (message: string, details?: { kind?: string }) => void;
       onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onMicrophonePhase?: (phase: 'idle' | 'explaining' | 'denied') => void;
+      onPlaybackChange?: (playing: boolean) => void;
       onSessionEvent?: (event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
       onTranscriptChange?: (update: { speaker: 'you' | 'asha'; text: string }) => void;
@@ -135,6 +142,14 @@ jest.mock('@/components/realtime-voice-button', () => {
         onTurnActionReady?.(() => onStatusChange?.('recording'));
         return () => onTurnActionReady?.(null);
       }, [onStatusChange, onTurnActionReady]);
+      mockReact.useEffect(() => {
+        onDisconnectReady?.((reason?: string) => {
+          mockLiveDisconnect(reason);
+          onSessionEvent?.({ type: 'ended', reason: reason ?? 'user_ended' });
+          onStatusChange?.('disconnected');
+        });
+        return () => onDisconnectReady?.(null);
+      }, [onDisconnectReady, onSessionEvent, onStatusChange]);
       return mockReact.createElement(
       mockReact.Fragment,
       null,
@@ -210,6 +225,22 @@ jest.mock('@/components/realtime-voice-button', () => {
           onPress: () => onStatusChange?.('responding'),
         },
         mockReact.createElement(MockText, null, 'Mock responding'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock Asha playback start',
+          onPress: () => onPlaybackChange?.(true),
+        },
+        mockReact.createElement(MockText, null, 'Mock playback start'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
+          accessibilityLabel: 'Mock Asha playback stop',
+          onPress: () => onPlaybackChange?.(false),
+        },
+        mockReact.createElement(MockText, null, 'Mock playback stop'),
       ),
       mockReact.createElement(
         MockPressable,
@@ -419,7 +450,7 @@ jest.mock('@/state/app-state', () => ({
       microphoneTested: false,
       primaryGoal: 'conversation',
       responseLanguage: 'en',
-      scriptPreference: 'both',
+      scriptPreference: mockScriptPreference,
     });
     const appendChatMessages = mockReact.useCallback((messages: typeof chatHistory) => {
       appState.__appendChatMessagesMock(messages);
@@ -466,6 +497,7 @@ jest.mock('@/lib/asha-session-log-store', () => ({
   findAshaSessionIdForRow: jest.fn(() => undefined),
   logAshaSessionEvent: jest.fn(),
   logAshaSessionSnapshot: jest.fn(),
+  logTypedChatSession: jest.fn(),
   registerLiveCallEnder: jest.fn(() => jest.fn()),
 }));
 
@@ -475,6 +507,7 @@ const sessionLog = jest.requireMock('@/lib/asha-session-log-store') as {
   findAshaSessionIdForRow: jest.Mock;
   logAshaSessionEvent: jest.Mock;
   logAshaSessionSnapshot: jest.Mock;
+  logTypedChatSession: jest.Mock;
   registerLiveCallEnder: jest.Mock;
 };
 
@@ -560,6 +593,20 @@ type FiberNode = {
   return: FiberNode | null;
 };
 
+/** Opens the More options menu and returns its Clear chat action, as the alert mock received it. */
+async function pressClearChatFromMenu(view: Awaited<ReturnType<typeof render>>, alert: jest.SpyInstance) {
+  await fireEvent.press(view.getByLabelText('More options'));
+  const menu = alert.mock.calls.findLast(([title]) => title === 'Asha chat');
+  const actions = menu?.[2] as { text: string; style?: string; onPress?: () => void }[] | undefined;
+  const clear = actions?.find(({ text }) => text === 'Clear chat');
+  if (!clear) throw new Error('The More options menu has no Clear chat action.');
+  expect(clear.style).toBe('destructive');
+  await act(async () => {
+    clear.onPress?.();
+    await Promise.resolve();
+  });
+}
+
 function getOnPress(instance: unknown) {
   let fiber: FiberNode | null | undefined = (instance as { unstable_fiber?: FiberNode }).unstable_fiber;
   while (fiber) {
@@ -596,8 +643,8 @@ describe('live consent layout', () => {
     expect(view.queryByText(/GPT-Live/u)).toBeNull();
     const testIds = collectTestIds(view.toJSON());
     expect(testIds.indexOf('asha-header-portrait')).toBeLessThan(testIds.indexOf('talk-with-asha'));
-    // The voice-language switch only appears once Asha is turned on, so it never shows greyed out.
-    expect(view.queryAllByRole('tab', { name: /Asha voice language/u })).toHaveLength(0);
+    // The reply-language pill only appears once Asha is turned on, so it never shows greyed out.
+    expect(view.queryByTestId('reply-language-pill')).toBeNull();
     expect(view.queryByLabelText('Create Asha reply')).toBeNull();
     expect(mockVoiceButtonProps.onConnectionStart).toBeUndefined();
     expect(view.queryByTestId('live-input-caption')).toBeNull();
@@ -629,10 +676,12 @@ describe('live consent layout', () => {
     await view.unmount();
   }, 20_000);
 
-  it('keeps the Last session entry reachable while consent is off, outside the consent-only section', async () => {
+  it('keeps the Past sessions entry reachable while consent is off, outside the consent-only section', async () => {
     const view = await render(<LiveScreen />);
     expect(view.queryByTestId('ask-asha-sheet')).toBeNull();
-    const entry = view.getByLabelText('View last Asha session');
+    expect(view.queryByLabelText('More options')).toBeNull();
+    const entry = view.getByLabelText('View past Asha sessions');
+    expect(within(entry).getByText('Past sessions')).toBeTruthy();
     expect(entry.props.accessibilityRole).toBe('button');
     await fireEvent.press(entry);
     expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
@@ -856,8 +905,8 @@ describe('immersive live conversation design', () => {
     expect(view.queryByLabelText('Unmute microphone')).toBeNull();
     expect(view.queryByText('Live microphone')).toBeNull();
     expect(view.queryByTestId('composer-mic-toggle')).toBeNull();
-    expect(view.getByText('Ask Asha')).toBeTruthy();
-    expect(view.getByText('How do I say…?')).toBeTruthy();
+    expect(view.queryByText('Ask Asha')).toBeNull();
+    expect(view.queryByText('How do I say…?')).toBeNull();
     expect(view.getByLabelText('Open chat history')).toBeTruthy();
     expect(view.queryByLabelText('Go back')).toBeNull();
     expect(view.getByTestId('featured-phrase-section')).toBeTruthy();
@@ -865,7 +914,7 @@ describe('immersive live conversation design', () => {
 
     const sheet = view.getByTestId('ask-asha-sheet');
     const sheetStyle = StyleSheet.flatten(sheet.props.style);
-    expect(sheetStyle.marginTop).toBeLessThan(0);
+    expect(sheetStyle.marginTop).toBe(spacing.md);
     expect(sheetStyle.borderTopLeftRadius).toBeGreaterThanOrEqual(30);
     expect(view.queryByTestId('ask-asha-sheet-handle')).toBeNull();
 
@@ -884,7 +933,7 @@ describe('immersive live conversation design', () => {
     expect(view.getByTestId('asha-voice-status')).toBeTruthy();
     expect(within(view.getByTestId('live-chat-list')).queryByTestId('composer-mic-toggle')).toBeNull();
     expect(view.getByTestId('composer-mic-toggle').props.accessibilityLabel).toBe('Start a voice conversation');
-    expect(view.getByText('How do I say…?')).toBeTruthy();
+    expect(view.queryByText('How do I say…?')).toBeNull();
     expect(view.queryByTestId('live-input-caption')).toBeNull();
     expect(view.getByTestId('live-output-caption').props.accessibilityLiveRegion).toBe('polite');
     expect(view.getByTestId('live-output-caption').props.children).toBe('Hello there.');
@@ -1072,13 +1121,11 @@ describe('immersive live conversation design', () => {
       const view = await render(<LiveScreen />);
       const heroStyle = StyleSheet.flatten(view.getByTestId('voice-conversation-hero').props.style);
       const sheetStyle = StyleSheet.flatten(view.getByTestId('ask-asha-sheet').props.style);
-      const headingStyle = StyleSheet.flatten(view.getByTestId('ask-asha-heading').props.style);
 
       expect(heroStyle.gap).toBe(4);
       expect(heroStyle.minHeight).toBeUndefined();
       expect(sheetStyle.gap).toBe(4);
       expect(sheetStyle.paddingTop).toBe(4);
-      expect(headingStyle.gap).toBe(0);
       await view.unmount();
       await flushMicrotasks();
     } finally {
@@ -1413,14 +1460,22 @@ describe('offline capture and queued reports', () => {
     alert.mockRestore();
   });
 
-  it('links to the last saved session from the Asha screen', async () => {
+  it('links to past sessions from the Asha screen through the More options menu', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
-    const link = view.getByLabelText('View last Asha session');
-    expect(link.props.accessibilityRole).toBe('button');
-    expect(StyleSheet.flatten(link.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    await fireEvent.press(link);
+    expect(view.queryByLabelText('View past Asha sessions')).toBeNull();
+    const more = view.getByLabelText('More options');
+    expect(more.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(more.props.style)).toMatchObject({ minHeight: 44, minWidth: 44 });
+    await fireEvent.press(more);
+    const menu = alert.mock.calls.findLast(([title]) => title === 'Asha chat');
+    const actions = menu?.[2] as { text: string; style?: string; onPress?: () => void }[];
+    // No chat yet, so only Past sessions and Cancel are offered.
+    expect(actions.map(({ text }) => text)).toEqual(['Past sessions', 'Cancel']);
+    actions.find(({ text }) => text === 'Past sessions')?.onPress?.();
     expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
     await view.unmount();
+    alert.mockRestore();
   });
 });
 
@@ -1773,19 +1828,31 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
-  it('selects English or Hindi for typed and realtime Asha responses and locks the choice during a live session', async () => {
+  it('selects English or Hindi replies from the reply-language pill and hides the choice during a live session', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Dhanyavaad.', language: 'hi' });
     const view = await render(<LiveScreen />);
-    const english = view.getByRole('tab', { name: 'Asha voice language: English' });
-    const hindi = view.getByRole('tab', { name: 'Asha voice language: Hindi' });
+    const pill = view.getByTestId('reply-language-pill');
 
-    expect(english.props.accessibilityState).toEqual({ selected: true, disabled: false });
-    expect(hindi.props.accessibilityState).toEqual({ selected: false, disabled: false });
+    expect(pill.props.accessibilityRole).toBe('button');
+    expect(pill.props.accessibilityLabel).toBe('Reply language: English. Change');
+    expect(pill.props.accessibilityState).toEqual({ disabled: false });
+    expect(within(pill).getByText('English replies')).toBeTruthy();
+    expect(view.queryByRole('tab', { name: /Asha voice language/u })).toBeNull();
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('en');
 
-    await fireEvent.press(hindi);
-    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState)
-      .toEqual({ selected: true, disabled: false });
+    await fireEvent.press(pill);
+    const menu = alert.mock.calls.findLast(([title]) => title === 'Reply language');
+    const choices = menu?.[2] as { text: string; style?: string; onPress?: () => void }[];
+    expect(choices.map(({ text, style }) => [text, style])).toEqual([
+      ['English replies', undefined],
+      ['Hindi replies', undefined],
+      ['Cancel', 'cancel'],
+    ]);
+    await act(async () => { choices.find(({ text }) => text === 'Hindi replies')?.onPress?.(); });
+    expect(view.getByTestId('reply-language-pill').props.accessibilityLabel).toBe('Reply language: Hindi. Change');
+    expect(within(view.getByTestId('reply-language-pill')).getByText('Hindi replies')).toBeTruthy();
+    expect(view.queryByText('English replies')).toBeNull();
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
     expect(view.getByText('Private Hindi coach · Hindi replies')).toBeTruthy();
 
@@ -1801,12 +1868,14 @@ describe('live coaching state', () => {
       expect.objectContaining({ role: 'asha', text: 'Dhanyavaad.', language: 'hi' }),
     ]);
 
+    // The pill leaves the screen for the whole session, so the choice cannot change mid-call.
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByRole('tab', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(true);
-    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
-    await fireEvent.press(view.getByRole('tab', { name: 'Asha voice language: English' }));
+    expect(view.queryByTestId('reply-language-pill')).toBeNull();
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(view.getByTestId('reply-language-pill').props.accessibilityLabel).toBe('Reply language: Hindi. Change');
 
+    alert.mockRestore();
     await view.unmount();
     await flushMicrotasks();
   });
@@ -1859,14 +1928,17 @@ describe('live coaching state', () => {
   it('clears saved coaching history only after destructive confirmation', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
-    expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
+    await fireEvent.press(view.getByLabelText('More options'));
+    let menu = alert.mock.calls.findLast(([title]) => title === 'Asha chat');
+    expect((menu?.[2] as { text: string }[]).map(({ text }) => text)).not.toContain('Clear chat');
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
 
-    const clear = view.getByLabelText('Clear Asha chat history');
-    expect(within(clear).getByText('Clear chat')).toBeTruthy();
-    expect(clear.props.accessibilityRole).toBe('button');
-    expect(StyleSheet.flatten(clear.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    await fireEvent.press(clear);
+    await fireEvent.press(view.getByLabelText('More options'));
+    menu = alert.mock.calls.findLast(([title]) => title === 'Asha chat');
+    const clearFromMenu = (menu?.[2] as { text: string; style?: string; onPress?: () => void }[]).find(({ text }) => text === 'Clear chat');
+    expect(clearFromMenu).toMatchObject({ style: 'destructive' });
+    const clear = { onPress: () => clearFromMenu?.onPress?.() };
+    await act(async () => { clear.onPress(); await Promise.resolve(); });
     expect(view.getByLabelText('You: Namaste')).toBeTruthy();
     expect(view.getByLabelText('Asha: Hello there.').props.accessibilityHint).toBe('Read-only message. Highlight words, then use Save selection below.');
 
@@ -1882,7 +1954,7 @@ describe('live coaching state', () => {
     expect(view.getByLabelText('You: Namaste')).toBeTruthy();
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
 
-    await fireEvent.press(clear);
+    await act(async () => { clear.onPress(); await Promise.resolve(); });
     const confirmPrompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (confirmPrompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
@@ -1899,7 +1971,9 @@ describe('live coaching state', () => {
     expect(view.queryByLabelText('You: Namaste')).toBeNull();
     expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
     expect(view.getByDisplayValue('Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.').props.accessibilityHint).toBe('Read-only message.');
-    expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
+    await fireEvent.press(view.getByLabelText('More options'));
+    menu = alert.mock.calls.findLast(([title]) => title === 'Asha chat');
+    expect((menu?.[2] as { text: string }[]).map(({ text }) => text)).toEqual(['Past sessions', 'Cancel']);
     await view.unmount();
     await flushMicrotasks();
     alert.mockRestore();
@@ -1909,7 +1983,7 @@ describe('live coaching state', () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
-    await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
+    await pressClearChatFromMenu(view, alert);
     const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (prompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
@@ -1950,7 +2024,7 @@ describe('live coaching state', () => {
     boloApi.sendMobileChat.mockResolvedValueOnce({ reply: 'Fresh typed answer', language: 'en' });
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
-    await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
+    await pressClearChatFromMenu(view, alert);
     const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (prompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
@@ -1986,7 +2060,7 @@ describe('live coaching state', () => {
       true,
     );
 
-    await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
+    await pressClearChatFromMenu(view, alert);
     const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (prompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
@@ -2061,17 +2135,19 @@ describe('live audio control exclusion', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
 
-    expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
+    // Typed entry leaves the screen for the whole session; replay stays visible but locked.
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
+    expect(view.queryByText('Correct my Hindi')).toBeNull();
     for (const listen of view.getAllByLabelText(/Read reply aloud:/u)) {
       expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(true);
       await fireEvent.press(listen);
     }
-    await fireEvent.press(view.getByText('Correct my Hindi'));
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
 
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.getByLabelText('Message Asha').props.editable).toBe(true);
+    expect(view.getByText('Correct my Hindi')).toBeTruthy();
     const firstListen = expectDefined(view.getAllByLabelText(/Read reply aloud:/u)[0]);
     expect(firstListen.props.accessibilityState?.disabled
       ?? firstListen.props.disabled).toBe(false);
@@ -2083,8 +2159,8 @@ describe('live audio control exclusion', () => {
   it('blocks typed chat and replay while the connected microphone is muted', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
-    await fireEvent.press(view.getByLabelText('Send message'));
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
+    expect(view.queryByLabelText('Send message')).toBeNull();
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
     await view.unmount();
@@ -2122,6 +2198,395 @@ describe('live audio control exclusion', () => {
     expect(send.props.accessibilityState).toEqual({ disabled: true });
     expect(StyleSheet.flatten(send.props.style).height).toBeGreaterThanOrEqual(44);
 
+    await view.unmount();
+    await flushMicrotasks();
+  });
+});
+
+describe('Asha session UX', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockScriptPreference = 'both';
+    mockReducedMotion = false;
+    mockAiConsent = true;
+  });
+
+  afterEach(() => {
+    mockScriptPreference = 'both';
+    jest.restoreAllMocks();
+  });
+
+  it('saves the typed chat as a past session before a new voice conversation clears it, and never saves an empty chat', async () => {
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Dhanyavaad means thank you.', language: 'en' });
+    const view = await render(<LiveScreen />);
+
+    // Nothing to keep yet.
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    expect(sessionLog.logTypedChatSession).toHaveBeenCalledWith([], 'en');
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    sessionLog.logTypedChatSession.mockClear();
+    appState.__clearChatHistoryMock.mockClear();
+
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'How do I say thank you?');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    expect(view.getByLabelText('Asha: Dhanyavaad means thank you.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    expect(sessionLog.logTypedChatSession).toHaveBeenCalledTimes(1);
+    const [saved, language] = sessionLog.logTypedChatSession.mock.calls[0] as [{ role: string; text: string }[], string];
+    expect(language).toBe('en');
+    expect(saved).toEqual([
+      expect.objectContaining({ role: 'you', text: 'How do I say thank you?' }),
+      expect.objectContaining({ role: 'asha', text: 'Dhanyavaad means thank you.' }),
+    ]);
+    // Saved after recovery finished and before the chat was cleared.
+    expect(sessionLog.logTypedChatSession.mock.invocationCallOrder[0]).toBeGreaterThan(sessionLog.ensureAshaSessionLogLoaded.mock.invocationCallOrder[0]!);
+    expect(sessionLog.logTypedChatSession.mock.invocationCallOrder[0]).toBeLessThan(appState.__clearChatHistoryMock.mock.invocationCallOrder[0]!);
+    expect(view.queryByLabelText('Asha: Dhanyavaad means thank you.')).toBeNull();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('shows a labelled End chat pill beside Mute during a session, which ends the call the way the portrait control did', async () => {
+    const view = await render(<LiveScreen />);
+    expect(view.queryByTestId('live-end-chat')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    const end = view.getByLabelText('End chat');
+    expect(end.props.accessibilityRole).toBe('button');
+    expect(end.props.testID).toBe('live-end-chat');
+    expect(within(end).getByText('End chat')).toBeTruthy();
+    expect(StyleSheet.flatten(end.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(end.props.style).minWidth).toBeGreaterThanOrEqual(44);
+    const bar = view.getByTestId('live-call-bar');
+    expect(within(bar).getByTestId('composer-mic-toggle')).toBeTruthy();
+    expect(within(view.getByTestId('live-chat-list')).queryByTestId('live-end-chat')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    expect(view.getByLabelText('End chat').props.accessibilityState).toEqual({ disabled: false });
+    await fireEvent.press(view.getByLabelText('End chat'));
+    expect(mockLiveDisconnect).toHaveBeenCalledTimes(1);
+    expect(mockLiveDisconnect).toHaveBeenCalledWith(undefined);
+    expect(sessionLog.logAshaSessionEvent).toHaveBeenCalledWith({ type: 'ended', reason: 'user_ended' }, 'en');
+    expect(view.queryByTestId('live-end-chat')).toBeNull();
+    expect(view.getByText('Ready when you are')).toBeTruthy();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('shows that Asha is speaking while her audio plays over an open microphone, on the label and hero text', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    expect(within(view.getByTestId('asha-voice-status')).getByText('LISTENING')).toBeTruthy();
+    expect(view.getByText('Your microphone is on')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock Asha playback start'));
+    expect(within(view.getByTestId('asha-voice-status')).getByText('SPEAKING')).toBeTruthy();
+    expect(view.getByText('Asha is speaking')).toBeTruthy();
+    expect(view.getByText(/just talk to interrupt/u)).toBeTruthy();
+    // Interrupting is a matter of talking; the mute control stays what it was.
+    expect(view.getByLabelText('Mute microphone')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock Asha playback stop'));
+    expect(within(view.getByTestId('asha-voice-status')).getByText('LISTENING')).toBeTruthy();
+    expect(view.queryByText(/just talk to interrupt/u)).toBeNull();
+
+    // A muted microphone while Asha speaks keeps its own copy.
+    await fireEvent.press(view.getByLabelText('Mock realtime responding'));
+    expect(within(view.getByTestId('asha-voice-status')).getByText('SPEAKING')).toBeTruthy();
+    expect(view.getByText('Your mic is muted. Tap Asha to speak at any time.')).toBeTruthy();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('announces state changes and finished replies for VoiceOver on iOS, never each caption delta', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    expect(announce).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    expect(announce.mock.calls.map(([message]) => message)).toEqual(['Connecting to Asha.', 'Asha is listening.']);
+
+    await fireEvent.press(view.getByLabelText('Mock Asha playback start'));
+    expect(announce).toHaveBeenLastCalledWith('Asha is speaking. Just talk to interrupt.');
+    announce.mockClear();
+    await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    expect(view.getByTestId('live-output-caption')).toBeTruthy();
+    expect(announce).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByLabelText('Mock Asha playback stop'));
+    expect(announce.mock.calls.map(([message]) => message)).toEqual(['नमस्ते Chris, आप कैसे हैं?', 'Asha is listening.']);
+
+    announce.mockClear();
+    await fireEvent.press(view.getByLabelText('Mock realtime error'));
+    expect(announce).toHaveBeenCalledWith('I didn’t receive enough audio.');
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    announce.mockClear();
+    await fireEvent.press(view.getByLabelText('Mock session interrupted'));
+    expect(announce.mock.calls.map(([message]) => message)).toEqual(['Connection lost. This conversation is saved on your device.']);
+
+    // The Android live regions stay in place for TalkBack.
+    expect(view.getByTestId('live-interrupted-banner').props.accessibilityLiveRegion).toBe('polite');
+    announce.mockClear();
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(announce.mock.calls.map(([message]) => message)).toEqual(['Connecting to Asha.', 'Your microphone is muted.', 'The conversation ended.']);
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('announces a typed reply once on iOS', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
+    boloApi.sendMobileChat.mockResolvedValueOnce({ transcript: '', reply: 'Here is an announced correction.', language: 'en' });
+    const view = await render(<LiveScreen />);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Please help with this sentence.');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    expect(announce.mock.calls.map(([message]) => message)).toEqual(['Here is an announced correction.']);
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('shows only the portrait, captions, and the call bar during a session, then restores the resting screen', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.getByLabelText('Private conversation')).toBeTruthy();
+    expect(view.getByTestId('reply-language-pill')).toBeTruthy();
+    expect(view.getByTestId('ask-asha-sheet')).toBeTruthy();
+    expect(view.getByLabelText('More options')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
+    await flushMicrotasks();
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+
+    expect(view.getByTestId('asha-header-portrait')).toBeTruthy();
+    expect(view.getByText('Speak with Asha')).toBeTruthy();
+    expect(view.getByTestId('live-output-caption')).toBeTruthy();
+    expect(view.getByTestId('live-call-bar')).toBeTruthy();
+    expect(view.getByTestId('asha-voice-status')).toBeTruthy();
+    expect(view.queryByLabelText('Private conversation')).toBeNull();
+    expect(view.queryByTestId('reply-language-pill')).toBeNull();
+    expect(view.queryByLabelText('Open chat history')).toBeNull();
+    expect(view.queryByTestId('ask-asha-sheet')).toBeNull();
+    // The More options menu stays in the header during the call (Past sessions lives there).
+    expect(within(view.getByTestId('asha-header-topbar')).getByLabelText('More options')).toBeTruthy();
+    expect(view.queryByText('Order tea')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Correct my Hindi' })).toBeNull();
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
+    expect(view.queryByLabelText('Send message')).toBeNull();
+    expect(view.queryByTestId('featured-phrase-section')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(view.getByLabelText('Private conversation')).toBeTruthy();
+    expect(view.getByTestId('reply-language-pill')).toBeTruthy();
+    expect(view.getByLabelText('Open chat history')).toBeTruthy();
+    expect(view.getByTestId('ask-asha-sheet')).toBeTruthy();
+    expect(view.getByLabelText('More options')).toBeTruthy();
+    expect(view.getByRole('button', { name: 'Correct my Hindi' })).toBeTruthy();
+    expect(view.getByLabelText('Message Asha')).toBeTruthy();
+    expect(view.queryByTestId('live-call-bar')).toBeNull();
+    // A chat exists, so the featured phrase card stays away.
+    expect(view.queryByTestId('featured-phrase-section')).toBeNull();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('offers Past sessions and Clear chat from one More options menu', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
+    expect(view.queryByLabelText('View past Asha sessions')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('More options'));
+    const menu = alert.mock.calls.findLast(([title]) => title === 'Asha chat');
+    const actions = menu?.[2] as { text: string; style?: string; onPress?: () => void }[];
+    expect(actions.map(({ text, style }) => [text, style])).toEqual([
+      ['Past sessions', undefined],
+      ['Clear chat', 'destructive'],
+      ['Cancel', 'cancel'],
+    ]);
+    await act(async () => { actions.find(({ text }) => text === 'Clear chat')?.onPress?.(); });
+    expect(alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?')).toBeTruthy();
+    expect(appState.__clearChatHistoryMock).not.toHaveBeenCalled();
+    await act(async () => { actions.find(({ text }) => text === 'Past sessions')?.onPress?.(); });
+    expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
+    await view.unmount();
+    await flushMicrotasks();
+    alert.mockRestore();
+  });
+
+  it('follows the learner script setting for live captions', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Mock Asha transcript'));
+    // Both: the spoken Devanagari line in Tiro, read as Hindi, with one romanization beneath it.
+    const hindi = view.getByTestId('live-output-caption-devanagari');
+    expect(hindi.props.children).toBe('नमस्ते Chris, आप कैसे हैं?');
+    expect(hindi.props.accessibilityLanguage).toBe('hi-IN');
+    expect(StyleSheet.flatten(hindi.props.style)).toMatchObject({ fontFamily: 'Tiro Devanagari Hindi', color: '#172523' });
+    expect(hindi.props.accessibilityLiveRegion).toBeUndefined();
+    const romanized = view.getByTestId('live-output-caption');
+    expect(romanized.props.children).toBe('Namaste Chris, aap kaise hain?');
+    expect(romanized.props.accessibilityLiveRegion).toBe('polite');
+    // An English line has no Devanagari to show.
+    await fireEvent.press(view.getByLabelText('Mock overlapping captions'));
+    expect(view.queryByTestId('live-input-caption-devanagari')).toBeNull();
+    expect(view.getByTestId('live-input-caption').props.children).toBe('I speak Hindi');
+    await view.unmount();
+
+    mockScriptPreference = 'latin';
+    const latin = await render(<LiveScreen />);
+    await fireEvent.press(latin.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(latin.getByLabelText('Mock Asha transcript'));
+    expect(latin.queryByTestId('live-output-caption-devanagari')).toBeNull();
+    expect(latin.getByTestId('live-output-caption').props.children).toBe('Namaste Chris, aap kaise hain?');
+    expect(latin.queryByText(/[ऀ-ॿ]/u)).toBeNull();
+    await latin.unmount();
+
+    mockScriptPreference = 'devanagari';
+    const devanagari = await render(<LiveScreen />);
+    await fireEvent.press(devanagari.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(devanagari.getByLabelText('Mock Asha transcript'));
+    expect(devanagari.queryByTestId('live-output-caption')).toBeNull();
+    const only = devanagari.getByTestId('live-output-caption-devanagari');
+    expect(only.props.children).toBe('नमस्ते Chris, आप कैसे हैं?');
+    expect(only.props.accessibilityLiveRegion).toBe('polite');
+    await devanagari.unmount();
+    await flushMicrotasks();
+  });
+
+  it('gives the error Dismiss control a 44 point tap target without changing its look', async () => {
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Mock realtime error'));
+    const dismiss = view.getByTestId('live-error-dismiss');
+    expect(dismiss.props.accessibilityRole).toBe('button');
+    // A 16pt glyph plus equal slop on both sides reaches 44pt each way.
+    expect(16 + 2 * (dismiss.props.hitSlop as number)).toBeGreaterThanOrEqual(44);
+    expect(dismiss.props.style).toBeUndefined();
+    await fireEvent.press(dismiss);
+    expect(view.queryByTestId('live-error-dismiss')).toBeNull();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+});
+
+describe('Asha tab chrome', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('keeps "Speak with Asha" as the only heading, with no Ask Asha eyebrow or title', async () => {
+    const view = await render(<LiveScreen />);
+    const headingText = (node: { props: Record<string, unknown> }) => node.props.children;
+    expect(view.getAllByRole('header').map(headingText)).toEqual(['Speak with Asha']);
+    expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
+    expect(view.queryByText('Ask Asha')).toBeNull();
+    expect(view.queryByText('How do I say…?')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.getAllByRole('header').map(headingText)).toEqual(['Speak with Asha']);
+    expect(view.queryByText('Ask Asha')).toBeNull();
+    expect(view.queryByText('How do I say…?')).toBeNull();
+
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    expect(view.getAllByRole('header').map(headingText)).toEqual(['Speak with Asha']);
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('offers the reply language as a compact pill that opens an English or Hindi choice', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    expect(view.queryByRole('tablist')).toBeNull();
+    const pill = view.getByRole('button', { name: 'Reply language: English. Change' });
+    expect(pill.props.testID).toBe('reply-language-pill');
+    expect(within(pill).getByText('English replies')).toBeTruthy();
+    expect(StyleSheet.flatten(pill.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(pill.props.style).opacity).toBeUndefined();
+
+    await fireEvent.press(pill);
+    expect(alert).toHaveBeenLastCalledWith('Reply language', expect.any(String), [
+      expect.objectContaining({ text: 'English replies' }),
+      expect.objectContaining({ text: 'Hindi replies' }),
+      expect.objectContaining({ text: 'Cancel', style: 'cancel' }),
+    ]);
+    const choices = alert.mock.calls.at(-1)?.[2] as { text: string; onPress?: () => void }[];
+    await act(async () => { choices.find(({ text }) => text === 'Hindi replies')?.onPress?.(); });
+    const hindiPill = view.getByRole('button', { name: 'Reply language: Hindi. Change' });
+    expect(within(hindiPill).getByText('Hindi replies')).toBeTruthy();
+    expect(view.queryByText('English replies')).toBeNull();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('keeps Clear chat only inside the More options menu, which stays in the header during a session', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const menuActions = () => (alert.mock.calls.findLast(([title]) => title === 'Asha chat')?.[2] as { text: string }[]).map(({ text }) => text);
+    const view = await render(<LiveScreen />);
+    expect(view.queryByRole('button', { name: /clear chat/iu })).toBeNull();
+    expect(view.queryByText('Clear chat')).toBeNull();
+    expect(view.getAllByLabelText('More options')).toHaveLength(1);
+
+    // An empty chat has nothing to clear, so the menu lists Past sessions only.
+    await fireEvent.press(view.getByLabelText('More options'));
+    expect(menuActions()).toEqual(['Past sessions', 'Cancel']);
+
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    expect(view.queryByRole('button', { name: /clear chat/iu })).toBeNull();
+    expect(view.queryByText('Clear chat')).toBeNull();
+    await fireEvent.press(view.getByLabelText('More options'));
+    expect(menuActions()).toEqual(['Past sessions', 'Clear chat', 'Cancel']);
+
+    // During a call the menu is still reachable from the header; Clear chat waits for the call to end.
+    await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    const more = within(view.getByTestId('asha-header-topbar')).getByLabelText('More options');
+    expect(view.getAllByLabelText('More options')).toHaveLength(1);
+    expect(StyleSheet.flatten(more.props.style)).toMatchObject({ minWidth: 44, minHeight: 44 });
+    await fireEvent.press(more);
+    expect(menuActions()).toEqual(['Past sessions', 'Cancel']);
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('fills the disabled Send button with the night line and dims its icon to 40 percent', async () => {
+    const view = await render(<LiveScreen />);
+    const send = view.getByLabelText('Send message');
+    expect(send.props.accessibilityState.disabled).toBe(true);
+    expect(StyleSheet.flatten(send.props.style)).toMatchObject({ backgroundColor: lightColors.nightLine });
+    expect(StyleSheet.flatten(send.props.style).opacity).toBeUndefined();
+    expect(StyleSheet.flatten(view.getByTestId('send-asha-message-icon').props.style)).toMatchObject({ opacity: opacity.disabledIcon });
+    expect(opacity.disabledIcon).toBe(0.4);
+
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'Namaste');
+    const ready = view.getByLabelText('Send message');
+    expect(ready.props.accessibilityState.disabled).toBe(false);
+    expect(StyleSheet.flatten(ready.props.style)).toMatchObject({ backgroundColor: lightColors.gold });
+    expect(StyleSheet.flatten(view.getByTestId('send-asha-message-icon').props.style)?.opacity).toBeUndefined();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('leaves md spacing between "Tap Asha to start talking" and the divider beneath it', async () => {
+    const view = await render(<LiveScreen />);
+    expect(view.getByText('Tap Asha to start talking with her.')).toBeTruthy();
+    const divider = StyleSheet.flatten(view.getByTestId('ask-asha-sheet').props.style);
+    expect(divider.marginTop).toBe(spacing.md);
+    expect(divider.borderTopWidth).toBe(1);
+    expect(divider.borderTopColor).toBe(lightColors.nightLine);
+    const ids = collectTestIds(view.toJSON());
+    expect(ids.indexOf('voice-conversation-hero')).toBeLessThan(ids.indexOf('ask-asha-sheet'));
     await view.unmount();
     await flushMicrotasks();
   });

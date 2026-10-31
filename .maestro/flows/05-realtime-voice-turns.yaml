@@ -57,13 +57,14 @@ tags:
 - assertVisible: "Start a voice conversation"
 - scrollUntilVisible:
     element:
-      text: "Asha voice language: Hindi"
+      text: "Reply language: English. Change"
     direction: UP
     visibilityPercentage: 100
     centerElement: true
     timeout: 20000
-- tapOn: "Asha voice language: Hindi"
-- assertVisible: ".*Hindi replies"
+- tapOn: "Reply language: English. Change"
+- tapOn: "Hindi replies"
+- assertVisible: "Reply language: Hindi. Change"
 - tapOn:
     id: "realtime-voice-orb"
 - extendedWaitUntil:

@@ -332,6 +332,52 @@ describe('Asha session log store', () => {
     });
   });
 
+  describe('typed chat saved before a new conversation', () => {
+    const typed = [
+      { id: 'you-1793441040000', role: 'you' as const, text: 'How do I say thank you?' },
+      { id: 'asha-1793441044000', role: 'asha' as const, text: 'धन्यवाद (dhanyavaad).' },
+    ];
+
+    it('stores the chat as a completed session, publishes it, and keeps it newest in the log', async () => {
+      seed(endedRecord);
+      const store = loadStore();
+      await store.ensureAshaSessionLogLoaded();
+      store.logTypedChatSession(typed, 'hi', { id: 'typed-1', at: '2026-10-31T10:05:00.000Z' });
+      expect(store.getAshaSessions().map((session) => session.id)).toEqual(['done', 'typed-1']);
+      await flush();
+      expect(storedRecord('typed-1')).toMatchObject({ state: 'ended', endReason: 'new_conversation', responseLanguage: 'hi', learnerTurns: 1 });
+      expect(storedRecord('typed-1')!.rows.map((row) => row.text)).toEqual(['How do I say thank you?', 'धन्यवाद (dhanyavaad).']);
+      expect(storedIndex().map((entry) => entry.id)).toEqual(['done', 'typed-1']);
+      expect(store.findAshaSessionIdForRow('asha-1793441044000')).toBe('typed-1');
+    });
+
+    it('does not save a transcript twice: rows a stored voice session holds are skipped, and nothing saves an empty chat', async () => {
+      seed(endedRecord);
+      const store = loadStore();
+      await store.ensureAshaSessionLogLoaded();
+      store.logTypedChatSession([{ id: 'live-a-0', role: 'you', text: 'Namaste' }], 'en', { id: 'dup' });
+      store.logTypedChatSession([], 'en', { id: 'empty' });
+      await flush();
+      expect(store.getAshaSessions().map((session) => session.id)).toEqual(['done']);
+      expect(sessionKeys()).toEqual([ashaSessionKey('done')]);
+      // Only the typed rows that are new reach the saved session.
+      store.logTypedChatSession([{ id: 'live-a-0', role: 'you', text: 'Namaste' }, ...typed], 'en', { id: 'partial', at: '2026-10-31T10:05:00.000Z' });
+      await flush();
+      expect(storedRecord('partial')!.rows.map((row) => row.id)).toEqual(typed.map((message) => message.id));
+    });
+
+    it('waits for hydration, and evicts the oldest durable session once the typed chat is written', async () => {
+      const olderRecords = Array.from({ length: MAX_ASHA_SESSIONS }, (_, index) => ({ ...endedRecord, id: `old-${index}`, startedAt: `2026-10-2${index + 1}T09:00:00.000Z` }));
+      olderRecords.forEach((record) => seed(record));
+      const store = loadStore();
+      store.logTypedChatSession(typed, 'en', { id: 'typed-2', at: '2026-10-31T10:05:00.000Z' });
+      await store.ensureAshaSessionLogLoaded();
+      await flush();
+      expect(store.getAshaSessions().map((session) => session.id)).toEqual(['old-1', 'old-2', 'typed-2']);
+      expect(sessionKeys()).toEqual([ashaSessionKey('old-1'), ashaSessionKey('old-2'), ashaSessionKey('typed-2')].sort());
+    });
+  });
+
   describe('retention', () => {
     const olderRecords = Array.from({ length: MAX_ASHA_SESSIONS }, (_, index) => ({ ...endedRecord, id: `old-${index}`, startedAt: `2026-10-2${index + 1}T09:00:00.000Z` }));
 

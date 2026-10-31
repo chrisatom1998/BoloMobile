@@ -94,6 +94,52 @@ export const radius = {
   pill: 999,
 } as const;
 
+/** Control dimensions. 44pt is the platform minimum touch target. */
+export const size = {
+  /** Smallest width or height of anything tappable. */
+  touchTarget: 44,
+  /** Round icon controls in the composer row and the live call bar. */
+  control: 48,
+} as const;
+
+/** Stroke widths for outlines and rings. */
+export const borderWidth = {
+  /** Pills, badges and outlined buttons. */
+  thin: 1,
+  /** The gold ring around Asha's portrait while her microphone or voice is live. */
+  portraitLive: 3,
+} as const;
+
+/** Lucide glyph sizes beside text and inside round controls. */
+export const iconSize = {
+  xs: 14,
+  sm: 16,
+  md: 18,
+  lg: 20,
+} as const;
+
+/** Opacity of inactive controls on the night surface. */
+export const opacity = {
+  disabled: 0.45,
+  /** The glyph inside a disabled filled button; the fill carries the disabled look. */
+  disabledIcon: 0.4,
+} as const;
+
+/** Extra tappable inset around a small glyph. `icon` lifts a 16pt mark to the 44pt touch target. */
+export const hitSlop = {
+  icon: 14,
+} as const;
+
+/** Size and leading pairs for UI text that is not a heading. */
+export const typeScale = {
+  /** Button and pill labels. */
+  label: { fontSize: 15, lineHeight: 20 },
+  /** Small captions, kickers and list intros. */
+  caption: { fontSize: 13, lineHeight: 18 },
+  /** Romanization under a Devanagari caption line. */
+  captionSecondary: { fontSize: 15, lineHeight: 21 },
+} as const;
+
 /** Serif display face for Latin headings. Georgia has no Devanagari glyphs; use `hindiFont` for Hindi. */
 export const displayFont = 'Georgia';
 

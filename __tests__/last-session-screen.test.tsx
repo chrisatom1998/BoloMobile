@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 
 import type { AshaSessionRecord } from '../src/lib/asha-session-log';
 import type { OutboxEntry } from '../src/lib/sync-outbox';
@@ -94,7 +94,7 @@ describe('Last session screen', () => {
 
   it('explains that nothing is saved yet and offers to start voice', async () => {
     const view = await render(<LastSessionScreen />);
-    expect(view.getByRole('header', { name: 'No saved session yet' })).toBeTruthy();
+    expect(view.getByRole('header', { name: 'No saved sessions yet' })).toBeTruthy();
     expect(view.getByText(/saved on this device/u)).toBeTruthy();
     expect(view.getByText(/needs an internet connection/u)).toBeTruthy();
     const start = view.getByLabelText('Start a voice conversation with Asha');
@@ -105,29 +105,65 @@ describe('Last session screen', () => {
     expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
   });
 
-  it('shows the most recent session by start time with its details and a read-only transcript, hiding older recovery records', async () => {
+  it('lists every saved session newest first, each with its details and a read-only transcript', async () => {
     const older = { ...session, id: 'older', startedAt: '2026-10-30T10:00:00.000Z', rows: [{ id: 'old-0', speaker: 'you' as const, text: 'Yesterday', startMs: 0, endMs: 100 }] };
-    const oldest = { ...older, id: 'oldest', startedAt: '2026-10-29T10:00:00.000Z' };
-    mockSessions = [session, oldest, older];
+    const oldest = { ...older, id: 'oldest', startedAt: '2026-10-29T10:00:00.000Z', rows: [{ id: 'oldest-0', speaker: 'asha' as const, text: 'दो दिन पहले', startMs: 0, endMs: 100 }] };
+    // Stored order is oldest first and may be unsorted; the list sorts by start time.
+    mockSessions = [oldest, session, older];
     const view = await render(<LastSessionScreen />);
-    const summary = view.getByTestId('last-session-summary');
-    expect(summary.props.accessibilityLabel).toMatch(/^Last session, .+, 4 minutes, Completed, Hindi replies, lesson mode, lesson .+, 1 learner turn$/u);
-    expect(view.getByText('Hindi replies')).toBeTruthy();
-    expect(view.getByText('Lesson mode')).toBeTruthy();
-    expect(view.getByText(getScene('chai')!.title)).toBeTruthy();
-    expect(view.getByText('4 minutes')).toBeTruthy();
-    expect(view.getByText('Completed')).toBeTruthy();
+    expect(view.getByText('3 saved sessions · newest first')).toBeTruthy();
+    const summaries = view.getAllByTestId('last-session-summary');
+    expect(summaries).toHaveLength(3);
+    const summary = summaries[0]!;
+    expect(summary.props.accessibilityLabel).toMatch(/^Latest session, .+, 4 minutes, Completed, Hindi replies, lesson mode, lesson .+, 1 learner turn$/u);
+    expect(summaries[1]!.props.accessibilityLabel).toMatch(/^Earlier session, /u);
+    expect(summaries[2]!.props.accessibilityLabel).toMatch(/^Earlier session, /u);
+    // Newest first: today's transcript, then yesterday's, then the oldest, with Devanagari kept readable.
+    const transcripts = view.getAllByTestId('last-session-transcript');
+    expect(transcripts.map((transcript) => transcript.props.accessibilityLabel)).toEqual(['Transcript, 2 lines, read only', 'Transcript, 1 line, read only', 'Transcript, 1 line, read only']);
+    expect(within(transcripts[1]!).getByLabelText('You: Yesterday')).toBeTruthy();
+    const oldestLine = within(transcripts[2]!).getByLabelText('Asha: दो दिन पहले');
+    expect(oldestLine.props.accessibilityLanguage).toBe('hi-IN');
+    expect(within(oldestLine).getByText('दो दिन पहले').props.style).toEqual(expect.arrayContaining([expect.objectContaining({ fontFamily: 'Tiro Devanagari Hindi' })]));
+    expect(within(summary).getByText('Hindi replies')).toBeTruthy();
+    expect(within(summary).getByText('Lesson mode')).toBeTruthy();
+    expect(within(summary).getByText(getScene('chai')!.title)).toBeTruthy();
+    expect(within(summary).getByText('4 minutes')).toBeTruthy();
+    expect(within(summary).getByText('Completed')).toBeTruthy();
     expect(view.queryByText('Interrupted')).toBeNull();
 
-    const transcript = view.getByTestId('last-session-transcript');
-    expect(transcript.props.accessibilityLabel).toBe('Transcript, 2 lines, read only');
-    expect(view.getByLabelText('You: Namaste')).toBeTruthy();
-    const reply = view.getByLabelText('Asha: नमस्ते! आप कैसे हैं?');
+    const transcript = transcripts[0]!;
+    expect(within(transcript).getByLabelText('You: Namaste')).toBeTruthy();
+    const reply = within(transcript).getByLabelText('Asha: नमस्ते! आप कैसे हैं?');
     expect(reply.props.accessibilityLanguage).toBe('hi-IN');
-    expect(view.getByText('Saved phrases: नमस्ते')).toBeTruthy();
-    expect(view.queryByLabelText('You: Yesterday')).toBeNull();
+    expect(view.getAllByText('Saved phrases: नमस्ते')).toHaveLength(3);
     expect(view.queryByTestId('last-session-empty')).toBeNull();
-    expect(view.getByText(/Saved on this device only/u)).toBeTruthy();
+    expect(view.getAllByText(/Saved on this device only/u)).toHaveLength(1);
+    expect(view.getAllByLabelText('Clear Asha chat history')).toHaveLength(1);
+  });
+
+  it('describes a typed chat saved when a new voice conversation started', async () => {
+    mockSessions = [{
+      ...session,
+      id: 'typed',
+      mode: undefined,
+      lessonId: undefined,
+      savedPhrases: [],
+      lessonsPracticed: [],
+      endReason: 'new_conversation',
+      rows: [
+        { id: 'you-1761900000000', speaker: 'you', text: 'How do I say thank you?', startMs: 0, endMs: 0 },
+        { id: 'asha-1761900004000', speaker: 'asha', text: 'धन्यवाद (dhanyavaad).', startMs: 4_000, endMs: 4_000 },
+      ],
+    }];
+    const view = await render(<LastSessionScreen />);
+    expect(view.getByText('1 saved session · newest first')).toBeTruthy();
+    expect(view.getByText('Completed')).toBeTruthy();
+    expect(view.getByText('Typed chat')).toBeTruthy();
+    expect(view.getByText('Saved when you started a new voice conversation.')).toBeTruthy();
+    expect(view.getByTestId('last-session-summary').props.accessibilityLabel).toMatch(/Completed, Hindi replies, typed chat, 1 learner turn$/u);
+    expect(view.getByLabelText('You: How do I say thank you?')).toBeTruthy();
+    expect(view.getByLabelText('Asha: धन्यवाद (dhanyavaad).').props.accessibilityLanguage).toBe('hi-IN');
   });
 
   it('labels an interrupted session with why it stopped, and an active one as in progress', async () => {
@@ -168,6 +204,7 @@ describe('Last session screen', () => {
     const view = await render(<LastSessionScreen />);
     expect(view.getByRole('header', { name: 'Reports waiting to send' })).toBeTruthy();
     expect(view.getAllByTestId('queued-report-row')).toHaveLength(2);
+    // A report without a session stays on the Asha screen; it belongs to no card here.
     expect(view.queryByText(/Typed reply/u)).toBeNull();
     expect(view.getByText(/Waiting to send\./u)).toBeTruthy();
     expect(view.getByText(/Couldn’t send\. Bolo stopped retrying/u)).toBeTruthy();

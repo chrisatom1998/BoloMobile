@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
+import { AlertCircle, ChevronDown, Ellipsis, History, Lock, MessageCircle, Mic, Sprout, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,10 +11,10 @@ import { AiConsentGate } from '@/components/ai-consent-gate';
 import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/components/asha-minimize-control';
 import { AshaTypingRow, ChatMessageRow } from '@/components/chat-message-row';
 import { JournalDisplay } from '@/components/journal-chrome';
+import { LiveCallBar } from '@/components/live-call-bar';
 import { LiveComposer } from '@/components/live-composer';
 import { QueuedReportRow } from '@/components/queued-report-row';
 import { RealtimeVoiceButton, type RealtimeErrorDetails } from '@/components/realtime-voice-button';
-import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
@@ -24,11 +24,12 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { type EffectiveMotion, useMotionPreference } from '@/hooks/use-motion-preference';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
+import { useVoiceAnnouncements } from '@/hooks/use-voice-announcements';
 import { showAppAlert } from '@/lib/app-alert';
 import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
-import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
-import { romanizeDevanagari } from '@/lib/devanagari-romanization';
-import { hapticTap } from '@/lib/haptics';
+import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, logTypedChatSession, registerLiveCallEnder } from '@/lib/asha-session-log-store';
+import { hapticSelect, hapticTap } from '@/lib/haptics';
+import { liveCaptionLines } from '@/lib/live-caption-display';
 import { ashaInviteAction, ashaInviteLine, ashaInviteSharing } from '@/lib/asha-invite';
 import { LIVE_MIC_EXPLAINER, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
@@ -40,7 +41,7 @@ import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/ser
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme } from '@/theme';
+import { borderWidth, displayFont, hindiType, hitSlop, iconSize, makeStyles, maxContentWidth, opacity, radius, size, spacing, typeScale, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -179,6 +180,17 @@ export default function LiveScreen() {
   const followedMessageCountRef = useRef(0);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
+  // The owned voice control's teardown, so End chat in the call bar ends the session like the portrait's X did.
+  const ownedDisconnectRef = useRef<((reason?: AshaSessionEndReason) => void) | null>(null);
+  const [ownedDisconnectBound, setOwnedDisconnectBound] = useState(false);
+  const [ashaPlaying, setAshaPlaying] = useState(false);
+  // The chat a new voice conversation is about to clear; refs keep the start callback stable.
+  const chatHistoryRef = useRef(chatHistory);
+  const responseLanguageRef = useRef(responseLanguage);
+  useEffect(() => {
+    chatHistoryRef.current = chatHistory;
+    responseLanguageRef.current = responseLanguage;
+  }, [chatHistory, responseLanguage]);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, clearingChat, pendingUserMessage],
@@ -187,8 +199,11 @@ export default function LiveScreen() {
   const realtimeOwnsAudio = realtimeLocked;
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
-  const youCaption = romanizeDevanagari(liveUserTranscript).trim();
-  const ashaCaption = romanizeDevanagari(liveAshaTranscript).trim();
+  const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
+  const youCaption = liveUserTranscript.trim();
+  const ashaCaption = liveAshaTranscript.trim();
+  // Captions show only what the transcript events carry: the spoken line and, per the
+  // learner's script setting, its local romanization. Nothing is translated.
   const speechCaption = latestCaptionSpeaker === 'asha' && ashaCaption
     ? { speaker: 'asha' as const, text: ashaCaption }
     : latestCaptionSpeaker === 'you' && youCaption
@@ -198,20 +213,26 @@ export default function LiveScreen() {
         : youCaption
           ? { speaker: 'you' as const, text: youCaption }
           : null;
+  const captionLines = speechCaption ? liveCaptionLines(speechCaption.text, scriptPreference) : null;
   const conversationStarted = aiConsent && (hasTranscriptMessages || speechCaption !== null);
+  // A connecting or connected call: the screen shows only the portrait, captions, and the call bar.
+  const inSession = aiConsent && realtimeLocked;
+  const isPlaying = floatingAsha.available ? floatingAsha.isPlaying : ashaPlaying;
+  // Asha talking, whether the learner's microphone is muted (`responding`) or still open.
+  const ashaSpeaking = realtimeStatus === 'responding' || (realtimeStatus === 'recording' && isPlaying);
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
   const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
-  const voiceHeroTitle = {
+  const voiceHeroTitle = ashaSpeaking ? 'Asha is speaking' : {
     disconnected: 'Ready when you are',
     connecting: 'Connecting to Asha',
     ready: 'Your microphone is muted',
     recording: 'Your microphone is on',
     responding: 'Asha is speaking',
   }[realtimeStatus];
-  const voiceHeroBody = {
+  const voiceHeroBody = realtimeStatus === 'recording' && ashaSpeaking ? 'Asha is speaking — just talk to interrupt. Tap to mute.' : {
     disconnected: 'Tap Asha to start talking with her.',
     connecting: 'Opening a private live voice session…',
     ready: 'Tap Asha to unmute and join the conversation.',
@@ -229,6 +250,14 @@ export default function LiveScreen() {
   // and a missing turn action, which happens when the floating session has no voice yet.
   const composerMicDisabled = !aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused) || realtimeStatus === 'connecting' || !composerMicActionBound;
   const restingVoiceLayout = !compactVoiceLayout && realtimeStatus === 'disconnected';
+  const endChatDisabled = floatingAsha.available ? !floatingAsha.voice : !ownedDisconnectBound;
+  // iOS ignores live regions, so VoiceOver hears state changes, errors, and each finished Asha reply from here.
+  const announceReply = useVoiceAnnouncements({
+    error,
+    interruptedMessage: interruptedReason ? interruptedCopy[interruptedReason] : null,
+    speaking: ashaSpeaking,
+    status: realtimeStatus,
+  }, liveAshaTranscript);
 
   const messageCount = chatHistory.length + (pendingUserMessage ? 1 : 0);
   const messageCountRef = useRef(0);
@@ -381,11 +410,12 @@ export default function LiveScreen() {
     if (result.transcript.trim()) additions.push({ id: `you-${now}`, role: 'you', text: result.transcript.trim() });
     additions.push({ id: `asha-${now}`, role: 'asha', text: result.reply.trim(), language: result.language });
     appendChatMessages(additions);
+    announceReply(result.reply);
     if (!practiced.current) {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [appendChatMessages, markLiveTurn]);
+  }, [announceReply, appendChatMessages, markLiveTurn]);
 
   const recordLiveSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     if (!mountedRef.current) return;
@@ -427,6 +457,16 @@ export default function LiveScreen() {
     clearAudioError();
     updateLearnerProfile({ responseLanguage: nextLanguage });
   }, [clearAudioError, languageControlLocked, responseLanguage, updateLearnerProfile]);
+
+  // The reply-language pill opens the same kind of choice sheet the report and More options menus use.
+  const openReplyLanguageMenu = useCallback(() => {
+    if (languageControlLocked) return;
+    showAppAlert('Reply language', 'Asha answers in the language you choose, spoken and typed.', [
+      { text: 'English replies', onPress: () => changeResponseLanguage('en') },
+      { text: 'Hindi replies', onPress: () => changeResponseLanguage('hi') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [changeResponseLanguage, languageControlLocked]);
 
   const resetChat = useCallback((): Promise<boolean> => {
     if (chatResetRef.current) return chatResetRef.current;
@@ -589,6 +629,8 @@ export default function LiveScreen() {
     // connection may create a new record; the automatic reset keeps saved sessions.
     await ensureAshaSessionLogLoaded();
     if (!mountedRef.current || signal.aborted) return;
+    // The chat on screen, typed messages included, becomes a past session before it is cleared.
+    logTypedChatSession(chatHistoryRef.current, responseLanguageRef.current);
     const cleared = await resetChat();
     if (!mountedRef.current || signal.aborted) return;
     if (!cleared) throw new Error('The previous chat could not be cleared. Please try starting a new conversation again.');
@@ -623,7 +665,16 @@ export default function LiveScreen() {
   const bindOwnedDisconnect = useCallback((disconnect: ((reason?: AshaSessionEndReason) => void) | null) => {
     unregisterLiveCallEnderRef.current?.();
     unregisterLiveCallEnderRef.current = disconnect ? registerLiveCallEnder(disconnect) : null;
+    ownedDisconnectRef.current = disconnect;
+    setOwnedDisconnectBound((current) => (disconnect !== null) === current ? current : disconnect !== null);
   }, []);
+  // End chat: the same teardown as the portrait's X, so the transcript stays and the log records `user_ended`.
+  const endChat = useCallback(() => {
+    const disconnect = floatingAsha.available ? floatingAsha.voice?.disconnect : ownedDisconnectRef.current;
+    if (!disconnect) return;
+    hapticSelect();
+    disconnect();
+  }, [floatingAsha.available, floatingAsha.voice]);
   const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {
     if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
     else setLiveUserTranscript(update.text);
@@ -712,16 +763,27 @@ export default function LiveScreen() {
   // entry point renders with or without AI consent.
   const lastSessionButton = ashaSessionLogEnabled ? (
     <Pressable
-      accessibilityHint="Opens the transcript of your most recent live voice session, saved on this device."
-      accessibilityLabel="View last Asha session"
+      accessibilityHint="Opens the transcripts of your recent Asha conversations, saved on this device."
+      accessibilityLabel="View past Asha sessions"
       accessibilityRole="button"
       onPress={openLastSession}
       style={[styles.lastSessionButton, !aiConsent && styles.lastSessionButtonConsent]}
     >
       <History color={colors.gold} size={17} />
-      <Text style={styles.lastSessionText}>Last session</Text>
+      <Text style={styles.lastSessionText}>Past sessions</Text>
     </Pressable>
   ) : null;
+  // Past sessions and Clear chat share one overflow menu, through the same alert the report menu uses.
+  // Clear chat is listed only while it can run, so the menu never offers a dead action.
+  const openMoreOptions = useCallback(() => {
+    showAppAlert('Asha chat', undefined, [
+      ...(ashaSessionLogEnabled ? [{ text: 'Past sessions', onPress: openLastSession }] : []),
+      ...(!clearChatDisabled ? [{ text: 'Clear chat', style: 'destructive' as const, onPress: confirmClearChat }] : []),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }, [clearChatDisabled, confirmClearChat, openLastSession]);
+  // The header's More options button shows whenever the menu has an entry, at rest and during a session.
+  const moreOptionsAvailable = aiConsent && (ashaSessionLogEnabled || !clearChatDisabled);
 
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
@@ -785,7 +847,7 @@ export default function LiveScreen() {
   ) : null;
 
   const statusKicker = aiConsent
-    ? { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', responding: 'SPEAKING' }[realtimeStatus]
+    ? ashaSpeaking ? 'SPEAKING' : { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', responding: 'SPEAKING' }[realtimeStatus]
     : 'LIVE VOICE';
 
   return (
@@ -822,10 +884,24 @@ export default function LiveScreen() {
                       {floatingAsha.available && aiConsent ? (
                         <AshaMinimizeButton onPress={floatingAsha.minimize} />
                       ) : null}
-                      <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-                        <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
-                        <Text style={styles.privateText}>Private</Text>
-                      </View>
+                      {!inSession ? (
+                        <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
+                          <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
+                          <Text style={styles.privateText}>Private</Text>
+                        </View>
+                      ) : null}
+                      {moreOptionsAvailable ? (
+                        <Pressable
+                          accessibilityHint="Shows past sessions and lets you clear the chat saved on this device."
+                          accessibilityLabel="More options"
+                          accessibilityRole="button"
+                          onPress={openMoreOptions}
+                          style={styles.moreButton}
+                          testID="live-more-options"
+                        >
+                          <Ellipsis color={colors.gold} size={iconSize.lg} />
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 );
@@ -857,20 +933,21 @@ export default function LiveScreen() {
                 </View>
               ) : null}
               {aiConsent ? <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
-                <SegmentedControl
-                  accessibilityLabel="Asha voice language"
-                  disabled={languageControlLocked}
-                  disabledHint="End the current request or live voice session to change Asha voice language."
-                  onValueChange={changeResponseLanguage}
-                  options={[
-                    { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
-                    { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
-                  ]}
-                  stackedAtLargeText
-                  style={[styles.languageSelector, { width: heroContentWidth }]}
-                  tone="dark"
-                  value={responseLanguage}
-                />
+                {!inSession ? (
+                  <Pressable
+                    accessibilityHint={languageControlLocked ? 'End the current request or live voice session to change the reply language.' : 'Opens a choice between English and Hindi replies.'}
+                    accessibilityLabel={`Reply language: ${responseLanguageName}. Change`}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: languageControlLocked }}
+                    disabled={languageControlLocked}
+                    onPress={openReplyLanguageMenu}
+                    style={[styles.languagePill, languageControlLocked && styles.disabled]}
+                    testID="reply-language-pill"
+                  >
+                    <Text style={styles.languagePillText}>{responseLanguageName} replies</Text>
+                    <ChevronDown color={colors.gold} size={iconSize.sm} />
+                  </Pressable>
+                ) : null}
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
@@ -885,7 +962,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onPlaybackChange={setAshaPlaying} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -897,7 +974,7 @@ export default function LiveScreen() {
                       />
                     </RealtimeVoiceButton>
                     )}
-                    {aiConsent ? (
+                    {aiConsent && !inSession ? (
                       <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
                         <MessageCircle color={colors.white} size={20} />
                       </Pressable>
@@ -934,41 +1011,33 @@ export default function LiveScreen() {
                       <View style={styles.captionLabelBadge} testID="live-caption-label-badge">
                         <Text style={[styles.captionLabel, speechCaption.speaker === 'asha' && styles.captionLabelAsha]}>{speechCaption.speaker === 'you' ? 'You' : 'Asha'}</Text>
                       </View>
-                      <Text
-                        accessibilityLiveRegion="polite"
-                        style={[styles.captionText, speechCaption.speaker === 'asha' && styles.captionTextAsha]}
-                        testID={speechCaption.speaker === 'you' ? 'live-input-caption' : 'live-output-caption'}
-                      >
-                        {speechCaption.text}
-                      </Text>
+                      {captionLines?.devanagari ? (
+                        <Text
+                          accessibilityLanguage="hi-IN"
+                          accessibilityLiveRegion={captionLines.romanized ? undefined : 'polite'}
+                          style={[styles.captionHindi, speechCaption.speaker === 'asha' && styles.captionHindiAsha]}
+                          testID={speechCaption.speaker === 'you' ? 'live-input-caption-devanagari' : 'live-output-caption-devanagari'}
+                        >
+                          {captionLines.devanagari}
+                        </Text>
+                      ) : null}
+                      {captionLines?.romanized ? (
+                        <Text
+                          accessibilityLiveRegion="polite"
+                          style={[styles.captionText, speechCaption.speaker === 'asha' && styles.captionTextAsha, captionLines.devanagari && styles.captionRomanizedSecondary]}
+                          testID={speechCaption.speaker === 'you' ? 'live-input-caption' : 'live-output-caption'}
+                        >
+                          {captionLines.romanized}
+                        </Text>
+                      ) : null}
                     </View>
                   </CaptionReveal>
                 ) : null}
               </View> : null}
             </View>
 
-            {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, restingVoiceLayout && styles.askSectionResting]} testID="ask-asha-sheet">
-                <View style={[styles.askHeadingRow, largeTextLayout && styles.askHeadingRowLarge]}>
-                  <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
-                    <Text style={styles.askEyebrow}>Ask Asha</Text>
-                    <Text style={styles.askTitle}>How do I say…?</Text>
-                  </View>
-                  {lastSessionButton}
-                  {chatHistory.length > 0 ? (
-                    <Pressable
-                      accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
-                      accessibilityLabel="Clear Asha chat history"
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: clearChatDisabled }}
-                      disabled={clearChatDisabled}
-                      onPress={confirmClearChat}
-                      style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
-                    >
-                      <Trash2 color={colors.dangerSoft} size={17} />
-                      <Text style={styles.clearChatText}>Clear chat</Text>
-                    </Pressable>
-                  ) : null}
-                </View>
+            {/* The divider under the hero: it carries only reports waiting to send; the chat list follows. */}
+            {aiConsent && !inSession ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, restingVoiceLayout && styles.askSectionResting]} testID="ask-asha-sheet">
                 {unassociatedReports.length ? (
                   <View style={styles.queuedReports} testID="queued-reports">
                     <Text accessibilityRole="header" style={styles.queuedReportsTitle}>Reports waiting to send</Text>
@@ -1049,7 +1118,7 @@ export default function LiveScreen() {
             </View>
             <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
             {/* The banner takes room from Asha's portrait above; let the learner clear it. */}
-            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={10} onPress={() => setError('')} testID="live-error-dismiss">
+            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={hitSlop.icon} onPress={() => setError('')} testID="live-error-dismiss">
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
@@ -1070,11 +1139,15 @@ export default function LiveScreen() {
               <AlertCircle color={colors.dangerSoft} size={16} />
             </View>
             <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text>
-            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={10} onPress={clearAudioError}>
+            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={hitSlop.icon} onPress={clearAudioError} testID="live-audio-error-dismiss">
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
         ) : null}
+        {inSession ? (
+          <LiveCallBar endDisabled={endChatDisabled} micDisabled={composerMicDisabled} micLabel={composerMicLabel} onEnd={endChat} onToggleMic={pressComposerMic} status={realtimeStatus} />
+        ) : (
+        <>
         <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
           {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
             <PressableFeedback
@@ -1101,11 +1174,13 @@ export default function LiveScreen() {
               style={[styles.composerMic, composerMicDisabled && styles.disabled]}
               testID="composer-mic-toggle"
             >
-              {realtimeStatus === 'recording' ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
+              <Mic color={colors.gold} size={20} />
             </Pressable>
           ) : null}
           <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
         </View>
+        </>
+        )}
       </SafeAreaView> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
@@ -1145,7 +1220,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.nightLine, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
   privateText: { color: c.brandSoft, fontSize: 13, fontWeight: '600' },
   chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  languageSelector: { alignSelf: 'center' },
+  languagePill: { minHeight: size.touchTarget, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: borderWidth.thin },
+  languagePillText: { color: c.white, ...typeScale.label, fontWeight: '600' },
   inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
   inviteRingCompact: { width: 124, height: 124 },
   talkButton: { minHeight: 50, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
@@ -1173,8 +1249,12 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   captionLabelBadge: { minHeight: 30, alignSelf: 'flex-start', justifyContent: 'center', overflow: 'visible', paddingVertical: 5 },
   captionLabel: { color: c.heroSubtle, fontSize: 12, lineHeight: 18, fontWeight: '800', letterSpacing: 0.25 },
   captionLabelAsha: { color: c.brand },
+  captionHindi: { ...hindiType(22), minWidth: 0, alignSelf: 'stretch', color: c.white },
+  captionHindiAsha: { color: c.ink },
   captionText: { minWidth: 0, alignSelf: 'stretch', color: c.white, fontSize: 16, lineHeight: 23 },
   captionTextAsha: { color: c.ink },
+  // Under a Devanagari line the romanization reads as the secondary line.
+  captionRomanizedSecondary: { ...typeScale.captionSecondary, fontWeight: '600' },
   studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, padding: spacing.lg },
   studioPhraseHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   studioPhraseCopy: { minWidth: 0, flex: 1, gap: 2 },
@@ -1188,17 +1268,10 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
   studioMasteryText: { color: c.goldText, fontSize: 11, fontWeight: '700' },
   featuredPhraseSection: { alignItems: 'center', backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.md },
+  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.md },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   askSectionResting: { gap: spacing.xs, paddingTop: spacing.xs, paddingBottom: 0 },
-  askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  askHeadingRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: 3 },
-  askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
-  askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
-  clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
-  clearChatText: { flexShrink: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
+  moreButton: { minWidth: size.touchTarget, minHeight: size.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: borderWidth.thin },
   lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
   lastSessionText: { flexShrink: 1, color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
@@ -1244,6 +1317,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   input: { flex: 1, minHeight: 52, maxHeight: 120, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 14, fontSize: 16, lineHeight: 22 },
   inputDisabled: { opacity: 0.72 },
   sendButton: { width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  sendButtonDisabled: { backgroundColor: c.nightLine },
+  sendIconDisabled: { opacity: opacity.disabledIcon },
   disabled: { opacity: 0.45 },
   thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   requestStatus: { color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },

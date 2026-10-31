@@ -7,13 +7,13 @@ import { QueuedReportRow } from '@/components/queued-report-row';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { showAppAlert } from '@/lib/app-alert';
-import { ashaSessionDurationMs, latestAshaSession, type AshaSessionEndReason, type AshaSessionRecord } from '@/lib/asha-session-log';
+import { ashaSessionDurationMs, ashaSessionsNewestFirst, type AshaSessionEndReason, type AshaSessionRecord } from '@/lib/asha-session-log';
 import { clearAshaSessionContent, useAshaSessionLog } from '@/lib/asha-session-log-store';
-import { syncOutbox, useSyncOutbox } from '@/lib/sync-outbox';
+import { syncOutbox, useSyncOutbox, type OutboxEntry } from '@/lib/sync-outbox';
 import type { LiveMode } from '@/services/bolo-api';
 import { useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { borderWidth, hindiType, makeStyles, radius, spacing, typeScale, useSharedStyles, useTheme } from '@/theme';
 
 /** Same explicit deletion and copy as the Asha screen's Clear chat. */
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
@@ -26,6 +26,7 @@ const endReasonCopy: Record<AshaSessionEndReason, string> = {
   data_deleted: 'The session ended when Bolo data was deleted.',
   config_changed: 'Settings changed, so the session ended.',
   app_terminated: 'Bolo closed before the session ended.',
+  new_conversation: 'Saved when you started a new voice conversation.',
 };
 
 const modeNames: Record<LiveMode, string> = {
@@ -56,7 +57,105 @@ export function sessionStateLabel(record: AshaSessionRecord) {
   return record.state === 'interrupted' ? 'Interrupted' : record.state === 'active' ? 'In progress' : 'Completed';
 }
 
+/** How the list names a session's place: the newest first, then earlier ones. */
+export function sessionPositionLabel(index: number) {
+  return index === 0 ? 'Latest session' : 'Earlier session';
+}
+
 const hasDevanagari = (text: string) => /[ऀ-ॿ]/u.test(text);
+
+function SessionCard({ index, onDiscardReport, onRetryReport, record, reports }: {
+  index: number;
+  onDiscardReport: (entryId: string) => void;
+  onRetryReport: (entryId: string) => void;
+  record: AshaSessionRecord;
+  reports: OutboxEntry[];
+}) {
+  const styles = useStyles();
+  const sharedStyles = useSharedStyles();
+  const started = describeStart(record);
+  const duration = describeSessionDuration(record);
+  const stateLabel = sessionStateLabel(record);
+  const cleared = record.contentClearedAt !== undefined;
+  const languageLabel = record.responseLanguage === 'hi' ? 'Hindi replies' : 'English replies';
+  const modeName = record.mode ? modeNames[record.mode] : null;
+  const typedChat = record.endReason === 'new_conversation';
+  const lessonTitle = record.lessonId ? getScene(record.lessonId)?.title ?? record.lessonId : null;
+  const practicedTitles = record.lessonsPracticed.map((lessonId) => getScene(lessonId)?.title ?? lessonId);
+  const summaryLabel = [
+    sessionPositionLabel(index),
+    started,
+    duration,
+    stateLabel,
+    languageLabel,
+    typedChat ? 'typed chat' : null,
+    modeName ? `${modeName.toLowerCase()} mode` : null,
+    lessonTitle ? `lesson ${lessonTitle}` : null,
+    plural(record.learnerTurns, 'learner turn'),
+    cleared ? 'transcript cleared' : null,
+  ].filter(Boolean).join(', ');
+
+  return (
+    <View style={styles.session} testID="last-session-card">
+      <View accessibilityLabel={summaryLabel} accessible style={[sharedStyles.card, styles.summary]} testID="last-session-summary">
+        <Text style={sharedStyles.eyebrow}>{started}</Text>
+        <View style={styles.badges}>
+          <View style={[styles.badge, record.state === 'interrupted' && styles.badgeInterrupted]}>
+            <Text style={[styles.badgeText, record.state === 'interrupted' && styles.badgeTextInterrupted]}>{stateLabel}</Text>
+          </View>
+          {duration ? <Text style={styles.detail}>{duration}</Text> : null}
+        </View>
+        {record.endReason ? <Text style={sharedStyles.body}>{endReasonCopy[record.endReason]}</Text> : null}
+        <View style={styles.facts}>
+          <Text style={styles.detail}>{languageLabel}</Text>
+          {typedChat ? <Text style={styles.detail}>Typed chat</Text> : null}
+          {modeName ? <Text style={styles.detail}>{`${modeName} mode`}</Text> : null}
+          {lessonTitle ? <Text style={styles.detail}>{lessonTitle}</Text> : null}
+          <Text style={styles.detail}>{plural(record.learnerTurns, 'learner turn')}</Text>
+        </View>
+        {record.savedPhrases.length ? <Text style={[styles.detail, styles.hindiDetail]}>{`Saved phrases: ${record.savedPhrases.join(', ')}`}</Text> : null}
+        {practicedTitles.length ? <Text style={styles.detail}>{`Lessons practiced: ${practicedTitles.join(', ')}`}</Text> : null}
+      </View>
+
+      {cleared ? (
+        <View accessibilityLabel="Transcript cleared" accessible style={[sharedStyles.card, styles.clearedCard]} testID="last-session-cleared">
+          <Text accessibilityRole="header" style={styles.transcriptTitle}>Transcript cleared</Text>
+          <Text style={sharedStyles.body}>You cleared this conversation from the device. Only its date, length, and how it ended remain.</Text>
+        </View>
+      ) : (
+        <View accessibilityLabel={`Transcript, ${plural(record.rows.length, 'line')}, read only`} style={styles.transcript} testID="last-session-transcript">
+          <Text accessibilityRole="header" style={styles.transcriptTitle}>Transcript</Text>
+          {record.rows.length === 0 ? <Text style={sharedStyles.body}>No captions were saved for this session.</Text> : null}
+          {record.rows.map((row) => {
+            const isYou = row.speaker === 'you';
+            const hindi = hasDevanagari(row.text);
+            return (
+              <View
+                accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${row.text}`}
+                accessibilityLanguage={hindi ? 'hi-IN' : undefined}
+                accessible
+                key={row.id}
+                style={[styles.row, isYou ? styles.rowYou : styles.rowAsha]}
+              >
+                <Text style={[styles.speaker, isYou && styles.speakerYou]}>{isYou ? 'You' : 'Asha'}</Text>
+                <Text style={[styles.rowText, isYou && styles.rowTextYou, hindi && styles.rowTextHindi]}>{row.text}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {reports.length ? (
+        <View style={styles.reports} testID="last-session-reports">
+          <Text accessibilityRole="header" style={styles.transcriptTitle}>Reports waiting to send</Text>
+          {reports.map((entry) => (
+            <QueuedReportRow entry={entry} key={entry.id} onDiscard={onDiscardReport} onRetry={onRetryReport} />
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 export default function LastSessionScreen() {
   const router = useRouter();
@@ -65,16 +164,13 @@ export default function LastSessionScreen() {
   const { colors } = useTheme();
   const { clearChatHistory } = useAppState();
   const floatingAsha = useAshaVoiceSession();
-  const sessions = useAshaSessionLog();
-  const latest = latestAshaSession(sessions);
+  const sessions = ashaSessionsNewestFirst(useAshaSessionLog());
   const outboxEntries = useSyncOutbox();
-  const latestId = latest?.id;
-  const associatedReports = latestId ? outboxEntries.filter((entry) => entry.sessionId === latestId) : [];
   const [clearing, setClearing] = useState(false);
   const [clearError, setClearError] = useState('');
   const mountedRef = useRef(true);
   const callActive = floatingAsha.available && floatingAsha.status !== 'disconnected';
-  const clearDisabled = clearing || callActive || !latest;
+  const clearDisabled = clearing || callActive || sessions.length === 0;
 
   useEffect(() => () => {
     mountedRef.current = false;
@@ -110,14 +206,14 @@ export default function LastSessionScreen() {
     ]);
   }, [clearDisabled, clearSavedChat]);
 
-  if (!latest) {
+  if (!sessions.length) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
-        <Stack.Screen options={{ title: 'Last session' }} />
+        <Stack.Screen options={{ title: 'Past sessions' }} />
         <View style={[sharedStyles.card, styles.empty]} testID="last-session-empty">
           <MessageCircle color={colors.brand} size={28} />
-          <Text accessibilityRole="header" style={sharedStyles.heading}>No saved session yet</Text>
-          <Text style={sharedStyles.body}>Your most recent live voice conversation with Asha is saved on this device as it happens, so a dropped connection never loses what you said. Nothing is uploaded. Voice still needs an internet connection.</Text>
+          <Text accessibilityRole="header" style={sharedStyles.heading}>No saved sessions yet</Text>
+          <Text style={sharedStyles.body}>Your recent conversations with Asha are saved on this device as they happen, so a dropped connection never loses what you said. Nothing is uploaded. Voice still needs an internet connection.</Text>
           <Pressable accessibilityLabel="Start a voice conversation with Asha" accessibilityRole="button" onPress={() => router.push('/live' as Href)} style={sharedStyles.primaryButton}>
             <Text style={sharedStyles.primaryButtonText}>Start voice</Text>
           </Pressable>
@@ -126,84 +222,20 @@ export default function LastSessionScreen() {
     );
   }
 
-  const started = describeStart(latest);
-  const duration = describeSessionDuration(latest);
-  const stateLabel = sessionStateLabel(latest);
-  const cleared = latest.contentClearedAt !== undefined;
-  const languageLabel = latest.responseLanguage === 'hi' ? 'Hindi replies' : 'English replies';
-  const modeName = latest.mode ? modeNames[latest.mode] : null;
-  const lessonTitle = latest.lessonId ? getScene(latest.lessonId)?.title ?? latest.lessonId : null;
-  const practicedTitles = latest.lessonsPracticed.map((lessonId) => getScene(lessonId)?.title ?? lessonId);
-  const summaryLabel = [
-    'Last session',
-    started,
-    duration,
-    stateLabel,
-    languageLabel,
-    modeName ? `${modeName.toLowerCase()} mode` : null,
-    lessonTitle ? `lesson ${lessonTitle}` : null,
-    plural(latest.learnerTurns, 'learner turn'),
-    cleared ? 'transcript cleared' : null,
-  ].filter(Boolean).join(', ');
-
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
-      <Stack.Screen options={{ title: 'Last session' }} />
-      <View accessibilityLabel={summaryLabel} accessible style={[sharedStyles.card, styles.summary]} testID="last-session-summary">
-        <Text style={sharedStyles.eyebrow}>{started}</Text>
-        <View style={styles.badges}>
-          <View style={[styles.badge, latest.state === 'interrupted' && styles.badgeInterrupted]}>
-            <Text style={[styles.badgeText, latest.state === 'interrupted' && styles.badgeTextInterrupted]}>{stateLabel}</Text>
-          </View>
-          {duration ? <Text style={styles.detail}>{duration}</Text> : null}
-        </View>
-        {latest.endReason ? <Text style={sharedStyles.body}>{endReasonCopy[latest.endReason]}</Text> : null}
-        <View style={styles.facts}>
-          <Text style={styles.detail}>{languageLabel}</Text>
-          {modeName ? <Text style={styles.detail}>{`${modeName} mode`}</Text> : null}
-          {lessonTitle ? <Text style={styles.detail}>{lessonTitle}</Text> : null}
-          <Text style={styles.detail}>{plural(latest.learnerTurns, 'learner turn')}</Text>
-        </View>
-        {latest.savedPhrases.length ? <Text style={[styles.detail, styles.hindiDetail]}>{`Saved phrases: ${latest.savedPhrases.join(', ')}`}</Text> : null}
-        {practicedTitles.length ? <Text style={styles.detail}>{`Lessons practiced: ${practicedTitles.join(', ')}`}</Text> : null}
-      </View>
-
-      {cleared ? (
-        <View accessibilityLabel="Transcript cleared" accessible style={[sharedStyles.card, styles.clearedCard]} testID="last-session-cleared">
-          <Text accessibilityRole="header" style={styles.transcriptTitle}>Transcript cleared</Text>
-          <Text style={sharedStyles.body}>You cleared this conversation from the device. Only its date, length, and how it ended remain.</Text>
-        </View>
-      ) : (
-        <View accessibilityLabel={`Transcript, ${plural(latest.rows.length, 'line')}, read only`} style={styles.transcript} testID="last-session-transcript">
-          <Text accessibilityRole="header" style={styles.transcriptTitle}>Transcript</Text>
-          {latest.rows.length === 0 ? <Text style={sharedStyles.body}>No captions were saved for this session.</Text> : null}
-          {latest.rows.map((row) => {
-            const isYou = row.speaker === 'you';
-            const hindi = hasDevanagari(row.text);
-            return (
-              <View
-                accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${row.text}`}
-                accessibilityLanguage={hindi ? 'hi-IN' : undefined}
-                accessible
-                key={row.id}
-                style={[styles.row, isYou ? styles.rowYou : styles.rowAsha]}
-              >
-                <Text style={[styles.speaker, isYou && styles.speakerYou]}>{isYou ? 'You' : 'Asha'}</Text>
-                <Text style={[styles.rowText, isYou && styles.rowTextYou, hindi && styles.rowTextHindi]}>{row.text}</Text>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {associatedReports.length ? (
-        <View style={styles.reports} testID="last-session-reports">
-          <Text accessibilityRole="header" style={styles.transcriptTitle}>Reports waiting to send</Text>
-          {associatedReports.map((entry) => (
-            <QueuedReportRow entry={entry} key={entry.id} onDiscard={discardReport} onRetry={retryReport} />
-          ))}
-        </View>
-      ) : null}
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen} testID="last-session-list">
+      <Stack.Screen options={{ title: 'Past sessions' }} />
+      <Text accessibilityLabel={`${plural(sessions.length, 'saved session')}, newest first`} style={styles.listIntro}>{`${plural(sessions.length, 'saved session')} · newest first`}</Text>
+      {sessions.map((record, index) => (
+        <SessionCard
+          index={index}
+          key={record.id}
+          onDiscardReport={discardReport}
+          onRetryReport={retryReport}
+          record={record}
+          reports={outboxEntries.filter((entry) => entry.sessionId === record.id)}
+        />
+      ))}
 
       <Text style={styles.footnote}>Saved on this device only. Nothing is uploaded.</Text>
       <Pressable
@@ -226,6 +258,8 @@ export default function LastSessionScreen() {
 const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   empty: { alignItems: 'flex-start' },
+  listIntro: { color: c.muted, ...typeScale.caption, fontWeight: '700' },
+  session: { gap: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: borderWidth.thin, borderBottomColor: c.line },
   summary: { gap: spacing.sm },
   badges: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   badge: { minHeight: 28, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm },
