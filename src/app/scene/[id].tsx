@@ -25,6 +25,7 @@ import { useSpeakText } from '@/hooks/use-speak-text';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { SceneAttempt } from '@/state/app-state-types';
 import { observe } from '@/lib/observability';
+import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiWordTokens } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
@@ -432,7 +433,11 @@ function SceneScreen() {
           <LessonReminderOffer
             onAnswered={(next) => {
               setReminderOffer('closed');
-              void setReminder(next);
+              // If saving fails the stored reminder rolls back, so cancel the
+              // notification that was just scheduled instead of orphaning it.
+              void setReminder(next).then(async (saved) => {
+                if (!saved && next.notificationId) await cancelPracticeReminder(next);
+              }).catch(() => undefined);
             }}
             reminder={reminder}
           />

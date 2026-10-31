@@ -17,6 +17,7 @@ const mockResetTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
 const mockMarkSceneComplete = jest.fn();
 const mockSetReminder = jest.fn(async () => true);
+const mockCancelNotification = jest.fn(async (..._args: unknown[]) => undefined);
 const mockGetNotificationPermissions = jest.fn();
 const mockRequestNotificationPermissions = jest.fn();
 const mockScheduleNotification = jest.fn();
@@ -41,7 +42,7 @@ jest.mock('expo-notifications', () => ({
   AndroidImportance: { DEFAULT: 3 },
   IosAuthorizationStatus: { PROVISIONAL: 3 },
   SchedulableTriggerInputTypes: { DAILY: 'daily' },
-  cancelScheduledNotificationAsync: jest.fn(async () => undefined),
+  cancelScheduledNotificationAsync: (...args: unknown[]) => mockCancelNotification(...args),
   getPermissionsAsync: (...args: unknown[]) => mockGetNotificationPermissions(...args),
   requestPermissionsAsync: (...args: unknown[]) => mockRequestNotificationPermissions(...args),
   scheduleNotificationAsync: (...args: unknown[]) => mockScheduleNotification(...args),
@@ -255,6 +256,24 @@ describe('SceneScreen primary journey', () => {
       offerAnswered: true,
     }));
     expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+  });
+
+  it('cancels the newly scheduled reminder when saving it fails', async () => {
+    mockSetReminder.mockResolvedValueOnce(false);
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockCancelNotification).toHaveBeenCalledWith('reminder-1'));
+    expect(mockScheduleNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the scheduled reminder when saving it succeeds', async () => {
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockSetReminder).toHaveBeenCalled());
+    await Promise.resolve();
+    expect(mockCancelNotification).not.toHaveBeenCalled();
   });
 
   it('does not offer a reminder after a lesson was already finished or the offer was answered', async () => {
