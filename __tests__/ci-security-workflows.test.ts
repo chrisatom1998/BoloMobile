@@ -143,6 +143,7 @@ describe('fail-closed merge verification', () => {
     const smoke = read('.maestro/flows/00-ci-smoke.yaml');
     expect(smoke).toContain('text: "Talk with Asha"');
     expect(smoke).toContain('- tapOn: "Talk with Asha"');
+    expect(smoke).toContain('- assertVisible: ".*Greet me like a neighbor and tell me your name.*"');
     expect(smoke).toContain(`- assertVisible: "${heading}"`);
     expect(smoke).toContain('- assertVisible: "Enable live practice"');
   });
