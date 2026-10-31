@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { Lock, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
+import { Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, AppState, FlatList, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -128,6 +128,7 @@ export default function LiveScreen() {
   const backgroundCheckpointedRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const scrollAfterContentChangeRef = useRef(false);
+  const composerMicActionRef = useRef<(() => void) | null>(null);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, clearingChat, pendingUserMessage],
@@ -147,7 +148,7 @@ export default function LiveScreen() {
         : youCaption
           ? { speaker: 'you' as const, text: youCaption }
           : null;
-  const conversationStarted = hasTranscriptMessages || speechCaption !== null;
+  const conversationStarted = aiConsent && (hasTranscriptMessages || speechCaption !== null);
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
   const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
@@ -167,10 +168,27 @@ export default function LiveScreen() {
     recording: 'Speak naturally, even while Asha talks. Tap to mute.',
     responding: 'Your mic is muted. Tap Asha to speak at any time.',
   }[realtimeStatus];
+  const composerMicLabel = {
+    disconnected: 'Start a voice conversation',
+    connecting: 'Connecting…',
+    ready: 'Unmute microphone',
+    recording: 'Mute microphone',
+    responding: 'Unmute microphone',
+  }[realtimeStatus];
+  const composerMicDisabled = !screenFocused || busy || clearingChat || realtimeStatus === 'connecting';
 
   const scrollToChat = useCallback(() => {
     listRef.current?.scrollToEnd({ animated: !reducedMotion });
   }, [reducedMotion]);
+
+  const bindComposerMicAction = useCallback((action: (() => void) | null) => {
+    composerMicActionRef.current = action;
+  }, []);
+
+  const pressComposerMic = useCallback(() => {
+    if (composerMicDisabled) return;
+    composerMicActionRef.current?.();
+  }, [composerMicDisabled]);
 
   const clearPendingUserMessage = useCallback((expectedId: string) => {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
@@ -260,10 +278,10 @@ export default function LiveScreen() {
     replaceLiveChatSnapshot(ids.current, messages);
     ids.current = messages.map((message) => message.id);
     scrollAfterContentChangeRef.current = true;
-    const lastSpoken = [...messages].reverse().find((row) => row.text.trim());
     setLiveUserTranscript([...messages].reverse().find((row) => row.role === 'you')?.text ?? '');
     setLiveAshaTranscript([...messages].reverse().find((row) => row.role === 'asha')?.text ?? '');
-    setLatestCaptionSpeaker(lastSpoken ? lastSpoken.role : null);
+    // Row order stays stable while speakers overlap, so the last snapshot row
+    // is not the line that just changed. The transcript event chooses the speaker.
     if (messages.some((row) => row.role === 'you') && !practiced.current) {
       practiced.current = true;
       markLiveTurn();
@@ -650,7 +668,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onTranscriptSnapshot={floatingAsha.available ? undefined : recordLiveSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -673,7 +691,9 @@ export default function LiveScreen() {
                       <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
                       <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} style={styles.liveVoiceText}>{statusKicker}</Text>
                     </View>
-                    {conversationStarted ? null : (
+                    {conversationStarted ? (
+                      <Text style={styles.heroBody}>{voiceHeroBody}</Text>
+                    ) : (
                       <>
                         <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{aiConsent ? voiceHeroTitle : 'Live voice unlocks here'}</Text>
                         <Text style={styles.heroBody}>{aiConsent ? voiceHeroBody : 'Enable live practice above to use voice coaching.'}</Text>
@@ -776,7 +796,25 @@ export default function LiveScreen() {
             </PressableFeedback>
           ))}
         </ScrollView>
-        <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
+        <View style={styles.composerEntry}>
+          {conversationStarted ? (
+            <Pressable
+              accessibilityHint={voiceHeroBody}
+              accessibilityLabel={composerMicLabel}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: composerMicDisabled }}
+              disabled={composerMicDisabled}
+              onPress={pressComposerMic}
+              style={[styles.composerMic, composerMicDisabled && styles.disabled]}
+              testID="composer-mic-toggle"
+            >
+              {realtimeStatus === 'recording' ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
+            </Pressable>
+          ) : null}
+          <View style={styles.composerField}>
+            <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
+          </View>
+        </View>
       </View> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
@@ -880,6 +918,9 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   examples: { justifyContent: 'center', gap: spacing.sm, paddingRight: spacing.xl },
   example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },
   exampleText: { color: c.white, fontSize: 14, textAlign: 'center' },
+  composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  composerField: { flex: 1, minWidth: 0 },
+  composerMic: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   input: { flex: 1, minHeight: 52, maxHeight: 110, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: StyleSheet.hairlineWidth, color: c.white, paddingHorizontal: spacing.md, paddingVertical: spacing.md, fontSize: 15 },
   inputDisabled: { backgroundColor: c.nightSurface, color: c.heroSubtle, opacity: 0.65 },
