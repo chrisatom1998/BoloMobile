@@ -473,7 +473,7 @@ describe('AI voice speech orchestration', () => {
     jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue(audio);
     const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockResolvedValue();
 
-    await expect(speakText('A live tab listen request.')).resolves.toBeUndefined();
+    await expect(speakText('A live tab listen request.')).resolves.toBe(true);
 
     expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal), 1, 'realtimePlayback');
   });
@@ -483,7 +483,7 @@ describe('AI voice speech orchestration', () => {
     jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue(audio);
     const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockResolvedValue();
 
-    await expect(speakText('A typed Asha reply.', undefined, 1, undefined, 'playback', true)).resolves.toBeUndefined();
+    await expect(speakText('A typed Asha reply.', undefined, 1, undefined, 'playback', true)).resolves.toBe(true);
 
     expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal), 1, 'playback', true);
   });
@@ -525,7 +525,7 @@ describe('AI voice speech orchestration', () => {
     expectDefined(requestDeferred[1]).resolve(expectDefined(audio[1]));
     await waitFor(() => playbackSpy.mock.calls.length === 2);
     expectDefined(playbackDeferred[1]).resolve();
-    await expect(speech).resolves.toBeUndefined();
+    await expect(speech).resolves.toBe(true);
 
     expect(requestSpy.mock.calls.map(([chunk]) => chunk)).toEqual(chunks);
     expect(expectDefined(requestSpy.mock.invocationCallOrder[0])).toBeLessThan(expectDefined(playbackSpy.mock.invocationCallOrder[0]));
@@ -556,7 +556,7 @@ describe('AI voice speech orchestration', () => {
     });
     const playbackSpy = jest.spyOn(aiVoicePlayer, 'playAiVoiceAudio').mockResolvedValue();
 
-    await expect(speakText(text)).resolves.toBeUndefined();
+    await expect(speakText(text)).resolves.toBe(true);
 
     expect(requestSpy.mock.calls.filter(([chunk]) => chunk === 'मुझे थोड़ी मदद चाहिए।')).toHaveLength(2);
     expect(playbackSpy.mock.calls.map(([value]) => value.audioBase64)).toEqual([
@@ -615,7 +615,7 @@ describe('AI voice speech orchestration', () => {
 
     request.resolve(audio);
     await expect(warmup).resolves.toBeUndefined();
-    await expect(replay).resolves.toBeUndefined();
+    await expect(replay).resolves.toBe(true);
     expect(requestSpy).toHaveBeenCalledTimes(1);
     expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal));
   });
@@ -629,7 +629,7 @@ describe('AI voice speech orchestration', () => {
     const text = 'Retry after this unique warm-up failure.';
 
     await expect(preloadSpeech(text)).resolves.toBeUndefined();
-    await expect(speakText(text)).resolves.toBeUndefined();
+    await expect(speakText(text)).resolves.toBe(true);
 
     expect(requestSpy).toHaveBeenCalledTimes(2);
     expect(playbackSpy).toHaveBeenCalledWith(audio, expect.any(AbortSignal));
@@ -655,8 +655,8 @@ describe('AI voice speech orchestration', () => {
     await firstStarted.promise;
     const secondSpeech = speakText('Second replacement phrase.');
 
-    await expect(secondSpeech).resolves.toBeUndefined();
-    await expect(firstSpeech).resolves.toBeUndefined();
+    await expect(secondSpeech).resolves.toBe(true);
+    await expect(firstSpeech).resolves.toBe(false);
     expect(firstSignal?.aborted).toBe(true);
     expect(requestSpy.mock.calls.map(([text]) => text)).toEqual([
       'First superseded phrase.',
@@ -685,8 +685,8 @@ describe('AI voice speech orchestration', () => {
     await waitFor(() => requestSpy.mock.calls.length === 2);
 
     expect(firstSignal?.aborted).toBe(true);
-    await expect(firstSpeech).resolves.toBeUndefined();
-    await expect(secondSpeech).resolves.toBeUndefined();
+    await expect(firstSpeech).resolves.toBe(false);
+    await expect(secondSpeech).resolves.toBe(true);
     expect(playbackSpy).toHaveBeenCalledTimes(1);
     expect(playbackSpy).toHaveBeenCalledWith(secondAudio, expect.any(AbortSignal));
   });
@@ -714,8 +714,21 @@ describe('AI voice speech orchestration', () => {
     await requestStarted.promise;
     controller.abort();
 
-    await expect(speech).resolves.toBeUndefined();
+    await expect(speech).resolves.toBe(false);
     expect(playbackSpy).not.toHaveBeenCalled();
+  });
+
+  it('reports an already-aborted listen as not played', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const requestSpy = jest.spyOn(boloApi, 'requestAiVoiceAudio').mockResolvedValue({
+      audioBase64: 'bm9vcGU=',
+      mimeType: 'audio/mpeg',
+    });
+
+    await expect(speakText('Do not play this canceled phrase.', controller.signal)).resolves.toBe(false);
+
+    expect(requestSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -752,7 +765,7 @@ describe('lesson-consistent Hindi speech routing', () => {
     const romanizedLessonPhrase = romanizeDevanagari('चीनी कम, कृपया।');
 
     expect(hasOfflineSpeech(romanizedLessonPhrase)).toBe(true);
-    await expect(speakText(romanizedLessonPhrase, undefined, 1, 'hi')).resolves.toBeUndefined();
+    await expect(speakText(romanizedLessonPhrase, undefined, 1, 'hi')).resolves.toBe(true);
 
     expect(requestSpy).not.toHaveBeenCalled();
     expect(expoAudio.createAudioPlayer).toHaveBeenLastCalledWith(expect.any(Number), {
