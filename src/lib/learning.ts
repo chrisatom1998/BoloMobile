@@ -1,3 +1,4 @@
+import { lessonPlans } from '@/data/lesson-plans';
 import { scenes, type Scene, type SceneCategory } from '@/data/scenes';
 import { dateKey, previousDate } from '@/lib/storage';
 import type { LearnerProfile, PhraseReview, PracticeDay, SavedPhrase, SceneProgress } from '@/state/app-state-types';
@@ -85,4 +86,14 @@ export function milestoneProgress(progress: Record<string, SceneProgress>) {
     const completed = milestone.sceneIds.filter((id) => (progress[id]?.completions ?? 0) > 0).length;
     return { ...milestone, completed, achieved: completed === milestone.sceneIds.length };
   });
+}
+
+const planLessonIds = new Set(lessonPlans.flatMap((plan) => plan.lessonIds));
+
+/**
+ * Lessons the learner has finished, counted the same way the plan rows count
+ * them (only lessons that sit in a lesson plan), so every screen agrees.
+ */
+export function completedLessonCount(progress: Record<string, SceneProgress>) {
+  return Object.entries(progress).filter(([id, item]) => planLessonIds.has(id) && item.completions > 0).length;
 }

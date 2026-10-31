@@ -90,7 +90,7 @@ jest.mock('@/components/word-definition-sheet', () => ({
 }));
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer , touch: jest.fn() }),
 }));
 
 jest.mock('@/lib/speech', () => ({
