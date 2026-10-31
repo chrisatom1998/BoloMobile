@@ -102,7 +102,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   // 390 and wider fit the title and Private badge on one row. Narrower phones stack them.
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < 390;
-  const { elapsedSeconds, reset: resetPracticeTimer } = useForegroundTimer();
+  const { elapsedSeconds, markActive, reset: resetPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const floatingAsha = useAshaVoiceSession();
@@ -251,9 +251,10 @@ export default function LiveScreen() {
   }, []);
 
   const pressComposerMic = useCallback(() => {
+    markActive();
     if (composerMicDisabled) return;
     composerMicActionRef.current?.();
-  }, [composerMicDisabled]);
+  }, [composerMicDisabled, markActive]);
 
   const clearPendingUserMessage = useCallback((expectedId: string) => {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
@@ -365,6 +366,7 @@ export default function LiveScreen() {
 
   const recordTurn = useCallback((result: { transcript: string; reply: string; language: 'en' | 'hi' }) => {
     if (!mountedRef.current) return;
+    markActive();
     const now = Date.now();
     void (result.language === 'hi' ? preloadSpeech(result.reply, 'hi') : preloadSpeech(result.reply));
     const additions: ChatMessage[] = [];
@@ -375,10 +377,11 @@ export default function LiveScreen() {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [appendChatMessages, markLiveTurn]);
+  }, [appendChatMessages, markActive, markLiveTurn]);
 
   const recordLiveSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     if (!mountedRef.current) return;
+    markActive();
     const messages: ChatMessage[] = rows.filter((row) => row.text.trim()).map((row) => ({
       id: row.id,
       role: row.speaker,
@@ -398,7 +401,7 @@ export default function LiveScreen() {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
+  }, [markActive, markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
 
   const playReply = useCallback((message: ChatMessage) => {
     if (!aiConsent || replyPlaybackLocked) return;
@@ -513,6 +516,7 @@ export default function LiveScreen() {
 
   const sendText = useCallback(async (raw: string): Promise<boolean> => {
     const text = raw.trim().slice(0, 500);
+    markActive();
     if (!aiConsent || !text || busy || realtimeLocked || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return false;
     hapticTap();
     chatActivityRef.current += 1;
@@ -554,11 +558,13 @@ export default function LiveScreen() {
         if (mountedRef.current) setBusy(false);
       }
     }
-  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, realtimeLocked, recordTurn, responseLanguage]);
+  }, [aiConsent, busy, chatHistory, clearPendingUserMessage, clientId, markActive, realtimeLocked, recordTurn, responseLanguage]);
 
   const updateRealtimeStatus = useCallback((status: RealtimeVoiceStatus) => {
     const previous = realtimeStatusRef.current;
     realtimeStatusRef.current = status;
+    // Portrait taps, mic toggles, and each spoken turn all arrive here as status changes.
+    markActive();
     setRealtimeStatus(status);
     if (status === 'recording') setError('');
     if (status === 'connecting' && previous === 'disconnected') {
@@ -568,7 +574,7 @@ export default function LiveScreen() {
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
     }
-  }, []);
+  }, [markActive]);
   const startNewConversation = useCallback(async (signal: AbortSignal) => {
     if (!mountedRef.current || signal.aborted) return;
     chatActivityRef.current += 1;
@@ -615,10 +621,11 @@ export default function LiveScreen() {
     unregisterLiveCallEnderRef.current = disconnect ? registerLiveCallEnder(disconnect) : null;
   }, []);
   const updateLiveTranscript = useCallback((update: RealtimeTranscriptUpdate) => {
+    markActive();
     if (update.speaker === 'asha') setLiveAshaTranscript(update.text);
     else setLiveUserTranscript(update.text);
     if (update.text.trim()) setLatestCaptionSpeaker(update.speaker);
-  }, []);
+  }, [markActive]);
 
   const floatingAvailable = floatingAsha.available;
   const setFloatingListeners = floatingAsha.setListeners;

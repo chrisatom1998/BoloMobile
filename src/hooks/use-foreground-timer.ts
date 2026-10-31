@@ -1,40 +1,80 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
+/**
+ * Foreground time counts only this long past the last tap, answer, or resume.
+ * A lesson left open on a desk stops earning minutes after a minute and a half.
+ */
+export const IDLE_WINDOW_MS = 90_000;
+
+/** One sitting never records more than an hour, whatever the clock says. */
+export const MAX_SESSION_SECONDS = 60 * 60;
+
+/** Milliseconds earned in the current foreground stretch, cut off at the idle window. */
+function creditedMs(activeSince: number | null, lastActiveAt: number, now: number) {
+  if (activeSince === null) return 0;
+  return Math.max(0, Math.min(now, lastActiveAt + IDLE_WINDOW_MS) - activeSince);
+}
+
 export function useForegroundTimer(enabled = true) {
   const accumulatedMs = useRef(0);
+  // Start of the current counting stretch; null while the app is not in the foreground.
   const activeSince = useRef<number | null>(null);
+  // Last tap, answer, or foreground resume. Counting stops IDLE_WINDOW_MS after it.
+  const lastActiveAt = useRef(0);
+
+  const begin = useCallback((now: number) => {
+    activeSince.current = now;
+    lastActiveAt.current = now;
+  }, []);
+
+  const pause = useCallback((now: number) => {
+    accumulatedMs.current += creditedMs(activeSince.current, lastActiveAt.current, now);
+    activeSince.current = null;
+  }, []);
+
+  /** Records learner activity. After an idle gap, counting resumes from this moment. */
+  const markActive = useCallback(() => {
+    const now = Date.now();
+    if (activeSince.current !== null && now - lastActiveAt.current > IDLE_WINDOW_MS) {
+      accumulatedMs.current += creditedMs(activeSince.current, lastActiveAt.current, now);
+      activeSince.current = now;
+    }
+    lastActiveAt.current = now;
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
-    if (AppState.currentState === 'active') activeSince.current = Date.now();
+    if (AppState.currentState === 'active') begin(Date.now());
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'active') {
-        if (activeSince.current === null) activeSince.current = Date.now();
+        if (activeSince.current === null) begin(Date.now());
+        else markActive();
         return;
       }
-      const started = activeSince.current;
-      if (started !== null) accumulatedMs.current += Math.max(0, Date.now() - started);
-      activeSince.current = null;
+      pause(Date.now());
     });
 
     return () => {
-      const started = activeSince.current;
-      if (started !== null) accumulatedMs.current += Math.max(0, Date.now() - started);
-      activeSince.current = null;
+      pause(Date.now());
       subscription.remove();
     };
-  }, [enabled]);
+  }, [begin, enabled, markActive, pause]);
 
   const elapsedSeconds = useCallback(() => {
-    const activeMs = activeSince.current === null ? 0 : Math.max(0, Date.now() - activeSince.current);
-    return Math.max(1, Math.round((accumulatedMs.current + activeMs) / 1000));
+    const totalMs = accumulatedMs.current + creditedMs(activeSince.current, lastActiveAt.current, Date.now());
+    return Math.min(MAX_SESSION_SECONDS, Math.max(1, Math.round(totalMs / 1000)));
   }, []);
 
   const reset = useCallback(() => {
+    const now = Date.now();
     accumulatedMs.current = 0;
-    activeSince.current = AppState.currentState === 'active' ? Date.now() : null;
-  }, []);
+    if (AppState.currentState === 'active') begin(now);
+    else {
+      activeSince.current = null;
+      lastActiveAt.current = now;
+    }
+  }, [begin]);
 
-  return { elapsedSeconds, reset };
+  return { elapsedSeconds, markActive, reset };
 }

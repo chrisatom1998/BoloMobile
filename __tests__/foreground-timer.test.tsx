@@ -1,7 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 
-import { useForegroundTimer } from '../src/hooks/use-foreground-timer';
+import { IDLE_WINDOW_MS, MAX_SESSION_SECONDS, useForegroundTimer } from '../src/hooks/use-foreground-timer';
 
 describe('foreground practice timer', () => {
   const originalCurrentState = Object.getOwnPropertyDescriptor(AppState, 'currentState');
@@ -77,6 +77,60 @@ describe('foreground practice timer', () => {
     transition('active', 10_000);
     now = 11_600;
     expect(result.current.elapsedSeconds()).toBe(2);
+
+    await unmount();
+  });
+
+  it('stops crediting time after the idle window when the learner never taps', async () => {
+    const { result, unmount } = await renderHook(() => useForegroundTimer());
+
+    now = 1_000 + 30 * 60_000;
+    expect(result.current.elapsedSeconds()).toBeLessThanOrEqual(120);
+    expect(result.current.elapsedSeconds()).toBe(IDLE_WINDOW_MS / 1000);
+
+    await unmount();
+  });
+
+  it('caps a session at one hour even with steady activity', async () => {
+    const { result, unmount } = await renderHook(() => useForegroundTimer());
+
+    for (let minute = 1; minute <= 120; minute += 1) {
+      now = 1_000 + minute * 60_000;
+      result.current.markActive();
+    }
+    expect(MAX_SESSION_SECONDS).toBe(3_600);
+    expect(result.current.elapsedSeconds()).toBe(MAX_SESSION_SECONDS);
+
+    await unmount();
+  });
+
+  it('resumes counting from the next tap after an idle gap', async () => {
+    const { result, unmount } = await renderHook(() => useForegroundTimer());
+
+    now = 1_000 + 5 * 60_000;
+    result.current.markActive();
+    expect(result.current.elapsedSeconds()).toBe(IDLE_WINDOW_MS / 1000);
+
+    now += 10_000;
+    expect(result.current.elapsedSeconds()).toBe(IDLE_WINDOW_MS / 1000 + 10);
+
+    now += 60_000;
+    result.current.markActive();
+    now += 20_000;
+    expect(result.current.elapsedSeconds()).toBe(IDLE_WINDOW_MS / 1000 + 90);
+
+    await unmount();
+  });
+
+  it('treats a foreground resume as activity but not the time spent in the background', async () => {
+    const { result, unmount } = await renderHook(() => useForegroundTimer());
+
+    now = 1_000 + 10 * 60_000;
+    transition('background', now);
+    now += 10 * 60_000;
+    transition('active', now);
+    now += 30_000;
+    expect(result.current.elapsedSeconds()).toBe(IDLE_WINDOW_MS / 1000 + 30);
 
     await unmount();
   });

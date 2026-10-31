@@ -82,7 +82,7 @@ function SceneScreen() {
     };
   }, [scene]);
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
-  const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
+  const { elapsedSeconds, markActive, reset: resetTimer } = useForegroundTimer();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const savedProgress = scene ? sceneProgress?.[scene.id] : undefined;
   const [legacyCheckpoint] = useState(() => !savedProgress?.attempt && (savedProgress?.lastBeatIndex ?? 0) > 0);
@@ -236,6 +236,7 @@ function SceneScreen() {
     : '';
 
   function play(text: string) {
+    markActive();
     if ((!aiConsent && !hasOfflineSpeech(text)) || pronunciationBusy) return;
     void speak(text);
   }
@@ -266,6 +267,7 @@ function SceneScreen() {
   }
 
   function choose(index: number) {
+    markActive();
     if (pickedRef.current !== null || pronunciationBusy || needsName) return;
     const choice = beat.choices[index];
     if (choice === undefined) return;
@@ -289,6 +291,7 @@ function SceneScreen() {
   }
 
   function handleAlternateResult(result: 'correct' | 'incorrect') {
+    markActive();
     if (pickedRef.current !== null || pronunciationBusy || needsName) return;
     pendingResolutionScrollRef.current = true;
     pickedRef.current = result === 'correct' ? 0 : -1;
@@ -303,6 +306,7 @@ function SceneScreen() {
   }
 
   function tryAgain() {
+    markActive();
     if ((effectiveMode !== 'choice' && effectiveMode !== 'wordOrder') || resolution !== 'incorrect' || answerShown || pronunciationBusy) return;
     pendingResolutionScrollRef.current = false;
     pickedRef.current = null;
@@ -315,6 +319,7 @@ function SceneScreen() {
   }
 
   function next() {
+    markActive();
     if (advancedBeatRef.current === beatIndex) return;
     advancedBeatRef.current = beatIndex;
     pendingResolutionScrollRef.current = false;
@@ -352,6 +357,7 @@ function SceneScreen() {
     void stopSpeaking();
     clearAudioError();
     resetTimer();
+    markActive();
     autoPlayedBeatRef.current = null;
     setInitialBeatIndex(0);
     setBeatIndex(0);
@@ -524,7 +530,7 @@ function SceneScreen() {
         </Pressable>
       ) : null}
       {choiceAnswerHidden ? (
-        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); setAnswerShown(true); }} style={styles.secondaryButton} testID="scene-show-answer">
+        <Pressable accessibilityRole="button" onPress={() => { markActive(); hapticSelect(); setAnswerShown(true); }} style={styles.secondaryButton} testID="scene-show-answer">
           <Text style={styles.secondaryText}>Show answer</Text>
         </Pressable>
       ) : (
@@ -788,7 +794,7 @@ function SceneScreen() {
 
         {aiConsent && !needsName && answerVisible ? (
           <View testID="scene-pronunciation">
-            <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
+            <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={(active) => { if (active) markActive(); setPronunciationBusy(active); }} target={target} />
           </View>
         ) : null}
         {!recoveryActionsFirst ? answerActions : null}

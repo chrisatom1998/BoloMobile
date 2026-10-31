@@ -7,6 +7,7 @@ import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
 import { deleteAllAshaSessions, endLiveCallForDataDeletion, startAshaSessionRetention } from '@/lib/asha-session-log-store';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
+import { clampStoredPracticeOnce } from '@/lib/practice-clamp-migration';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { restorableProgressKeys, type RestorableProgress } from '@/lib/progress-backup';
 import { updatePracticeWidget } from '@/lib/practice-widget';
@@ -205,6 +206,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     let active = true;
     void (async () => {
       try {
+        // Totals recorded by the old always-on timer are clamped once, before they are read.
+        await clampStoredPracticeOnce();
         const pairs = await AsyncStorage.multiGet(Object.values(storageKeys));
         const stored = Object.fromEntries(pairs);
         const readStored = (key: string) => stored[key] ?? null;

@@ -46,6 +46,7 @@ import { getAshaSessions, logAshaSessionEvent, logAshaSessionSnapshot, logAshaSe
 import { SYNC_OUTBOX_CLEARING_KEY, SYNC_OUTBOX_KEY, syncOutbox } from '../src/lib/sync-outbox';
 import { BoloApiError, reportGeneratedMessage } from '../src/services/bolo-api';
 import { observe } from '../src/lib/observability';
+import { PRACTICE_CLAMP_MIGRATION_KEY } from '../src/lib/practice-clamp-migration';
 import { cancelPracticeReminder } from '../src/lib/practice-reminder';
 import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
@@ -186,7 +187,8 @@ describe('AppStateProvider clearAllData', () => {
       practice: emptyPractice(),
       streakDays: [],
     });
-    expect(asyncStorage.__store.size).toBe(Object.keys(storageKeys).length);
+    // Only the persisted keys and the one-time practice clamp marker remain.
+    expect([...asyncStorage.__store.keys()].sort()).toEqual([...Object.values(storageKeys), PRACTICE_CLAMP_MIGRATION_KEY].sort());
     expect(asyncStorage.__store.has(ASHA_SESSION_INDEX_KEY)).toBe(false);
     expect(sessionKeys()).toEqual([]);
     expect(asyncStorage.__store.has(SYNC_OUTBOX_KEY)).toBe(false);
@@ -439,6 +441,8 @@ describe('AppStateProvider clearAllData', () => {
   });
 
   it('caps every runtime practice update at the daily maximum', async () => {
+    // The one-time clamp migration would pull this seeded day down to four hours first.
+    asyncStorage.__store.set(PRACTICE_CLAMP_MIGRATION_KEY, '1');
     asyncStorage.__store.set(storageKeys.practice, JSON.stringify({
       ...emptyPractice(),
       seconds: MAX_DAILY_PRACTICE_SECONDS - 5,
