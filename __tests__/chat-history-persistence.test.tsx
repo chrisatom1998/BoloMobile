@@ -10,6 +10,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   const storage = {
     __store: store,
+    getItem: jest.fn(async (key: string) => store.get(key) ?? null),
     multiGet: jest.fn(async (keys: string[]) => keys.map((key) => [key, store.get(key) ?? null])),
     multiSet: jest.fn(async (entries: [string, string][]) => {
       entries.forEach(([key, value]) => store.set(key, value));

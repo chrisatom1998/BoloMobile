@@ -78,7 +78,7 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
           <Text style={styles.body}>Record up to 15 seconds. Asha will check one useful sound or rhythm detail.</Text>
         </View>
       </View>
-      <AiConsentGate>
+      <AiConsentGate compact={{ body: 'Recording uses Asha coaching, which sends your clip to Bolo and OpenAI.' }}>
         <VoiceTurnButton
           idleLabel="Record pronunciation"
           onActivityChange={onActivityChange}

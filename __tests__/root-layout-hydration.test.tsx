@@ -53,6 +53,7 @@ describe('RootLayout hydration gate', () => {
     expect(screen.getByTestId('stack-screen-(tabs)')).toBeTruthy();
     expect(screen.getByTestId('stack-screen-settings')).toBeTruthy();
     expect(screen.getByTestId('stack-screen-privacy')).toBeTruthy();
+    expect(screen.getByTestId('stack-screen-last-session')).toBeTruthy();
     expect(screen.getByTestId('stack-screen-scene/[id]')).toBeTruthy();
   });
 });
