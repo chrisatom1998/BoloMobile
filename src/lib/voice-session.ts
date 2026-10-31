@@ -5,6 +5,10 @@ export async function activateVoiceChatSession(_options?: { notifyWebRtc?: boole
 
 export async function restoreDefaultAudioSessionMode(): Promise<void> {}
 
+export async function releaseAudioSessionBeforeCall(): Promise<string> {
+  return 'n/a';
+}
+
 export async function readAudioSessionState(): Promise<string> {
   return 'n/a';
 }

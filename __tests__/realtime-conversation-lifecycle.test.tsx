@@ -5,12 +5,12 @@ import { useRealtimeConversation } from '../src/hooks/use-realtime-conversation'
 import { createRealtimePeerSession } from '../src/lib/realtime-peer';
 import type { RealtimePeerOptions, RealtimePeerSession } from '../src/lib/realtime-peer.types';
 import { speakText, stopSpeaking } from '../src/lib/speech';
-import { activateVoiceChatSession, restoreDefaultAudioSessionMode } from '../src/lib/voice-session';
+import { activateVoiceChatSession, releaseAudioSessionBeforeCall, restoreDefaultAudioSessionMode } from '../src/lib/voice-session';
 import { createLiveCall } from '../src/services/bolo-api';
 
 let mockIsDevice = true;
 jest.mock('expo-audio', () => ({ requestRecordingPermissionsAsync: jest.fn(), setAudioModeAsync: jest.fn() }));
-jest.mock('@/lib/voice-session', () => ({ activateVoiceChatSession: jest.fn(), restoreDefaultAudioSessionMode: jest.fn() }));
+jest.mock('@/lib/voice-session', () => ({ activateVoiceChatSession: jest.fn(), releaseAudioSessionBeforeCall: jest.fn(), restoreDefaultAudioSessionMode: jest.fn() }));
 jest.mock('expo-device',() => ({ get isDevice() { return mockIsDevice; } }));
 jest.mock('@/lib/realtime-peer', () => ({ createRealtimePeerSession: jest.fn() }));
 jest.mock('@/lib/speech', () => ({ speakText: jest.fn(), stopSpeaking: jest.fn(async () => undefined) }));
@@ -39,6 +39,7 @@ beforeEach(() => {
   jest.mocked(stopSpeaking).mockResolvedValue(undefined);
   jest.mocked(activateVoiceChatSession).mockResolvedValue('PlayAndRecord/VoiceChat active in:iPhone Microphone');
   jest.mocked(restoreDefaultAudioSessionMode).mockResolvedValue(undefined);
+  jest.mocked(releaseAudioSessionBeforeCall).mockResolvedValue('ok');
   jest.mocked(createLiveCall).mockResolvedValue({ answerSdp: 'live-answer', sessionId: 'live-session' });
   peer = { close: jest.fn(), send: jest.fn(), setMicrophoneEnabled: jest.fn() };
   createPeerMock.mockImplementation(async (options) => {
@@ -266,6 +267,25 @@ describe('GPT-Live conversation lifecycle', () => {
     expect(lastActivation).toBeLessThan(jest.mocked(peer.send).mock.invocationCallOrder[0]!);
     await act(async () => { acknowledge(true); await start; });
     expect(setAudioModeAsync).toHaveBeenCalledTimes(1);
+    await unmount();
+  });
+
+  it('starts listening on call start without a typed message first by releasing the session before setup', async () => {
+    const { result, unmount } = await mount();
+    let start!: Promise<void>;
+    await act(async () => { start = result.current.startTurn(); await flush(); });
+    // Same state a typed reply leaves behind: session off, then configured and activated for the call.
+    expect(speakText).not.toHaveBeenCalled();
+    expect(releaseAudioSessionBeforeCall).toHaveBeenCalledTimes(1);
+    const release = jest.mocked(releaseAudioSessionBeforeCall).mock.invocationCallOrder[0]!;
+    expect(release).toBeLessThan(jest.mocked(setAudioModeAsync).mock.invocationCallOrder[0]!);
+    expect(release).toBeLessThan(Math.min(...jest.mocked(activateVoiceChatSession).mock.invocationCallOrder));
+    expect(release).toBeLessThan(createPeerMock.mock.invocationCallOrder[0]!);
+    await act(async () => { acknowledge(true); await start; });
+    expect(result.current.microphoneEnabled).toBe(true);
+    expect(peer.setMicrophoneEnabled).toHaveBeenLastCalledWith(true);
+    // Never under the running peer: later activations must not turn the session off again.
+    expect(releaseAudioSessionBeforeCall).toHaveBeenCalledTimes(1);
     await unmount();
   });
 
