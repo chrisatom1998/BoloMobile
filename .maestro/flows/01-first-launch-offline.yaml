@@ -14,18 +14,7 @@ tags:
     permissions:
       microphone: deny
 - runFlow: ../subflows/enter-development-build.yaml
-- assertVisible: "Your Hindi plan in one minute"
-- scrollUntilVisible:
-    element:
-      text: "Check microphone access"
-    direction: DOWN
-- tapOn: "Check microphone access"
-- scrollUntilVisible:
-    element:
-      text: "Microphone access is off. Typed and written practice still work."
-    direction: DOWN
-    timeout: 20000
-- assertVisible: "Microphone access is off. Typed and written practice still work."
+- assertVisible: "Hear this"
 - runFlow: ../subflows/complete-onboarding.yaml
 - stopApp
 - launchApp:
@@ -34,7 +23,7 @@ tags:
       EXDevMenuShowsAtLaunch: false
       EXDevMenuShowFloatingActionButton: false
 - runFlow: ../subflows/dismiss-dev-menu.yaml
-- assertNotVisible: "Your Hindi plan in one minute"
+- assertNotVisible: "Hear this"
 - setAirplaneMode: enabled
 - scrollUntilVisible:
     element:

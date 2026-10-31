@@ -389,6 +389,8 @@ describe('practice reminder storage', () => {
     expect(sanitizeReminder('{"notificationId":"reminder-1"}').notificationId).toBe('reminder-1');
     expect(sanitizeReminder('{"notificationId":42}').notificationId).toBeNull();
     expect(sanitizeReminder(JSON.stringify({ notificationId: 'x'.repeat(201) })).notificationId).toBeNull();
+    expect(sanitizeReminder('{"offerAnswered":true}').offerAnswered).toBe(true);
+    expect(sanitizeReminder('{"offerAnswered":"true"}').offerAnswered).toBeUndefined();
   });
 });
 
