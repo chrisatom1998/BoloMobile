@@ -757,7 +757,7 @@ export default function LiveScreen() {
                   style={[styles.languageSelector, { width: heroContentWidth }]}
                   tone="dark"
                   value={responseLanguage}
-                />}
+                />
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
