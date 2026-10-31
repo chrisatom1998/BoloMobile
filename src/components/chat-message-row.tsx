@@ -160,6 +160,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   aiConsent,
   continuesNext,
   continuesPrevious,
+  hasSelectedText,
   isPending,
   isWelcome,
   message,
@@ -184,6 +185,8 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   aiConsent: boolean;
   continuesNext: boolean;
   continuesPrevious: boolean;
+  /** True while the learner has words highlighted in this message; a highlight beats the structured candidates. */
+  hasSelectedText?: (messageId: string) => boolean;
   isPending: boolean;
   isWelcome: boolean;
   message: ChatMessage;
@@ -236,10 +239,11 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const selectionCollapsed = useCallback(() => onSelectionCollapsed(message.id), [message.id, onSelectionCollapsed]);
   const closeMenu = useCallback(() => setMenu(null), []);
   const savePhrase = useCallback(() => {
-    if (saveCandidates.length === 1) onOpenPhrasePicker(message, saveCandidates[0]);
+    if (hasSelectedText?.(message.id)) onOpenPhrasePicker(message);
+    else if (saveCandidates.length === 1) onOpenPhrasePicker(message, saveCandidates[0]);
     else if (saveCandidates.length > 1) setMenu('save');
     else onOpenPhrasePicker(message);
-  }, [message, onOpenPhrasePicker, saveCandidates]);
+  }, [hasSelectedText, message, onOpenPhrasePicker, saveCandidates]);
   const openWordDefinition = useCallback(() => { if (sourcePhrase) onOpenWordDefinition(sourcePhrase); }, [onOpenWordDefinition, sourcePhrase]);
   const playReply = useCallback(() => onPlayReply(message), [message, onPlayReply]);
   const report = useCallback(() => onReport(message), [message, onReport]);

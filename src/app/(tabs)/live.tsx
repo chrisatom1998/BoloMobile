@@ -514,6 +514,8 @@ export default function LiveScreen() {
     selectionClearTimersRef.current.set(messageId, timer);
   }, []);
 
+  const hasSelectedChatText = useCallback((messageId: string) => selectedChatTextRef.current.has(messageId), []);
+
   const openPhrasePicker = useCallback((message: ChatMessage, prefill?: StructuredPhrase) => {
     const selection = selectedChatTextRef.current.get(message.id);
     const pendingClear = selectionClearTimersRef.current.get(message.id);
@@ -522,8 +524,8 @@ export default function LiveScreen() {
     selectedChatTextRef.current.delete(message.id);
     phraseSheetSessionRef.current += 1;
     pendingPhraseAlertRef.current = null;
-    // A structured phrase is canonical: it wins over any highlight in the prose around it.
-    setPhraseMessage(prefill
+    // Words the learner highlighted win; otherwise a structured phrase is the canonical prefill.
+    setPhraseMessage(prefill && !selection
       ? { message, prefill, selectedText: prefill.romanized, sourceText: prefill.devanagari }
       : { message, selectedText: selection?.text, sourceText: selection?.sourceText || message.text });
     setPhraseSheetVisible(true);
@@ -1014,6 +1016,7 @@ export default function LiveScreen() {
             continuesNext={sharesSpeaker(item, visibleMessages[index + 1])}
             continuesPrevious={sharesSpeaker(visibleMessages[index - 1], item)}
             isPending={item.id === pendingUserMessage?.id}
+            hasSelectedText={hasSelectedChatText}
             isWelcome={item.id === welcome.id}
             message={item}
             onOpenPhrasePicker={openPhrasePicker}

@@ -297,6 +297,20 @@ describe('ChatMessageRow structured replies', () => {
     expect(onOpenPhrasePicker).toHaveBeenCalledWith(structuredMessage, { devanagari: 'डालिए', romanized: 'daaliye', english: 'please put' });
   });
 
+  it('saves the highlighted words instead of offering the structured phrases', async () => {
+    const hasSelectedText = jest.fn((messageId: string) => messageId === 'asha-2');
+    const { onOpenPhrasePicker, view } = await renderRow(structuredMessage, 'both', { hasSelectedText });
+    await fireEvent.press(view.getByLabelText(/^Save phrase:/u));
+    expect(hasSelectedText).toHaveBeenCalledWith('asha-2');
+    expect(onOpenPhrasePicker).toHaveBeenCalledWith(structuredMessage);
+    expect(view.queryByTestId('chat-menu-asha-2')).toBeNull();
+
+    const single: ChatMessage = { ...structuredMessage, id: 'asha-2', structured: { version: 1, intro: 'Try:', phrases: structuredMessage.structured!.phrases } };
+    const highlighted = await renderRow(single, 'latin', { hasSelectedText });
+    await fireEvent.press(highlighted.view.getByLabelText(/^Save phrase:/u));
+    expect(highlighted.onOpenPhrasePicker).toHaveBeenCalledWith(single);
+  });
+
   it('pre-fills the picker directly when the reply teaches one phrase', async () => {
     const single: ChatMessage = { ...structuredMessage, id: 'asha-3', structured: { version: 1, intro: 'Try:', phrases: structuredMessage.structured!.phrases } };
     const { onOpenPhrasePicker, onOpenWordDefinition, view } = await renderRow(single, 'latin');

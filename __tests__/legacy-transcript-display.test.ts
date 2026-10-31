@@ -51,6 +51,20 @@ describe('legacyTranscriptDisplay', () => {
     expect(legacyTranscriptDisplay('Say वह आया (woh aaya).', { scriptPreference: 'latin' }).displayText).toBe('Say woh aaya.');
   });
 
+  it('keeps an English gloss whose words share the Hindi initials as prose', () => {
+    expect(legacyTranscriptDisplay('मेरा नाम (my name)', { scriptPreference: 'latin' }).displayText).toBe('Meraa naam (my name)');
+    expect(legacyTranscriptDisplay('मेरा नाम (my name)', { scriptPreference: 'devanagari' }).displayText).toBe('मेरा नाम (my name)');
+    expect(legacyTranscriptDisplay('The word नाम (name) is useful.', { scriptPreference: 'latin' }).displayText).toBe('The word naam (name) is useful.');
+  });
+
+  it('recognizes a transliteration placed after a danda and keeps the danda', () => {
+    const text = 'मुझे पानी चाहिए। (mujhe paani chaahiye.)';
+    expect(legacyTranscriptDisplay(text, { scriptPreference: 'devanagari' }).displayText).toBe('मुझे पानी चाहिए।');
+    const both = legacyTranscriptDisplay(text, { scriptPreference: 'both' }).displayText;
+    expect(both.match(/paani/gu)).toHaveLength(1);
+    expect(legacyTranscriptDisplay(text, { scriptPreference: 'latin' }).displayText).not.toMatch(DEVANAGARI);
+  });
+
   it('matches the previous whole-string romanization for a Hindi-mode reply in "latin"', () => {
     const display = legacyTranscriptDisplay(longDevanagariReply, { normalizeKnown: true, scriptPreference: 'latin' });
     expect(display.displayText).toBe(romanizeDevanagari(longDevanagariReply));

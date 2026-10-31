@@ -64,8 +64,12 @@ const HINDI_RUN = /[ऀ-ॣ०-९ॱ-ॿ]+(?:[ \t,;:'"’\-–…]+[ऀ-ॣ०-
 const HINDI_WORD = /[ऀ-ॣ०-९ॱ-ॿ]+/gu;
 const LATIN_WORD = /[A-Za-z]+/gu;
 const DEVANAGARI_ANY = /[ऀ-ॿ]/u;
-/** Our romanizer's first letters versus common alternative spellings. */
-const INITIAL_EQUIVALENTS: Record<string, string> = { w: 'v', z: 'j', f: 'p', q: 'k', c: 'ch' };
+/** Common alternative spellings folded onto our romanizer's letters before comparing words. */
+const LETTER_EQUIVALENTS: Record<string, string> = { w: 'v', z: 'j', f: 'p', q: 'k', c: 'k' };
+/** Most a transliteration may differ from our romanization, as a share of the longer word. */
+const MAX_SPELLING_DISTANCE = 0.4;
+/** Sentence punctuation the model may put between a Hindi run and its transliteration. */
+const PUNCTUATION_BEFORE_TRANSLITERATION = /^[।॥.!?,;:]*/u;
 
 export type TranscriptSegment =
   | { kind: 'text'; text: string; sourceStart: number; sourceEnd: number }
@@ -99,22 +103,40 @@ export type LegacyTranscriptDisplay = {
   hasDevanagari: boolean;
 };
 
-function sameInitial(expected: string, candidate: string) {
-  const a = expected[0]?.toLowerCase() ?? '';
-  const b = candidate[0]?.toLowerCase() ?? '';
+function foldSpelling(word: string) {
+  return [...word.toLowerCase()].map((letter) => LETTER_EQUIVALENTS[letter] ?? letter).join('');
+}
+
+function editDistance(a: string, b: string) {
+  let previous = Array.from({ length: b.length + 1 }, (_value, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    previous = current;
+  }
+  return previous[b.length]!;
+}
+
+/** True when `candidate` reads as another spelling of our romanization, not an English word. */
+function similarSpelling(expected: string, candidate: string) {
+  const a = foldSpelling(expected);
+  const b = foldSpelling(candidate);
   if (!a || !b) return false;
-  if (a === b) return true;
-  return INITIAL_EQUIVALENTS[b] === a || INITIAL_EQUIVALENTS[a] === b || (a === 'c' && b === 'k') || (a === 'k' && b === 'c');
+  return editDistance(a, b) / Math.max(a.length, b.length) <= MAX_SPELLING_DISTANCE;
 }
 
 /**
- * A parenthetical directly after a Hindi run is treated as the model's own
- * transliteration only when it reads like one: Latin letters only, the same
- * number of words, and mostly matching initial sounds. An English gloss such
- * as "(less)" stays prose.
+ * A parenthetical directly after a Hindi run (optionally after sentence
+ * punctuation such as a danda) is treated as the model's own transliteration
+ * only when it reads like one: Latin letters only, the same number of words,
+ * and spelled close to our romanization. An English gloss such as "(less)" or
+ * "(my name)" stays prose.
  */
 function modelTransliteration(run: string, derived: string, following: string) {
-  const match = /^(\s*)\(([^()]*)\)/u.exec(following);
+  const punctuation = PUNCTUATION_BEFORE_TRANSLITERATION.exec(following)?.[0] ?? '';
+  const match = /^(\s*)\(([^()]*)\)/u.exec(following.slice(punctuation.length));
   if (!match) return null;
   const inner = match[2] ?? '';
   if (!/[A-Za-z]/u.test(inner) || DEVANAGARI_ANY.test(inner)) return null;
@@ -123,10 +145,14 @@ function modelTransliteration(run: string, derived: string, following: string) {
   const derivedWords = derived.match(LATIN_WORD) ?? [];
   if (!hindiWords.length || latinWords.length !== hindiWords.length) return null;
   if (derivedWords.length === latinWords.length) {
-    const matches = latinWords.filter((word, index) => sameInitial(derivedWords[index]!, word)).length;
-    if (matches / latinWords.length < 0.6) return null;
+    const matches = latinWords.filter((word, index) => similarSpelling(derivedWords[index]!, word)).length;
+    // Short glosses must match word for word; one stray word in a long phrase is tolerated.
+    const needed = latinWords.length <= 3 ? latinWords.length : Math.ceil(latinWords.length * 0.8);
+    if (matches < needed) return null;
+  } else if (!similarSpelling(derivedWords.join(''), latinWords.join(''))) {
+    return null;
   }
-  return { consumed: match[0].length, romanized: inner.trim() };
+  return { consumed: punctuation.length + match[0].length, punctuation, romanized: inner.trim() };
 }
 
 function atSentenceStart(preceding: string) {
@@ -175,6 +201,8 @@ export function segmentTranscript(text: string, normalizeKnown = true): { segmen
       sourceEnd: selectionSource.length + run.length,
     });
     selectionSource += run;
+    // Punctuation between the run and its transliteration stays in the prose.
+    if (model?.punctuation) pushText(model.punctuation);
     cursor = index + run.length + (model?.consumed ?? 0);
   }
   pushText(text.slice(cursor));
