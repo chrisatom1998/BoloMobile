@@ -249,9 +249,21 @@ jest.mock('@/hooks/use-motion-preference', () => ({
   }),
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
-}));
+jest.mock('react-native-safe-area-context', () => {
+  const { View } = jest.requireActual('react-native');
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ bottom: mockSafeAreaBottom, left: 0, right: 0, top: 0 }),
+  };
+});
+
+let mockSafeAreaBottom = 0;
+
+/** A keyboard event whose frame ends `height` points above the bottom edge, or floats `gap` points above it. */
+function keyboardEvent(height: number, gap = 0) {
+  const screenHeight = Dimensions.get('window').height;
+  return { endCoordinates: { height, screenX: 0, screenY: screenHeight - height - gap, width: Dimensions.get('window').width } };
+}
 
 let mockAiConsent = true;
 
@@ -425,6 +437,54 @@ describe('live consent layout', () => {
   }, 20_000);
 });
 
+describe('live composer bottom inset', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    mockSafeAreaBottom = 0;
+  });
+
+  it('measures the tab bar inset natively on iOS and drops it while the keyboard is open', async () => {
+    mockSafeAreaBottom = 83;
+    const listeners = new Map<string, (event?: unknown) => void>();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: (event?: unknown) => void) => {
+      listeners.set(event, listener);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+    const view = await render(<LiveScreen />);
+    const composerArea = () => view.getByTestId('live-composer-area');
+
+    expect(composerArea().props.edges).toEqual({ bottom: 'additive' });
+    expect(StyleSheet.flatten(composerArea().props.style).paddingBottom).toBe(spacing.sm);
+
+    await act(async () => { expectDefined(listeners.get('keyboardWillShow'))(keyboardEvent(336)); });
+    expect(composerArea().props.edges).toEqual({});
+
+    await act(async () => { expectDefined(listeners.get('keyboardWillHide'))(); });
+    expect(composerArea().props.edges).toEqual({ bottom: 'additive' });
+    await view.unmount();
+  }, 20_000);
+
+  it.each([
+    ['a hardware-keyboard shortcut bar', keyboardEvent(55)],
+    ['a floating keyboard', keyboardEvent(260, 120)],
+  ])('keeps the tab bar inset for %s', async (_label, keyboard) => {
+    mockSafeAreaBottom = 83;
+    const listeners = new Map<string, (event?: unknown) => void>();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: (event?: unknown) => void) => {
+      listeners.set(event, listener);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+    const view = await render(<LiveScreen />);
+
+    await act(async () => { expectDefined(listeners.get('keyboardWillShow'))(keyboard); });
+    expect(view.getByTestId('live-composer-area').props.edges).toEqual({ bottom: 'additive' });
+    await view.unmount();
+  }, 20_000);
+});
+
 describe('live theme styles', () => {
   it('paints the chat list, bubbles, and composer from the active palette', () => {
     const styles = createLiveStyles(lightColors);
@@ -455,8 +515,8 @@ describe('immersive live conversation design', () => {
   });
 
   it('ignores a keyboard opened on another tab', async () => {
-    const listeners = new Map<string, () => void>();
-    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: () => void) => {
+    const listeners = new Map<string, (event?: unknown) => void>();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: (event?: unknown) => void) => {
       listeners.set(event, listener);
       return { remove: jest.fn() };
     }) as unknown as typeof Keyboard.addListener);
@@ -466,7 +526,7 @@ describe('immersive live conversation design', () => {
       await act(async () => { mockBlurScreen(); });
       scrollToEnd.mockClear();
       await act(async () => {
-        expectDefined(listeners.get('keyboardWillShow'))();
+        expectDefined(listeners.get('keyboardWillShow'))(keyboardEvent(336));
         await new Promise((resolve) => setTimeout(resolve, 20));
       });
       expect(scrollToEnd).not.toHaveBeenCalled();

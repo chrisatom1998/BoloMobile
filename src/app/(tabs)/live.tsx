@@ -4,8 +4,8 @@ import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { AlertCircle, Lock, MessageCircle, Sprout, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, AppState, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/components/asha-minimize-control';
@@ -118,7 +118,9 @@ export default function LiveScreen() {
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  // How far a docked keyboard reaches up from the bottom of the screen; 0 when hidden or floating.
+  const [keyboardOverlap, setKeyboardOverlap] = useState(0);
+  const keyboardCoversTabBar = screenFocused && keyboardOverlap > 0 && keyboardOverlap >= insets.bottom;
   const ownedSnapshotIds = useRef<string[]>([]);
   const snapshotIdsRef = useRef(ownedSnapshotIds);
   const sharedSnapshotIds = floatingAsha.snapshotIds;
@@ -258,13 +260,16 @@ export default function LiveScreen() {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
     // Tabs stay mounted, so a keyboard opened on another tab must not move this thread.
-    const showSubscription = Keyboard.addListener(showEvent, () => {
+    const showSubscription = Keyboard.addListener(showEvent, (event) => {
       if (!mountedRef.current) return;
-      setKeyboardVisible(true);
+      const { height, screenY } = event.endCoordinates;
+      const screenHeight = Dimensions.get('window').height;
+      // A floating keyboard does not reach the bottom edge, so it leaves the tab bar visible.
+      setKeyboardOverlap(screenY + height >= screenHeight - 1 ? Math.max(0, screenHeight - screenY) : 0);
       if (screenFocused) scrollTailIntoView(!reducedMotion);
     });
     const hideSubscription = Keyboard.addListener(hideEvent, () => {
-      if (mountedRef.current) setKeyboardVisible(false);
+      if (mountedRef.current) setKeyboardOverlap(0);
     });
     return () => {
       showSubscription.remove();
@@ -849,7 +854,16 @@ export default function LiveScreen() {
         ) : null}
       />
 
-      {aiConsent ? <View style={[styles.composer, { paddingBottom: Platform.OS === 'ios' && screenFocused && keyboardVisible ? spacing.sm : Math.max(spacing.md, insets.bottom + 52) }]}>
+      {/* On iOS the screen runs under the native tab bar. Native tabs wrap each tab in
+          its own SafeAreaProvider, so this SafeAreaView's bottom inset includes the tab
+          bar. Drop it only while a docked keyboard covers the tab bar, because
+          KeyboardAvoidingView then lifts the composer; a hardware-keyboard shortcut bar
+          or floating keyboard is shorter, so the inset stays. */}
+      {aiConsent ? <SafeAreaView
+        edges={Platform.OS === 'ios' && !keyboardCoversTabBar ? { bottom: 'additive' } : {}}
+        style={[styles.composer, Platform.OS === 'ios' ? { paddingBottom: spacing.sm } : { paddingBottom: Math.max(spacing.md, insets.bottom + 52) }]}
+        testID="live-composer-area"
+      >
         {busy && pendingUserMessage ? (
           <View style={styles.thinkingRow}>
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -894,7 +908,7 @@ export default function LiveScreen() {
           ))}
         </ScrollView>
         <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
-      </View> : null}
+      </SafeAreaView> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}
       {aiConsent ? <WordDefinitionSheet key={chatHistory[0]?.id ?? 'empty'} clientId={clientId} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordDefinitionPhrase ?? ''} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && !!wordDefinitionPhrase} /> : null}
       {floatingAsha.minimized ? <AshaMinimizedCover onExpand={floatingAsha.expand} statusLabel={aiConsent ? statusKicker : 'LIVE VOICE'} /> : null}
