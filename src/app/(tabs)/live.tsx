@@ -1,7 +1,7 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
-import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
 import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -29,6 +29,8 @@ import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent
 import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hapticTap } from '@/lib/haptics';
+import { signalNetworkAvailable, signalNetworkLost } from '@/lib/network-signal';
+import { screenCopy, voiceStatusTitle } from '@/lib/screen-copy';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
@@ -49,7 +51,7 @@ const welcome: ChatMessage = {
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const tailFollowThreshold = 48;
 /** Shown instead of the generic network error when a live call cannot even start. */
-export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Lessons and saved phrases work offline.';
+export const LIVE_OFFLINE_MESSAGE = screenCopy.offlineBody;
 /** The learner's explicit Clear removes saved transcripts but keeps queued reports and their retries. */
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
 type InterruptedReason = Extract<AshaSessionEndReason, 'connection_lost' | 'backgrounded'>;
@@ -567,6 +569,7 @@ export default function LiveScreen() {
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
+      signalNetworkAvailable();
     }
   }, []);
   const startNewConversation = useCallback(async (signal: AbortSignal) => {
@@ -591,6 +594,7 @@ export default function LiveScreen() {
     // Only a transport failure or timeout before the call started proves there is no
     // connection. Configuration, rejected payloads, microphone, and peer errors keep their copy.
     const offline = connecting && (details?.kind === 'network' || details?.kind === 'timeout');
+    if (offline) signalNetworkLost();
     setError(offline ? LIVE_OFFLINE_MESSAGE : message);
   }, []);
   // Interrupted sessions keep their transcript on screen with a note that it is saved.
@@ -1013,7 +1017,10 @@ export default function LiveScreen() {
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <AlertCircle color={colors.dangerSoft} size={16} />
             </View>
-            <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
+            <View style={styles.errorCopy}>
+              <Text accessibilityRole="header" style={styles.errorTitle}>{voiceStatusTitle(error)}</Text>
+              <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
+            </View>
             {/* The banner takes room from Asha's portrait above; let the learner clear it. */}
             <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={10} onPress={() => setError('')} testID="live-error-dismiss">
               <X color={colors.heroSubtle} size={16} />
@@ -1044,6 +1051,7 @@ export default function LiveScreen() {
         <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
           {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
             <PressableFeedback
+              accessibilityLabel={example}
               accessibilityRole="button"
               accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
               isDisabled={busy || clearingChat || realtimeLocked}
@@ -1212,7 +1220,9 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.danger, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   noticeBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.nightLine, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   noticeText: { flex: 1, color: c.white, fontSize: 13, lineHeight: 18 },
-  error: { flex: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
+  errorCopy: { flex: 1, gap: spacing.xs },
+  errorTitle: { color: c.white, fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  error: { color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
   settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
   settingsLinkText: { color: c.white, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 } as const);

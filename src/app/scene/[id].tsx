@@ -26,7 +26,7 @@ import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { SceneAttempt } from '@/state/app-state-types';
 import { observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
-import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { hapticLessonComplete, hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiWordTokens } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
@@ -34,7 +34,7 @@ import { shuffleChoices } from '@/lib/shuffle-choices';
 import { trimTerminalPunctuation } from '@/lib/text';
 import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, safeArea, spacing, useSharedStyles, useTheme } from '@/theme';
 
 export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
@@ -139,6 +139,10 @@ function SceneScreen() {
   }, [sceneExists]);
 
   useEffect(() => {
+    if (done) hapticLessonComplete();
+  }, [done]);
+
+  useEffect(() => {
     if (!sceneId || !sourceScene) return;
     const save = () => {
       if (completedRef.current) return;
@@ -194,7 +198,7 @@ function SceneScreen() {
       <View style={styles.center}>
         <Text accessibilityRole="header" style={styles.finishTitle}>Lesson not found</Text>
         <Text style={styles.notFoundBody}>This lesson may have moved or been removed. Your saved progress is unchanged.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
+        <Pressable accessibilityLabel="Back to Today" accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </View>
     );
   }
@@ -443,10 +447,10 @@ function SceneScreen() {
             reminder={reminder}
           />
         ) : null}
-        <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
-        <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
+        <Pressable accessibilityLabel={completionAction} accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
+        <Pressable accessibilityLabel="Practice again" accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
-          <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={styles.tertiaryButton} testID="scene-completion-tertiary">
+          <Pressable accessibilityLabel="Back to Today" accessibilityRole="button" onPress={() => router.replace('/')} style={styles.tertiaryButton} testID="scene-completion-tertiary">
             <Text style={styles.tertiaryText}>Back to Today</Text>
           </Pressable>
         ) : null}
@@ -674,7 +678,7 @@ function SceneScreen() {
       ) : null}
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
-      <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
+      <View style={[styles.sheet, { paddingBottom: Math.max(safeArea.homeIndicator, insets.bottom + spacing.md) }]}>
         {currentUsesName && resolution === null && practiceName.trim() ? (
           <View style={styles.nameRow}>
             <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
@@ -859,7 +863,7 @@ const useStyles = makeStyles((c) => ({
   learnerTextHindi: hindiType(19),
   disabled: { opacity: 0.4 },
   audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: spacing.lg, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: spacing.lg, paddingBottom: safeArea.homeIndicator, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
   answerTitle: { minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },

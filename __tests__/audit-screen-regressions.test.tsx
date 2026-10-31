@@ -331,7 +331,7 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('Your first lesson')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
     expect(view.getByText('Plan 01 · Lesson 1 of 10 · 10 turns')).toBeTruthy();
-    expect(view.getByText('Your week, streak and saved phrases will show up here after your first lesson.')).toBeTruthy();
+    expect(view.getByText('Finish one short lesson. Your week, streak, and saved phrases will show up here.')).toBeTruthy();
     // A brand-new learner sees one clear next step, not a wall of zeros.
     expect(view.queryByText('No practice streak yet')).toBeNull();
     expect(view.queryByText('Last 7 days')).toBeNull();

@@ -1,12 +1,14 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
-import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
 import { ArrowRight, AudioLines, BookOpenText, Check, Flame, ListOrdered, Settings } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
-import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View } from 'react-native';
+import { FlatList, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 import { JournalDisplay } from '@/components/journal-chrome';
+import { OfflineNote } from '@/components/screen-state';
 import { MotionReveal } from '@/components/motion';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
@@ -14,12 +16,14 @@ import { lessonPlans } from '@/data/lesson-plans';
 import { selectNextLesson } from '@/lib/lesson-path';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
+import { useStreakCelebration } from '@/hooks/use-streak-celebration';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
+import { headerlessContentInset } from '@/lib/screen-insets';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
@@ -48,14 +52,14 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
-  const contentTopPadding = Platform.OS === 'android'
-    ? Math.max(18, (StatusBar.currentHeight ?? 0) + spacing.md)
-    : 18;
+  const insets = useSafeAreaInsets();
+  const contentInset = headerlessContentInset(insets, spacing.xxl);
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
   const { goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, practiceHistory, reviewStreakDays, sceneProgress: savedSceneProgress, streak } = state;
   const { mode: motionMode } = useMotionPreference(motionPreference);
+  useStreakCelebration(streak, state.hydrated === true);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const openLesson = useCallback((lessonId: string) => router.push({ pathname: '/scene/[id]', params: { id: lessonId } }), [router]);
   const openPlan = useCallback((planId: string) => router.push({ pathname: '/lesson-plans', params: { planId } }), [router]);
@@ -185,6 +189,7 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </View>
+      <OfflineNote />
 
       <MotionReveal mode={motionMode} motionKey={currentStep ?? 'done'} style={[styles.hero, dayComplete && styles.heroDone]} testID="today-primary-motion">
         {watermark ? <Text accessibilityElementsHidden accessible={false} aria-hidden ellipsizeMode="clip" importantForAccessibility="no-hide-descendants" numberOfLines={1} style={styles.heroWatermark}>{watermark}</Text> : null}
@@ -308,7 +313,7 @@ export default function HomeScreen() {
     <>
       <FlatList
         contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
+        contentContainerStyle={[styles.list, contentInset]}
         data={currentPlan ? [currentPlan] : []}
         keyExtractor={(plan) => plan.id}
         renderItem={({ item: plan }) => {

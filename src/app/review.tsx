@@ -10,6 +10,7 @@ import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { reviewCardMode } from '@/lib/learning';
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
+import { screenCopy } from '@/lib/screen-copy';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
@@ -120,9 +121,9 @@ export default function ReviewScreen() {
   if (session.length === 0) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
-        <Text accessibilityRole="header" style={styles.title}>Save a phrase to start reviewing</Text>
-        <Text style={styles.body}>Tap the bookmark on an answer during a lesson, and it becomes a quick recall card here.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
+        <Text accessibilityRole="header" style={styles.title}>{screenCopy.reviewEmptyTitle}</Text>
+        <Text style={styles.body}>{screenCopy.reviewEmptyBody}</Text>
+        <Pressable accessibilityLabel="Back to Today" accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </ScrollView>
     );
   }
@@ -136,7 +137,7 @@ export default function ReviewScreen() {
         <Text style={sharedStyles.eyebrow}>Review complete</Text>
         <Text accessibilityRole="header" style={styles.title}>{correct} of {session.length} remembered</Text>
         <Text style={styles.body}>Bolo scheduled each phrase based on how it felt today.</Text>
-        <Pressable accessibilityRole="button" onPress={finishReview} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Done</Text></Pressable>
+        <Pressable accessibilityLabel="Done" accessibilityRole="button" onPress={finishReview} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Done</Text></Pressable>
       </ScrollView>
     );
   }
@@ -168,7 +169,7 @@ export default function ReviewScreen() {
             </View>
           </View>
         ) : (
-          <Pressable accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
+          <Pressable accessibilityLabel="Reveal answer" accessibilityRole="button" onPress={() => setRevealed(true)} style={styles.revealButton}><Text style={styles.revealText}>Reveal answer</Text></Pressable>
         )}
         {hintUsed && !listenFirst ? <Text style={styles.hintNote} testID="review-hint-note">Hint used, so this card counts as Again.</Text> : null}
         {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
@@ -176,8 +177,8 @@ export default function ReviewScreen() {
       {/* Grading sits right under the answer so it is never pushed below optional pronunciation practice. */}
       {revealed ? (
         <View style={styles.grades}>
-          <Pressable accessibilityRole="button" onPress={() => grade(false)} style={[styles.gradeButton, styles.againButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => grade(true)} style={[styles.gradeButton, styles.gotItButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
+          <Pressable accessibilityHint="Show this phrase again sooner" accessibilityLabel="Again" accessibilityRole="button" onPress={() => grade(false)} style={[styles.gradeButton, styles.againButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
+          <Pressable accessibilityHint="I remembered this phrase" accessibilityLabel="Got it" accessibilityRole="button" onPress={() => grade(true)} style={[styles.gradeButton, styles.gotItButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
         </View>
       ) : null}
       {revealed ? (

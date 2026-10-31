@@ -1,6 +1,7 @@
 import { router, type ErrorBoundaryProps } from 'expo-router';
-import { Component, type ErrorInfo, type PropsWithChildren } from 'react';
+import { Component, useContext, type ErrorInfo, type PropsWithChildren } from 'react';
 import { Text, View } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { observe } from '@/lib/observability';
@@ -41,20 +42,23 @@ export function RouteErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   );
 }
 
+const zeroInsets = { bottom: 0, left: 0, right: 0, top: 0 };
+
 function ErrorFallback({ onRetry, onHome }: { onRetry: () => void; onHome?: () => void }) {
   const styles = useStyles();
+  const insets = useContext(SafeAreaInsetsContext) ?? zeroInsets;
   return (
-    <View accessibilityRole="alert" style={styles.screen}>
+    <View accessibilityRole="alert" style={[styles.screen, { paddingTop: spacing.xl + insets.top, paddingBottom: spacing.xl + insets.bottom, paddingLeft: spacing.xl + insets.left, paddingRight: spacing.xl + insets.right }]}>
       <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.mark}>
         <Text maxFontSizeMultiplier={1.2} style={styles.markText}>ब</Text>
       </View>
       <Text accessibilityRole="header" style={styles.title}>Bolo needs a fresh start</Text>
       <Text style={styles.body}>Your saved progress is still on this device. Try loading the screen again.</Text>
-      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.button}>
+      <Pressable accessibilityLabel="Try again" accessibilityRole="button" onPress={onRetry} style={styles.button}>
         <Text style={styles.buttonText}>Try again</Text>
       </Pressable>
       {onHome ? (
-        <Pressable accessibilityRole="button" onPress={onHome} style={styles.secondaryButton}>
+        <Pressable accessibilityLabel="Back to Today" accessibilityRole="button" onPress={onHome} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>Back to Today</Text>
         </Pressable>
       ) : null}

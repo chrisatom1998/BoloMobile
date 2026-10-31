@@ -116,7 +116,7 @@ const SearchField = Object.assign(SearchFieldRoot, {
   SearchIcon: View,
 });
 
-function PressableFeedback({ children, isDisabled = false, ...props }) {
+function PressableFeedback({ animation: _animation, children, isDisabled = false, ...props }) {
   return React.createElement(Pressable, { ...props, disabled: isDisabled }, children);
 }
 

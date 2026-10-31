@@ -11,6 +11,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
+import { showPrivateDiagnostics } from '@/lib/release-ui';
 import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
 import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
@@ -320,7 +321,7 @@ export default function SettingsScreen() {
           testID="settings-daily-goal"
           value={String(state.goal ?? 10) as '5' | '10' | '15'}
         />
-        <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'recalibrate' } })} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
+        <Pressable accessibilityLabel="Recalibrate my plan" accessibilityRole="button" onPress={() => router.push({ pathname: '/onboarding', params: { mode: 'recalibrate' } })} style={styles.secondaryButton}><Text style={styles.secondaryText}>Recalibrate my plan</Text></Pressable>
       </View>
 
       <View style={styles.card}>
@@ -379,41 +380,43 @@ export default function SettingsScreen() {
             <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
           </View>
           <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, or coaching.</Text>
-          <Pressable accessibilityRole="button" accessibilityState={{ disabled: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
+          <Pressable accessibilityLabel={withdrawing ? 'Saving…' : 'Withdraw consent'} accessibilityRole="button" accessibilityState={{ disabled: withdrawing, busy: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
         </View>
       ) : (
         <AiConsentGate compact={{ body: 'Asha coaching is off. Lessons, reviews and saved-phrase audio all work offline without it.', label: 'Review and turn on Asha coaching' }}><View /></AiConsentGate>
       )}
 
-      <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]} testID="settings-privacy-link">
+      <Pressable accessibilityLabel="Privacy & data use" accessibilityRole="button" onPress={() => router.push('/privacy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]} testID="settings-privacy-link">
         <View style={styles.icon}><LockKeyhole color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="link" onPress={() => openPage('privacy', 'Privacy Policy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
+      <Pressable accessibilityLabel="Public Privacy Policy" accessibilityRole="link" onPress={() => openPage('privacy', 'Privacy Policy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><ExternalLink color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Public Privacy Policy</Text><Text style={styles.body}>Open the current policy on the web</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="link" onPress={() => openPage('support', 'Support')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
+      <Pressable accessibilityLabel="Support" accessibilityRole="link" onPress={() => openPage('support', 'Support')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><LifeBuoy color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Support</Text><Text style={styles.body}>Get help or make a privacy request</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="link" onPress={() => openPage('terms', 'Terms of Use')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
+      <Pressable accessibilityLabel="Terms of Use" accessibilityRole="link" onPress={() => openPage('terms', 'Terms of Use')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
         <View style={styles.icon}><FileText color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Terms of Use</Text><Text style={styles.body}>Read Bolo&apos;s public terms</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
-      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
-        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Diagnostics for support</Text><Text style={styles.body}>Simple counts that help us fix problems. Stays on this phone.</Text></View>
-        <ChevronRight color={colors.muted} size={20} />
-      </Pressable>
+      {showPrivateDiagnostics() ? (
+        <Pressable accessibilityLabel="Diagnostics for support" accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
+          <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Diagnostics for support</Text><Text style={styles.body}>Simple counts that help us fix problems. Stays on this phone.</Text></View>
+          <ChevronRight color={colors.muted} size={20} />
+        </Pressable>
+      ) : null}
 
       <View style={styles.card} testID="settings-progress-backup">
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
@@ -455,7 +458,7 @@ export default function SettingsScreen() {
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
         </View>
         <Text style={styles.detail}>Deletes any reports you sent from this phone, then erases your phrases, progress and settings here. If Bolo can&apos;t reach its server, nothing is erased and you can try again.</Text>
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: deleting }} disabled={deleting} onPress={confirmDeletion} style={[styles.destructiveButton, deleting && styles.disabled]}>
+        <Pressable accessibilityLabel={deleting ? 'Deleting…' : 'Delete my Bolo data'} accessibilityRole="button" accessibilityState={{ disabled: deleting, busy: deleting }} disabled={deleting} onPress={confirmDeletion} style={[styles.destructiveButton, deleting && styles.disabled]}>
           <Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{deleting ? 'Deleting…' : 'Delete my Bolo data'}</Text>
         </Pressable>
       </View>

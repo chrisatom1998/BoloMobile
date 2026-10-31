@@ -1,8 +1,8 @@
 import { useRouter, type Href } from 'expo-router';
 import { Share2 } from 'lucide-react-native';
-import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
 import { useMemo } from 'react';
-import { Platform, Share, ScrollView, Text, View } from 'react-native';
+import { Share, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { JournalDisplay } from '@/components/journal-chrome';
@@ -12,8 +12,11 @@ import { selectNextLesson } from '@/lib/lesson-path';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
+import { screenCopy } from '@/lib/screen-copy';
+import { headerlessContentInset } from '@/lib/screen-insets';
 import { useAppStateValue } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, safeArea, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { OfflineNote } from '@/components/screen-state';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
@@ -97,7 +100,7 @@ export default function ProgressScreen() {
 
   return (
     <>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
+      <ScrollView contentInsetAdjustmentBehavior="never" contentContainerStyle={[styles.content, headerlessContentInset(insets, safeArea.progressScrollTail)]} style={sharedStyles.screen}>
         <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
           <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
             <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
@@ -107,6 +110,7 @@ export default function ProgressScreen() {
             <Share2 color={colors.ink} size={18} />
           </PressableFeedback>
         </View>
+        <OfflineNote />
 
         {hasLearningActivity ? <>
         <View style={styles.weekCard}>
@@ -176,7 +180,7 @@ export default function ProgressScreen() {
           <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
           <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
           <View style={styles.heroFootnotes}>
-            {hasLearningActivity ? <Text style={styles.heroFootnoteText}>{completedScenes} lesson{completedScenes === 1 ? '' : 's'} finished · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text> : <Text style={styles.heroFootnoteText}>Your week, streak and saved phrases will show up here after your first lesson.</Text>}
+            {hasLearningActivity ? <Text style={styles.heroFootnoteText}>{completedScenes} lesson{completedScenes === 1 ? '' : 's'} finished · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text> : <Text style={styles.heroFootnoteText}>{screenCopy.progressEmptyBody}</Text>}
           </View>
           <PressableFeedback
             accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
@@ -220,7 +224,7 @@ export default function ProgressScreen() {
 }
 
 export const createProgressStyles = (c: ThemeColors) => ({
-  content: { alignItems: 'center', padding: 20, paddingTop: 18, paddingBottom: 120, gap: spacing.lg },
+  content: { alignItems: 'center', padding: 20, paddingTop: spacing.sm, paddingBottom: safeArea.progressScrollTail, gap: spacing.lg },
   pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   pageHeadingCopy: { minWidth: 0, flex: 1, gap: 2 },

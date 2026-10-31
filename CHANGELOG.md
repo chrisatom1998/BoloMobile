@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- iOS screens without a navigation header now pad for the notch, Dynamic Island, and home indicator, and the app stays locked upright. Review, privacy, last session, and diagnostics open as form sheets with a grabber and swipe-to-dismiss. Card screens keep the edge-swipe back gesture.
+- Correct and Again, a finished lesson, a new streak, and the start and end of an Asha call use a light haptic. Reduce Motion, including the in-app Reduced setting, turns those taps off.
+- Today, Phrases, Progress, lesson plans, and Asha show short empty, offline, microphone, and connection lines. Private diagnostics stay out of release builds.
+
 ### Added
 
 - Asha live voice sessions are now kept in an on-device session log, one AsyncStorage value per session (`bolo-asha-session-v1:<id>`) plus a small index (`bolo-asha-session-index-v1`). A session is saved from its first transcript line: start and end time, how it ended, reply language, mode, lesson, the final transcript lines (merged by line id, up to 200 per session), and phrases or lessons saved through Asha's tools. The log is written while the call runs, so a dropped connection, backgrounding, or a killed app leaves the lines saved so far marked "Interrupted". Bolo keeps the latest 3 sessions for at most 30 days (the newest is shown; up to two older ones stay hidden for crash recovery), stores no audio, and never uploads them. Empty attempts that never produced a line are not kept and do not replace an older session.

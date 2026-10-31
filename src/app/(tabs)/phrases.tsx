@@ -1,9 +1,9 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
-import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
 import { SearchField } from 'heroui-native/search-field';
-import { BookOpen, Trash2, Volume2 } from 'lucide-react-native';
+import { Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Platform, Text, View } from 'react-native';
+import { FlatList, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
@@ -16,11 +16,14 @@ import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
+import { screenCopy } from '@/lib/screen-copy';
+import { headerlessContentInset } from '@/lib/screen-insets';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { OfflineNote, ScreenState } from '@/components/screen-state';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Filter = 'All' | SceneCategory;
@@ -125,6 +128,7 @@ export default function PhrasesScreen() {
         </View>
         <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep.</Text>
       </View>
+      <OfflineNote />
       {phrases.length > 0 ? (
         <>
           <PressableFeedback accessibilityLabel={due.length ? `Review ${due.length} phrase${due.length === 1 ? '' : 's'} due today` : 'All phrases reviewed for today. Practice them again'} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
@@ -154,7 +158,7 @@ export default function PhrasesScreen() {
             />
           ) : null}
           {!aiConsent && phrases.some((phrase) => !hasOfflineSpeech(phrase.hi)) ? (
-            <Pressable accessibilityHint="Opens Settings" accessibilityRole="link" onPress={() => router.push('/settings')} style={styles.consentNote} testID="phrases-consent-note">
+            <Pressable accessibilityHint="Opens Settings" accessibilityLabel="Turn on AI coaching in Settings" accessibilityRole="link" onPress={() => router.push('/settings')} style={styles.consentNote} testID="phrases-consent-note">
               <Text style={styles.consentNoteText}>Some phrases need Asha&apos;s voice to play. <Text style={styles.consentNoteLink}>Turn on AI coaching in Settings</Text></Text>
             </Pressable>
           ) : null}
@@ -180,11 +184,8 @@ export default function PhrasesScreen() {
   return (
     <>
       <FlatList
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={[
-          styles.content,
-          Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
-        ]}
+        contentContainerStyle={[styles.content, headerlessContentInset(insets, spacing.xxl)]}
+        contentInsetAdjustmentBehavior="never"
         data={visible}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
@@ -192,31 +193,21 @@ export default function PhrasesScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={Header}
         ListEmptyComponent={phrases.length === 0 ? (
-          <View style={styles.empty}>
-            <BookOpen color={colors.brand} size={32} strokeWidth={1.6} />
-            <Text style={styles.emptyBody}>Practice a lesson, then save any useful phrase you want to keep.</Text>
-            <PressableFeedback
-              accessibilityLabel={nextLesson.action}
-              accessibilityRole="button"
-              onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
-              style={styles.emptyAction}
-              testID="phrases-empty-lesson-action"
-            >
-              <Text style={styles.emptyActionText}>{nextLesson.action}</Text>
-            </PressableFeedback>
-          </View>
+          <ScreenState
+            actionLabel={nextLesson.action}
+            body={screenCopy.phrasesEmptyBody}
+            onAction={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
+            testID="phrases-empty-lesson-action"
+            title={screenCopy.phrasesEmptyTitle}
+          />
         ) : (
-          <View style={styles.noResultsBlock}>
-            <Text style={styles.noResults}>No phrases match this search and filter.</Text>
-            <PressableFeedback
-              accessibilityRole="button"
-              onPress={() => { setQuery(''); setFilter('All'); }}
-              style={styles.clearFilters}
-              testID="phrases-clear-filters"
-            >
-              <Text style={styles.clearFiltersText}>Show all phrases</Text>
-            </PressableFeedback>
-          </View>
+          <ScreenState
+            actionLabel="Show all phrases"
+            body={screenCopy.phrasesNoMatchBody}
+            onAction={() => { setQuery(''); setFilter('All'); }}
+            testID="phrases-clear-filters"
+            title={screenCopy.phrasesNoMatchTitle}
+          />
         )}
         renderItem={({ item }) => {
           const offline = hasOfflineSpeech(item.hi);
@@ -301,15 +292,7 @@ const useStyles = makeStyles((c) => ({
   speedSetting: { width: '100%', gap: spacing.sm },
   speedLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   disabled: { opacity: 0.4 },
-  empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
-  emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  emptyAction: { minWidth: 180, minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  emptyActionText: { color: c.white, fontSize: 14, fontWeight: '600', textAlign: 'center' },
   consentNote: { minHeight: 44, justifyContent: 'center' },
   consentNoteText: { color: c.muted, fontSize: 14, lineHeight: 20 },
   consentNoteLink: { color: c.forestText, fontWeight: '700', textDecorationLine: 'underline' },
-  noResultsBlock: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl },
-  noResults: { color: c.muted, fontSize: 15, textAlign: 'center' },
-  clearFilters: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
-  clearFiltersText: { color: c.forestText, fontSize: 15, fontWeight: '700' },
 }));

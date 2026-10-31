@@ -21,6 +21,8 @@ jest.mock('lucide-react-native', () => ({
 }));
 
 jest.mock('@/lib/haptics', () => ({
+  hapticCallEnded: jest.fn(),
+  hapticCallStarted: jest.fn(),
   hapticSelect: jest.fn(),
   hapticStartRecording: jest.fn(),
   hapticTap: jest.fn(),
