@@ -707,6 +707,18 @@ describe('SceneScreen primary journey', () => {
     expect(stopSpeakingMock).toHaveBeenCalled();
   });
 
+  it('leads guided starter lessons with English and keeps their Hindi narration behind Listen', async () => {
+    mockSceneId = 'plan-essentials-01';
+    const beat = getScene(mockSceneId)!.beats[0]!;
+    const view = await render(<SceneScreen />);
+    expect(view.getByText(beat.translation)).toBeTruthy();
+    expect(view.getByText(romanizeDevanagari(beat.npc))).toBeTruthy();
+    await act(async () => { await Promise.resolve(); });
+    expect(speakTextMock).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Hear Asha'));
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
+  });
+
   it('stacks the scene HUD, answer choices, and follow-up controls at accessibility text sizes', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');

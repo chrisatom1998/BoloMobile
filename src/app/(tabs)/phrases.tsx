@@ -83,6 +83,8 @@ export default function PhrasesScreen() {
   }, [phrases]);
   // A filter whose last phrase was removed falls back to All instead of showing an empty list.
   const activeFilter: Filter = filter !== 'All' && filterOptions.some((option) => option.value === filter) ? filter : 'All';
+  // Forget the stale choice too, so saving into that category later doesn't silently re-filter the list.
+  if (activeFilter !== filter) setFilter('All');
   const visible = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
     return phrases.filter((phrase) => {

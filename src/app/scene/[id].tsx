@@ -167,8 +167,13 @@ function SceneScreen() {
     key: `${scene?.id ?? 'missing-scene'}:${beatIndex}:${choiceNonce}`,
   }), [beatIndex, choiceNonce, currentBeat, effectiveMode, scene?.id]);
 
+  // Guided Starter and Beginner lessons set the scene in long Hindi narration, well above the level they teach.
+  const englishFirstSetup = Boolean(guidedLesson) && (scene?.level === 'Starter' || scene?.level === 'Beginner');
+
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
+  // English-first lessons skip it: their above-level Hindi narration plays only when the learner taps Listen.
   useEffect(() => {
+    if (englishFirstSetup) return;
     if (!autoPlayKey || npcLine === undefined || situationPromptSpeech === undefined) return;
     if (resolution !== null) return;
     if (pronunciationBusy) return;
@@ -178,7 +183,7 @@ function SceneScreen() {
     // consent or pronunciation activity still speaks when the effect re-runs.
     autoPlayedBeatRef.current = autoPlayKey;
     void speakText(situationPromptSpeech).catch(() => {});
-  }, [aiConsent, autoPlayKey, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
+  }, [aiConsent, autoPlayKey, englishFirstSetup, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
 
   if (!scene || !currentBeat || !currentTarget) {
     return (
@@ -192,8 +197,6 @@ function SceneScreen() {
 
   const activeScene = scene;
   const beat = currentBeat;
-  // Guided Starter and Beginner lessons set the scene in long Hindi narration, well above the level they teach.
-  const englishFirstSetup = Boolean(guidedLesson) && (activeScene.level === 'Starter' || activeScene.level === 'Beginner');
   const target = currentTarget;
   const openWordSheet = (word: string) => {
     wordSheetSessionRef.current += 1;
@@ -257,9 +260,9 @@ function SceneScreen() {
     return answerShown ? 'Here’s the natural answer.' : 'Not that one.';
   }
 
-  function announceResult(isCorrect: boolean) {
+  function announceResult(isCorrect: boolean, title = resultTitle(isCorrect)) {
     // Android reads the new result via focus/live updates; iOS needs an explicit announcement.
-    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(resultTitle(isCorrect));
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(title);
   }
 
   function choose(index: number) {
@@ -270,7 +273,8 @@ function SceneScreen() {
     pickedRef.current = index;
     setPicked(index);
     recordAnswer(choice.correct);
-    announceResult(choice.correct);
+    // A second miss reveals the answer, so announce the title the screen is about to show.
+    announceResult(choice.correct, !choice.correct && alreadyResolvedIncorrect ? 'Here’s the natural answer.' : undefined);
     if (choice.correct) {
       hapticSuccess();
       setResolution('correct');
@@ -624,7 +628,9 @@ function SceneScreen() {
             <>
               {/* Starter and Beginner lessons lead with the moment in English; the Hindi stays one tap of Listen away. */}
               <Text style={[styles.setupEnglish, largeTextLayout && styles.npcLarge]}>{beat.translation}</Text>
-              <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.setupHindi, scriptPreference !== 'latin' && styles.setupHindiScript]}>{lessonHindiLabel(beat.npc, scriptPreference === 'both' ? 'devanagari' : scriptPreference)}</Text>
+              <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.setupHindi, scriptPreference !== 'latin' && styles.setupHindiScript]}>{scriptPreference === 'both'
+                ? <>{beat.npc}{'\n'}<Text style={styles.setupHindi}>{romanizeDevanagari(beat.npc)}</Text></>
+                : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
             </>
           ) : (
             <>
