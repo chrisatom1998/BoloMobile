@@ -18,7 +18,7 @@ import { boloApiErrorKind, type BoloApiErrorKind } from '@/services/bolo-api';
 import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { borderWidth, makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 type Props = {
@@ -427,7 +427,7 @@ const useStyles = makeStyles((c) => ({
   portraitRingInnerCompact: { width: 110, height: 110 },
   portraitRingRecording: { borderWidth: 3, borderColor: c.gold },
   // While Asha speaks the outer ring thickens to gold, so the stage shows her turn even with the microphone open.
-  portraitRingSpeaking: { borderWidth: 3, borderColor: c.gold },
+  portraitRingSpeaking: { borderWidth: borderWidth.portraitLive, borderColor: c.gold },
   portraitButton: { width: 112, height: 112, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
   portraitButtonCompact: { width: 96, height: 96 },
   portraitBadge: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: radius.pill, borderWidth: 3, borderColor: c.night, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },

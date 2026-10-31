@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { AlertCircle, Ellipsis, History, Lock, MessageCircle, Mic, Sprout, Volume2, X } from 'lucide-react-native';
+import { AlertCircle, ChevronDown, Ellipsis, History, Lock, MessageCircle, Mic, Sprout, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +15,6 @@ import { LiveCallBar } from '@/components/live-call-bar';
 import { LiveComposer } from '@/components/live-composer';
 import { QueuedReportRow } from '@/components/queued-report-row';
 import { RealtimeVoiceButton, type RealtimeErrorDetails } from '@/components/realtime-voice-button';
-import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { TranscriptPhrasePicker } from '@/components/transcript-phrase-picker';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
@@ -42,7 +41,7 @@ import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/ser
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme } from '@/theme';
+import { borderWidth, displayFont, hindiType, hitSlop, iconSize, makeStyles, maxContentWidth, opacity, radius, size, spacing, typeScale, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -459,6 +458,16 @@ export default function LiveScreen() {
     updateLearnerProfile({ responseLanguage: nextLanguage });
   }, [clearAudioError, languageControlLocked, responseLanguage, updateLearnerProfile]);
 
+  // The reply-language pill opens the same kind of choice sheet the report and More options menus use.
+  const openReplyLanguageMenu = useCallback(() => {
+    if (languageControlLocked) return;
+    showAppAlert('Reply language', 'Asha answers in the language you choose, spoken and typed.', [
+      { text: 'English replies', onPress: () => changeResponseLanguage('en') },
+      { text: 'Hindi replies', onPress: () => changeResponseLanguage('hi') },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [changeResponseLanguage, languageControlLocked]);
+
   const resetChat = useCallback((): Promise<boolean> => {
     if (chatResetRef.current) return chatResetRef.current;
     // Invalidate a pending typed request before clearing, even if its network
@@ -765,13 +774,16 @@ export default function LiveScreen() {
     </Pressable>
   ) : null;
   // Past sessions and Clear chat share one overflow menu, through the same alert the report menu uses.
+  // Clear chat is listed only while it can run, so the menu never offers a dead action.
   const openMoreOptions = useCallback(() => {
     showAppAlert('Asha chat', undefined, [
       ...(ashaSessionLogEnabled ? [{ text: 'Past sessions', onPress: openLastSession }] : []),
-      ...(chatHistory.length > 0 ? [{ text: 'Clear chat', style: 'destructive' as const, onPress: confirmClearChat }] : []),
+      ...(!clearChatDisabled ? [{ text: 'Clear chat', style: 'destructive' as const, onPress: confirmClearChat }] : []),
       { text: 'Cancel', style: 'cancel' as const },
     ]);
-  }, [chatHistory.length, confirmClearChat, openLastSession]);
+  }, [clearChatDisabled, confirmClearChat, openLastSession]);
+  // The header's More options button shows whenever the menu has an entry, at rest and during a session.
+  const moreOptionsAvailable = aiConsent && (ashaSessionLogEnabled || !clearChatDisabled);
 
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
@@ -878,6 +890,18 @@ export default function LiveScreen() {
                           <Text style={styles.privateText}>Private</Text>
                         </View>
                       ) : null}
+                      {moreOptionsAvailable ? (
+                        <Pressable
+                          accessibilityHint="Shows past sessions and lets you clear the chat saved on this device."
+                          accessibilityLabel="More options"
+                          accessibilityRole="button"
+                          onPress={openMoreOptions}
+                          style={styles.moreButton}
+                          testID="live-more-options"
+                        >
+                          <Ellipsis color={colors.gold} size={iconSize.lg} />
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
                 );
@@ -909,20 +933,21 @@ export default function LiveScreen() {
                 </View>
               ) : null}
               {aiConsent ? <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
-                {!inSession ? <SegmentedControl
-                  accessibilityLabel="Asha voice language"
-                  disabled={languageControlLocked}
-                  disabledHint="End the current request or live voice session to change Asha voice language."
-                  onValueChange={changeResponseLanguage}
-                  options={[
-                    { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
-                    { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
-                  ]}
-                  stackedAtLargeText
-                  style={[styles.languageSelector, { width: heroContentWidth }]}
-                  tone="dark"
-                  value={responseLanguage}
-                /> : null}
+                {!inSession ? (
+                  <Pressable
+                    accessibilityHint={languageControlLocked ? 'End the current request or live voice session to change the reply language.' : 'Opens a choice between English and Hindi replies.'}
+                    accessibilityLabel={`Reply language: ${responseLanguageName}. Change`}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: languageControlLocked }}
+                    disabled={languageControlLocked}
+                    onPress={openReplyLanguageMenu}
+                    style={[styles.languagePill, languageControlLocked && styles.disabled]}
+                    testID="reply-language-pill"
+                  >
+                    <Text style={styles.languagePillText}>{responseLanguageName} replies</Text>
+                    <ChevronDown color={colors.gold} size={iconSize.sm} />
+                  </Pressable>
+                ) : null}
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
@@ -1011,25 +1036,8 @@ export default function LiveScreen() {
               </View> : null}
             </View>
 
+            {/* The divider under the hero: it carries only reports waiting to send; the chat list follows. */}
             {aiConsent && !inSession ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, restingVoiceLayout && styles.askSectionResting]} testID="ask-asha-sheet">
-                <View style={[styles.askHeadingRow, largeTextLayout && styles.askHeadingRowLarge]}>
-                  <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
-                    <Text style={styles.askEyebrow}>Ask Asha</Text>
-                    <Text style={styles.askTitle}>How do I say…?</Text>
-                  </View>
-                  {ashaSessionLogEnabled || chatHistory.length > 0 ? (
-                    <Pressable
-                      accessibilityHint="Shows past sessions and lets you clear the chat saved on this device."
-                      accessibilityLabel="More options"
-                      accessibilityRole="button"
-                      onPress={openMoreOptions}
-                      style={styles.moreButton}
-                      testID="live-more-options"
-                    >
-                      <Ellipsis color={colors.gold} size={20} />
-                    </Pressable>
-                  ) : null}
-                </View>
                 {unassociatedReports.length ? (
                   <View style={styles.queuedReports} testID="queued-reports">
                     <Text accessibilityRole="header" style={styles.queuedReportsTitle}>Reports waiting to send</Text>
@@ -1110,7 +1118,7 @@ export default function LiveScreen() {
             </View>
             <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
             {/* The banner takes room from Asha's portrait above; let the learner clear it. */}
-            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={14} onPress={() => setError('')} testID="live-error-dismiss">
+            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={hitSlop.icon} onPress={() => setError('')} testID="live-error-dismiss">
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
@@ -1131,7 +1139,7 @@ export default function LiveScreen() {
               <AlertCircle color={colors.dangerSoft} size={16} />
             </View>
             <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text>
-            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={14} onPress={clearAudioError} testID="live-audio-error-dismiss">
+            <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={hitSlop.icon} onPress={clearAudioError} testID="live-audio-error-dismiss">
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
@@ -1212,7 +1220,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.nightLine, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
   privateText: { color: c.brandSoft, fontSize: 13, fontWeight: '600' },
   chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
-  languageSelector: { alignSelf: 'center' },
+  languagePill: { minHeight: size.touchTarget, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: borderWidth.thin },
+  languagePillText: { color: c.white, ...typeScale.label, fontWeight: '600' },
   inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
   inviteRingCompact: { width: 124, height: 124 },
   talkButton: { minHeight: 50, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
@@ -1245,7 +1254,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   captionText: { minWidth: 0, alignSelf: 'stretch', color: c.white, fontSize: 16, lineHeight: 23 },
   captionTextAsha: { color: c.ink },
   // Under a Devanagari line the romanization reads as the secondary line.
-  captionRomanizedSecondary: { fontSize: 15, lineHeight: 21, fontWeight: '600' },
+  captionRomanizedSecondary: { ...typeScale.captionSecondary, fontWeight: '600' },
   studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, padding: spacing.lg },
   studioPhraseHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   studioPhraseCopy: { minWidth: 0, flex: 1, gap: 2 },
@@ -1259,16 +1268,10 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
   studioMasteryText: { color: c.goldText, fontSize: 11, fontWeight: '700' },
   featuredPhraseSection: { alignItems: 'center', backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.md },
+  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.md },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   askSectionResting: { gap: spacing.xs, paddingTop: spacing.xs, paddingBottom: 0 },
-  askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  askHeadingRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: 3 },
-  askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
-  askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
-  moreButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
+  moreButton: { minWidth: size.touchTarget, minHeight: size.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: borderWidth.thin },
   lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
   lastSessionText: { flexShrink: 1, color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
@@ -1314,6 +1317,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   input: { flex: 1, minHeight: 52, maxHeight: 120, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 14, fontSize: 16, lineHeight: 22 },
   inputDisabled: { opacity: 0.72 },
   sendButton: { width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  sendButtonDisabled: { backgroundColor: c.nightLine },
+  sendIconDisabled: { opacity: opacity.disabledIcon },
   disabled: { opacity: 0.45 },
   thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   requestStatus: { color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },

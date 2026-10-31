@@ -26,6 +26,8 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
   const mountedRef = useRef(true);
   const locked = disabled || sending;
   const sendDisabled = locked || !input.trim();
+  // A disabled Send keeps its shape but takes the night line fill with a dimmed glyph; a pending send keeps the gold.
+  const sendInactive = sendDisabled && !sending;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -88,10 +90,14 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
           accessibilityState={{ disabled: sendDisabled, ...(sending ? { busy: true } : {}) }}
           disabled={sendDisabled}
           onPress={submit}
-          style={[styles.sendButton, sendDisabled && !sending && styles.disabled]}
+          style={[styles.sendButton, sendInactive && styles.sendButtonDisabled]}
           testID="send-asha-message"
         >
-          {sending ? <ActivityIndicator color={colors.ink} size="small" /> : <Send color={colors.ink} size={20} />}
+          {sending ? <ActivityIndicator color={colors.ink} size="small" /> : (
+            <View style={sendInactive ? styles.sendIconDisabled : undefined} testID="send-asha-message-icon">
+              <Send color={sendInactive ? colors.white : colors.ink} size={20} />
+            </View>
+          )}
         </Pressable>
       </View>
     </View>

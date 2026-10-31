@@ -13,7 +13,7 @@ import { syncOutbox, useSyncOutbox, type OutboxEntry } from '@/lib/sync-outbox';
 import type { LiveMode } from '@/services/bolo-api';
 import { useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { borderWidth, hindiType, makeStyles, radius, spacing, typeScale, useSharedStyles, useTheme } from '@/theme';
 
 /** Same explicit deletion and copy as the Asha screen's Clear chat. */
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
@@ -258,8 +258,8 @@ export default function LastSessionScreen() {
 const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   empty: { alignItems: 'flex-start' },
-  listIntro: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '700' },
-  session: { gap: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: c.line },
+  listIntro: { color: c.muted, ...typeScale.caption, fontWeight: '700' },
+  session: { gap: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: borderWidth.thin, borderBottomColor: c.line },
   summary: { gap: spacing.sm },
   badges: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   badge: { minHeight: 28, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm },
