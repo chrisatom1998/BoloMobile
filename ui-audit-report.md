@@ -131,3 +131,27 @@ Re-verified every finding against the clean tree at c9f39bf. **Tally: 23 fixed, 
 ## Fixed and confirmed
 
 All other findings, including 7 of 8 criticals: invisible/overlapping end-session button (now solid `danger` red, stage widened so no orb overlap), recalibrate trap (seeds from profile + Cancel button), review scrollability, hardcoded cue (now uses the phrase's own `latin`), Android status-bar insets on all four screens, word-sheet retry wedge (+ "Try again" button), review/scene double-tap guards, `inactive`-state recording discard, response-language two-way sync, chat action-row wrap, phrase-picker double keyboard inset, script preference on Home/Progress/word sheet, fake speaker icons (now `→`), speech stopping on tab blur, settings segmented controls (stacked + 44pt), stale-selection save, scene resume notice with matching denominators, diagnostics loading state, web alert re-prompt loop, touch targets, review a11y label/progress bar.
+
+---
+
+# Verification pass — 2026-10-30, at 936fb70
+
+Re-checked the 8 "still present" and 12 "partially fixed" items above, and spot-checked the critical fixes, against the current code. This was a code read only: nothing was run on a device. **Tally: 17 of 20 open items were already fixed; H2 is now fixed, L2 turned out not to be a defect, and L5 needs a device check. All 8 criticals still fixed.**
+
+## Fixed in this pass
+
+- **H2 — Live composer bottom spacing.** On iOS the composer is now a native `SafeAreaView` with `edges={{ bottom: 'additive' }}`, which measures the real tab bar inset instead of the old `insets.bottom + 52` guess. The bottom edge turns off while the keyboard is open on the Asha tab, so it no longer double-pads above the keyboard. Checked on the iPhone 16 Pro simulator (iOS 18.6): the composer sits just above the tab bar, and directly above the keyboard. Android keeps the old padding and was not re-checked on a device.
+
+## Not a defect
+
+- **L2 — 56-character excerpt.** The cap only applies to the action button labels ("Read reply aloud: …"). The message itself is read in full from its own label and live region (`chat-message-row.tsx:142-143`), so short button labels are the right choice. The "announced as an edit field" part was fixed earlier (`accessibilityRole="text"`).
+
+## Needs a device check
+
+- **L5 — Home header motif vs. greeting on narrow phones** (`index.tsx:135`). The code alone can't settle this; check on an iPhone SE-width screen at large text.
+
+## Fixed since July 26
+
+H1 due count (uncapped everywhere, `app-state.tsx:579`), H3 Android keyboard (`softwareKeyboardLayoutMode: "resize"` in `app.json`), M3 "Phrase saved" alert (now waits for `onDismissed`), L7 modal slide-out (sheets stay mounted, use `onDismiss`), L9 composer disabled style, L10 pronunciation "thinking" label, #6 practice time (Live and scenes now save on background), M6 tab-root back arrow (removed), M8 Phrases audio error (shown on the row), M9 plan detail title, M11 reduced-motion ring (held at full opacity), M16 not-found button (uses the primary button style), M17 word sheet Android header inset, L3 `बोलो` watermark hidden from screen readers, L6 header portrait (real image), L8 chart bars capped at 100% and hearts HUD removed, L11 `commit()` no longer runs inside a setState updater and the scene route param is guarded.
+
+Leftover nit: `heroRaised` and `heroGlyph` in `theme.ts:60,62` look unused.

@@ -1,6 +1,6 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
-import { memo, useCallback, useMemo, useState } from 'react';
-import { Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle } from 'react-native';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { Animated, Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
@@ -8,9 +8,11 @@ import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
 import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
 import type { ChatMessage } from '@/state/app-state-types';
-import { useTheme } from '@/theme';
+import { spacing, useTheme } from '@/theme';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
+// Half the action-row gap, so neighboring targets do not overlap. The row is 44pt tall, so no vertical slop.
+const actionHitSlop = { bottom: 0, left: spacing.xs / 2, right: spacing.xs / 2, top: 0 };
 
 // Web textareas draw a resize grip, which makes a chat line look editable.
 const webChatText = { resize: 'none' } as TextStyle;
@@ -27,6 +29,7 @@ function SelectableChatText({
   accessibilityLiveRegion,
   onSelectedText,
   onSelectionCollapsed,
+  selectionColor,
   sourceText,
   style,
   text,
@@ -36,6 +39,7 @@ function SelectableChatText({
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
   onSelectedText: (selection: { sourceText: string; text: string }) => void;
   onSelectionCollapsed: () => void;
+  selectionColor: string;
   sourceText: string;
   style: StyleProp<TextStyle>;
   text: string;
@@ -74,6 +78,7 @@ function SelectableChatText({
       onSelectionChange={selectionChanged}
       readOnly
       scrollEnabled={false}
+      selectionColor={selectionColor}
       style={[style, Platform.OS === 'web' ? webChatText : null, { minHeight: 23 }, height === undefined ? undefined : { height }]}
       value={text}
     />
@@ -82,6 +87,8 @@ function SelectableChatText({
 
 export const ChatMessageRow = memo(function ChatMessageRow({
   aiConsent,
+  continuesNext,
+  continuesPrevious,
   isPending,
   isWelcome,
   message,
@@ -97,6 +104,8 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   styles,
 }: {
   aiConsent: boolean;
+  continuesNext: boolean;
+  continuesPrevious: boolean;
   isPending: boolean;
   isWelcome: boolean;
   message: ChatMessage;
@@ -130,31 +139,36 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   const openWordDefinition = useCallback(() => { if (sourcePhrase) onOpenWordDefinition(sourcePhrase); }, [onOpenWordDefinition, sourcePhrase]);
   const playReply = useCallback(() => onPlayReply(message), [message, onPlayReply]);
   const report = useCallback(() => onReport(message), [message, onReport]);
+  const showActions = !isPending && !isWelcome;
 
   return (
-    <View style={[styles.messageRow, isYou && styles.messageRowYou]} testID={!isWelcome && !isPending ? (isYou ? 'live-transcript-user' : 'live-transcript-assistant') : undefined}>
-      <View style={[styles.message, isYou ? styles.userMessage : styles.ashaMessage]}>
-        <View style={styles.messageIdentity}>
-          <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
-        </View>
+    <View style={[styles.messageRow, isYou && styles.messageRowYou, isWelcome && styles.welcomeRow, continuesNext && styles.messageRowStacked]} testID={!isWelcome && !isPending ? (isYou ? 'live-transcript-user' : 'live-transcript-assistant') : undefined}>
+      <View style={[styles.message, isYou ? styles.userMessage : styles.ashaMessage, isWelcome && styles.welcomeMessage, !isWelcome && continuesPrevious && (isYou ? styles.userContinued : styles.ashaContinued), !isWelcome && !continuesNext && (isYou ? styles.userTail : styles.ashaTail)]}>
+        {continuesPrevious ? null : (
+          <View style={styles.messageIdentity}>
+            <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
+          </View>
+        )}
         <SelectableChatText
           accessibilityHint={messageHint}
           accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${displayText}`}
           accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
           onSelectionCollapsed={selectionCollapsed}
           onSelectedText={selectedText}
+          selectionColor={isYou ? colors.gold : colors.brand}
           sourceText={selectionSource}
           style={[styles.messageText, isYou && styles.userText]}
           text={displayText}
         />
-        {message.role === 'asha' || !isWelcome ? (
-          <View style={styles.messageActions}>
-            {!isWelcome ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${excerpt}`} accessibilityRole="button" onPress={openPhrasePicker} style={styles.smallAction}><BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, isYou && styles.userText]}>Save selection</Text></Pressable> : null}
-            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
+        {isPending ? <Text style={styles.messageStatus}>Sending…</Text> : null}
+        {showActions ? (
+          <View style={[styles.messageActions, isYou && styles.messageActionsYou]}>
+            {!isWelcome ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${excerpt}`} accessibilityRole="button" hitSlop={actionHitSlop} onPress={openPhrasePicker} style={styles.smallAction}><BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, isYou && styles.userText]}>Save selection</Text></Pressable> : null}
+            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} hitSlop={actionHitSlop} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
             {message.role === 'asha' ? (
               <>
-                <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || playbackLocked }} disabled={!aiConsent || playbackLocked} onPress={playReply} style={[styles.smallAction, (!aiConsent || playbackLocked) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
-                {!isWelcome ? <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} onPress={report} style={[styles.smallAction, reporting && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable> : null}
+                <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || playbackLocked }} disabled={!aiConsent || playbackLocked} hitSlop={actionHitSlop} onPress={playReply} style={[styles.smallAction, (!aiConsent || playbackLocked) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
+                {!isWelcome ? <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} hitSlop={actionHitSlop} onPress={report} style={[styles.smallAction, reporting && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable> : null}
               </>
             ) : null}
           </View>
@@ -163,3 +177,43 @@ export const ChatMessageRow = memo(function ChatMessageRow({
     </View>
   );
 });
+
+/** Quiet in-thread marker while a typed reply is in flight. The composer owns the live announcement. */
+export function AshaTypingRow({ reducedMotion, styles }: { reducedMotion: boolean; styles: ReturnType<typeof createLiveStyles> }) {
+  return (
+    <View accessibilityLabel="Asha is writing a reply" style={styles.messageRow} testID="asha-typing-indicator">
+      <View style={[styles.message, styles.ashaMessage, styles.ashaTail, styles.typingBubble]}>
+        <Text style={styles.messageLabel}>Asha</Text>
+        <View style={styles.typingDots}>
+          <TypingDot delay={0} reducedMotion={reducedMotion} style={styles.typingDot} />
+          <TypingDot delay={140} reducedMotion={reducedMotion} style={styles.typingDot} />
+          <TypingDot delay={280} reducedMotion={reducedMotion} style={styles.typingDot} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function TypingDot({ delay, reducedMotion, style }: { delay: number; reducedMotion: boolean; style: StyleProp<ViewStyle> }) {
+  const [opacity] = useState(() => new Animated.Value(reducedMotion ? 0.85 : 0.35));
+
+  useEffect(() => {
+    if (reducedMotion) {
+      opacity.setValue(0.85);
+      return;
+    }
+    const animation = Animated.sequence([
+      Animated.delay(delay),
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(opacity, { duration: 280, toValue: 1, useNativeDriver: true }),
+          Animated.timing(opacity, { duration: 280, toValue: 0.28, useNativeDriver: true }),
+        ]),
+      ),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [delay, opacity, reducedMotion]);
+
+  return <Animated.View style={[style, { opacity }]} />;
+}
