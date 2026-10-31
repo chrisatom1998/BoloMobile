@@ -327,7 +327,7 @@ function VoiceTurnFace({ accessibilityHint, appearance, busy = false, disabled =
       disabled={unavailable}
       onPress={onPress}
       style={hero
-        ? [styles.heroPressable, disabled && styles.disabled]
+        ? styles.heroPressable
         : [styles.button, isRecording && styles.recording, working && styles.working, disabled && styles.disabled]}
       testID={testID}
     >
@@ -335,7 +335,7 @@ function VoiceTurnFace({ accessibilityHint, appearance, busy = false, disabled =
         <View style={styles.heroRings}>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.heroRingOuter} />
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.heroRingInner} />
-          <View style={[styles.heroFace, isRecording && styles.recording, working && styles.working]} testID={testID ? `${testID}-face` : undefined}>
+          <View style={[styles.heroFace, isRecording && styles.recording, working && styles.working, disabled && styles.disabled]} testID={testID ? `${testID}-face` : undefined}>
             {icon}
           </View>
         </View>
