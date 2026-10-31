@@ -14,7 +14,6 @@ import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, u
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
-const SELECTED_ORANGE = '#D8663C';
 
 type OnboardingStep = 'listen' | 'level' | 'goal';
 type ReplyId = 'namaste' | 'thanks' | 'bye';
@@ -68,7 +67,7 @@ function ChoiceRow<T extends string>({ choices, label, onChange, testIDFor, valu
             style={[styles.choice, selected && styles.choiceSelected]}
             testID={testIDFor?.(choice)}
           >
-            <View style={[styles.mark, selected && styles.markSelected]} />
+            <View style={[styles.mark, selected && styles.markSelected]}>{selected ? <Text style={styles.markCheck}>✓</Text> : null}</View>
             <View style={styles.choiceCopy}>
               <Text style={[styles.choiceLabel, choice.hindi && styles.choiceHindi]}>{choice.label}</Text>
               {choice.detail ? <Text style={styles.choiceDetail}>{choice.detail}</Text> : null}
@@ -257,10 +256,11 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  choiceSelected: { backgroundColor: '#F8E6DE', borderColor: SELECTED_ORANGE },
-  mark: { borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 18, width: 18 },
-  markSelected: { backgroundColor: SELECTED_ORANGE, borderColor: SELECTED_ORANGE },
-  choiceCopy: { flex: 1, gap: 2, minWidth: 0 },
+  choiceSelected: { borderColor: c.ink, borderWidth: 2 },
+  mark: { alignItems: 'center', justifyContent: 'center', borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 22, width: 22 },
+  markSelected: { backgroundColor: c.ink, borderColor: c.ink },
+  markCheck: { ...type.caption, color: c.white, fontWeight: '700' },
+  choiceCopy: { flex: 1, gap: spacing.xs, minWidth: 0 },
   choiceLabel: { ...type.label, color: c.ink, fontWeight: '700' },
   choiceHindi: { ...hindiType(20) },
   choiceDetail: { ...type.caption, color: c.muted },

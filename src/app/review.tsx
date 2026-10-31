@@ -216,7 +216,7 @@ const useStyles = makeStyles((c) => ({
   gotItButton: { backgroundColor: c.forest },
   againText: buttons.secondaryText,
   gotItText: { ...type.label, color: c.white, fontWeight: '700' },
-  doneMark: { width: 72, height: 72, borderRadius: 25, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
+  doneMark: { width: 72, height: 72, borderRadius: radius.xl, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
   title: { ...type.title, color: c.ink, textAlign: 'center' },
   body: { ...type.body, color: c.muted, textAlign: 'center' },
 }));

@@ -344,19 +344,19 @@ const useStyles = makeStyles((c) => ({
   orbMinimal: { width: 88, height: 88, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 4 },
   orbActive: { backgroundColor: c.orbActive, shadowOpacity: 0.56 },
   orbRecording: { backgroundColor: c.orbRecording },
-  orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.17)' },
+  orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: c.orbHighlight },
   orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '700' },  // Exception to the type scale: decorative orb glyph.
   orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },  // Exception: decorative orb glyph.
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
   endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
-  ringDark: { borderColor: 'rgba(231, 172, 61, 0.35)' },
+  ringDark: { borderColor: c.orbRingDark },
   ringInnerRecordingDark: { borderWidth: 1.5, borderColor: c.gold },
   orbDark: { backgroundColor: c.gold, shadowColor: c.gold, shadowOpacity: 0.3 },
   orbDarkActive: { backgroundColor: c.gold, shadowOpacity: 0.5 },
-  orbDarkRecording: { backgroundColor: '#F2BE57' },
+  orbDarkRecording: { backgroundColor: c.goldBright },
   orbGlyphDark: { color: c.ink },
-  endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine },
+  endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Negative margins centre the button on the orb.
   // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
   endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
   // Portrait variant: the 112pt (96pt compact) portrait is the control; rings sit around it.

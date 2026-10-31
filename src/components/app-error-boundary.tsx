@@ -64,7 +64,7 @@ function ErrorFallback({ onRetry, onHome }: { onRetry: () => void; onHome?: () =
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
-  mark: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
+  mark: { width: 64, height: 64, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
   markText: { ...hindiType(28), color: c.white },
   title: { ...type.title, color: c.ink, textAlign: 'center' },
   body: { ...type.body, color: c.muted, textAlign: 'center' },

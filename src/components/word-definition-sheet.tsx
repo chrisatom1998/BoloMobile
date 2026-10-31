@@ -204,7 +204,7 @@ export function WordDefinitionSheet({
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.background },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, borderBottomColor: c.line, borderBottomWidth: 1, backgroundColor: c.paperRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  headerCopy: { minWidth: 0, flex: 1, gap: 2 },
+  headerCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   eyebrow: { ...type.eyebrow, color: c.brandText },
   title: { ...type.title, color: c.ink },
   closeButton: { ...buttons.quiet, minWidth: 52 },

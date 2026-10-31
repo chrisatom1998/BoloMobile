@@ -238,7 +238,7 @@ const useStyles = makeStyles((c) => ({
   transcript: { gap: spacing.sm },
   clearedCard: { gap: spacing.xs },
   transcriptTitle: { ...type.label, color: c.ink, fontWeight: '700' },
-  row: { maxWidth: '92%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: 2 },
+  row: { maxWidth: '92%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
   rowAsha: { alignSelf: 'flex-start', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
   rowYou: { alignSelf: 'flex-end', backgroundColor: c.night },
   speaker: { ...type.caption, color: c.brandText, fontWeight: '700' },

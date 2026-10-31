@@ -69,6 +69,11 @@ export const lightColors = {
   /** Gold rings around Asha's tap-to-talk portrait on the night surface. */
   portraitRing: 'rgba(231, 172, 61, 0.5)',
   portraitRingFaint: 'rgba(231, 172, 61, 0.25)',
+  /** Live-orb ring and highlight on the night surface. */
+  orbRingDark: 'rgba(231, 172, 61, 0.35)',
+  orbHighlight: 'rgba(255, 255, 255, 0.17)',
+  /** Brighter gold for the recording state of the gold orb. */
+  goldBright: '#F2BE57',
 } as const;
 
 export type ThemeColors = { [Key in keyof typeof lightColors]: typeof lightColors[Key] extends string ? string : number };
@@ -83,6 +88,8 @@ export const spacing = {
   lg: 16,
   xl: 24,
   xxl: 32,
+  /** Side padding for every screen. */
+  gutter: 20,
 } as const;
 
 export const radius = {

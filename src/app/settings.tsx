@@ -476,7 +476,7 @@ const useStyles = makeStyles((c) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, gap: 3 },
+  copy: { flex: 1, gap: spacing.xs },
   copyLarge: { flex: 0, width: '100%' },
   title: { ...type.label, color: c.ink, fontWeight: '700' },
   body: { ...type.caption, color: c.muted },
