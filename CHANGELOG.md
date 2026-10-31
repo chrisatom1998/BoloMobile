@@ -94,6 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Asha's intro message no longer shows a Listen button, and the live-voice debug line is gone ([#90](https://github.com/chrisatom1998/BoloMobile/pull/90)).
 - Smaller fixes on Today, Phrases, Progress, Settings, Review (grade buttons sit above the recorder, saved phrases come back tomorrow) and Asha (errors can be dismissed), plus a one-line privacy card and exercise copy that matches the task ([#95](https://github.com/chrisatom1998/BoloMobile/pull/95)).
 - Settings says "lessons" instead of "scenes" ([#100](https://github.com/chrisatom1998/BoloMobile/pull/100)).
+- A message you type or send from an example chip on the Asha screen now scrolls into view even when you've scrolled up ([#121](https://github.com/chrisatom1998/BoloMobile/pull/121)).
 
 ### Internal
 
@@ -105,5 +106,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - iOS release preflight, an App Store privacy manifest and a pinned Node version ([#16](https://github.com/chrisatom1998/BoloMobile/pull/16)).
 - Maestro harness repairs ([#50](https://github.com/chrisatom1998/BoloMobile/pull/50)).
 - The EAS build upload includes the postinstall patch, and expo-doctor stays green with the Expo pins documented ([#83](https://github.com/chrisatom1998/BoloMobile/pull/83), [#84](https://github.com/chrisatom1998/BoloMobile/pull/84)).
+- Pinned react-native-webrtc to exactly 155.0.1 (was ^155.0.1) ([#121](https://github.com/chrisatom1998/BoloMobile/pull/121)).
 - Docs: AGENTS.md puts Claude Code first ([#81](https://github.com/chrisatom1998/BoloMobile/pull/81)), and Cloud Agent docs cover the Node pin and dev servers ([#89](https://github.com/chrisatom1998/BoloMobile/pull/89)).
 - `__tests__/live-runtime-regressions.test.tsx` and `__tests__/realtime-voice-accessibility.test.tsx` updated and extended for the orb CTA, hidden-until-active caption, segmented-control roles, and compact variant (165 tests passing).
