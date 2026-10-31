@@ -67,6 +67,8 @@ export type ReminderSettings = {
   hour: number;
   minute: number;
   notificationId: string | null;
+  /** Set after the learner accepts or dismisses the first-lesson reminder offer. */
+  offerAnswered?: boolean;
 };
 
 /** One Hindi phrase Asha teaches: canonical Devanagari, one romanization, the English meaning. */

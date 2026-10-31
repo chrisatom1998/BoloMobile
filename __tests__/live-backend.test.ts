@@ -224,7 +224,10 @@ describe('GPT-Live backend', () => {
   });
 
   it('aborts and returns a timeout even if the upstream promise ignores cancellation', async () => {
+    const clientDigest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(validBody.clientId));
+    jest.useRealTimers();
     jest.useFakeTimers();
+    jest.spyOn(globalThis.crypto.subtle, 'digest').mockResolvedValue(clientDigest);
     const { deps, call } = setup();
     deps.openAI.mockImplementation(() => new Promise(() => {}));
     const pending = call({ body: validBody });

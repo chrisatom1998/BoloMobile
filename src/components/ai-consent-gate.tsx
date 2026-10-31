@@ -1,6 +1,7 @@
 import { ShieldCheck } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
@@ -9,6 +10,8 @@ import { observe, observeOncePerSession } from '@/lib/observability';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
+
+type AiConsentPresentation = 'card' | 'sheet';
 
 type AiConsentGateProps = {
   actionLabel?: string;
@@ -19,6 +22,14 @@ type AiConsentGateProps = {
    */
   compact?: { body: string; label?: string };
   title?: string;
+  /**
+   * `sheet` keeps the notice off the screen until `sheetVisible` is set.
+   * Closing the sheet does not record consent.
+   */
+  presentation?: AiConsentPresentation;
+  sheetVisible?: boolean;
+  onCloseSheet?: () => void;
+  reducedMotion?: boolean;
 };
 
 /** Plain-language summary of the full notice below. The complete text stays reachable under "Read full notice". */
@@ -34,6 +45,10 @@ export function AiConsentGate({
   actionLabel = 'I agree and want to continue',
   children,
   compact,
+  onCloseSheet,
+  presentation = 'card',
+  reducedMotion = false,
+  sheetVisible = false,
   title = 'Before using Asha',
 }: AiConsentGateProps) {
   const { colors } = useTheme();
@@ -44,9 +59,10 @@ export function AiConsentGate({
   const [compactOpen, setCompactOpen] = useState(false);
   const savingRef = useRef(false);
   const collapsed = Boolean(compact) && !compactOpen;
+  const showingNotice = !aiConsent && !collapsed && (presentation === 'card' || sheetVisible);
   useEffect(() => {
-    if (!aiConsent && !collapsed) observeOncePerSession('consent_viewed');
-  }, [aiConsent, collapsed]);
+    if (showingNotice) observeOncePerSession('consent_viewed');
+  }, [showingNotice]);
   if (aiConsent) return children;
 
   function openPrivacyPolicy() {
@@ -79,7 +95,7 @@ export function AiConsentGate({
     );
   }
 
-  return (
+  const notice = (
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <ShieldCheck color={colors.forest} size={20} strokeWidth={2} />
@@ -122,6 +138,41 @@ export function AiConsentGate({
       <Text style={styles.version}>AI data-use consent notice version {AI_CONSENT_VERSION}</Text>
     </View>
   );
+
+  switch (presentation) {
+    case 'card':
+      return notice;
+    case 'sheet':
+      if (!sheetVisible) return null;
+      return (
+        <ConsentNoticeSheet onClose={onCloseSheet} reducedMotion={reducedMotion}>
+          {notice}
+        </ConsentNoticeSheet>
+      );
+    default: {
+      const unreachable: never = presentation;
+      return unreachable;
+    }
+  }
+}
+
+function ConsentNoticeSheet({ children, onClose, reducedMotion }: { children: ReactNode; onClose?: () => void; reducedMotion: boolean }) {
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal animationType={reducedMotion ? 'fade' : 'slide'} onRequestClose={onClose} presentationStyle="pageSheet" visible>
+      <View style={[styles.sheetScreen, Platform.OS === 'android' && { paddingTop: insets.top }]} testID="consent-sheet">
+        <View style={styles.sheetHeader}>
+          <Pressable accessibilityLabel="Close consent notice" accessibilityRole="button" onPress={onClose} style={styles.sheetClose}>
+            <Text style={styles.sheetCloseText}>Not now</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}>
+          {children}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
 }
 
 const useStyles = makeStyles((c) => ({
@@ -148,4 +199,9 @@ const useStyles = makeStyles((c) => ({
   compactBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   compactButtonText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  sheetScreen: { flex: 1, backgroundColor: c.background },
+  sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  sheetClose: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
+  sheetCloseText: { color: c.brandText, fontSize: 17, fontWeight: '600' },
+  sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
 }));
