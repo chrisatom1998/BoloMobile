@@ -229,6 +229,14 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(
         MockPressable,
         {
+          accessibilityLabel: 'Mock loanword transcript',
+          onPress: () => onTranscriptChange?.({ speaker: 'asha', text: 'ऑटो वाले से डॉक्टर का पता पूछो।' }),
+        },
+        mockReact.createElement(MockText, null, 'Mock loanword transcript'),
+      ),
+      mockReact.createElement(
+        MockPressable,
+        {
           accessibilityLabel: 'Mock overlapping captions',
           onPress: () => {
             const you = { id: 'you-overlap', speaker: 'you' as const, startMs: 0, endMs: 400, fragments: [] as never[] };
@@ -1805,6 +1813,12 @@ describe('live caption scripts', () => {
 
     expect(view.queryByTestId('live-input-caption-devanagari')).toBeNull();
     expect(view.getByTestId('live-input-caption').props.children).toBe(romanizeDevanagari('नमस्ते, मेरा नाम Chris है।'));
+    expect(view.queryByText(/[\u0900-\u097F]/u)).toBeNull();
+
+    // Loanword vowels such as ऑ have no simple mapping; they must still never reach a latin-only screen.
+    await fireEvent.press(view.getByLabelText('Mock loanword transcript'));
+    expect(view.queryByTestId('live-output-caption-devanagari')).toBeNull();
+    expect(view.getByTestId('live-output-caption').props.children).toBe('Oto vaale se doktar kaa pataa poochho.');
     expect(view.queryByText(/[\u0900-\u097F]/u)).toBeNull();
 
     await view.unmount();
