@@ -552,7 +552,7 @@ function SceneScreen() {
       ) : (
         <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
           <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
-          <ChevronRight color={colors.ink} size={18} />
+          <ChevronRight color={colors.white} size={18} />
         </Pressable>
       )}
     </View>
@@ -929,7 +929,7 @@ const useStyles = makeStyles((c) => ({
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   tryAgainText: { ...type.label, color: c.brandText },
   nextButton: { ...buttons.primary, width: '100%', alignSelf: 'stretch' },
-  nextText: { ...type.label, color: c.ink },
+  nextText: buttons.primaryText,
   saveRow: { backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   saveRowLarge: { alignItems: 'stretch', flexDirection: 'column' },
   saveCopy: { flex: 1, gap: spacing.xs },
