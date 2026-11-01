@@ -119,6 +119,22 @@ export const layout = {
   headerStackBelow: 360,
   /** Distance scrolled before the Asha header collapses to a bar. */
   headerCollapseOffset: spacing.xxl + spacing.lg,
+  /**
+   * Dynamic Type at this scale or larger is an accessibility size.
+   * The Asha header starts as a compact bar so the portrait stays on screen.
+   */
+  accessibilityFontScale: 1.6,
+  /** Caps the Asha title, Private label, and subtitle. */
+  headerFontScaleCap: 1.3,
+  /**
+   * Caps the composer so three lines can hold "Ask in English or Hindi…".
+   * Still well above the body size, so the field grows at accessibility sizes.
+   */
+  composerFontScaleCap: 2.4,
+  /** Lines the composer keeps so the placeholder stays whole at an accessibility size. */
+  composerLines: 3,
+  /** Extra room so the last composer line clears the field's own padding. */
+  composerLineSlack: spacing.lg,
 } as const;
 
 export const radius = {

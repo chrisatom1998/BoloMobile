@@ -4,7 +4,13 @@ import type { createLiveStyles } from '../src/app/(tabs)/live';
 import { LiveComposer } from '../src/components/live-composer';
 
 jest.mock('lucide-react-native', () => ({ Send: () => null }));
-jest.mock('@/theme', () => ({ useTheme: () => ({ colors: { muted: '#777', white: '#fff' } }) }));
+jest.mock('@/theme', () => {
+  const actual = jest.requireActual('@/theme');
+  return {
+    ...actual,
+    useTheme: () => ({ colors: { muted: '#777', white: '#fff' } }),
+  };
+});
 
 const styles = {} as ReturnType<typeof createLiveStyles>;
 

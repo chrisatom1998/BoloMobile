@@ -121,6 +121,7 @@ export default function LiveScreen() {
   const largeTextLayout = useLargeTextLayout();
   // A 393pt phone keeps one row. Stack only for large text or a phone under headerStackBelow.
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < layout.headerStackBelow;
+  const accessibilityCompact = fontScale >= layout.accessibilityFontScale;
   const { elapsedSeconds, reset: resetPracticeTimer, touch: touchPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
@@ -230,7 +231,7 @@ export default function LiveScreen() {
   const realtimeOwnsAudio = realtimeLocked;
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
-  const headerCollapsed = hasTranscriptMessages || scrolledCompact;
+  const headerCollapsed = hasTranscriptMessages || scrolledCompact || accessibilityCompact;
   useEffect(() => {
     if (!hasTranscriptMessages) setScrolledCompact(false);
   }, [hasTranscriptMessages]);
@@ -248,7 +249,6 @@ export default function LiveScreen() {
   const conversationStarted = aiConsent && (hasTranscriptMessages || speechCaption !== null);
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
-  const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
   const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
   const voiceHeroTitle = {
@@ -905,7 +905,7 @@ export default function LiveScreen() {
   const portraitStyle = [
     styles.ashaPortrait,
     compactVoiceLayout && !headerCollapsed && styles.ashaPortraitCompact,
-    headerCollapsed && styles.ashaPortraitCollapsed,
+    headerCollapsed && !accessibilityCompact && styles.ashaPortraitCollapsed,
   ];
 
   const languageControl = (
@@ -918,7 +918,8 @@ export default function LiveScreen() {
         { accessibilityLabel: 'English', label: 'English', value: 'en' },
         { accessibilityLabel: 'Hindi', label: 'Hindi', value: 'hi' },
       ]}
-      stackedAtLargeText
+      maxFontSizeMultiplier={accessibilityCompact ? layout.headerFontScaleCap : undefined}
+      stackedAtLargeText={!accessibilityCompact}
       style={[styles.languageSelector, { width: heroContentWidth }]}
       tone="dark"
       value={responseLanguage}
@@ -929,7 +930,7 @@ export default function LiveScreen() {
     <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
       <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
         <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
-          <JournalDisplay style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked, headerCollapsed && styles.headerTitleCollapsed]}>Speak with Asha</JournalDisplay>
+          <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked, headerCollapsed && styles.headerTitleCollapsed]}>Speak with Asha</JournalDisplay>
         </View>
       </View>
       <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
@@ -937,8 +938,8 @@ export default function LiveScreen() {
           <AshaMinimizeButton onPress={floatingAsha.minimize} />
         ) : null}
         <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-          <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
-          <Text style={styles.privateText}>Private</Text>
+          <Lock color={colors.heroSubtle} size={14} strokeWidth={2} />
+          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.privateText}>Private</Text>
         </View>
         <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.headerSettings} testID="asha-settings">
           <Settings accessibilityLabel="Settings" accessible={false} color={colors.white} size={20} strokeWidth={2} />
@@ -953,6 +954,9 @@ export default function LiveScreen() {
         {floatingAsha.available
           ? <AshaSwipeToMinimize onMinimize={floatingAsha.minimize}>{headerTopbar}</AshaSwipeToMinimize>
           : headerTopbar}
+        {accessibilityCompact ? (
+          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.headerSubtitle}>Your Hindi coach</Text>
+        ) : null}
         {headerCollapsed && aiConsent ? languageControl : null}
       </View>
       <FlatList
@@ -987,7 +991,7 @@ export default function LiveScreen() {
         ListHeaderComponent={(
           <View>
             <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, headerCollapsed && styles.voiceHeroCollapsed, { paddingTop: restingVoiceLayout ? spacing.xs : spacing.md }]} testID="voice-conversation-hero">
-              {headerCollapsed ? null : <Text style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Private Hindi coach · {responseLanguageName} replies</Text>}
+              {headerCollapsed ? null : <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Your Hindi coach</Text>}
               {!aiConsent ? (
                 <View style={[styles.liveControls, { width: heroContentWidth }]} testID="live-voice-controls">
                   <View style={[styles.inviteRing, compactVoiceLayout && styles.inviteRingCompact]}>
@@ -1018,7 +1022,8 @@ export default function LiveScreen() {
                   <View style={styles.portraitControl} testID="asha-portrait-control">
                     {floatingAsha.available && !floatingAsha.voice ? (
                       <Image
-                        accessible={false}
+                        accessibilityLabel="Talk to Asha"
+                        accessible
                         cachePolicy="memory-disk"
                         contentFit="cover"
                         source={ashaPortrait}
@@ -1040,8 +1045,8 @@ export default function LiveScreen() {
                     </RealtimeVoiceButton>
                     )}
                     {aiConsent ? (
-                      <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                        <MessageCircle accessibilityLabel="Open chat history" accessible={false} color={colors.white} size={20} />
+                      <Pressable accessibilityLabel="Open transcript" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                        <MessageCircle accessibilityLabel="Open transcript" accessible={false} color={colors.white} size={20} />
                       </Pressable>
                     ) : null}
                   </View>
@@ -1279,7 +1284,7 @@ export default function LiveScreen() {
           </View>
         </View>
         <View style={styles.composerEntry}>
-          {conversationStarted && composerMicActionBound ? (
+          {composerMicActionBound ? (
             <Pressable
               accessibilityHint="Mutes or unmutes your microphone."
               accessibilityLabel={composerMicLabel}
@@ -1336,7 +1341,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerActions: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: spacing.sm },
   headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
   privateBadge: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: spacing.xs },
-  privateText: { ...type.caption, flexShrink: 0, color: c.brandSoft, fontWeight: '600' },
+  privateText: { ...type.caption, flexShrink: 0, color: c.heroSubtle, fontWeight: '600' },
   chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { alignSelf: 'center' },
   inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
@@ -1402,11 +1407,11 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   messageRow: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'flex-start', backgroundColor: c.night, paddingHorizontal: spacing.gutter, marginBottom: spacing.md },
   messageRowStacked: { marginBottom: spacing.xs },
   messageRowYou: { alignItems: 'flex-end' },
-  welcomeRow: { alignItems: 'center', paddingTop: spacing.xs },
+  welcomeRow: { alignItems: 'flex-start', paddingTop: spacing.xs },
   message: { maxWidth: '88%', overflow: 'visible', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   ashaMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
   userMessage: { backgroundColor: c.nightSurface, borderColor: c.nightLine, borderWidth: 1 },
-  welcomeMessage: { alignSelf: 'center', width: '100%', borderRadius: radius.xl, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  welcomeMessage: { alignSelf: 'flex-start', borderRadius: radius.xl, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
   ashaTail: { borderBottomLeftRadius: radius.sm },
   userTail: { borderBottomRightRadius: radius.sm },
   ashaContinued: { borderTopLeftRadius: radius.sm },
