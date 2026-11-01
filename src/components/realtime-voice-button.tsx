@@ -319,7 +319,7 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
         />
         <Animated.View style={orbStyle}>
           <Pressable
-            accessibilityLabel={labels[voice.status]}
+            accessibilityLabel={voice.status === 'disconnected' ? 'Talk to Asha' : labels[voice.status]}
             accessibilityHint={accessibilityHint}
             accessibilityRole="button"
             accessibilityState={{ disabled: blocked }}

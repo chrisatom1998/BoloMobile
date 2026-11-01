@@ -163,7 +163,7 @@ describe('realtime voice accessibility', () => {
     it('makes the portrait itself the start control with the orb accessibility contract', async () => {
       mockVoiceStatus = 'disconnected';
       const view = await renderPortrait();
-      const start = view.getByLabelText('Start a voice conversation');
+      const start = view.getByLabelText('Talk to Asha');
 
       expect(start.props.testID).toBe('realtime-voice-orb');
       expect(view.getByTestId('portrait-face')).toBeTruthy();

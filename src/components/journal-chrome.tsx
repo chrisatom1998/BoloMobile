@@ -4,6 +4,7 @@ import { makeStyles, type } from '@/theme';
 
 type DisplayProps = {
   children: string;
+  maxFontSizeMultiplier?: number;
   numberOfLines?: number;
   style?: StyleProp<TextStyle>;
 };
@@ -13,9 +14,9 @@ type DisplayProps = {
  * simple native primitives so the learning UI remains fast, accessible, and
  * independent of the web-only HeroUI packages.
  */
-export function JournalDisplay({ children, numberOfLines, style }: DisplayProps) {
+export function JournalDisplay({ children, maxFontSizeMultiplier, numberOfLines, style }: DisplayProps) {
   const styles = useStyles();
-  return <Text accessibilityRole="header" numberOfLines={numberOfLines} style={[styles.display, style]}>{children}</Text>;
+  return <Text accessibilityRole="header" maxFontSizeMultiplier={maxFontSizeMultiplier} numberOfLines={numberOfLines} style={[styles.display, style]}>{children}</Text>;
 }
 
 export function JournalKicker({ children, style }: Pick<DisplayProps, 'children' | 'style'>) {
