@@ -1657,6 +1657,7 @@ describe('immersive live conversation design', () => {
       const ready = view.getByText('READY');
 
       expect(topbarStyle.flexDirection).toBe('row');
+      expect(topbarStyle.flexWrap).toBe('wrap');
       expect(title.props.numberOfLines).toBe(1);
       expect(title.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
       expect(subtitle.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);

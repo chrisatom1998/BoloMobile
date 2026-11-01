@@ -972,7 +972,7 @@ export default function LiveScreen() {
   ) : null;
 
   const headerTopbar = (
-    <View style={[styles.topbar, reflowHeaderLayout && !accessibilityCompact && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
+    <View style={[styles.topbar, reflowHeaderLayout && !accessibilityCompact && styles.topbarLarge, accessibilityCompact && styles.topbarCompact, { width: heroContentWidth }]} testID="asha-header-topbar">
       {accessibilityCompact ? (
         <View style={styles.headerAvatarCluster}>
           {talkControl}
@@ -1383,6 +1383,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerSettings: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
   voiceHeroLarge: { overflow: 'visible' },
   topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  // During a call the avatar row gains End and a longer status, so the actions drop to a second row instead of running off screen.
+  topbarCompact: { flexWrap: 'wrap', rowGap: spacing.sm },
   topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
   headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   headerIdentityLarge: { flex: 0 },
