@@ -28,6 +28,7 @@ import { showAppAlert } from '@/lib/app-alert';
 import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
 import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
+import { selectFeaturedPhrase } from '@/lib/featured-phrase';
 import { hapticTap } from '@/lib/haptics';
 import { ashaInviteAction, ashaInviteLine, ashaInviteSharing } from '@/lib/asha-invite';
 import { LIVE_MIC_EXPLAINER, type LiveMicrophonePhase } from '@/lib/live-microphone';
@@ -123,7 +124,7 @@ export default function LiveScreen() {
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < layout.headerStackBelow;
   const accessibilityCompact = fontScale >= layout.accessibilityFontScale;
   const { elapsedSeconds, reset: resetPracticeTimer, touch: touchPracticeTimer } = useForegroundTimer();
-  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
+  const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, duePhrases = [], learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], sceneProgress = {}, togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const floatingAsha = useAshaVoiceSession();
   const floatingAshaRef = useRef(floatingAsha);
@@ -219,6 +220,7 @@ export default function LiveScreen() {
   }, []);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
   const [chipClipWidth, setChipClipWidth] = useState(0);
   const [chipWidths, setChipWidths] = useState<number[]>([0, 0, 0, 0]);
   const [scrolledCompact, setScrolledCompact] = useState(false);
@@ -248,7 +250,12 @@ export default function LiveScreen() {
           ? { speaker: 'you' as const, text: youCaption }
           : null;
   const conversationStarted = aiConsent && (hasTranscriptMessages || speechCaption !== null);
-  const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
+  const studioPhrase = useMemo(
+    () => selectFeaturedPhrase(duePhrases, sceneProgress, learnerProfile),
+    [duePhrases, learnerProfile, sceneProgress],
+  );
+  // Starter chips stay off the resting screen. They return when the composer is focused.
+  const showExampleChips = composerFocused;
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
   const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
   const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
@@ -1236,7 +1243,7 @@ export default function LiveScreen() {
             </Pressable>
           </View>
         ) : null}
-        <View
+        {showExampleChips ? <View
           onLayout={(event) => {
             const width = event.nativeEvent.layout.width;
             setChipClipWidth((current) => (current === width ? current : width));
@@ -1286,7 +1293,7 @@ export default function LiveScreen() {
             </View>
           ) : null}
           </View>
-        </View>
+        </View> : null}
         <View style={styles.composerEntry}>
           {composerMicActionBound ? (
             <Pressable
@@ -1302,7 +1309,7 @@ export default function LiveScreen() {
               {realtimeStatus === 'recording' ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
             </Pressable>
           ) : null}
-          <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
+          <LiveComposer disabled={busy || clearingChat || realtimeLocked} onFocusChange={setComposerFocused} onSend={sendText} styles={styles} />
         </View>
       </SafeAreaView> : null}
       {phraseMessage ? <TranscriptPhrasePicker aiConsent={aiConsent} clientId={clientId} message={phraseMessage.message} onClose={closePhraseSheet} onDismissed={finishPhraseSheet} onSave={saveTranscriptPhrase} prefill={phraseMessage.prefill} reducedMotion={reducedMotion} selectedText={phraseMessage.selectedText} sourceText={phraseMessage.sourceText} visible={phraseSheetVisible} /> : null}

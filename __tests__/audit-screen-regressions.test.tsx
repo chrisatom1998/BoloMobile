@@ -259,7 +259,8 @@ describe('previously uncovered audit screens', () => {
     await fireEvent.press(view.getByRole('radio', { name: 'धन्यवाद, Dhanyavaad, Thank you' }));
     expect(view.getByTestId('onboarding-continue').props.accessibilityState).toEqual({ disabled: true });
     await fireEvent.press(view.getByTestId('onboarding-reply-namaste'));
-    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).borderColor).toBe('#172523');
+    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).borderColor).toBe(lightColors.brand);
+    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).backgroundColor).toBe(lightColors.brandSoft);
     expect(StyleSheet.flatten(view.getByRole('header', { name: 'Hear this' }).props.style).fontFamily).toBe('Georgia');
     await fireEvent.press(view.getByTestId('onboarding-continue'));
 
@@ -337,6 +338,28 @@ describe('previously uncovered audit screens', () => {
     expect(view.queryByText('Last 7 days')).toBeNull();
     expect(view.queryByTestId('progress-stats')).toBeNull();
     expect(view.queryAllByTestId('progress-day-bar')).toHaveLength(0);
+    expect(view.getByText('Real-life milestones')).toBeTruthy();
+    expect(view.getByTestId('progress-milestone-order-food').props.accessibilityLabel).toBe('Order food, 0 of 2 lessons complete');
+    expect(view.getByTestId('progress-milestone-meet-people').props.accessibilityLabel).toBe('Meet someone new, 0 of 1 lesson complete');
+  });
+
+  it('marks a real-life milestone done when its lessons are finished', async () => {
+    const finished = {
+      bestAccuracy: 100,
+      bestScore: 10,
+      completions: 1,
+      lastBeatIndex: 0,
+      lastPracticedAt: '2026-07-28T12:00:00.000Z',
+      totalAnswers: 1,
+      totalCorrect: 1,
+      weakPhrases: [],
+    };
+    mockAppState.sceneProgress = { chai: finished, restaurant: finished };
+    const view = await render(<ProgressScreen />);
+
+    expect(view.getByTestId('progress-milestone-order-food').props.accessibilityLabel).toBe('Order food, complete');
+    expect(view.getByText('Done')).toBeTruthy();
+    expect(view.getByTestId('progress-milestone-navigate-station').props.accessibilityLabel).toBe('Navigate a station, 0 of 2 lessons complete');
   });
 
   it('caps a practiced day at the full bar and draws zero-minute days as 4 pt stubs', async () => {
@@ -409,6 +432,7 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('Say your name')).toBeTruthy();
     expect(view.getByText('Plan 01 · Lesson 2 of 10 · Turn 4 of 10')).toBeTruthy();
     expect(view.getByTestId('progress-stat-streak').props.accessibilityLabel).toBe('3 day practice streak');
+    expect(view.getByTestId('progress-milestone-order-food').props.accessibilityLabel).toBe('Order food, 0 of 2 lessons complete');
     await fireEvent.press(view.getByLabelText('Continue lesson: Say your name'));
     expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-02' } });
   });
