@@ -121,10 +121,10 @@ export const layout = {
   headerCollapseOffset: spacing.xxl + spacing.lg,
   /**
    * Dynamic Type at this scale or larger is an accessibility size.
-   * The Asha header starts as a compact bar so the portrait stays on screen.
+   * The Asha header starts as a compact bar with a small avatar so a chat bubble fits.
    */
   accessibilityFontScale: 1.6,
-  /** Caps the Asha title, Private label, and subtitle. */
+  /** Caps the Asha title, Private label, subtitle, and READY status. */
   headerFontScaleCap: 1.3,
   /**
    * Caps the composer so three lines can hold "Ask in English or Hindi…".

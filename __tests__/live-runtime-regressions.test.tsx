@@ -622,6 +622,18 @@ function getOnPress(instance: unknown) {
   throw new Error('The rendered element does not have an onPress callback.');
 }
 
+beforeEach(async () => {
+  const window = Dimensions.get('window');
+  const screen = Dimensions.get('screen');
+  await act(async () => {
+    Dimensions.set({
+      screen: { ...screen, fontScale: 1 },
+      window: { ...window, fontScale: 1 },
+    });
+    await Promise.resolve();
+  });
+});
+
 describe('live consent layout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -870,18 +882,20 @@ describe('live theme styles', () => {
     try {
       const view = await render(<LiveScreen />);
       const actions = view.getByTestId('ask-asha-actions');
-      const chips = view.getByTestId('live-example-chips');
       const accessibilityCompact = fontScale >= layout.accessibilityFontScale;
 
       expect(StyleSheet.flatten(view.getByTestId('ask-asha-heading-block').props.style).flexDirection).toBe('column');
       if (accessibilityCompact) {
         expect(view.queryByTestId('ask-asha-heading')).toBeNull();
         expect(view.getByText('Your Hindi coach')).toBeTruthy();
+        expect(view.queryByTestId('live-example-chips')).toBeNull();
+        await fireEvent.press(view.getByLabelText('Suggestions'));
       } else {
         const heading = view.getByTestId('ask-asha-heading');
         expect(within(heading).getByText('How do I say…?')).toBeTruthy();
         expect(within(heading).queryByText('Last session')).toBeNull();
       }
+      const chips = view.getByTestId('live-example-chips');
       expect(within(actions).getByText('Last session')).toBeTruthy();
       expect(StyleSheet.flatten(actions.props.style)).toMatchObject({
         flexWrap: 'wrap',
@@ -1575,6 +1589,7 @@ describe('immersive live conversation design', () => {
       const view = await render(<LiveScreen />);
       await fireEvent.press(view.getByLabelText('Create Asha reply'));
       expect(view.getByLabelText('Settings')).toBeTruthy();
+      await fireEvent.press(view.getByLabelText('Asha voice language'));
       expect(view.getByText('English')).toBeTruthy();
 
       await act(async () => { expectDefined(listeners.get('keyboardWillShow'))(keyboardEvent(336)); });
@@ -1608,28 +1623,38 @@ describe('immersive live conversation design', () => {
       const topbarStyle = StyleSheet.flatten(view.getByTestId('asha-header-topbar').props.style);
       const title = view.getByText('Speak with Asha');
       const subtitle = view.getByText('Your Hindi coach');
-      const bodyStyle = StyleSheet.flatten(view.getByText('Tap Asha to start talking with her.').props.style);
       const privateText = view.getByText('Private');
+      const ready = view.getByText('READY');
 
-      expect(topbarStyle.flexDirection).toBe('column');
+      expect(topbarStyle.flexDirection).toBe('row');
+      expect(title.props.numberOfLines).toBe(1);
       expect(title.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
       expect(subtitle.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+      expect(StyleSheet.flatten(subtitle.props.style).paddingLeft).toBe(spacing.lg);
       expect(privateText.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
       expect(StyleSheet.flatten(privateText.props.style).color).toBe(lightColors.heroSubtle);
-      expect('maxWidth' in bodyStyle).toBe(false);
+      expect(ready.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
       expect(view.queryByText('How do I say…?')).toBeNull();
-      expect(view.getByText('English')).toBeTruthy();
-      expect(view.getByText('Hindi')).toBeTruthy();
-      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(112);
+      expect(view.queryByText('English')).toBeNull();
+      expect(view.getByLabelText('Asha: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
+      expect(view.getByLabelText('Suggestions')).toBeTruthy();
+      expect(view.queryByTestId('live-example-chips')).toBeNull();
+      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
       expect(StyleSheet.flatten(view.getByLabelText('Message Asha').props.style).minHeight).toBe(
         (typeScale.body.lineHeight ?? 0) * Math.min(3.12, layout.composerFontScaleCap) * layout.composerLines + spacing.lg * 2 + layout.composerLineSlack,
       );
       expect(view.getByLabelText('Message Asha').props.maxFontSizeMultiplier).toBe(layout.composerFontScaleCap);
+      expect(StyleSheet.flatten(view.getByTestId('composer-mic-toggle').props.style).alignSelf).toBe('flex-end');
+      expect(StyleSheet.flatten(view.getByLabelText('Send message').props.style).alignSelf).toBe('flex-end');
+
+      await fireEvent.press(view.getByLabelText('Asha voice language'));
       expect(view.getByText('English').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+      expect(view.getByText('Hindi')).toBeTruthy();
 
       await fireEvent.press(view.getByLabelText('Create Asha reply'));
       expect(view.getByText('Your Hindi coach')).toBeTruthy();
-      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(112);
+      expect(view.getByLabelText('Asha: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
+      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
       expect(view.getByText('Clear chat')).toBeTruthy();
       expect(view.getByText('Last session')).toBeTruthy();
       expect(view.getByLabelText('Settings')).toBeTruthy();
@@ -1671,6 +1696,49 @@ describe('immersive live conversation design', () => {
       await act(async () => { scrollList(0); });
       expect(view.getByText('How do I say…?')).toBeTruthy();
     } finally {
+      await view.unmount();
+      await flushMicrotasks();
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
+  it('expands a scrolled header in the same update that clears the chat', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const phone = { ...originalWindow, fontScale: 1, height: 852, width: 393 };
+    await act(async () => {
+      Dimensions.set({ screen: { ...originalScreen, ...phone }, window: phone });
+      await Promise.resolve();
+    });
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    try {
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      await act(async () => {
+        view.getByTestId('live-chat-list').props.onScroll({
+          nativeEvent: {
+            contentOffset: { x: 0, y: layout.headerCollapseOffset + 8 },
+            contentSize: { height: 1600, width: 393 },
+            layoutMeasurement: { height: 700, width: 393 },
+          },
+        });
+      });
+      expect(view.queryByText('How do I say…?')).toBeNull();
+      await fireEvent.press(view.getByLabelText('Clear Asha chat history'));
+      const confirmPrompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
+      const clearAction = (confirmPrompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
+        ?.find(({ text }) => text === 'Clear chat');
+      await act(async () => {
+        clearAction?.onPress?.();
+        await Promise.resolve();
+      });
+      expect(view.getByText('How do I say…?')).toBeTruthy();
+      expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
+    } finally {
+      alert.mockRestore();
       await view.unmount();
       await flushMicrotasks();
       await act(async () => {
