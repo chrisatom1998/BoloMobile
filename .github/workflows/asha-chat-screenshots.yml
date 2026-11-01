@@ -1,17 +1,15 @@
 name: Asha chat screenshots
 
+# Push, not pull_request. This stacked pull request does not target main, and
+# while it conflicts GitHub cannot build the merge ref that pull_request jobs
+# need. A push to this branch starts the job from the workflow in the commit.
 on:
-  pull_request:
-    types: [opened, synchronize]
-    paths:
-      - .github/workflows/asha-chat-screenshots.yml
-      - .maestro/screenshots/**
-      - src/app/screenshot-chat.tsx
-      - src/lib/screenshot-chat-fixture.ts
-      - src/components/chat-message-row.tsx
+  push:
+    branches:
+      - cursor/asha-session-ux
 
 concurrency:
-  group: asha-chat-screenshots-${{ github.event.pull_request.number || github.ref }}
+  group: asha-chat-screenshots-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -19,8 +17,7 @@ permissions:
 
 jobs:
   capture:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'cursor/asha-session-ux'
-    runs-on: ${{ vars.SCREENSHOT_RUNNER == 'hosted' && 'macos-26' || fromJSON('["self-hosted","macOS","bolo-screenshots"]') }}
+    runs-on: macos-26
     timeout-minutes: 90
     env:
       CI: 1
@@ -41,32 +38,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Use the Xcode installed on this runner
-        run: |
-          set -euo pipefail
-          developer=""
-          best=0
-          for app in /Applications/Xcode*.app; do
-            bin="$app/Contents/Developer/usr/bin/xcodebuild"
-            if [[ ! -x "$bin" ]]; then
-              continue
-            fi
-            version="$("$bin" -version | awk 'NR==1 { print $2 }')"
-            major="${version%%.*}"
-            rest="${version#*.}"
-            minor="${rest%%.*}"
-            score=$((major * 1000 + minor))
-            if (( score > best )); then
-              best="$score"
-              developer="$app/Contents/Developer"
-            fi
-          done
-          if [[ -z "$developer" ]]; then
-            developer="$(xcode-select -p)"
-          fi
-          echo "DEVELOPER_DIR=$developer" >> "$GITHUB_ENV"
-          echo "Using $developer"
-          "$developer/usr/bin/xcodebuild" -version
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
       - run: npm ci
       - name: Generate the iOS project
         run: npx expo prebuild --platform ios --clean --no-install
@@ -89,15 +62,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable == true and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')"
-          device_type_id="$(xcrun simctl list devicetypes --json | jq -r '[.devicetypes[] | select(.name == "iPhone 15") | .identifier] | first // empty')"
+          xcrun simctl list runtimes
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')"
+          pinned="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+          if xcrun simctl list runtimes --json | jq -e --arg id "$pinned" '.runtimes[] | select(.isAvailable and .identifier == $id)' >/dev/null; then runtime_id="$pinned"; fi
+          device_type_id=""
+          device_name=""
+          for candidate in "iPhone 15" "iPhone 16" "iPhone 15 Pro"; do
+            device_type_id="$(xcrun simctl list devicetypes --json | jq -r --arg name "$candidate" '[.devicetypes[] | select(.name == $name) | .identifier] | first // empty')"
+            if [[ -n "$device_type_id" ]]; then device_name="$candidate"; break; fi
+          done
           if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
-            echo "::error::No available iOS runtime or iPhone 15 simulator device type."
-            xcrun simctl list runtimes
+            echo "::error::No iOS runtime or 393x852 iPhone simulator available."
             xcrun simctl list devicetypes
             exit 1
           fi
-          echo "Using iPhone 15 on ${runtime_id}"
+          echo "Using ${device_name} on ${runtime_id}"
           udid="$(xcrun simctl create "Bolo asha chat $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           xcrun simctl boot "$udid"
@@ -105,7 +85,6 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
           xcrun simctl ui "$udid" appearance light || true
           xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
-          xcrun simctl ui "$udid" content_size large
       - name: Install the app
         run: |
           app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
@@ -143,6 +122,9 @@ jobs:
             fi
             cp "$png" "named-screenshots/$shot.png"
           }
+          # "large" is the iOS default content size. "extra-large" is one step up.
+          # Set the size before each launch so the app reads it at startup.
+          xcrun simctl ui "$SIM_UDID" content_size large
           maestro test \
             --device "$SIM_UDID" \
             --debug-output maestro-artifacts-seed \
@@ -151,6 +133,7 @@ jobs:
           capture asha-chat-default
           xcrun simctl ui "$SIM_UDID" content_size extra-large
           capture asha-chat-larger
+          xcrun simctl ui "$SIM_UDID" content_size large || true
           find named-screenshots -name '*.png' | sort
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
