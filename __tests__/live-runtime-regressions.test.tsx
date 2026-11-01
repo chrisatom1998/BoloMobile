@@ -869,6 +869,7 @@ describe('live theme styles', () => {
     });
     try {
       const view = await render(<LiveScreen />);
+      await fireEvent(view.getByLabelText('Message Asha'), 'focus');
       const actions = view.getByTestId('ask-asha-actions');
       const chips = view.getByTestId('live-example-chips');
       const accessibilityCompact = fontScale >= layout.accessibilityFontScale;
@@ -950,9 +951,7 @@ describe('immersive live conversation design', () => {
     };
     try {
       await fireEvent.press(view.getByLabelText('Create Asha reply'));
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-      });
+      await flushScrollFrames();
       expect(scrollToEnd.mock.calls.length).toBeGreaterThan(0);
       scrollToEnd.mockClear();
 
@@ -1098,6 +1097,7 @@ describe('immersive live conversation design', () => {
     try {
       scrollLiveChat(view, 0);
       scrollToEnd.mockClear();
+      await fireEvent(view.getByLabelText('Message Asha'), 'focus');
       await fireEvent.press(view.getByRole('button', { name: 'Order tea' }));
 
       expect(within(view.getByTestId('live-chat-list')).getByLabelText('You: Order tea')).toBeTruthy();
@@ -1198,6 +1198,7 @@ describe('immersive live conversation design', () => {
     const scrollToEnd = jest.spyOn(FlatList.prototype, 'scrollToEnd');
     const view = await render(<LiveScreen />);
     try {
+      await fireEvent(view.getByLabelText('Message Asha'), 'focus');
       await fireEvent.press(view.getByLabelText('Mock realtime ready'));
       scrollLiveChat(view, 0);
       scrollToEnd.mockClear();
@@ -1254,7 +1255,12 @@ describe('immersive live conversation design', () => {
     expect(view.getByLabelText('Open transcript')).toBeTruthy();
     expect(view.queryByLabelText('Go back')).toBeNull();
     expect(view.getByTestId('featured-phrase-section')).toBeTruthy();
+    expect(view.getByText('नमस्ते।')).toBeTruthy();
+    expect(view.getByText('Hello.')).toBeTruthy();
     expect(within(hero).queryByText('Featured phrase')).toBeNull();
+    expect(view.queryByTestId('live-example-chips')).toBeNull();
+    await fireEvent(view.getByLabelText('Message Asha'), 'focus');
+    expect(view.getByTestId('live-example-chips')).toBeTruthy();
 
     const sheet = view.getByTestId('ask-asha-sheet');
     const sheetStyle = StyleSheet.flatten(sheet.props.style);
@@ -2658,7 +2664,7 @@ describe('live audio control exclusion', () => {
       await fireEvent.press(listen);
     }
     await fireEvent.press(view.getByLabelText('Close menu'));
-    await fireEvent.press(view.getByText('Correct my Hindi'));
+    expect(view.queryByText('Correct my Hindi')).toBeNull();
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
 
@@ -2711,6 +2717,7 @@ describe('live audio control exclusion', () => {
     expect(StyleSheet.flatten(save.props.style).minHeight + saveSlop.top + saveSlop.bottom).toBeGreaterThanOrEqual(44);
     await fireEvent.press(more);
     const listen = view.getByLabelText('Read reply aloud: Hello there.');
+    await fireEvent(view.getByLabelText('Message Asha'), 'focus');
     const example = view.getByRole('button', { name: 'Correct my Hindi' });
     const send = view.getByLabelText('Send message');
     const listenStyle = StyleSheet.flatten(listen.props.style);

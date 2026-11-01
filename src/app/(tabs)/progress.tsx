@@ -169,6 +169,36 @@ export default function ProgressScreen() {
         </View>
         </> : null}
 
+        <View style={styles.card} testID="progress-milestones">
+          <Text style={styles.title}>Real-life milestones</Text>
+          {milestones.map((milestone) => {
+            const total = milestone.sceneIds.length;
+            const percent = Math.round(milestone.completed / total * 100);
+            const lessonWord = total === 1 ? 'lesson' : 'lessons';
+            return (
+              <View
+                key={milestone.id}
+                accessible
+                accessibilityLabel={milestone.achieved
+                  ? `${milestone.title}, complete`
+                  : `${milestone.title}, ${milestone.completed} of ${total} ${lessonWord} complete`}
+                accessibilityRole="progressbar"
+                accessibilityValue={{ max: total, min: 0, now: milestone.completed }}
+                style={styles.milestoneRow}
+                testID={`progress-milestone-${milestone.id}`}
+              >
+                <View style={styles.planCopy}>
+                  <Text style={[styles.milestoneTitle, milestone.achieved && styles.milestoneTitleDone]}>{milestone.title}</Text>
+                  <Text style={styles.planMeta}>{milestone.achieved ? 'Done' : `${milestone.completed}/${total}`}</Text>
+                </View>
+                <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.planTrack}>
+                  <View style={[styles.planFill, milestone.achieved && styles.planFillComplete, { width: `${Math.max(percent, milestone.completed > 0 ? 4 : 0)}%` }]} />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
         <View style={styles.hero}>
           <Text style={styles.heroEyebrow}>
             {lessonFocus.mode === 'continue' ? 'Current lesson' : !hasLearningActivity ? 'Your first lesson' : lessonFocus.mode === 'review' ? 'Review lesson' : 'Next lesson'}
@@ -273,6 +303,9 @@ export const createProgressStyles = (c: ThemeColors) => {
   seeAll: button.quiet,
   seeAllText: button.quietText,
   planRow: { gap: spacing.sm },
+  milestoneRow: { gap: spacing.sm },
+  milestoneTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },
+  milestoneTitleDone: { color: c.forestText },
   planCopy: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
   planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },
   planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
