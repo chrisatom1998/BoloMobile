@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Settings, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
+import { AlertCircle, ChevronDown, History, Lock, MessageCircle, Mic, MicOff, Settings, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -222,6 +222,10 @@ export default function LiveScreen() {
   const [chipClipWidth, setChipClipWidth] = useState(0);
   const [chipWidths, setChipWidths] = useState<number[]>([0, 0, 0, 0]);
   const [scrolledCompact, setScrolledCompact] = useState(false);
+  const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  if (!accessibilityCompact && languageMenuOpen) setLanguageMenuOpen(false);
+  if (!accessibilityCompact && suggestionsOpen) setSuggestionsOpen(false);
   const chipViewportWidth = visibleChipRowWidth(chipWidths, chipClipWidth, layout.chipPeek, spacing.sm);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
@@ -548,7 +552,9 @@ export default function LiveScreen() {
     setWordDefinitionPhrase(null);
     setInterruptedReason(null);
     setError('');
+    // Same event as the clear, so the header does not stay collapsed for a frame.
     setScrolledCompact(false);
+    setLanguageMenuOpen(false);
     clearAudioError();
     const pending = clearChatHistory().finally(() => {
       if (chatResetRef.current !== pending) return;
@@ -930,16 +936,64 @@ export default function LiveScreen() {
     />
   );
 
+  const talkControl = floatingAsha.available && !floatingAsha.voice ? (
+    <Image
+      accessibilityLabel="Talk to Asha"
+      accessible
+      cachePolicy="memory-disk"
+      contentFit="cover"
+      source={ashaPortrait}
+      style={accessibilityCompact ? styles.ashaPortraitCollapsed : portraitStyle}
+      testID="asha-header-portrait"
+      transition={0}
+    />
+  ) : (
+    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" voice={floatingAsha.voice ?? undefined}>
+      <Image
+        accessible={false}
+        cachePolicy="memory-disk"
+        contentFit="cover"
+        source={ashaPortrait}
+        style={accessibilityCompact ? styles.ashaPortraitCollapsed : portraitStyle}
+        testID="asha-header-portrait"
+        transition={0}
+      />
+    </RealtimeVoiceButton>
+  );
+
+  const microphoneGuidance = microphonePhase === 'explaining' ? (
+    <Text accessibilityLiveRegion="polite" style={styles.heroBody} testID="mic-explainer">{LIVE_MIC_EXPLAINER}</Text>
+  ) : microphonePhase === 'denied' ? (
+    <View style={styles.micDenied} testID="mic-denied">
+      <Text accessibilityRole="alert" style={styles.heroTitle}>The microphone is off</Text>
+      <Text style={styles.heroBody}>{LIVE_MIC_PERMISSION_MESSAGE}</Text>
+      <Pressable accessibilityLabel="Open Settings to allow microphone access" accessibilityRole="button" onPress={() => void Linking.openSettings()} style={styles.talkButton} testID="mic-open-settings">
+        <Text style={styles.talkButtonText}>Open Settings</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
   const headerTopbar = (
-    <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
-      <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
-        <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
-          <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked, headerCollapsed && styles.headerTitleCollapsed]}>Speak with Asha</JournalDisplay>
+    <View style={[styles.topbar, reflowHeaderLayout && !accessibilityCompact && styles.topbarLarge, accessibilityCompact && styles.topbarCompact, { width: heroContentWidth }]} testID="asha-header-topbar">
+      {accessibilityCompact ? (
+        <View style={styles.headerAvatarCluster}>
+          {talkControl}
+          <View style={styles.headerStatus} testID="asha-voice-status">
+            <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
+            <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveVoiceText}>{statusKicker}</Text>
+          </View>
         </View>
-      </View>
+      ) : null}
+      {accessibilityCompact ? null : (
+        <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
+          <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
+            <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked, headerCollapsed && styles.headerTitleCollapsed]}>Speak with Asha</JournalDisplay>
+          </View>
+        </View>
+      )}
       {composingAtLargeText ? null : (
-        <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
-          {floatingAsha.available && aiConsent ? (
+        <View style={[styles.headerActions, reflowHeaderLayout && !accessibilityCompact && styles.headerActionsStacked]}>
+          {floatingAsha.available && aiConsent && !accessibilityCompact ? (
             <AshaMinimizeButton onPress={floatingAsha.minimize} />
           ) : null}
           <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
@@ -949,6 +1003,23 @@ export default function LiveScreen() {
           <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.headerSettings} testID="asha-settings">
             <Settings accessibilityLabel="Settings" accessible={false} color={colors.white} size={20} strokeWidth={2} />
           </Pressable>
+          {accessibilityCompact && aiConsent ? (
+            <Pressable accessibilityLabel="Open transcript" accessibilityRole="button" onPress={scrollToChat} style={styles.headerSettings}>
+              <MessageCircle accessibilityLabel="Open transcript" accessible={false} color={colors.white} size={20} />
+            </Pressable>
+          ) : null}
+          {accessibilityCompact && aiConsent ? (
+            <Pressable
+              accessibilityLabel="Asha voice language"
+              accessibilityRole="button"
+              accessibilityState={{ expanded: languageMenuOpen }}
+              onPress={() => setLanguageMenuOpen((open) => !open)}
+              style={styles.headerSettings}
+              testID="asha-language-menu"
+            >
+              <ChevronDown accessibilityLabel="Asha voice language" accessible={false} color={colors.white} size={20} strokeWidth={2} />
+            </Pressable>
+          ) : null}
         </View>
       )}
     </View>
@@ -961,9 +1032,13 @@ export default function LiveScreen() {
           ? <AshaSwipeToMinimize onMinimize={floatingAsha.minimize}>{headerTopbar}</AshaSwipeToMinimize>
           : headerTopbar}
         {accessibilityCompact ? (
-          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.headerSubtitle}>Your Hindi coach</Text>
+          <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={[styles.headerTitle, styles.headerTitleCollapsed, styles.headerTitleBar, styles.headerSubtitleInset]}>Speak with Asha</JournalDisplay>
         ) : null}
-        {headerCollapsed && aiConsent && !composingAtLargeText ? languageControl : null}
+        {accessibilityCompact ? (
+          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, styles.headerSubtitleInset]}>Your Hindi coach</Text>
+        ) : null}
+        {headerCollapsed && aiConsent && !accessibilityCompact && !composingAtLargeText ? languageControl : null}
+        {accessibilityCompact && languageMenuOpen && aiConsent && !composingAtLargeText ? languageControl : null}
       </View>
       <FlatList
         ref={listRef}
@@ -996,7 +1071,7 @@ export default function LiveScreen() {
         testID="live-chat-list"
         ListHeaderComponent={(
           <View>
-            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, headerCollapsed && styles.voiceHeroCollapsed, { paddingTop: restingVoiceLayout ? spacing.xs : spacing.md }]} testID="voice-conversation-hero">
+            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, headerCollapsed && styles.voiceHeroCollapsed, { paddingTop: accessibilityCompact || restingVoiceLayout ? spacing.xs : spacing.md }, accessibilityCompact && aiConsent && !speechCaption && microphonePhase === 'idle' && styles.voiceHeroHidden]} testID="voice-conversation-hero">
               {headerCollapsed ? null : <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Your Hindi coach</Text>}
               {!aiConsent ? (
                 <View style={[styles.liveControls, { width: heroContentWidth }]} testID="live-voice-controls">
@@ -1022,65 +1097,34 @@ export default function LiveScreen() {
                 </View>
               ) : null}
               {aiConsent ? <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
-                {headerCollapsed ? null : languageControl}
+                {headerCollapsed || accessibilityCompact ? null : languageControl}
+                {accessibilityCompact ? null : (
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
-                    {floatingAsha.available && !floatingAsha.voice ? (
-                      <Image
-                        accessibilityLabel="Talk to Asha"
-                        accessible
-                        cachePolicy="memory-disk"
-                        contentFit="cover"
-                        source={ashaPortrait}
-                        style={portraitStyle}
-                        testID="asha-header-portrait"
-                        transition={0}
-                      />
-                    ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
-                      <Image
-                        accessible={false}
-                        cachePolicy="memory-disk"
-                        contentFit="cover"
-                        source={ashaPortrait}
-                        style={portraitStyle}
-                        testID="asha-header-portrait"
-                        transition={0}
-                      />
-                    </RealtimeVoiceButton>
-                    )}
-                    {aiConsent ? (
-                      <Pressable accessibilityLabel="Open transcript" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                        <MessageCircle accessibilityLabel="Open transcript" accessible={false} color={colors.white} size={20} />
-                      </Pressable>
-                    ) : null}
+                    {talkControl}
+                    <Pressable accessibilityLabel="Open transcript" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                      <MessageCircle accessibilityLabel="Open transcript" accessible={false} color={colors.white} size={20} />
+                    </Pressable>
                   </View>
                   <View style={styles.heroCopy}>
                     <View style={styles.statusRow} testID="asha-voice-status">
                       <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
-                      <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} style={styles.liveVoiceText}>{statusKicker}</Text>
+                      <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveVoiceText}>{statusKicker}</Text>
                     </View>
-                    {microphonePhase === 'explaining' ? (
-                      <Text accessibilityLiveRegion="polite" style={styles.heroBody} testID="mic-explainer">{LIVE_MIC_EXPLAINER}</Text>
-                    ) : microphonePhase === 'denied' ? (
-                      <View style={styles.micDenied} testID="mic-denied">
-                        <Text accessibilityRole="alert" style={styles.heroTitle}>The microphone is off</Text>
-                        <Text style={styles.heroBody}>{LIVE_MIC_PERMISSION_MESSAGE}</Text>
-                        <Pressable accessibilityLabel="Open Settings to allow microphone access" accessibilityRole="button" onPress={() => void Linking.openSettings()} style={styles.talkButton} testID="mic-open-settings">
-                          <Text style={styles.talkButtonText}>Open Settings</Text>
-                        </Pressable>
-                      </View>
-                    ) : conversationStarted ? (
+                    {microphoneGuidance ?? (conversationStarted ? (
                       <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                     ) : (
                       <>
                         <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
                         <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                       </>
-                    )}
+                    ))}
                   </View>
                 </View>
+                )}
+                {/* The compact layout drops the stage, so permission guidance renders on its own. */}
+                {accessibilityCompact && microphoneGuidance ? <View style={[styles.heroCopy, { width: heroContentWidth }]}>{microphoneGuidance}</View> : null}
                 {/* Live captions are for the call in progress. Once it ends, each line lives in the chat below. */}
                 {speechCaption && realtimeStatus !== 'disconnected' ? (
                   <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
@@ -1101,7 +1145,7 @@ export default function LiveScreen() {
               </View> : null}
             </View>
 
-            {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, restingVoiceLayout && styles.askSectionResting]} testID="ask-asha-sheet">
+            {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, (restingVoiceLayout || accessibilityCompact) && styles.askSectionResting]} testID="ask-asha-sheet">
                 {/* Title on its own row, then the controls. A shared row let the title paint over Last session. */}
                 <View style={styles.askHeading} testID="ask-asha-heading-block">
                   {headerCollapsed ? null : (
@@ -1239,6 +1283,11 @@ export default function LiveScreen() {
             </Pressable>
           </View>
         ) : null}
+        {accessibilityCompact && !suggestionsOpen ? (
+          <Pressable accessibilityLabel="Suggestions" accessibilityRole="button" onPress={() => setSuggestionsOpen(true)} style={styles.example} testID="asha-suggestions">
+            <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.exampleText}>Suggestions</Text>
+          </Pressable>
+        ) : (
         <View
           onLayout={(event) => {
             const width = event.nativeEvent.layout.width;
@@ -1290,6 +1339,7 @@ export default function LiveScreen() {
           ) : null}
           </View>
         </View>
+        )}
         <View style={styles.composerEntry}>
           {composerMicActionBound ? (
             <Pressable
@@ -1331,10 +1381,13 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.xs },
   voiceHeroResting: { gap: 0, paddingBottom: spacing.sm },
   voiceHeroCollapsed: { gap: spacing.xs, paddingBottom: 0 },
+  voiceHeroHidden: { height: 0, minHeight: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' },
   screenHeader: { alignItems: 'center', backgroundColor: c.night, paddingBottom: spacing.xs },
   headerSettings: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
   voiceHeroLarge: { overflow: 'visible' },
   topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  // During a call the avatar row gains End and a longer status, so the actions drop to a second row instead of running off screen.
+  topbarCompact: { flexWrap: 'wrap', rowGap: spacing.sm },
   topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
   headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   headerIdentityLarge: { flex: 0 },
@@ -1343,7 +1396,11 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerTitle: { ...type.headline, alignSelf: 'stretch', color: c.white, flexShrink: 0, textAlign: 'left' },
   headerTitleStacked: { alignSelf: 'stretch' },
   headerTitleCollapsed: { ...type.headline, color: c.white, textAlign: 'left' },
+  headerTitleBar: { flexShrink: 1 },
+  headerAvatarCluster: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: spacing.sm },
+  headerStatus: { flexDirection: 'row', alignItems: 'center', flexShrink: 1, gap: spacing.xs },
   headerSubtitle: { ...type.caption, alignSelf: 'stretch', flexShrink: 0, color: c.heroSubtle, textAlign: 'left' },
+  headerSubtitleInset: { paddingLeft: spacing.lg },
   headerSubtitleStacked: { flexShrink: 0 },
   headerActions: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: spacing.sm },
   headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
@@ -1364,6 +1421,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   portraitControl: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface },
   ashaPortraitCompact: { width: 96, height: 96 },
+  // Only the largest-text avatar control uses this size; its ring is sized to match.
+  ashaPortraitCollapsed: { width: layout.touchTarget, height: layout.touchTarget, borderWidth: 2 },
   heroCopy: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.xs },
   statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
   statusDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.gold, opacity: 0.6 },
@@ -1469,13 +1528,13 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },
-  composerMic: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  composerMic: { alignSelf: 'flex-end', width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   charCount: { ...type.caption, color: c.heroSubtle, textAlign: 'right', fontWeight: '600' },
   charCountLimit: { color: c.gold },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   input: { ...type.body, flex: 1, minHeight: 52, maxHeight: 120, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },
   inputDisabled: { opacity: 0.72 },
-  sendButton: { width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  sendButton: { alignSelf: 'flex-end', width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
   thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   requestStatus: { ...type.caption, color: c.gold, textAlign: 'center', fontWeight: '600' },
