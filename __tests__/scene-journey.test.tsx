@@ -986,10 +986,10 @@ describe('lesson audit regressions', () => {
   it('keeps Continue reachable above the keyboard on the name step', async () => {
     mockSceneId = 'plan-essentials-02';
     const view = await render(<SceneScreen />);
-    // iOS: a padding KeyboardAvoidingView shrinks the scroll view above the keyboard, so the flexGrow content keeps
-    // the bottom-pinned Continue visible instead of only adding scroll inset under it.
-    // KeyboardAvoidingView keeps `behavior` on the composite element; its host View only shows the padding branch
-    // through a paddingBottom entry (0 while the keyboard is hidden), which the default branch never adds.
+    // iOS: a padding KeyboardAvoidingView shrinks the step above the keyboard. Continue is a footer
+    // sibling of the scroll view, so a taller heading (larger text) scrolls inside the step and the
+    // button stays on screen. KeyboardAvoidingView keeps `behavior` on the composite element; its host
+    // View only shows the padding branch through a paddingBottom entry (0 while the keyboard is hidden).
     const avoider = view.getByTestId('scene-name-step-keyboard');
     const avoiderStyle = StyleSheet.flatten(avoider.props.style);
     expect(avoiderStyle.paddingBottom).toBe(0);
@@ -1001,7 +1001,9 @@ describe('lesson audit regressions', () => {
     expect(StyleSheet.flatten(nameStep.props.style).flex).toBe(1);
     // A tap on Continue must land while the keyboard is up instead of only dismissing it.
     expect(nameStep.props.keyboardShouldPersistTaps).toBe('handled');
-    expect(view.getByTestId('scene-name-continue')).toBeTruthy();
+    const continueButton = view.getByTestId('scene-name-continue');
+    expect(continueButton.parent?.parent).toBe(avoider);
+    expect(continueButton.parent).not.toBe(nameStep);
   });
 
   it('gives the Change name link a 44pt tap target without growing the text', async () => {

@@ -465,8 +465,9 @@ function SceneScreen() {
       setNameStepOpen(false);
     };
     return (
-      // iOS: pad the whole step above the keyboard so the scroll view itself shrinks and the flexGrow content keeps
-      // Continue at the visible bottom. Android resizes the window (softwareKeyboardLayoutMode), so no behavior there.
+      // iOS: pad the whole step above the keyboard. Continue stays in a footer, not in the scrolling
+      // content, so larger text can grow the heading without sliding the button under the keyboard.
+      // Android resizes the window (softwareKeyboardLayoutMode), so no behavior there.
       <KeyboardAvoidingView
         key="scene-name-step"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -476,7 +477,7 @@ function SceneScreen() {
         <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
         <ScrollView
           contentInsetAdjustmentBehavior="never"
-          contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
+          contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: spacing.lg }]}
           keyboardShouldPersistTaps="handled"
           style={styles.nameStepScroll}
           testID="scene-name-step"
@@ -505,8 +506,10 @@ function SceneScreen() {
               textContentType="givenName"
               value={nameDraft}
             />
-            <Text style={styles.nameStepNote}>Stays on this device.</Text>
           </View>
+        </ScrollView>
+        <View style={[styles.nameStepFooter, { paddingBottom: insets.bottom + spacing.md }]}>
+          <Text style={styles.nameStepNote}>Stays on this device.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: !draft }}
@@ -518,7 +521,7 @@ function SceneScreen() {
             <Text style={sharedStyles.primaryButtonText}>Continue</Text>
             <ChevronRight color={colors.white} size={18} />
           </Pressable>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     );
   }
@@ -914,6 +917,7 @@ const useStyles = makeStyles((c) => ({
   setupHindiScript: { ...hindiType(17), color: c.muted },
   nameStep: { flexGrow: 1 },
   nameStepScroll: { flex: 1 },
+  nameStepFooter: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
   nameStepTitle: { ...type.display, color: c.ink },
