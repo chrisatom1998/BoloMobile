@@ -38,6 +38,36 @@ const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/
 let secureApi: SecureApi | null | undefined;
 let secureKeyPromise: Promise<KeyMaterial> | null = null;
 let fallbackKeyPromise: Promise<KeyMaterial> | null = null;
+/**
+ * Serializes migration rewrites with deletion for each storage key. Hydration
+ * encrypts leftover plaintext inside the read, outside the session log's own
+ * write queue. Delete Bolo data must wait for that rewrite and then remove its
+ * result, and a rewrite must not start until an in-flight delete has finished.
+ */
+const keyQueues = new Map<string, Promise<void>>();
+
+function withKeys<T>(keys: readonly string[], task: () => Promise<T>): Promise<T> {
+  const ordered = [...new Set(keys)].sort();
+  const releases: (() => void)[] = [];
+  let pending = Promise.resolve();
+  for (const key of ordered) {
+    const previous = keyQueues.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const settled = previous.then(() => gate).then(() => undefined, () => undefined);
+    keyQueues.set(key, settled);
+    settled.then(() => {
+      if (keyQueues.get(key) === settled) keyQueues.delete(key);
+    }, () => undefined);
+    releases.push(release);
+    pending = pending.then(() => previous);
+  }
+  return pending.then(task).finally(() => {
+    for (const release of releases) release();
+  });
+}
 
 function bytesToHex(bytes: Uint8Array): string {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
@@ -254,42 +284,60 @@ export async function readSensitiveItem(store: SensitiveStore, key: string): Pro
   }
 }
 
+async function readManySensitive(store: SensitiveStore, keys: readonly string[]): Promise<[string, string | null][]> {
+  const pairs = store.multiGet
+    ? await store.multiGet(keys)
+    : await Promise.all(keys.map(async (key) => [key, await store.getItem(key)] as [string, string | null]));
+  const decoded: [string, string | null][] = [];
+  for (const [key, value] of pairs) {
+    if (value == null) {
+      decoded.push([key, null]);
+      continue;
+    }
+    if (!isSensitiveEnvelope(value)) {
+      try {
+        await writeSensitiveItem(store, key, value);
+      } catch (error) {
+        console.warn('Bolo could not encrypt saved history.', error);
+      }
+      decoded.push([key, value]);
+      continue;
+    }
+    try {
+      decoded.push([key, await revealSensitiveValue(value, store)]);
+    } catch (error) {
+      console.warn('Bolo could not read encrypted history.', error);
+      decoded.push([key, null]);
+    }
+  }
+  return decoded;
+}
+
 export function wrapSensitiveStorage<T extends SensitiveStore>(store: T): T {
   return {
     ...store,
     async getItem(key: string) {
-      return readSensitiveItem(store, key);
+      return withKeys([key], () => readSensitiveItem(store, key));
     },
     async setItem(key: string, value: string) {
-      await writeSensitiveItem(store, key, value);
+      await withKeys([key], () => writeSensitiveItem(store, key, value));
+    },
+    async removeItem(key: string) {
+      await withKeys([key], async () => {
+        await store.removeItem?.(key);
+      });
+    },
+    async multiRemove(keys: readonly string[]) {
+      await withKeys(keys, async () => {
+        if (store.multiRemove) {
+          await store.multiRemove(keys);
+          return;
+        }
+        for (const key of keys) await store.removeItem?.(key);
+      });
     },
     async multiGet(keys: readonly string[]) {
-      const pairs = store.multiGet
-        ? await store.multiGet(keys)
-        : await Promise.all(keys.map(async (key) => [key, await store.getItem(key)] as [string, string | null]));
-      const decoded: [string, string | null][] = [];
-      for (const [key, value] of pairs) {
-        if (value == null) {
-          decoded.push([key, null]);
-          continue;
-        }
-        if (!isSensitiveEnvelope(value)) {
-          try {
-            await writeSensitiveItem(store, key, value);
-          } catch (error) {
-            console.warn('Bolo could not encrypt saved history.', error);
-          }
-          decoded.push([key, value]);
-          continue;
-        }
-        try {
-          decoded.push([key, await revealSensitiveValue(value, store)]);
-        } catch (error) {
-          console.warn('Bolo could not read encrypted history.', error);
-          decoded.push([key, null]);
-        }
-      }
-      return decoded;
+      return withKeys(keys, () => readManySensitive(store, keys));
     },
   } as T;
 }

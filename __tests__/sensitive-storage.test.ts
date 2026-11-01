@@ -6,6 +6,7 @@ import {
   revealSensitiveValue,
   wrapSensitiveStorage,
   writeSensitiveItem,
+  type SensitiveStore,
 } from '../src/lib/sensitive-storage';
 
 jest.mock('@react-native-async-storage/async-storage', () => {
@@ -126,6 +127,53 @@ describe('sensitive on-device storage', () => {
     expect(raw).not.toContain(secret);
     const [pair] = await wrapped.multiGet(['bolo-asha-session-v1:one']);
     expect(pair?.[1]).toBe(secret);
+  });
+
+  it('leaves nothing stored when a delete runs during a plaintext migration', async () => {
+    const sessionKey = 'bolo-asha-session-v1:doomed';
+    const values = new Map<string, string>([[sessionKey, secret]]);
+    let releaseMigrationWrite: () => void = () => undefined;
+    let migrationWriteStarted!: () => void;
+    const migrationWriteEntered = new Promise<void>((resolve) => {
+      migrationWriteStarted = resolve;
+    });
+    const store = {
+      async getItem(key: string) {
+        return values.get(key) ?? null;
+      },
+      async setItem(key: string, value: string) {
+        if (key === sessionKey) {
+          migrationWriteStarted();
+          await new Promise<void>((resolve) => {
+            releaseMigrationWrite = resolve;
+          });
+        }
+        values.set(key, value);
+      },
+      async removeItem(key: string) {
+        values.delete(key);
+      },
+      async multiGet(keys: readonly string[]) {
+        return keys.map((key) => [key, values.get(key) ?? null] as [string, string | null]);
+      },
+      async multiRemove(keys: readonly string[]) {
+        keys.forEach((key) => values.delete(key));
+      },
+    } satisfies SensitiveStore;
+    const wrapped = wrapSensitiveStorage(store);
+    const migrating = wrapped.multiGet([sessionKey]);
+    await migrationWriteEntered;
+    let deleted = false;
+    const deleting = wrapped.multiRemove([sessionKey]).then(() => {
+      deleted = true;
+    });
+    await Promise.resolve();
+    expect(deleted).toBe(false);
+    releaseMigrationWrite();
+    await migrating;
+    await deleting;
+    expect(values.has(sessionKey)).toBe(false);
+    expect([...values.values()].join('\n')).not.toContain(secret);
   });
 
   it('stores the encryption key outside AsyncStorage when the platform keystore is unavailable only as a fallback account', async () => {
