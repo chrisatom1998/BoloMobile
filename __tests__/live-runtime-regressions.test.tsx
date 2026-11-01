@@ -803,21 +803,26 @@ describe('live theme styles', () => {
     expect('textTransform' in styles.captionLabel).toBe(false);
     expect('minHeight' in styles.voiceHero).toBe(false);
     expect('minHeight' in styles.voiceHeroCompact).toBe(false);
-    expect(styles.examples.flexWrap).toBe('wrap');
+    expect('flexWrap' in styles.examples).toBe(false);
+    expect(styles.examples.flexDirection).toBe('row');
     expect(styles.examples.paddingRight).toBe(layout.chipEndInset);
+    expect(styles.composer.paddingHorizontal).toBe(layout.chipEndInset);
+    expect(styles.exampleClip.overflow).toBe('hidden');
+    expect(styles.exampleScroller.flexGrow).toBe(0);
     expect(layout.chipEndInset).toBe(spacing.gutter);
     expect(layout.touchTarget).toBe(44);
     expect(styles.askHeading.flexDirection).toBe('column');
     expect(styles.askTitle.alignSelf).toBe('stretch');
+    expect(styles.askTitle.textAlign).toBe('center');
     expect(styles.askHeadingActions.flexDirection).toBe('row');
     expect(styles.askHeadingActions.flexWrap).toBe('wrap');
-    expect(styles.askHeadingActions.justifyContent).toBe('flex-start');
+    expect(styles.askHeadingActions.justifyContent).toBe('space-between');
+    expect(styles.lastSessionSlot.marginLeft).toBe('auto');
     expect(styles.clearChatButton.minHeight).toBe(layout.touchTarget);
     expect(styles.clearChatButton.flexShrink).toBe(0);
     expect(styles.lastSessionButton.minHeight).toBe(layout.touchTarget);
     expect(styles.lastSessionButton.flexShrink).toBe(0);
     expect(styles.example.minHeight).toBe(layout.touchTarget);
-    expect(styles.example.maxWidth).toBe('100%');
     expect(styles.example.flexShrink).toBe(0);
   });
 
@@ -839,11 +844,16 @@ describe('live theme styles', () => {
       expect(within(heading).getByText('How do I say…?')).toBeTruthy();
       expect(within(heading).queryByText('Last session')).toBeNull();
       expect(within(actions).getByText('Last session')).toBeTruthy();
-      expect(StyleSheet.flatten(actions.props.style).flexWrap).toBe('wrap');
-      expect(StyleSheet.flatten(chips.props.style)).toMatchObject({
+      expect(StyleSheet.flatten(actions.props.style)).toMatchObject({
         flexWrap: 'wrap',
+        justifyContent: 'space-between',
+      });
+      expect(chips.props.horizontal).toBe(true);
+      expect(StyleSheet.flatten(chips.props.contentContainerStyle)).toMatchObject({
+        flexDirection: 'row',
         paddingRight: layout.chipEndInset,
       });
+      expect(StyleSheet.flatten(chips.props.contentContainerStyle).flexWrap).toBeUndefined();
       expect(view.getByRole('button', { name: 'Correct my Hindi' })).toBeTruthy();
       await view.unmount();
       await flushMicrotasks();

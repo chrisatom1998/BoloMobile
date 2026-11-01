@@ -4,7 +4,7 @@ import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -1068,7 +1068,7 @@ export default function LiveScreen() {
                         <Text style={styles.clearChatText}>Clear chat</Text>
                       </Pressable>
                     ) : null}
-                    {lastSessionButton}
+                    <View style={styles.lastSessionSlot}>{lastSessionButton}</View>
                   </View>
                 </View>
                 {unassociatedReports.length ? (
@@ -1182,19 +1182,28 @@ export default function LiveScreen() {
             </Pressable>
           </View>
         ) : null}
-        <View style={styles.examples} testID="live-example-chips">
-          {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
-            <PressableFeedback
-              accessibilityRole="button"
-              accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
-              isDisabled={busy || clearingChat || realtimeLocked}
-              key={example}
-              onPress={() => { void sendText(example); }}
-              style={[styles.example, (busy || clearingChat || realtimeLocked) && styles.disabled]}
-            >
-              <Text style={styles.exampleText}>{example}</Text>
-            </PressableFeedback>
-          ))}
+        <View style={styles.exampleClip}>
+          <ScrollView
+            horizontal
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            style={styles.exampleScroller}
+            contentContainerStyle={styles.examples}
+            testID="live-example-chips"
+          >
+            {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example, index, examples) => (
+              <PressableFeedback
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
+                isDisabled={busy || clearingChat || realtimeLocked}
+                key={example}
+                onPress={() => { void sendText(example); }}
+                style={[styles.example, index < examples.length - 1 && styles.exampleSpacer, (busy || clearingChat || realtimeLocked) && styles.disabled]}
+              >
+                <Text style={styles.exampleText}>{example}</Text>
+              </PressableFeedback>
+            ))}
+          </ScrollView>
         </View>
         <View style={styles.composerEntry}>
           {conversationStarted && composerMicActionBound ? (
@@ -1301,7 +1310,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askHeading: { width: '100%', alignSelf: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
   askHeadingCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.xs },
   askHeadingCopyCompact: { gap: 0 },
-  askHeadingActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm },
+  askHeadingActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.sm },
+  lastSessionSlot: { marginLeft: 'auto', maxWidth: '100%', flexShrink: 0 },
   askEyebrow: { ...type.eyebrow, alignSelf: 'stretch', color: c.gold, textAlign: 'center' },
   askTitle: { ...type.headline, alignSelf: 'stretch', color: c.white, textAlign: 'center', fontWeight: '600' },
   clearChatButton: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
@@ -1357,10 +1367,14 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   correctionSayRoman: { color: c.forestText },
   correctionEnglish: { ...type.caption, width: '100%', color: c.muted },
   correctionNote: { ...type.caption, color: c.muted, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
-  composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, gap: spacing.sm },
-  examples: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingRight: layout.chipEndInset },
-  example: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
-  exampleText: { ...type.caption, flexShrink: 1, color: c.white, textAlign: 'center' },
+  composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: layout.chipEndInset, paddingTop: spacing.md, gap: spacing.sm },
+  // The scroller stays inside the gutter. flexGrow 0 stops the row from painting out to the screen edge.
+  exampleClip: { alignSelf: 'stretch', overflow: 'hidden' },
+  exampleScroller: { flexGrow: 0 },
+  examples: { flexDirection: 'row', alignItems: 'center', paddingRight: layout.chipEndInset },
+  exampleSpacer: { marginRight: spacing.sm },
+  example: { minHeight: layout.touchTarget, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
+  exampleText: { ...type.caption, color: c.white, textAlign: 'center' },
   composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },
