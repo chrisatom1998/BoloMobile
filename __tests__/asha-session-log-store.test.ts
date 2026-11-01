@@ -530,6 +530,10 @@ describe('Asha session log store', () => {
 
   it('re-applies retention when a screen reads the already hydrated log', async () => {
     const store = sharedStore;
+    await store.deleteAllAshaSessions();
+    await flush();
+    await runSession(store, 'done', endedRecord.startedAt, endedRecord.rows);
+    await runSession(store, 'session-2', '2026-10-31T10:00:00.000Z', [row('live-0', 'you', 'Hi')]);
     expect(store.getAshaSessions().map((session) => session.id)).toEqual(['done', 'session-2']);
     jest.useFakeTimers();
     // Well past the window for both records; hydration ran long ago, so only the screen's refresh can expire them.

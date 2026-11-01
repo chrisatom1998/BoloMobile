@@ -5,30 +5,6 @@ function HeroUINativeProvider({ children }) {
   return React.createElement(React.Fragment, null, children);
 }
 
-function ButtonRoot({ children, onPress, ...props }) {
-  const content = typeof children === 'string'
-    ? React.createElement(Text, null, children)
-    : children;
-
-  return React.createElement(Pressable, { ...props, onPress }, content);
-}
-
-const Button = Object.assign(ButtonRoot, { Label: Text });
-
-const Card = Object.assign(View, {
-  Body: View,
-  Description: Text,
-  Footer: View,
-  Header: View,
-  Title: Text,
-});
-
-function ChipRoot({ children, onPress, ...props }) {
-  return React.createElement(Pressable, { ...props, onPress }, children);
-}
-
-const Chip = Object.assign(ChipRoot, { Label: Text });
-
 const TabsContext = React.createContext(null);
 
 function TabsRoot({ children, onValueChange, value, ...props }) {
@@ -63,12 +39,9 @@ function TabsTrigger({ children, isDisabled = false, onPress, value, ...props })
 }
 
 const Tabs = Object.assign(TabsRoot, {
-  Content: View,
   Indicator: View,
   Label: Text,
   List: View,
-  ScrollView: View,
-  Separator: View,
   Trigger: TabsTrigger,
 });
 
@@ -121,15 +94,8 @@ function PressableFeedback({ children, isDisabled = false, ...props }) {
 }
 
 module.exports = {
-  Button,
-  Card,
-  Chip,
-  Description: Text,
   HeroUINativeProvider,
-  Input: TextInput,
-  Label: Text,
   PressableFeedback,
   SearchField,
   Tabs,
-  TextField: View,
 };

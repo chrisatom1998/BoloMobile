@@ -2,15 +2,13 @@ import { trimTerminalPunctuation } from '../src/lib/text';
 
 describe('trimTerminalPunctuation', () => {
   it.each([
-    'Hello.',
-    'Yes!?…',
-    'My name is …',
-    'Already clean',
-    'Punctuation before spaces!?…   ',
-    '   ',
-  ])('stays byte-identical to the former local implementation for %p', (value) => {
-    const previousResult = value.replace(/[.!?…]+$/u, '').trimEnd();
-
-    expect(trimTerminalPunctuation(value)).toBe(previousResult);
+    ['Hello.', 'Hello'],
+    ['Yes!?…', 'Yes'],
+    ['My name is …', 'My name is'],
+    ['Already clean', 'Already clean'],
+    ['Punctuation before spaces!?…   ', 'Punctuation before spaces!?…'],
+    ['   ', ''],
+  ])('trims terminal punctuation from %p', (value, expected) => {
+    expect(trimTerminalPunctuation(value)).toBe(expected);
   });
 });
