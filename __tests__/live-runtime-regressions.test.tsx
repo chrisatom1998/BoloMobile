@@ -1272,7 +1272,7 @@ describe('immersive live conversation design', () => {
     try {
     const hero = view.getByTestId('voice-conversation-hero');
 
-    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#10201E');
+    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe(lightColors.night);
     expect(StyleSheet.flatten(hero.props.style).minHeight).toBeUndefined();
     expect(view.getByText('Your Hindi coach')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
