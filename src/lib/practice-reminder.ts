@@ -47,7 +47,7 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
       ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
   });
-  return { enabled: true, hour, minute, notificationId };
+  return { ...current, enabled: true, hour, minute, notificationId };
 }
 
 export async function cancelPracticeReminder(current: ReminderSettings): Promise<ReminderSettings> {

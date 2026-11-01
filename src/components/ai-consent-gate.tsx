@@ -1,6 +1,7 @@
 import { ShieldCheck } from 'lucide-react-native';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
+import { Modal, Platform, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
@@ -9,6 +10,8 @@ import { observe, observeOncePerSession } from '@/lib/observability';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
+
+type AiConsentPresentation = 'card' | 'sheet';
 
 type AiConsentGateProps = {
   actionLabel?: string;
@@ -19,6 +22,14 @@ type AiConsentGateProps = {
    */
   compact?: { body: string; label?: string };
   title?: string;
+  /**
+   * `sheet` keeps the notice off the screen until `sheetVisible` is set.
+   * Closing the sheet does not record consent.
+   */
+  presentation?: AiConsentPresentation;
+  sheetVisible?: boolean;
+  onCloseSheet?: () => void;
+  reducedMotion?: boolean;
 };
 
 /** Plain-language summary of the full notice below. The complete text stays reachable under "Read full notice". */
@@ -34,6 +45,10 @@ export function AiConsentGate({
   actionLabel = 'I agree and want to continue',
   children,
   compact,
+  onCloseSheet,
+  presentation = 'card',
+  reducedMotion = false,
+  sheetVisible = false,
   title = 'Before using Asha',
 }: AiConsentGateProps) {
   const { colors } = useTheme();
@@ -44,9 +59,10 @@ export function AiConsentGate({
   const [compactOpen, setCompactOpen] = useState(false);
   const savingRef = useRef(false);
   const collapsed = Boolean(compact) && !compactOpen;
+  const showingNotice = !aiConsent && !collapsed && (presentation === 'card' || sheetVisible);
   useEffect(() => {
-    if (!aiConsent && !collapsed) observeOncePerSession('consent_viewed');
-  }, [aiConsent, collapsed]);
+    if (showingNotice) observeOncePerSession('consent_viewed');
+  }, [showingNotice]);
   if (aiConsent) return children;
 
   function openPrivacyPolicy() {
@@ -79,7 +95,7 @@ export function AiConsentGate({
     );
   }
 
-  return (
+  const notice = (
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <ShieldCheck color={colors.forest} size={20} strokeWidth={2} />
@@ -109,7 +125,7 @@ export function AiConsentGate({
             Core lesson and saved-phrase audio is bundled with Bolo and works offline without sending text anywhere. After you agree, Bolo uses its service and OpenAI for generated Asha speech, submitted text, live voice turns, and pronunciation recordings. Typed coaching and live voice startup include a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream. Your microphone stays on continuously until you mute it by tapping the orb. Tap again to unmute; you can speak while Asha is speaking. The stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Minimizing Asha keeps that same live session while you browse other screens in Bolo; it still ends when you tap End or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Asha&apos;s spoken reply travels directly from OpenAI to the app. To tailor live voice, Bolo also sends your learner level, the suggested lesson, a few of its phrases, and a few of your saved phrases; during the call Asha can ask the app for a summary of your lessons, progress, and saved phrases, save a phrase only after you approve it in the app, and record lesson practice. Those requests and their results pass through OpenAI. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
           </Text>
           <Text style={styles.detail}>
-            Saved phrases, learning progress, preferences, reminder settings, content-free reliability counters, and up to 100 recent Asha chat messages are stored unencrypted on this device; live voice shares only the parts described above. Reliability counters contain no messages, transcripts, audio, phrases, identifiers, or error text and are never uploaded. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
+            Saved phrases, learning progress, preferences, reminder settings, and content-free reliability counters are stored unencrypted on this device. Up to 100 recent Asha chat messages are encrypted on this device; live voice shares only the parts described above. Reliability counters contain no messages, transcripts, audio, phrases, identifiers, or error text and are never uploaded. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
           </Text>
         </View>
       ) : null}
@@ -121,6 +137,41 @@ export function AiConsentGate({
       </Pressable>
       <Text style={styles.version}>AI data-use consent notice version {AI_CONSENT_VERSION}</Text>
     </View>
+  );
+
+  switch (presentation) {
+    case 'card':
+      return notice;
+    case 'sheet':
+      if (!sheetVisible) return null;
+      return (
+        <ConsentNoticeSheet onClose={onCloseSheet} reducedMotion={reducedMotion}>
+          {notice}
+        </ConsentNoticeSheet>
+      );
+    default: {
+      const unreachable: never = presentation;
+      return unreachable;
+    }
+  }
+}
+
+function ConsentNoticeSheet({ children, onClose, reducedMotion }: { children: ReactNode; onClose?: () => void; reducedMotion: boolean }) {
+  const styles = useStyles();
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal animationType={reducedMotion ? 'fade' : 'slide'} onRequestClose={onClose} presentationStyle="pageSheet" visible>
+      <View style={[styles.sheetScreen, Platform.OS === 'android' && { paddingTop: insets.top }]} testID="consent-sheet">
+        <View style={styles.sheetHeader}>
+          <Pressable accessibilityLabel="Close consent notice" accessibilityRole="button" onPress={onClose} style={styles.sheetClose}>
+            <Text style={styles.sheetCloseText}>Not now</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={[styles.sheetContent, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}>
+          {children}
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
@@ -148,4 +199,9 @@ const useStyles = makeStyles((c) => ({
   compactBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
   compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
   compactButtonText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  sheetScreen: { flex: 1, backgroundColor: c.background },
+  sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  sheetClose: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
+  sheetCloseText: { color: c.brandText, fontSize: 17, fontWeight: '600' },
+  sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
 }));

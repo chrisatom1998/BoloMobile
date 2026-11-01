@@ -10,6 +10,11 @@ const mockUseRealtimeConversation = jest.fn((_options?: unknown) => ({
   status: 'ready' as const,
 }));
 
+jest.mock('expo-audio', () => ({
+  getRecordingPermissionsAsync: jest.fn(async () => ({ canAskAgain: true, granted: true, status: 'granted' })),
+  requestRecordingPermissionsAsync: jest.fn(async () => ({ canAskAgain: true, granted: true, status: 'granted' })),
+}));
+
 jest.mock('@/hooks/use-realtime-conversation', () => ({
   useRealtimeConversation: (options: unknown) => mockUseRealtimeConversation(options),
 }));

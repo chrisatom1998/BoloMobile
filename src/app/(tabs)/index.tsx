@@ -180,7 +180,7 @@ export default function HomeScreen() {
             <Flame color={colors.goldIcon} size={18} strokeWidth={2.2} />
             <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
           </Pressable>
-          <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton}>
+          <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton} testID="today-settings">
             <Settings color={colors.ink} size={20} strokeWidth={2} />
           </Pressable>
         </View>
