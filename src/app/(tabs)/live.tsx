@@ -232,9 +232,6 @@ export default function LiveScreen() {
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
   const headerCollapsed = hasTranscriptMessages || scrolledCompact || accessibilityCompact;
-  useEffect(() => {
-    if (!hasTranscriptMessages) setScrolledCompact(false);
-  }, [hasTranscriptMessages]);
   const youCaption = romanizeDevanagari(liveUserTranscript).trim();
   const ashaCaption = romanizeDevanagari(liveAshaTranscript).trim();
   const speechCaption = latestCaptionSpeaker === 'asha' && ashaCaption
@@ -547,6 +544,7 @@ export default function LiveScreen() {
     setWordDefinitionPhrase(null);
     setInterruptedReason(null);
     setError('');
+    setScrolledCompact(false);
     clearAudioError();
     const pending = clearChatHistory().finally(() => {
       if (chatResetRef.current !== pending) return;
