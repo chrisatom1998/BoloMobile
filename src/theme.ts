@@ -113,6 +113,12 @@ export const layout = {
   chipScrollInset: spacing.lg,
   /** How much of the next chip stays in view so the row shows it can scroll. */
   chipPeek: spacing.xl,
+  /**
+   * Stack the Asha header below this width. A 393pt phone stays on one row.
+   */
+  headerStackBelow: 360,
+  /** Distance scrolled before the Asha header collapses to a bar. */
+  headerCollapseOffset: spacing.xxl + spacing.lg,
 } as const;
 
 export const radius = {

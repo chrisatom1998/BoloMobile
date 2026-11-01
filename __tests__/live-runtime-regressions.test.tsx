@@ -4,7 +4,7 @@ import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pre
 
 import LiveScreen, { createLiveStyles, visibleChipRowWidth } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
-import { layout, lightColors, spacing } from '../src/theme';
+import { displayFont, layout, lightColors, spacing } from '../src/theme';
 
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
@@ -831,7 +831,22 @@ describe('live theme styles', () => {
     expect(layout.touchTarget).toBe(44);
     expect(styles.askHeading.flexDirection).toBe('column');
     expect(styles.askTitle.alignSelf).toBe('stretch');
-    expect(styles.askTitle.textAlign).toBe('center');
+    expect(styles.askTitle.textAlign).toBe('left');
+    expect('fontFamily' in styles.askTitle).toBe(false);
+    expect(styles.headerTitle.fontFamily).toBe(displayFont);
+    expect(styles.headerTitle.textAlign).toBe('left');
+    expect('maxWidth' in styles.headerTitle).toBe(false);
+    expect('maxWidth' in styles.heroTitle).toBe(false);
+    expect('maxWidth' in styles.heroBody).toBe(false);
+    expect('fontFamily' in styles.heroTitle).toBe(false);
+    expect('borderWidth' in styles.privateBadge).toBe(false);
+    expect(styles.privateBadge.flexShrink).toBe(0);
+    expect(styles.secondaryActionText.flexShrink).toBe(0);
+    expect(styles.messageLabel.flexShrink).toBe(0);
+    expect(styles.example.paddingVertical).toBe(spacing.sm);
+    expect(styles.voiceHero.overflow).toBe('visible');
+    expect(layout.headerStackBelow).toBe(360);
+    expect(styles.ashaPortraitCollapsed.height).toBe(layout.touchTarget);
     expect(styles.askHeadingActions.flexDirection).toBe('row');
     expect(styles.askHeadingActions.flexWrap).toBe('wrap');
     expect(styles.askHeadingActions.justifyContent).toBe('space-between');
@@ -941,7 +956,7 @@ describe('immersive live conversation design', () => {
       });
       expect(scrollToEnd).not.toHaveBeenCalled();
 
-      scrollList(0);
+      await act(async () => { scrollList(0); });
       await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
       scrollToEnd.mockClear();
       await act(async () => {
@@ -949,7 +964,7 @@ describe('immersive live conversation design', () => {
       });
       expect(scrollToEnd).not.toHaveBeenCalled();
 
-      scrollList(1160);
+      await act(async () => { scrollList(1160); });
       await act(async () => {
         view.getByTestId('live-chat-list').props.onContentSizeChange();
       });
@@ -1248,7 +1263,7 @@ describe('immersive live conversation design', () => {
     expect(view.getByTestId('asha-voice-status')).toBeTruthy();
     expect(within(view.getByTestId('live-chat-list')).queryByTestId('composer-mic-toggle')).toBeNull();
     expect(view.getByTestId('composer-mic-toggle').props.accessibilityLabel).toBe('Start a voice conversation');
-    expect(view.getByText('How do I say…?')).toBeTruthy();
+    expect(view.queryByText('How do I say…?')).toBeNull();
     expect(view.queryByTestId('live-input-caption')).toBeNull();
     expect(view.getByTestId('live-output-caption').props.accessibilityLiveRegion).toBe('polite');
     expect(view.getByTestId('live-output-caption').props.children).toBe('Hello there.');
@@ -1481,7 +1496,7 @@ describe('immersive live conversation design', () => {
       expect(topbarStyle.flexDirection).toBe('column');
       expect(topbarStyle.paddingRight).toBe(0);
       expect(header.getByText('Speak with Asha').props.numberOfLines).toBeUndefined();
-      expect(header.getByText('Private Hindi coach · English replies').props.numberOfLines).toBeUndefined();
+      expect(view.getByText('Private Hindi coach · English replies').props.numberOfLines).toBeUndefined();
       await view.unmount();
       await flushMicrotasks();
     } finally {
@@ -1490,6 +1505,101 @@ describe('immersive live conversation design', () => {
         await Promise.resolve();
       });
     }
+  });
+
+  it('keeps one header row on a 393pt phone at the default text size', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const phone = { fontScale: 1, height: 852, scale: 3, width: 393 };
+    await act(async () => {
+      Dimensions.set({ screen: phone, window: phone });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      const topbarStyle = StyleSheet.flatten(view.getByTestId('asha-header-topbar').props.style);
+      const titleStyle = StyleSheet.flatten(view.getByText('Speak with Asha').props.style);
+      const askStyle = StyleSheet.flatten(view.getByText('How do I say…?').props.style);
+
+      expect(topbarStyle.flexDirection).toBe('row');
+      expect(titleStyle.textAlign).toBe('left');
+      expect(titleStyle.fontFamily).toBe(displayFont);
+      expect(askStyle.textAlign).toBe('left');
+      expect(askStyle.fontFamily).not.toBe(displayFont);
+      expect(view.getByText('English')).toBeTruthy();
+      expect(view.getByText('Hindi')).toBeTruthy();
+      expect('borderWidth' in StyleSheet.flatten(view.getByLabelText('Private conversation').props.style)).toBe(false);
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
+  it('wraps header labels at the largest text size and collapses after a message', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largest = { fontScale: 3.12, height: 852, scale: 3, width: 393 };
+    await act(async () => {
+      Dimensions.set({ screen: largest, window: largest });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      const topbarStyle = StyleSheet.flatten(view.getByTestId('asha-header-topbar').props.style);
+      const title = view.getByText('Speak with Asha');
+      const subtitle = view.getByText('Private Hindi coach · English replies');
+      const bodyStyle = StyleSheet.flatten(view.getByText('Tap Asha to start talking with her.').props.style);
+
+      expect(topbarStyle.flexDirection).toBe('column');
+      expect(title.props.numberOfLines).toBeUndefined();
+      expect(subtitle.props.numberOfLines).toBeUndefined();
+      expect('maxWidth' in bodyStyle).toBe(false);
+      expect(view.getByText('English')).toBeTruthy();
+      expect(view.getByText('Hindi')).toBeTruthy();
+      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(112);
+
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      expect(view.queryByText('How do I say…?')).toBeNull();
+      expect(view.queryByText('Private Hindi coach · English replies')).toBeNull();
+      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
+      expect(view.getByText('Clear chat')).toBeTruthy();
+      expect(view.getByText('Last session')).toBeTruthy();
+      expect(view.getByLabelText('Settings')).toBeTruthy();
+      expect(view.getByLabelText('Open chat history')).toBeTruthy();
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
+  it('collapses the voice header while the thread is scrolled and restores it at the top', async () => {
+    const view = await render(<LiveScreen />);
+    const scrollList = (offsetY: number) => {
+      view.getByTestId('live-chat-list').props.onScroll({
+        nativeEvent: {
+          contentOffset: { x: 0, y: offsetY },
+          contentSize: { height: 1600, width: 393 },
+          layoutMeasurement: { height: 700, width: 393 },
+        },
+      });
+    };
+
+    expect(view.getByText('How do I say…?')).toBeTruthy();
+    await act(async () => { scrollList(layout.headerCollapseOffset + 8); });
+    expect(view.queryByText('How do I say…?')).toBeNull();
+    expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
+    await act(async () => { scrollList(0); });
+    expect(view.getByText('How do I say…?')).toBeTruthy();
+    await view.unmount();
+    await flushMicrotasks();
   });
 });
 
