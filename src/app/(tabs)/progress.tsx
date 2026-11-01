@@ -13,7 +13,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { completedLessonCount, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { createButtonStyles, displayFont, hindiType, makeStyles, radius, spacing, type, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
@@ -77,8 +77,8 @@ export default function ProgressScreen() {
 
   const stats = [
     { accessibilityLabel: `${streak} day practice streak`, key: 'streak', label: 'day streak', value: String(streak) },
-    { accessibilityLabel: `${phrases.length} phrase${phrases.length === 1 ? '' : 's'} saved`, key: 'phrases', label: 'phrases', value: String(phrases.length) },
-    { accessibilityLabel: `${completedScenes} lesson${completedScenes === 1 ? '' : 's'} finished`, key: 'scenes', label: 'lessons', value: String(completedScenes) },
+    { accessibilityLabel: `${phrases.length} phrase${phrases.length === 1 ? '' : 's'} saved`, key: 'phrases', label: phrases.length === 1 ? 'phrase' : 'phrases', value: String(phrases.length) },
+    { accessibilityLabel: `${completedScenes} lesson${completedScenes === 1 ? '' : 's'} finished`, key: 'scenes', label: completedScenes === 1 ? 'lesson' : 'lessons', value: String(completedScenes) },
     // No answered turns yet: a dash, not a misleading 0%.
     answeredTurns > 0
       ? { accessibilityLabel: `${accuracy} percent answer accuracy`, key: 'accuracy', label: 'accuracy', value: `${accuracy}%` }
@@ -88,7 +88,7 @@ export default function ProgressScreen() {
   function shareMilestones() {
     const achieved = milestones.filter((item) => item.achieved).map((item) => item.title);
     const message = achieved.length
-      ? `I’m practicing real-life Hindi with Bolo. ${completedScenes} lessons complete — ${achieved.join(', ')}.`
+      ? `I’m practicing real-life Hindi with Bolo. ${completedScenes} lesson${completedScenes === 1 ? '' : 's'} complete — ${achieved.join(', ')}.`
       : `I’m building practical Hindi confidence with Bolo. ${completedScenes} lesson${completedScenes === 1 ? '' : 's'} complete.`;
     void Share.share({ message, title: 'My Bolo progress' }).catch((error: unknown) => {
       showAppAlert('Could not share your progress', error instanceof Error ? error.message : 'Try again in a moment.');
@@ -97,7 +97,7 @@ export default function ProgressScreen() {
 
   return (
     <>
-      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
+      <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
         <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
           <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
             <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
@@ -154,12 +154,12 @@ export default function ProgressScreen() {
         </View>
 
         <View style={[styles.stats, largeTextLayout && styles.statsLarge]} testID="progress-stats">
-          {stats.map((stat, index) => (
+          {stats.map((stat) => (
             <View
               key={stat.key}
               accessible
               accessibilityLabel={stat.accessibilityLabel}
-              style={[styles.stat, largeTextLayout && styles.statLarge, index > 0 && (largeTextLayout ? styles.statDividerLarge : styles.statDivider)]}
+              style={[styles.stat, largeTextLayout && styles.statLarge]}
               testID={`progress-stat-${stat.key}`}
             >
               <Text style={styles.statValue}>{stat.value}</Text>
@@ -219,65 +219,67 @@ export default function ProgressScreen() {
   );
 }
 
-export const createProgressStyles = (c: ThemeColors) => ({
-  content: { alignItems: 'center', padding: 20, paddingTop: 18, paddingBottom: 120, gap: spacing.lg },
+export const createProgressStyles = (c: ThemeColors) => {
+  const button = createButtonStyles(c);
+  return {
+  content: { alignItems: 'center', padding: spacing.gutter, paddingTop: spacing.lg, paddingBottom: 120, gap: spacing.lg },
   pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  pageHeadingCopy: { minWidth: 0, flex: 1, gap: 2 },
+  pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   pageHeadingCopyLarge: { flex: 0, width: '100%' },
-  pageTitle: { fontSize: 30, lineHeight: 36, letterSpacing: -0.3 },
-  pageSubtitle: { maxWidth: 300, color: c.muted, fontFamily: displayFont, fontSize: 16, lineHeight: 22, textAlign: 'left' },
+  pageTitle: { ...type.display },
+  pageSubtitle: { ...type.body, maxWidth: 300, color: c.muted, fontFamily: displayFont, textAlign: 'left' },
   pageSubtitleLarge: { maxWidth: '100%' },
   shareButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: 20, gap: spacing.lg },
+  weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: spacing.gutter, gap: spacing.lg },
   // Tucked into the top-right corner, small and faint, so it never sits behind the bars.
   weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },
   weekHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
-  weekHeadingCopy: { minWidth: 0, flexShrink: 1, gap: 4, paddingTop: 6 },
-  weekEyebrow: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase' },
-  weekMeta: { color: c.brandSoft, fontSize: 12, lineHeight: 16, fontWeight: '600' },
-  weekTotal: { color: c.white, fontFamily: displayFont, fontSize: 36, lineHeight: 42, fontWeight: '700', fontVariant: ['tabular-nums'], textAlign: 'right' },
-  weekTotalUnit: { color: c.brandSoft, fontFamily: undefined, fontSize: 15, fontWeight: '600' },
-  chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
-  barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
-  barValue: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontVariant: ['tabular-nums'] },
+  weekHeadingCopy: { minWidth: 0, flexShrink: 1, gap: spacing.xs, paddingTop: spacing.sm },
+  weekEyebrow: { ...type.eyebrow, color: c.brandSoft },
+  weekMeta: { ...type.caption, color: c.brandSoft },
+  weekTotal: { ...type.display, color: c.white, fontVariant: ['lining-nums', 'tabular-nums'], textAlign: 'right' },
+  weekTotalUnit: { ...type.label, color: c.brandSoft },
+  chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
+  barValue: { ...type.caption, color: c.brandSoft, fontVariant: ['lining-nums', 'tabular-nums'] },
   barValueToday: { color: c.white, fontWeight: '700' },
   barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
-  bar: { width: '100%', minHeight: 8, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
-  barEmpty: { height: 0, minHeight: 0 },
+  bar: { width: '100%', minHeight: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
+  // Zero-minute days keep a 4 pt stub so all seven days always show.
+  barEmpty: { height: spacing.xs, minHeight: spacing.xs, borderRadius: radius.pill, backgroundColor: c.track },
   barToday: { backgroundColor: c.gold },
-  day: { color: c.brandSoft, fontSize: 11, lineHeight: 14, fontWeight: '600' },
+  day: { ...type.caption, color: c.brandSoft, fontWeight: '600' },
   dayToday: { color: c.white },
-  weekSummary: { color: '#FBEFE8', fontSize: 14, lineHeight: 20 },
-  stats: { width: '100%', flexDirection: 'row', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', paddingVertical: spacing.lg, paddingHorizontal: spacing.xs },
-  statsLarge: { flexDirection: 'column', paddingVertical: spacing.xs, paddingHorizontal: spacing.lg },
-  stat: { minWidth: 0, flex: 1, alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: spacing.xs },
-  statLarge: { flex: 0, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'flex-start', gap: spacing.sm, paddingVertical: spacing.md },
-  statDivider: { borderLeftColor: c.line, borderLeftWidth: 1 },
-  statDividerLarge: { borderTopColor: c.line, borderTopWidth: 1 },
-  statValue: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  statLabel: { color: c.muted, fontSize: 12, lineHeight: 16, textAlign: 'center' },
-  hero: { width: '100%', alignItems: 'flex-start', borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg, gap: spacing.sm },
-  heroEyebrow: { color: c.brandText, fontSize: 12, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
-  heroTitle: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 28, fontWeight: '600', textAlign: 'left' },
-  heroBody: { color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'left' },
-  heroFootnotes: { width: '100%', gap: 2, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.sm, marginTop: spacing.xs },
-  heroFootnoteText: { color: c.muted, fontSize: 12, lineHeight: 17, fontVariant: ['tabular-nums'] },
+  weekSummary: { ...type.caption, color: c.onBrandText },
+  stats: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  statsLarge: { flexDirection: 'column', flexWrap: 'nowrap' },
+  stat: { minWidth: 0, flexBasis: '47%', flexGrow: 1, gap: spacing.xs, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg },
+  statLarge: { flexBasis: 'auto', flexGrow: 0, flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
+  statValue: { ...type.title, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
+  statLabel: { ...type.caption, color: c.muted },
+  hero: { width: '100%', alignItems: 'flex-start', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg, gap: spacing.sm },
+  heroEyebrow: { ...type.eyebrow, color: c.brandText },
+  heroTitle: { ...type.headline, color: c.ink, textAlign: 'left' },
+  heroBody: { ...type.caption, color: c.muted, textAlign: 'left', fontVariant: ['lining-nums', 'tabular-nums'] },
+  heroFootnotes: { width: '100%', gap: spacing.xs, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.sm, marginTop: spacing.xs },
+  heroFootnoteText: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   heroFootnoteForestText: { color: c.forestText, fontWeight: '600' },
-  heroAction: { minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, marginTop: spacing.xs },
-  heroActionText: { color: c.ink, fontSize: 15, fontWeight: '600' },
-  card: { width: '100%', backgroundColor: c.paperRaised, borderRadius: 22, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md },
+  heroAction: { ...button.primary, alignSelf: 'stretch', marginTop: spacing.xs },
+  heroActionText: button.primaryText,
+  card: { width: '100%', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  title: { color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },
-  seeAll: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
-  seeAllText: { color: c.brand, fontSize: 13, fontWeight: '600' },
-  planRow: { gap: 6 },
+  title: { ...type.headline, color: c.ink },
+  seeAll: button.quiet,
+  seeAllText: button.quietText,
+  planRow: { gap: spacing.sm },
   planCopy: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
-  planTitle: { minWidth: 0, flexShrink: 1, color: c.ink, fontSize: 14, lineHeight: 20, fontWeight: '600' },
-  planMeta: { color: c.muted, fontSize: 14, lineHeight: 20, fontVariant: ['tabular-nums'] },
+  planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },
+  planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   planTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.track },
   planFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
   planFillComplete: { backgroundColor: c.forest },
-} satisfies NamedStyles);
+  } satisfies NamedStyles;
+};
 
 const useStyles = makeStyles(createProgressStyles);

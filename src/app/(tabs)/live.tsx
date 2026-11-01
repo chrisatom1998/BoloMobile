@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
+import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Settings, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,7 +40,20 @@ import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/ser
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme, type } from '@/theme';
+import { displayFont, hindiType, layout, makeStyles, maxContentWidth, radius, spacing, useTheme, type } from '@/theme';
+
+/** Width of the chip scroller so the next chip peeks by `peek` points inside `available`. */
+export function visibleChipRowWidth(widths: readonly number[], available: number, peek: number, gap: number): number {
+  if (available <= 0 || widths.length === 0 || widths.some((width) => width <= 0)) return available;
+  let cursor = 0;
+  for (let index = 0; index < widths.length; index += 1) {
+    const width = widths[index] ?? 0;
+    if (cursor + width > available) return Math.min(available, cursor + peek);
+    cursor += width;
+    if (index < widths.length - 1) cursor += gap;
+  }
+  return Math.min(available, cursor);
+}
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -50,6 +63,10 @@ const welcome: ChatMessage = {
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const tailFollowThreshold = 48;
+/** Releases a send-follow that never emits a scroll-end event. Longer than a scroll animation. */
+const animatedFollowReleaseMs = 500;
+/** One frame. The send update already consumes a zero-delay frame, so the follow waits for the next one. */
+const tailFollowFrameMs = 16;
 /** Shown instead of the generic network error when a live call cannot even start. */
 export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Lessons and saved phrases work offline.';
 /** The learner's explicit Clear removes saved transcripts but keeps queued reports and their retries. */
@@ -102,8 +119,9 @@ export default function LiveScreen() {
   const heroContentWidth = Math.max(288, Math.min(420, windowWidth - spacing.xxl));
   const compactVoiceLayout = windowHeight < 760;
   const largeTextLayout = useLargeTextLayout();
-  // 390 and wider fit the title and Private badge on one row. Narrower phones stack them.
-  const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < 390;
+  // A 393pt phone keeps one row. Stack only for large text or a phone under headerStackBelow.
+  const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < layout.headerStackBelow;
+  const accessibilityCompact = fontScale >= layout.accessibilityFontScale;
   const { elapsedSeconds, reset: resetPracticeTimer, touch: touchPracticeTimer } = useForegroundTimer();
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
@@ -178,8 +196,33 @@ export default function LiveScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const nearBottomRef = useRef(true);
   const followedMessageCountRef = useRef(0);
+  // Pending learner row that should be brought into view. Honored only while
+  // that row is on screen, or for the commit that replaces it with Asha's turn.
+  const forceFollowIdRef = useRef<string | null>(null);
+  // Animated send-follow emits onScroll from mid-flight offsets. Ignore those
+  // until the list is near the tail, the scroll ends, or this timeout fires.
+  const animatedFollowRef = useRef(false);
+  const animatedFollowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseAnimatedFollow = useCallback(() => {
+    animatedFollowRef.current = false;
+    if (animatedFollowTimerRef.current === null) return;
+    clearTimeout(animatedFollowTimerRef.current);
+    animatedFollowTimerRef.current = null;
+  }, []);
+  const armAnimatedFollow = useCallback(() => {
+    animatedFollowRef.current = true;
+    if (animatedFollowTimerRef.current !== null) clearTimeout(animatedFollowTimerRef.current);
+    animatedFollowTimerRef.current = setTimeout(() => {
+      animatedFollowTimerRef.current = null;
+      animatedFollowRef.current = false;
+    }, animatedFollowReleaseMs);
+  }, []);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
+  const [chipClipWidth, setChipClipWidth] = useState(0);
+  const [chipWidths, setChipWidths] = useState<number[]>([0, 0, 0, 0]);
+  const [scrolledCompact, setScrolledCompact] = useState(false);
+  const chipViewportWidth = visibleChipRowWidth(chipWidths, chipClipWidth, layout.chipPeek, spacing.sm);
   const visibleMessages = useMemo(
     () => clearingChat ? [welcome] : pendingUserMessage ? [welcome, ...chatHistory, pendingUserMessage] : [welcome, ...chatHistory],
     [chatHistory, clearingChat, pendingUserMessage],
@@ -188,6 +231,11 @@ export default function LiveScreen() {
   const realtimeOwnsAudio = realtimeLocked;
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
+  const headerCollapsed = hasTranscriptMessages || scrolledCompact || accessibilityCompact;
+  // At large text the fixed header (stacked title, actions, two-row language switch) can fill most of
+  // the space left above the keyboard. While typing there, keep only the title so the transcript and
+  // composer still fit. Everything comes back when the keyboard closes.
+  const composingAtLargeText = largeTextLayout && keyboardOverlap > 0;
   const youCaption = romanizeDevanagari(liveUserTranscript).trim();
   const ashaCaption = romanizeDevanagari(liveAshaTranscript).trim();
   const speechCaption = latestCaptionSpeaker === 'asha' && ashaCaption
@@ -202,7 +250,6 @@ export default function LiveScreen() {
   const conversationStarted = aiConsent && (hasTranscriptMessages || speechCaption !== null);
   const studioPhrase = phrases[0] ?? { en: 'Less sugar, please.', hi: 'चीनी कम, कृपया।', latin: 'Cheeni kam, kripya.' };
   const studioPhraseMastery = phraseReviews[studioPhrase.hi]?.mastery ?? 0;
-  const responseLanguageName = responseLanguage === 'hi' ? 'Hindi' : 'English';
   const languageControlLocked = busy || clearingChat || realtimeOwnsAudio;
   const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
   const voiceHeroTitle = {
@@ -330,24 +377,48 @@ export default function LiveScreen() {
     };
   }, [reducedMotion, screenFocused, scrollTailIntoView]);
 
-  // A new message follows the tail when the reader is already near it. The first
-  // scrollToEnd can run before layout, so retry once on the next frame.
+  // A new message follows the tail when the reader is already near it. A send
+  // names its pending row so the same follow runs after that row commits, even
+  // if they had scrolled up. The first scrollToEnd can run before layout, so
+  // retry once on the next frame. A send animates only after that decision;
+  // mid-flight onScroll is ignored until the tail is reached, the scroll ends, or the reader drags.
   useEffect(() => {
-    const countChanged = messageCount !== followedMessageCountRef.current;
+    const previousCount = followedMessageCountRef.current;
+    const countChanged = messageCount !== previousCount;
     followedMessageCountRef.current = messageCount;
-    if (!aiConsent || messageCount === 0 || !countChanged || !nearBottomRef.current) return;
+    const forceId = forceFollowIdRef.current;
+    const showsForcedRow = forceId !== null && pendingUserMessage?.id === forceId;
+    // A fast success replaces the pending row in the same commit the count grows.
+    // A failure clears the id before that, so a later voice turn cannot inherit it.
+    const forcedSendLanded = forceId !== null && !showsForcedRow && messageCount > previousCount;
+    if (forceId !== null && !showsForcedRow) forceFollowIdRef.current = null;
+    const forceFollow = showsForcedRow || forcedSendLanded;
+    if (!aiConsent || messageCount === 0 || !countChanged || (!nearBottomRef.current && !forceFollow)) return;
+    const animate = forceFollow && !reducedMotion;
+    let settled = false;
+    let firstFrame = 0;
     let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
-      secondFrame = requestAnimationFrame(() => {
-        listRef.current?.scrollToEnd({ animated: false });
+    const kick = setTimeout(() => {
+      firstFrame = requestAnimationFrame(() => {
+        if (animate) armAnimatedFollow();
+        listRef.current?.scrollToEnd({ animated: animate });
+        secondFrame = requestAnimationFrame(() => {
+          if (animate) armAnimatedFollow();
+          listRef.current?.scrollToEnd({ animated: animate });
+          settled = true;
+          if (!forceFollow) return;
+          forceFollowIdRef.current = null;
+          nearBottomRef.current = true;
+        });
       });
-    });
+    }, tailFollowFrameMs);
     return () => {
+      clearTimeout(kick);
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
+      if (!settled) releaseAnimatedFollow();
     };
-  }, [aiConsent, messageCount]);
+  }, [aiConsent, armAnimatedFollow, messageCount, pendingUserMessage, reducedMotion, releaseAnimatedFollow]);
 
   // Only the outbox's explicit delivery says a queued report was received; an entry
   // that disappears through Discard, consent withdrawal, or Delete Bolo data was not.
@@ -370,6 +441,7 @@ export default function LiveScreen() {
       reportControllers.clear();
       selectionClearTimers.forEach(clearTimeout);
       selectionClearTimers.clear();
+      if (animatedFollowTimerRef.current !== null) clearTimeout(animatedFollowTimerRef.current);
       void stopSpeaking();
     };
   }, []);
@@ -476,6 +548,7 @@ export default function LiveScreen() {
     setWordDefinitionPhrase(null);
     setInterruptedReason(null);
     setError('');
+    setScrolledCompact(false);
     clearAudioError();
     const pending = clearChatHistory().finally(() => {
       if (chatResetRef.current !== pending) return;
@@ -554,6 +627,9 @@ export default function LiveScreen() {
     hapticTap();
     chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
+    // Tie the follow to this row. A failure clears it before the next paint, so
+    // a later voice turn cannot inherit a send that never stayed on screen.
+    forceFollowIdRef.current = userMessage.id;
     setPendingUserMessage(userMessage);
     setBusy(true);
     setError('');
@@ -562,6 +638,7 @@ export default function LiveScreen() {
     try {
       const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) {
+        if (forceFollowIdRef.current === userMessage.id) forceFollowIdRef.current = null;
         if (mountedRef.current) clearPendingUserMessage(userMessage.id);
         return false;
       }
@@ -580,6 +657,7 @@ export default function LiveScreen() {
       }
       return true;
     } catch (cause) {
+      if (forceFollowIdRef.current === userMessage.id) forceFollowIdRef.current = null;
       if (mountedRef.current) clearPendingUserMessage(userMessage.id);
       if (mountedRef.current && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
@@ -746,7 +824,7 @@ export default function LiveScreen() {
       style={[styles.lastSessionButton, !aiConsent && styles.lastSessionButtonConsent]}
     >
       <History color={colors.gold} size={17} />
-      <Text style={styles.lastSessionText}>Last session</Text>
+      <Text style={styles.secondaryActionText}>Last session</Text>
     </Pressable>
   ) : null;
 
@@ -826,8 +904,65 @@ export default function LiveScreen() {
     ? { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', responding: 'SPEAKING' }[realtimeStatus]
     : 'LIVE VOICE';
 
+  const portraitStyle = [
+    styles.ashaPortrait,
+    compactVoiceLayout && !headerCollapsed && styles.ashaPortraitCompact,
+    headerCollapsed && !accessibilityCompact && styles.ashaPortraitCollapsed,
+  ];
+
+  const languageControl = (
+    <SegmentedControl
+      accessibilityLabel="Asha voice language"
+      disabled={languageControlLocked}
+      disabledHint="End the current request or live voice session to change Asha voice language."
+      onValueChange={changeResponseLanguage}
+      options={[
+        { accessibilityLabel: 'English', label: 'English', value: 'en' },
+        { accessibilityLabel: 'Hindi', label: 'Hindi', value: 'hi' },
+      ]}
+      maxFontSizeMultiplier={accessibilityCompact ? layout.headerFontScaleCap : undefined}
+      stackedAtLargeText={!accessibilityCompact}
+      style={[styles.languageSelector, { width: heroContentWidth }]}
+      tone="dark"
+      value={responseLanguage}
+    />
+  );
+
+  const headerTopbar = (
+    <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
+      <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
+        <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
+          <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked, headerCollapsed && styles.headerTitleCollapsed]}>Speak with Asha</JournalDisplay>
+        </View>
+      </View>
+      {composingAtLargeText ? null : (
+        <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
+          {floatingAsha.available && aiConsent ? (
+            <AshaMinimizeButton onPress={floatingAsha.minimize} />
+          ) : null}
+          <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
+            <Lock color={colors.heroSubtle} size={14} strokeWidth={2} />
+            <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.privateText}>Private</Text>
+          </View>
+          <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.headerSettings} testID="asha-settings">
+            <Settings accessibilityLabel="Settings" accessible={false} color={colors.white} size={20} strokeWidth={2} />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
+      <View style={[styles.screenHeader, { paddingTop: insets.top }]}>
+        {floatingAsha.available
+          ? <AshaSwipeToMinimize onMinimize={floatingAsha.minimize}>{headerTopbar}</AshaSwipeToMinimize>
+          : headerTopbar}
+        {accessibilityCompact ? (
+          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.headerSubtitle}>Your Hindi coach</Text>
+        ) : null}
+        {headerCollapsed && aiConsent && !composingAtLargeText ? languageControl : null}
+      </View>
       <FlatList
         ref={listRef}
         contentInsetAdjustmentBehavior="never"
@@ -835,42 +970,32 @@ export default function LiveScreen() {
         onScroll={(event) => {
           const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
           const distanceFromEnd = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-          nearBottomRef.current = distanceFromEnd <= tailFollowThreshold;
+          const canScroll = contentSize.height > layoutMeasurement.height + layout.headerCollapseOffset;
+          const nextCompact = canScroll && contentOffset.y > layout.headerCollapseOffset;
+          setScrolledCompact((current) => {
+            if (!canScroll || contentOffset.y < spacing.sm) return false;
+            if (nextCompact) return true;
+            return current;
+          });
+          const nearBottom = distanceFromEnd <= tailFollowThreshold;
+          if (animatedFollowRef.current && !nearBottom) return;
+          releaseAnimatedFollow();
+          nearBottomRef.current = nearBottom;
         }}
+        onMomentumScrollEnd={releaseAnimatedFollow}
+        onScrollBeginDrag={releaseAnimatedFollow}
+        onScrollEndDrag={releaseAnimatedFollow}
         scrollEventThrottle={16}
         data={aiConsent ? visibleMessages : []}
         keyExtractor={(message) => message.id}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
-        style={[styles.list, { marginTop: insets.top }]}
+        style={styles.list}
         testID="live-chat-list"
         ListHeaderComponent={(
           <View>
-            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, { paddingTop: restingVoiceLayout ? spacing.xs : spacing.md }]} testID="voice-conversation-hero">
-              {(() => {
-                const topbar = (
-                  <View style={[styles.topbar, reflowHeaderLayout && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
-                    <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
-                      <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
-                        <JournalDisplay numberOfLines={reflowHeaderLayout ? undefined : 2} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked]}>Speak with Asha</JournalDisplay>
-                        <Text numberOfLines={reflowHeaderLayout ? undefined : 1} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Private Hindi coach · {responseLanguageName} replies</Text>
-                      </View>
-                    </View>
-                    <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
-                      {floatingAsha.available && aiConsent ? (
-                        <AshaMinimizeButton onPress={floatingAsha.minimize} />
-                      ) : null}
-                      <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-                        <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
-                        <Text style={styles.privateText}>Private</Text>
-                      </View>
-                    </View>
-                  </View>
-                );
-                return floatingAsha.available
-                  ? <AshaSwipeToMinimize onMinimize={floatingAsha.minimize}>{topbar}</AshaSwipeToMinimize>
-                  : topbar;
-              })()}
+            <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, headerCollapsed && styles.voiceHeroCollapsed, { paddingTop: restingVoiceLayout ? spacing.xs : spacing.md }]} testID="voice-conversation-hero">
+              {headerCollapsed ? null : <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Your Hindi coach</Text>}
               {!aiConsent ? (
                 <View style={[styles.liveControls, { width: heroContentWidth }]} testID="live-voice-controls">
                   <View style={[styles.inviteRing, compactVoiceLayout && styles.inviteRingCompact]}>
@@ -879,7 +1004,7 @@ export default function LiveScreen() {
                       cachePolicy="memory-disk"
                       contentFit="cover"
                       source={ashaPortrait}
-                      style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
+                      style={portraitStyle}
                       testID="asha-header-portrait"
                       transition={0}
                     />
@@ -895,30 +1020,18 @@ export default function LiveScreen() {
                 </View>
               ) : null}
               {aiConsent ? <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
-                <SegmentedControl
-                  accessibilityLabel="Asha voice language"
-                  disabled={languageControlLocked}
-                  disabledHint="End the current request or live voice session to change Asha voice language."
-                  onValueChange={changeResponseLanguage}
-                  options={[
-                    { accessibilityLabel: 'English', label: 'English replies', value: 'en' },
-                    { accessibilityLabel: 'Hindi', label: 'Hindi replies', value: 'hi' },
-                  ]}
-                  stackedAtLargeText
-                  style={[styles.languageSelector, { width: heroContentWidth }]}
-                  tone="dark"
-                  value={responseLanguage}
-                />
+                {headerCollapsed ? null : languageControl}
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
                     {floatingAsha.available && !floatingAsha.voice ? (
                       <Image
-                        accessible={false}
+                        accessibilityLabel="Talk to Asha"
+                        accessible
                         cachePolicy="memory-disk"
                         contentFit="cover"
                         source={ashaPortrait}
-                        style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
+                        style={portraitStyle}
                         testID="asha-header-portrait"
                         transition={0}
                       />
@@ -929,15 +1042,15 @@ export default function LiveScreen() {
                         cachePolicy="memory-disk"
                         contentFit="cover"
                         source={ashaPortrait}
-                        style={[styles.ashaPortrait, compactVoiceLayout && styles.ashaPortraitCompact]}
+                        style={portraitStyle}
                         testID="asha-header-portrait"
                         transition={0}
                       />
                     </RealtimeVoiceButton>
                     )}
                     {aiConsent ? (
-                      <Pressable accessibilityLabel="Open chat history" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                        <MessageCircle color={colors.white} size={20} />
+                      <Pressable accessibilityLabel="Open transcript" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
+                        <MessageCircle accessibilityLabel="Open transcript" accessible={false} color={colors.white} size={20} />
                       </Pressable>
                     ) : null}
                   </View>
@@ -986,26 +1099,31 @@ export default function LiveScreen() {
             </View>
 
             {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, restingVoiceLayout && styles.askSectionResting]} testID="ask-asha-sheet">
-                <View style={[styles.askHeadingRow, largeTextLayout && styles.askHeadingRowLarge]}>
-                  <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
-                    <Text style={styles.askEyebrow}>Ask Asha</Text>
-                    <Text style={styles.askTitle}>How do I say…?</Text>
+                {/* Title on its own row, then the controls. A shared row let the title paint over Last session. */}
+                <View style={styles.askHeading} testID="ask-asha-heading-block">
+                  {headerCollapsed ? null : (
+                    <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
+                      <Text style={styles.askEyebrow}>Ask Asha</Text>
+                      <Text style={styles.askTitle}>How do I say…?</Text>
+                    </View>
+                  )}
+                  <View style={styles.askHeadingActions} testID="ask-asha-actions">
+                    {chatHistory.length > 0 ? (
+                      <Pressable
+                        accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
+                        accessibilityLabel="Clear Asha chat history"
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: clearChatDisabled }}
+                        disabled={clearChatDisabled}
+                        onPress={confirmClearChat}
+                        style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
+                      >
+                        <Trash2 color={colors.gold} size={17} />
+                        <Text style={styles.secondaryActionText}>Clear chat</Text>
+                      </Pressable>
+                    ) : null}
+                    <View style={styles.lastSessionSlot}>{lastSessionButton}</View>
                   </View>
-                  {lastSessionButton}
-                  {chatHistory.length > 0 ? (
-                    <Pressable
-                      accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
-                      accessibilityLabel="Clear Asha chat history"
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: clearChatDisabled }}
-                      disabled={clearChatDisabled}
-                      onPress={confirmClearChat}
-                      style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
-                    >
-                      <Trash2 color={colors.dangerSoft} size={17} />
-                      <Text style={styles.clearChatText}>Clear chat</Text>
-                    </Pressable>
-                  ) : null}
                 </View>
                 {unassociatedReports.length ? (
                   <View style={styles.queuedReports} testID="queued-reports">
@@ -1118,22 +1236,59 @@ export default function LiveScreen() {
             </Pressable>
           </View>
         ) : null}
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
-          {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
-            <PressableFeedback
-              accessibilityRole="button"
-              accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
-              isDisabled={busy || clearingChat || realtimeLocked}
-              key={example}
-              onPress={() => { void sendText(example); }}
-              style={[styles.example, (busy || clearingChat || realtimeLocked) && styles.disabled]}
-            >
-              <Text style={styles.exampleText}>{example}</Text>
-            </PressableFeedback>
-          ))}
-        </ScrollView>
+        <View
+          onLayout={(event) => {
+            const width = event.nativeEvent.layout.width;
+            setChipClipWidth((current) => (current === width ? current : width));
+          }}
+          style={styles.exampleClip}
+        >
+          <View style={[styles.exampleViewport, chipViewportWidth > 0 && { width: chipViewportWidth }]}>
+          <ScrollView
+            horizontal
+            keyboardShouldPersistTaps="handled"
+            showsHorizontalScrollIndicator={false}
+            style={styles.exampleScroller}
+            contentContainerStyle={styles.examples}
+            testID="live-example-chips"
+          >
+            {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example, index, examples) => (
+              <View
+                key={example}
+                onLayout={(event) => {
+                  const width = event.nativeEvent.layout.width;
+                  setChipWidths((current) => {
+                    if (current[index] === width) return current;
+                    const next = current.slice();
+                    next[index] = width;
+                    return next;
+                  });
+                }}
+                style={index < examples.length - 1 ? styles.exampleSpacer : undefined}
+              >
+                <PressableFeedback
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: busy || clearingChat || realtimeLocked }}
+                  isDisabled={busy || clearingChat || realtimeLocked}
+                  onPress={() => { void sendText(example); }}
+                  style={[styles.example, (busy || clearingChat || realtimeLocked) && styles.disabled]}
+                >
+                  <Text style={styles.exampleText}>{example}</Text>
+                </PressableFeedback>
+              </View>
+            ))}
+          </ScrollView>
+          {chipClipWidth > 0 && chipViewportWidth < chipClipWidth - 1 ? (
+            <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={styles.chipFade}>
+              {Array.from({ length: 6 }, (_, index) => (
+                <View key={index} style={[styles.chipFadeStrip, { opacity: (index + 1) / 6 }]} />
+              ))}
+            </View>
+          ) : null}
+          </View>
+        </View>
         <View style={styles.composerEntry}>
-          {conversationStarted && composerMicActionBound ? (
+          {composerMicActionBound ? (
             <Pressable
               accessibilityHint="Mutes or unmutes your microphone."
               accessibilityLabel={composerMicLabel}
@@ -1168,25 +1323,29 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
     backgroundColor: c.night,
-    overflow: 'hidden',
+    overflow: 'visible',
   },
   voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.xs },
-  voiceHeroResting: { gap: 0, paddingBottom: 0 },
+  voiceHeroResting: { gap: 0, paddingBottom: spacing.sm },
+  voiceHeroCollapsed: { gap: spacing.xs, paddingBottom: 0 },
+  screenHeader: { alignItems: 'center', backgroundColor: c.night, paddingBottom: spacing.xs },
+  headerSettings: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
   voiceHeroLarge: { overflow: 'visible' },
   topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
   headerIdentity: { minWidth: 0, flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   headerIdentityLarge: { flex: 0 },
-  headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs, overflow: 'hidden' },
+  headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs, overflow: 'visible' },
   headerCopyStacked: { overflow: 'visible' },
-  headerTitle: { ...type.display, alignSelf: 'stretch', color: c.white, maxWidth: 260, textAlign: 'left' },
-  headerTitleStacked: { maxWidth: '100%' },
-  headerSubtitle: { ...type.caption, minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.heroSubtle, textAlign: 'left' },
+  headerTitle: { ...type.headline, alignSelf: 'stretch', color: c.white, flexShrink: 0, textAlign: 'left' },
+  headerTitleStacked: { alignSelf: 'stretch' },
+  headerTitleCollapsed: { ...type.headline, color: c.white, textAlign: 'left' },
+  headerSubtitle: { ...type.caption, alignSelf: 'stretch', flexShrink: 0, color: c.heroSubtle, textAlign: 'left' },
   headerSubtitleStacked: { flexShrink: 0 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerActions: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: spacing.sm },
   headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
-  privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.nightLine, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  privateText: { ...type.caption, color: c.brandSoft, fontWeight: '600' },
+  privateBadge: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: spacing.xs },
+  privateText: { ...type.caption, flexShrink: 0, color: c.heroSubtle, fontWeight: '600' },
   chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { alignSelf: 'center' },
   inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
@@ -1202,19 +1361,20 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   portraitControl: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface },
   ashaPortraitCompact: { width: 96, height: 96 },
-  heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.xs },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  ashaPortraitCollapsed: { width: layout.touchTarget, height: layout.touchTarget, borderWidth: 2 },
+  heroCopy: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.xs },
+  statusRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm },
   statusDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.gold, opacity: 0.6 },
   statusDotLive: { opacity: 1 },
-  liveVoiceText: { ...type.eyebrow, color: c.gold },
-  heroTitle: { ...type.headline, minWidth: 0, maxWidth: 300, flexShrink: 1, color: c.white, textAlign: 'center', fontWeight: '600' },
-  heroBody: { ...type.caption, minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroSubtle, textAlign: 'center' },
+  liveVoiceText: { ...type.eyebrow, flexShrink: 0, color: c.gold },
+  heroTitle: { ...type.body, color: c.white, flexShrink: 0, textAlign: 'center', fontWeight: '600' },
+  heroBody: { ...type.caption, color: c.heroSubtle, flexShrink: 0, textAlign: 'center' },
   captionBlock: { alignSelf: 'center', gap: spacing.md, marginBottom: spacing.sm },
   captionCard: { alignSelf: 'stretch', gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   captionCardYou: { backgroundColor: c.nightSurface },
   captionCardAsha: { backgroundColor: c.paperRaised },
   captionLabelBadge: { minHeight: 30, alignSelf: 'flex-start', justifyContent: 'center', overflow: 'visible', paddingVertical: 5 }, // 5 pt keeps the badge text from clipping (pinned by a regression test).
-  captionLabel: { ...type.caption, color: c.heroSubtle, fontWeight: '700', letterSpacing: 0.25 },
+  captionLabel: { ...type.caption, flexShrink: 0, color: c.heroSubtle, fontWeight: '700', letterSpacing: 0.25 },
   captionLabelAsha: { color: c.brand },
   captionText: { ...type.body, minWidth: 0, alignSelf: 'stretch', color: c.white },
   captionTextAsha: { color: c.ink },
@@ -1234,34 +1394,34 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, paddingBottom: spacing.md },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   askSectionResting: { gap: spacing.xs, paddingTop: spacing.xs, paddingBottom: 0 },
-  askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  askHeadingRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: spacing.xs },
+  askHeading: { width: '100%', alignSelf: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
+  askHeadingCopy: { alignSelf: 'stretch', alignItems: 'flex-start', gap: spacing.xs },
   askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { ...type.eyebrow, color: c.gold, textAlign: 'center' },
-  askTitle: { ...type.headline, color: c.white, textAlign: 'center', fontWeight: '600' },
-  clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
-  clearChatText: { ...type.caption, flexShrink: 1, color: c.dangerSoft, textAlign: 'center', fontWeight: '600' },
-  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  askHeadingActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.sm },
+  lastSessionSlot: { marginLeft: 'auto', maxWidth: '100%', flexShrink: 0 },
+  askEyebrow: { ...type.eyebrow, alignSelf: 'stretch', color: c.gold, textAlign: 'left' },
+  askTitle: { ...type.caption, alignSelf: 'stretch', color: c.white, flexShrink: 0, textAlign: 'left', fontWeight: '600' },
+  clearChatButton: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  lastSessionButton: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
-  lastSessionText: { ...type.caption, flexShrink: 1, color: c.gold, textAlign: 'center', fontWeight: '600' },
+  secondaryActionText: { ...type.caption, flexShrink: 0, color: c.gold, textAlign: 'center', fontWeight: '600' },
   failedReportText: { color: c.dangerSoft },
   queuedReports: { gap: spacing.sm, marginTop: spacing.md },
   queuedReportsTitle: { ...type.caption, color: c.heroSubtle, fontWeight: '700' },
   messageRow: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'flex-start', backgroundColor: c.night, paddingHorizontal: spacing.gutter, marginBottom: spacing.md },
   messageRowStacked: { marginBottom: spacing.xs },
   messageRowYou: { alignItems: 'flex-end' },
-  welcomeRow: { alignItems: 'center', paddingTop: spacing.xs },
-  message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
+  welcomeRow: { alignItems: 'flex-start', paddingTop: spacing.xs },
+  message: { maxWidth: '88%', overflow: 'visible', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   ashaMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
   userMessage: { backgroundColor: c.nightSurface, borderColor: c.nightLine, borderWidth: 1 },
-  welcomeMessage: { alignSelf: 'center', width: '100%', maxWidth: 420, borderRadius: radius.xl, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
+  welcomeMessage: { alignSelf: 'flex-start', borderRadius: radius.xl, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
   ashaTail: { borderBottomLeftRadius: radius.sm },
   userTail: { borderBottomRightRadius: radius.sm },
   ashaContinued: { borderTopLeftRadius: radius.sm },
   userContinued: { borderTopRightRadius: radius.sm },
-  messageIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  messageLabel: { ...type.caption, color: c.brand, fontWeight: '700' },
+  messageIdentity: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap', gap: spacing.xs },
+  messageLabel: { ...type.caption, flexShrink: 0, color: c.brand, fontWeight: '700' },
   messageText: { ...type.body, alignSelf: 'stretch', color: c.ink, margin: 0, padding: 0 },
   userText: { color: c.white },
   messageStatus: { ...type.caption, color: c.gold, fontWeight: '600' },
@@ -1294,9 +1454,16 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   correctionEnglish: { ...type.caption, width: '100%', color: c.muted },
   correctionNote: { ...type.caption, color: c.muted, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
   composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, gap: spacing.sm },
-  examples: { justifyContent: 'flex-start', gap: spacing.sm, paddingRight: spacing.xl },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
-  exampleText: { ...type.caption, color: c.white, textAlign: 'center' },
+  // Pull the row out to the 16pt inset. The scroller width then stops after a short peek of the next chip.
+  exampleClip: { alignSelf: 'stretch', overflow: 'hidden', marginHorizontal: layout.chipScrollInset - spacing.gutter },
+  exampleViewport: { alignSelf: 'flex-start', maxWidth: '100%', position: 'relative' },
+  exampleScroller: { flexGrow: 0, width: '100%' },
+  chipFade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: layout.chipPeek, flexDirection: 'row' },
+  chipFadeStrip: { flex: 1, backgroundColor: c.nightSurface },
+  examples: { flexDirection: 'row', alignItems: 'center', paddingRight: layout.chipScrollInset },
+  exampleSpacer: { marginRight: spacing.sm },
+  example: { minHeight: layout.touchTarget, flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  exampleText: { ...type.caption, flexShrink: 0, color: c.white, textAlign: 'center' },
   composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },

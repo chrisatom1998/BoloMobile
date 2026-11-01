@@ -1,10 +1,10 @@
 import { Send } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
-import { useTheme } from '@/theme';
+import { layout, spacing, type, useTheme } from '@/theme';
 
 type Props = {
   disabled: boolean;
@@ -19,6 +19,12 @@ type Props = {
  */
 export const LiveComposer = memo(function LiveComposer({ disabled, onSend, styles }: Props) {
   const { colors } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const composerScale = Math.min(fontScale, layout.composerFontScaleCap);
+  const composerLines = fontScale >= layout.accessibilityFontScale ? layout.composerLines : 1;
+  const composerPad = spacing.lg + spacing.lg + layout.composerLineSlack;
+  const composerMinHeight = type.body.lineHeight * composerScale * composerLines + composerPad;
+  const composerMaxHeight = type.body.lineHeight * composerScale * layout.composerLines + composerPad;
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -75,9 +81,10 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
           maxLength={500}
           multiline
           onChangeText={changeInput}
+          maxFontSizeMultiplier={layout.composerFontScaleCap}
           placeholder="Ask in English or Hindi…"
           placeholderTextColor={colors.heroSubtle}
-          style={[styles.input, locked && styles.inputDisabled]}
+          style={[styles.input, { maxHeight: composerMaxHeight, minHeight: composerMinHeight }, locked && styles.inputDisabled]}
           submitBehavior="newline"
           testID="message-asha-input"
           value={input}

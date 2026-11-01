@@ -182,35 +182,31 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
   });
 
-  it('routes the jump tiles, the streak, the current plan, and the full catalog', async () => {
+  it('routes the streak, the current plan, and the full catalog', async () => {
     const view = await render(<HomeScreen />);
 
-    await fireEvent.press(view.getByLabelText('Talk with Asha'));
-    await fireEvent.press(view.getByLabelText('Saved phrases, 1 phrase due'));
     await fireEvent.press(view.getByLabelText('Browse all 10 plans'));
     await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete'));
     await fireEvent.press(view.getByLabelText('2 day practice streak'));
 
-    expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/live');
-    expect(mockRouterPush).toHaveBeenNthCalledWith(2, '/phrases');
-    expect(mockRouterPush).toHaveBeenNthCalledWith(3, '/lesson-plans');
-    expect(mockRouterPush).toHaveBeenNthCalledWith(4, { pathname: '/lesson-plans', params: { planId: 'essentials' } });
-    expect(mockRouterPush).toHaveBeenNthCalledWith(5, '/progress');
+    expect(mockRouterPush).toHaveBeenNthCalledWith(1, '/lesson-plans');
+    expect(mockRouterPush).toHaveBeenNthCalledWith(2, { pathname: '/lesson-plans', params: { planId: 'essentials' } });
+    expect(mockRouterPush).toHaveBeenNthCalledWith(3, '/progress');
   });
 
-  it('keeps the guided card above the jump tiles and the current plan', async () => {
+  it('keeps the guided card above the current plan', async () => {
     const view = await render(<HomeScreen />);
 
     expect(view.getByText('Your path')).toBeTruthy();
-    expect(view.getByText('Plan 01')).toBeTruthy();
+    expect(view.getByText('All plans')).toBeTruthy();
     expect(view.getByText('0 of 10 lessons')).toBeTruthy();
     expect(view.getByTestId('today-plan-segments').children).toHaveLength(10);
     expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.goldIcon);
     expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.line);
     expect(view.queryByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeNull();
     const testIds = collectTestIds(view.toJSON());
-    expect(testIds.indexOf('today-primary-motion')).toBeLessThan(testIds.indexOf('today-jump-row'));
-    expect(testIds.indexOf('today-jump-row')).toBeLessThan(testIds.indexOf('today-current-plan'));
+    expect(testIds.indexOf('today-primary-motion')).toBeLessThan(testIds.indexOf('today-current-plan'));
+    expect(view.queryByText('Or jump to')).toBeNull();
     expect(view.queryByLabelText('5 minute daily goal')).toBeNull();
   });
 
@@ -224,7 +220,7 @@ describe('HomeScreen primary journey', () => {
 
     const view = await render(<HomeScreen />);
 
-    expect(view.getByText('Plan 02')).toBeTruthy();
+    expect(view.getByText('All plans')).toBeTruthy();
     expect(view.getByLabelText('Make a connection, plan 2 of 10, 0 of 10 lessons complete')).toBeTruthy();
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 2 of 3, Lesson: Ask where someone lives, later');
   });
@@ -251,11 +247,11 @@ describe('HomeScreen primary journey', () => {
     const view = await render(<HomeScreen />);
 
     expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('50 percent of daily goal complete');
-    expect(view.getByTestId('today-goal-value').props.children.join('')).toBe('of 10 min');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('of 10 min');
 
     mockAppState.goal = 15;
     await view.rerender(<HomeScreen />);
-    expect(view.getByTestId('today-goal-value').props.children.join('')).toBe('of 15 min');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('of 15 min');
     expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('33 percent of daily goal complete');
 
     mockAppState.practice = { chaiDone: true, date: dateKey(), liveDone: true, seconds: 1200 };

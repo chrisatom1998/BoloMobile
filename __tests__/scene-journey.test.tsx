@@ -147,6 +147,17 @@ function resumeAt(lastBeatIndex: number, overrides: Partial<SceneAttempt> = {}) 
   return { lastBeatIndex, attempt: { id: 'resume-attempt', score: 0, correct: 0, total: lastBeatIndex, weakPhrases: [], seconds: 0, answeredBeatIndex: null, ...overrides } };
 }
 
+/** Height a Pressable responds to: the label's line box plus hitSlop above and below (minHeight when set). */
+function tapTargetHeight(pressable: { props: { hitSlop?: number | { top?: number; bottom?: number }; style?: unknown } }, label: { props: { style?: unknown } }) {
+  const hitSlop = pressable.props.hitSlop;
+  const slop = typeof hitSlop === 'number' ? hitSlop * 2 : (hitSlop?.top ?? 0) + (hitSlop?.bottom ?? 0);
+  const text = StyleSheet.flatten(label.props.style) as { lineHeight?: number; fontSize?: number } | undefined;
+  // Without an explicit lineHeight, iOS lays a 13pt label out at roughly 1.2x its font size.
+  const lineHeight = text?.lineHeight ?? Math.round((text?.fontSize ?? 14) * 1.2);
+  const minHeight = (StyleSheet.flatten(pressable.props.style) as { minHeight?: number } | undefined)?.minHeight ?? 0;
+  return Math.max(minHeight, lineHeight + slop);
+}
+
 describe('SceneScreen primary journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -983,6 +994,46 @@ describe('lesson audit regressions', () => {
     await fireEvent.changeText(view.getByTestId('scene-practice-name'), 'Chris');
     await fireEvent.press(view.getByTestId('scene-name-continue'));
     expect(view.getByText('Practicing as Chris')).toBeTruthy();
+  });
+
+  it('keeps Continue reachable above the keyboard on the name step', async () => {
+    mockSceneId = 'plan-essentials-02';
+    const view = await render(<SceneScreen />);
+    // iOS: a padding KeyboardAvoidingView shrinks the step above the keyboard. Continue is a footer
+    // sibling of the scroll view, so a taller heading (larger text) scrolls inside the step and the
+    // button stays on screen. KeyboardAvoidingView keeps `behavior` on the composite element; its host
+    // View only shows the padding branch through a paddingBottom entry (0 while the keyboard is hidden).
+    const avoider = view.getByTestId('scene-name-step-keyboard');
+    const avoiderStyle = StyleSheet.flatten(avoider.props.style);
+    expect(avoiderStyle.paddingBottom).toBe(0);
+    expect(avoiderStyle.flex).toBe(1);
+    expect(avoiderStyle.backgroundColor).toBe(lightColors.background);
+    const nameStep = view.getByTestId('scene-name-step');
+    expect(nameStep.parent).toBe(avoider);
+    expect(nameStep.props.automaticallyAdjustKeyboardInsets).toBeUndefined();
+    expect(StyleSheet.flatten(nameStep.props.style).flex).toBe(1);
+    // A tap on Continue must land while the keyboard is up instead of only dismissing it.
+    expect(nameStep.props.keyboardShouldPersistTaps).toBe('handled');
+    const continueButton = view.getByTestId('scene-name-continue');
+    expect(continueButton.parent?.parent).toBe(avoider);
+    expect(continueButton.parent).not.toBe(nameStep);
+  });
+
+  it('gives the Change name link a 44pt tap target without growing the text', async () => {
+    mockSceneId = 'plan-essentials-02';
+    mockAppState.learnerProfile = { ...mockAppState.learnerProfile, displayName: 'Asha' };
+    const view = await render(<SceneScreen />);
+    const change = view.getByTestId('scene-change-name');
+    expect(tapTargetHeight(change, view.getByText('Change'))).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(change.props.style)?.minHeight).toBeUndefined();
+  });
+
+  it('gives the Add Asha coaching control a 44pt tap target without growing the text', async () => {
+    mockAppState.aiConsent = false;
+    const view = await render(<SceneScreen />);
+    const details = view.getByTestId('scene-ai-details');
+    expect(tapTargetHeight(details, view.getByText('Works offline · Add Asha coaching'))).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(details.props.style)?.minHeight).toBeUndefined();
   });
 
   it('works offline by default and keeps the consent details optional', async () => {

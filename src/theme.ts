@@ -62,6 +62,17 @@ export const lightColors = {
   heroGlyph: 'rgba(255, 255, 255, 0.18)',
   /** Faint decorative Devanagari watermark on brand (rust) surfaces. */
   onBrandWatermark: 'rgba(255, 255, 255, 0.08)',
+  /** Body text on brand (rust) surfaces. */
+  onBrandText: '#FBEFE8',
+  /** Frosted chips and callouts on brand surfaces. */
+  onBrandChip: 'rgba(255, 255, 255, 0.14)',
+  onBrandCallout: 'rgba(255, 255, 255, 0.10)',
+  /** Hairlines and empty ring tracks on brand surfaces. */
+  onBrandLine: 'rgba(255, 255, 255, 0.18)',
+  onBrandTrack: 'rgba(255, 255, 255, 0.22)',
+  onBrandOutline: 'rgba(255, 255, 255, 0.5)',
+  /** The current step's dot fill on brand surfaces. */
+  onBrandGoldTint: 'rgba(231, 172, 61, 0.25)',
 
   orb: '#E76B48',
   orbActive: '#D85F3D',
@@ -90,6 +101,40 @@ export const spacing = {
   xxl: 32,
   /** Side padding for every screen. */
   gutter: 20,
+} as const;
+
+/** Shared layout measures. */
+export const layout = {
+  /** Smallest height of a tappable control. */
+  touchTarget: 44,
+  /** Trailing space after the last suggestion chip once the row is scrolled to the end. Same width as the screen gutter. */
+  chipEndInset: spacing.gutter,
+  /** Space between the suggestion row and the screen edge. */
+  chipScrollInset: spacing.lg,
+  /** How much of the next chip stays in view so the row shows it can scroll. */
+  chipPeek: spacing.xl,
+  /**
+   * Stack the Asha header below this width. A 393pt phone stays on one row.
+   */
+  headerStackBelow: 360,
+  /** Distance scrolled before the Asha header collapses to a bar. */
+  headerCollapseOffset: spacing.xxl + spacing.lg,
+  /**
+   * Dynamic Type at this scale or larger is an accessibility size.
+   * The Asha header starts as a compact bar so the portrait stays on screen.
+   */
+  accessibilityFontScale: 1.6,
+  /** Caps the Asha title, Private label, and subtitle. */
+  headerFontScaleCap: 1.3,
+  /**
+   * Caps the composer so three lines can hold "Ask in English or Hindi…".
+   * Still well above the body size, so the field grows at accessibility sizes.
+   */
+  composerFontScaleCap: 2.4,
+  /** Lines the composer keeps so the placeholder stays whole at an accessibility size. */
+  composerLines: 3,
+  /** Extra room so the last composer line clears the field's own padding. */
+  composerLineSlack: spacing.lg,
 } as const;
 
 export const radius = {
