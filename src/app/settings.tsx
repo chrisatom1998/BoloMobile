@@ -19,7 +19,7 @@ import { syncOutbox } from '@/lib/sync-outbox';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { MotionPreference, ReminderSettings } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
   const normalizedHour = Math.min(23, Math.max(0, Math.round(hour)));
@@ -476,22 +476,22 @@ const useStyles = makeStyles((c) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, gap: 3 },
+  copy: { flex: 1, gap: spacing.xs },
   copyLarge: { flex: 0, width: '100%' },
-  title: { color: c.ink, fontSize: 16, fontWeight: '900' },
-  body: { color: c.muted, fontSize: 13 },
-  detail: { color: c.muted, fontSize: 14, lineHeight: 21 },
-  motionPriority: { color: c.muted, fontSize: 12, lineHeight: 18 },
+  title: { ...type.label, color: c.ink, fontWeight: '700' },
+  body: { ...type.caption, color: c.muted },
+  detail: { ...type.caption, color: c.muted },
+  motionPriority: { ...type.caption, color: c.muted },
   destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  destructiveText: { color: c.danger, fontSize: 15, fontWeight: '800' },
+  destructiveText: { ...type.label, color: c.danger, fontWeight: '700' },
   disabled: { opacity: 0.5 },
-  choiceLabel: { color: c.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  choiceLabel: { ...type.eyebrow, color: c.muted },
+  secondaryButton: buttons.secondary,
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   buttonRowLarge: { flexDirection: 'column' },
   backupButton: { flexGrow: 1, flexBasis: 160, flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
-  secondaryText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  secondaryText: buttons.secondaryText,
   backupText: { flexShrink: 1 },
   about: { padding: spacing.lg, gap: spacing.sm },
-  aboutText: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  aboutText: { ...type.caption, color: c.muted },
 }));

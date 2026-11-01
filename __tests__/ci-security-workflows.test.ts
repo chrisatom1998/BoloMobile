@@ -138,7 +138,7 @@ describe('fail-closed merge verification', () => {
     const scrolls = [...smoke.matchAll(/^- scrollUntilVisible:\n((?: {4,}[^\n]+\n?)*)/gmu)]
       .map((match) => match[1]);
 
-    expect(scrolls).toHaveLength(5);
+    expect(scrolls).toHaveLength(3);
     for (const scroll of scrolls) {
       expect(scroll).toContain('direction: DOWN');
       expect(scroll).toContain('speed: 60');
@@ -153,8 +153,11 @@ describe('fail-closed merge verification', () => {
     const heading = screen.match(/<AiConsentGate actionLabel="Enable live practice" title="([^"]+)"/u)?.[1];
     expect(heading).toBeDefined();
     const smoke = read('.maestro/flows/00-ci-smoke.yaml');
-    expect(smoke).toContain(`      text: "${heading}"`);
+    expect(smoke).toContain('text: "Talk with Asha"');
+    expect(smoke).toContain('- tapOn: "Talk with Asha"');
+    expect(smoke).toContain('- assertVisible: ".*Greet me like a neighbor and tell me your name.*"');
     expect(smoke).toContain(`- assertVisible: "${heading}"`);
+    expect(smoke).toContain('- assertVisible: "Enable live practice"');
   });
 
   test('configures the internal preview with the deployed public live endpoint', () => {
@@ -208,7 +211,7 @@ describe('fail-closed merge verification', () => {
     expect(smokeJob).toContain('timeout-minutes: 30');
     expect(smokeJob).toContain('com.apple.CoreSimulator.SimRuntime.iOS-26-5');
     expect(smokeJob).not.toContain('sort_by(.version');
-    expect(smokeStep).toContain('timeout-minutes: 15');
+    expect(smokeStep).toContain('timeout-minutes: 22');
     expect(smokeStep).toContain('--debug-output maestro-artifacts/driver-logs');
     expect(smokeStep).toContain('rebooting the simulator and retrying once');
     expect(smokeStep).toContain('GITHUB_STEP_SUMMARY');

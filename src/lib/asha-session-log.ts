@@ -1,6 +1,6 @@
 /**
  * On-device log of Asha live voice sessions. Pure data and reducers; the
- * AsyncStorage side lives in `asha-session-log-store.ts`.
+ * encrypted persistence side lives in `asha-session-log-store.ts`.
  *
  * Records hold metadata, the final transcript rows, and what a session changed
  * through tools. No audio is ever stored. Stored sessions are ordered by start
@@ -14,7 +14,7 @@ import type { AshaResponseLanguage } from '@/state/app-state-types';
 /** Set this to false to stop writing the session log and hide the Last session screen. */
 export const ashaSessionLogEnabled = true;
 
-/** One AsyncStorage value per session, so a save never rewrites every session. */
+/** One stored value per session, so a save never rewrites every session. */
 export const ASHA_SESSION_KEY_PREFIX = 'bolo-asha-session-v1:';
 /** Ids and start times only; it changes on insertion, eviction, expiry, or deletion. */
 export const ASHA_SESSION_INDEX_KEY = 'bolo-asha-session-index-v1';

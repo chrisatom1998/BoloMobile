@@ -8,7 +8,8 @@ it('sends all Hindi sentences as context without clipping the selected-word inst
   try {
     await expect(getContextualWordDefinition({ clientId: 'client-12345678', phrase: source, word: 'धन्यवाद' })).resolves.toBe('An expression of thanks.');
     const [, options] = (fetchMock.mock.calls as unknown as [string, RequestInit][])[0]!;
-    const body = JSON.parse(options.body as string) as { text: string; messages: { text: string }[] };
+    const body = JSON.parse(options.body as string) as { text: string; messages: { text: string }[]; replyFormat?: string };
+    expect(body.replyFormat).toBeUndefined();
     expect(body.messages.map((message) => message.text).join('')).toBe(source);
     expect(body.messages.every((message) => message.text.length <= 600)).toBe(true);
     expect(body.text.length).toBeLessThanOrEqual(500);

@@ -20,7 +20,7 @@ export default function PrimaryTabsLayout() {
       disableTransparentOnScrollEdge
       iconColor={{ default: colors.muted, selected: colors.brand }}
       indicatorColor={colors.brandSoft}
-      labelStyle={{ fontSize: 11, fontWeight: '600' }}
+      labelStyle={{ fontSize: 11, fontWeight: '600' }} // Tab labels: platform tab-bar size, an exception to the type scale.
       labelVisibilityMode="labeled"
       minimizeBehavior="onScrollDown"
       shadowColor={colors.line}
