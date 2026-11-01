@@ -1,5 +1,4 @@
-// Realtime bookkeeping keeps several insertion-ordered caches of recent ids so a
-// late duplicate event can still be recognized without growing without bound.
+// Bounds the speech clip cache so generated audio does not grow without limit.
 export const BOUNDED_ID_LIMIT = 24;
 
 function trimOldestKeys(
@@ -11,16 +10,6 @@ function trimOldestKeys(
     if (oldest === undefined) break;
     entries.delete(oldest);
   }
-}
-
-/**
- * Records an id in an insertion-ordered bounded set. Re-adding a known id keeps
- * its original position so the oldest ids are still evicted first.
- */
-export function rememberBoundedId(items: Set<string>, id: string | null, limit = BOUNDED_ID_LIMIT) {
-  if (!id) return;
-  items.add(id);
-  trimOldestKeys(items, limit);
 }
 
 /**
