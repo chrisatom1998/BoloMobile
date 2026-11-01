@@ -16,7 +16,6 @@ jest.mock('react-native-safe-area-context', () => ({
 
 jest.mock('@/state/app-state', () => ({
   useAppState: () => ({
-    dailySteps: 0,
     duePhrases: [],
     goal: 5,
     hydrated: true,

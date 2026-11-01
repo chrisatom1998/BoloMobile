@@ -39,7 +39,6 @@ AuthKey_*.p8
 __tests__/
 .github/
 .maestro/
-design-system/
 store/
 scripts/*
 !scripts/patch-query-string-decoder.mjs
@@ -48,7 +47,6 @@ README.md
 LICENSE
 AGENTS.md
 CLAUDE.md
-codex-review-fixes.md
 eslint.config.js
 store.config.js
 store.config.json
