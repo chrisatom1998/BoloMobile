@@ -52,6 +52,8 @@ const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const tailFollowThreshold = 48;
 /** Releases a send-follow that never emits a scroll-end event. Longer than a scroll animation. */
 const animatedFollowReleaseMs = 500;
+/** One frame. The send update already consumes a zero-delay frame, so the follow waits for the next one. */
+const tailFollowFrameMs = 16;
 /** Shown instead of the generic network error when a live call cannot even start. */
 export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Lessons and saved phrases work offline.';
 /** The learner's explicit Clear removes saved transcripts but keeps queued reports and their retries. */
@@ -372,20 +374,24 @@ export default function LiveScreen() {
     if (!aiConsent || messageCount === 0 || !countChanged || (!nearBottomRef.current && !forceFollow)) return;
     const animate = forceFollow && !reducedMotion;
     let settled = false;
+    let firstFrame = 0;
     let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      if (animate) armAnimatedFollow();
-      listRef.current?.scrollToEnd({ animated: animate });
-      secondFrame = requestAnimationFrame(() => {
+    const kick = setTimeout(() => {
+      firstFrame = requestAnimationFrame(() => {
         if (animate) armAnimatedFollow();
         listRef.current?.scrollToEnd({ animated: animate });
-        settled = true;
-        if (!forceFollow) return;
-        forceFollowIdRef.current = null;
-        nearBottomRef.current = true;
+        secondFrame = requestAnimationFrame(() => {
+          if (animate) armAnimatedFollow();
+          listRef.current?.scrollToEnd({ animated: animate });
+          settled = true;
+          if (!forceFollow) return;
+          forceFollowIdRef.current = null;
+          nearBottomRef.current = true;
+        });
       });
-    });
+    }, tailFollowFrameMs);
     return () => {
+      clearTimeout(kick);
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
       if (!settled) releaseAnimatedFollow();
