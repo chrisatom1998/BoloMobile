@@ -11,7 +11,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
-import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { applyRestoredReminder, cancelOtherPracticeReminders, cancelPracticeReminder, clearAllPracticeReminders, NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
 import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
@@ -110,27 +110,47 @@ export default function SettingsScreen() {
     deletionInFlightRef.current = true;
     setDeleting(true);
     const controller = new AbortController();
+    const oldClientId = clientId;
     deletionRef.current = controller;
     try {
-      // Drop queued reports before asking the server to delete: otherwise a retry could
-      // file one after the deletion (a successful request wakes the outbox), recreating
-      // a report the learner just deleted. clear() blocks sending synchronously; if its
-      // storage removal fails, sending stays blocked and clearAllData() retries it.
-      void syncOutbox.clear().catch((error: unknown) => {
-        console.warn('Bolo could not clear queued reports before deletion.', error);
-      });
-      await deleteMobileData(clientId, controller.signal);
-      await clearAllPracticeReminders();
-      await clearAllData();
-      if (mountedRef.current) {
-        showAppAlert('Bolo data deleted', 'Stored reports and data on this device were deleted. Bolo created a new random app identifier.');
+      let serverError: unknown;
+      try {
+        // Drop queued reports before asking the server to delete: otherwise a retry could
+        // file one after the deletion (a successful request wakes the outbox), recreating
+        // a report the learner just deleted. clear() blocks sending synchronously; if its
+        // storage removal fails, sending stays blocked and clearAllData() retries it.
+        void syncOutbox.clear().catch((error: unknown) => {
+          console.warn('Bolo could not clear queued reports before deletion.', error);
+        });
+        await deleteMobileData(oldClientId, controller.signal);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        serverError = error;
       }
-    } catch (error) {
-      if (mountedRef.current && !controller.signal.aborted) {
-        showAppAlert(
-          'Could not delete data',
-          error instanceof Error ? error.message : 'Your data and current identifier were kept so you can try again.',
-        );
+      if (controller.signal.aborted) return;
+      try {
+        await clearAllPracticeReminders();
+      } catch (error) {
+        console.warn('Bolo could not clear every practice reminder before deletion.', error);
+      }
+      if (controller.signal.aborted) return;
+      try {
+        await clearAllData();
+        if (mountedRef.current) {
+          if (serverError) {
+            // Keep the pre-wipe id in the warning so support can locate the old server copy after clearAllData rotates it.
+            showAppAlert('Deleted from this device', `Your data on this device was deleted. Bolo couldn’t reach the server, so your reports may still be stored there. To have them deleted, contact support with this old app ID: ${oldClientId}.`);
+          } else {
+            showAppAlert('Bolo data deleted', 'Stored reports and data on this device were deleted. Bolo created a new random app identifier.');
+          }
+        }
+      } catch (error) {
+        if (mountedRef.current) {
+          showAppAlert(
+            'Could not delete data',
+            error instanceof Error ? error.message : 'Bolo could not delete all data from this device. Check available storage and try again.',
+          );
+        }
       }
     } finally {
       if (deletionRef.current === controller) {
@@ -144,7 +164,7 @@ export default function SettingsScreen() {
   function confirmDeletion() {
     showAppAlert(
       'Delete your Bolo data?',
-      'This permanently deletes reports tied to this installation, recent Asha chat history, saved phrases, practice progress, your consent choice, and the current random app identifier.',
+      'This permanently deletes reports tied to this installation, recent Asha chat history, saved phrases, practice progress, your consent choice, and the current random app identifier. Data on this device is deleted even if Bolo can’t reach the server.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete data', style: 'destructive', onPress: () => void performDeletion() },
@@ -165,9 +185,12 @@ export default function SettingsScreen() {
         if (!(await setReminder(disabled).catch(() => false))) return;
         try {
           await cancelPracticeReminder(reminder);
+          await cancelOtherPracticeReminders(null).catch(() => undefined);
         } catch (error) {
           // The notification is still scheduled, so put the saved setting back to match it.
-          await setReminder(reminder).catch(() => false);
+          if (!(await setReminder(reminder).catch(() => false))) {
+            throw new Error('The reminder may still be scheduled, but Bolo could not restore its setting. Check your reminder and try again.');
+          }
           throw error;
         }
         return;
@@ -178,8 +201,32 @@ export default function SettingsScreen() {
         await cancelPracticeReminder(next).catch(() => undefined);
         return;
       }
+      let previousCancellationFailed = false;
       if (reminder.notificationId && reminder.notificationId !== next.notificationId) {
-        await cancelPracticeReminder(reminder).catch(() => undefined);
+        try {
+          await cancelPracticeReminder(reminder);
+        } catch {
+          previousCancellationFailed = true;
+        }
+      }
+      try {
+        // Also removes marked reminders left behind by an earlier interrupted update.
+        await cancelOtherPracticeReminders(next.notificationId, reminder.notificationId ? [reminder.notificationId] : []);
+      } catch {
+        if (previousCancellationFailed) {
+          const replacementCancelled = await cancelPracticeReminder(next).then(() => true, () => false);
+          const previousRestored = replacementCancelled
+            ? await setReminder(reminder).catch(() => false)
+            : false;
+          if (replacementCancelled && previousRestored) {
+            throw new Error('Bolo could not replace the old reminder. The previous reminder was kept. Try again.');
+          }
+          if (replacementCancelled) {
+            throw new Error('The replacement reminder was canceled, but Bolo could not restore the previous reminder setting. The old reminder may still be scheduled. Check your reminder and try again.');
+          }
+          throw new Error('A second reminder may still be scheduled. Check your reminders and try again.');
+        }
+        throw new Error('A second reminder may still be scheduled. Check your reminders and try again.');
       }
     } catch (error) {
       if (error instanceof NotificationPermissionError) {

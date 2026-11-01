@@ -93,6 +93,8 @@ type AppActions = {
 
 export type TogglePhraseResult = 'saved' | 'removed' | 'full' | 'failed';
 
+export const REVIEW_PRACTICE_SECONDS = 15;
+
 type AppStateValue = AppStateSlices & AppActions;
 
 const initialState: PersistedState = {
@@ -433,6 +435,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
       const intervalDays = remembered ? reviewIntervals[mastery] ?? 0 : 0;
       const today = dateKey();
+      const elapsed = cappedPracticeSeconds(current.practice.seconds, REVIEW_PRACTICE_SECONDS);
+      const practice = { ...current.practice, seconds: elapsed.total };
       const reviewStreakDays = [...new Set([...current.reviewStreakDays, today])].sort().slice(-400);
       return {
         ...current,
@@ -447,10 +451,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             totalReviews: previous.totalReviews + 1,
           },
         },
-        practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
+        practice,
+        practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds: elapsed.added, correct: Number(remembered), answers: 1, reviews: 1 }),
+        streakDays: withRecordedDay(current.streakDays, practice),
         reviewStreakDays,
       };
-    }, ['phraseReviews', 'practiceHistory', 'reviewStreakDays']);
+    }, ['phraseReviews', 'practice', 'practiceHistory', 'streakDays', 'reviewStreakDays']);
   }, [commit]);
 
   const markLiveTurn = useCallback((seconds = 0) => {
@@ -583,8 +589,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const entries = storageEntries(next, Object.keys(storageKeys) as PersistedKey[]);
     try {
       // Cancel the scheduled daily reminder before wiping its notificationId,
-      // otherwise the OS notification keeps firing with no way to turn it off.
-      if (state.reminder.notificationId) await cancelPracticeReminder(state.reminder);
+      // but keep the local wipe independent from native notification failures.
+      if (state.reminder.notificationId) {
+        try {
+          await cancelPracticeReminder(state.reminder);
+        } catch (error) {
+          console.warn('Bolo could not cancel the practice reminder during data deletion.', error);
+        }
+      }
       await enqueuePersistence(() => AsyncStorage.multiSet(entries));
       clearAiVoicePlaybackCache();
       // Storage now holds the defaults; update in-memory state before anything

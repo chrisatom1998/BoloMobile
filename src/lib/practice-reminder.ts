@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import type { ReminderSettings } from '@/state/app-state-types';
 
 const CHANNEL_ID = 'practice-reminders';
+const PRACTICE_REMINDER_KIND = 'bolo-practice-reminder';
 
 /** Thrown when a reminder cannot be scheduled because notification permission is off. */
 export class NotificationPermissionError extends Error {
@@ -39,7 +40,7 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
     content: {
       title: 'A little Hindi goes a long way',
       body: 'Your next Bolo scene and phrase review are ready.',
-      data: { url: '/review' },
+      data: { kind: PRACTICE_REMINDER_KIND, url: '/review' },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -52,16 +53,38 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
     try {
       await Notifications.cancelScheduledNotificationAsync(current.notificationId);
     } catch (error) {
-      // Keep the device at the old reminder rather than two: drop the new one and report.
       try {
-        await Notifications.cancelScheduledNotificationAsync(notificationId);
+        await cancelOtherPracticeReminders(notificationId, [current.notificationId]);
       } catch {
-        // The original failure is the one worth reporting.
+        // Keep the device at the old reminder rather than two: drop the new one and report.
+        try {
+          await Notifications.cancelScheduledNotificationAsync(notificationId);
+        } catch {
+          // The original failure is the one worth reporting.
+        }
+        throw error;
       }
-      throw error;
     }
   }
   return { ...current, enabled: true, hour, minute, notificationId };
+}
+
+/** Cancel only Bolo practice reminders, retaining keepId when provided. */
+export async function cancelOtherPracticeReminders(keepId: string | null, knownReminderIds: string[] = []) {
+  const Notifications = loadNotifications();
+  const knownIds = new Set(knownReminderIds);
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const cancellations = scheduled
+    .filter((request) => {
+      const data = request.content.data;
+      const isLegacyPracticeReminder = data?.kind == null && data?.url === '/review';
+      return request.identifier !== keepId
+        && (data?.kind === PRACTICE_REMINDER_KIND || isLegacyPracticeReminder || knownIds.has(request.identifier));
+    })
+    .map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier));
+  const results = await Promise.allSettled(cancellations);
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (failure) throw failure.reason;
 }
 
 export async function cancelPracticeReminder(current: ReminderSettings): Promise<ReminderSettings> {

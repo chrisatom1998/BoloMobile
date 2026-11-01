@@ -40,6 +40,7 @@ jest.mock('@/lib/public-pages', () => ({
 
 jest.mock('@/lib/practice-reminder', () => ({
   NotificationPermissionError: class NotificationPermissionError extends Error {},
+  cancelOtherPracticeReminders: jest.fn(async () => undefined),
   cancelPracticeReminder: jest.fn(async (current) => ({ ...current, enabled: false, notificationId: null })),
   clearAllPracticeReminders: jest.fn(async () => undefined),
   schedulePracticeReminder: jest.fn(async (_current, hour, minute = 0) => ({
@@ -64,12 +65,13 @@ jest.mock('@/state/app-state', () => ({
 
 import SettingsScreen, { formatReminderTime } from '../src/app/settings';
 import { showAppAlert } from '../src/lib/app-alert';
-import { cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
+import { cancelOtherPracticeReminders, cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
 import { syncOutbox } from '../src/lib/sync-outbox';
 import { deleteMobileData } from '../src/services/bolo-api';
 
 const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 const clearAllPracticeRemindersMock = clearAllPracticeReminders as jest.MockedFunction<typeof clearAllPracticeReminders>;
+const cancelOtherPracticeRemindersMock = cancelOtherPracticeReminders as jest.MockedFunction<typeof cancelOtherPracticeReminders>;
 const cancelPracticeReminderMock = cancelPracticeReminder as jest.MockedFunction<typeof cancelPracticeReminder>;
 const schedulePracticeReminderMock = schedulePracticeReminder as jest.MockedFunction<typeof schedulePracticeReminder>;
 const deleteMobileDataMock = deleteMobileData as jest.MockedFunction<typeof deleteMobileData>;
@@ -196,7 +198,58 @@ describe('SettingsScreen lifecycle and UI', () => {
       expect(setReminder).toHaveBeenCalledWith({ enabled: true, hour: 7, minute: 0, notificationId: 'test-reminder' });
       expect(cancelPracticeReminderMock).toHaveBeenCalledTimes(1);
       expect(cancelPracticeReminderMock).toHaveBeenCalledWith(current);
+      expect(cancelOtherPracticeRemindersMock).toHaveBeenCalledWith('test-reminder', ['old-reminder']);
       expect(setReminder.mock.invocationCallOrder[0]).toBeLessThan(cancelPracticeReminderMock.mock.invocationCallOrder[0] ?? 0);
+    });
+
+    it('sweeps the old notification when its first cancellation attempt fails', async () => {
+      const setReminder = jest.fn(async () => true);
+      cancelPracticeReminderMock.mockRejectedValueOnce(new Error('first cancel failed'));
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: 7:00 AM'));
+      await flushMicrotasks();
+
+      expect(cancelOtherPracticeRemindersMock).toHaveBeenCalledWith('test-reminder', ['old-reminder']);
+      expect(setReminder).toHaveBeenCalledTimes(1);
+      expect(showAppAlertMock).not.toHaveBeenCalledWith('Could not update reminder', expect.any(String));
+    });
+
+    it('drops the replacement and restores the old setting when uniqueness cannot be guaranteed', async () => {
+      const setReminder = jest.fn(async () => true);
+      cancelPracticeReminderMock.mockRejectedValueOnce(new Error('old cancel failed'));
+      cancelOtherPracticeRemindersMock.mockRejectedValueOnce(new Error('sweep failed'));
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: 7:00 AM'));
+      await flushMicrotasks();
+
+      expect(cancelPracticeReminderMock.mock.calls.map(([settings]) => settings.notificationId)).toEqual(['old-reminder', 'test-reminder']);
+      expect(setReminder).toHaveBeenNthCalledWith(1, { enabled: true, hour: 7, minute: 0, notificationId: 'test-reminder' });
+      expect(setReminder).toHaveBeenNthCalledWith(2, current);
+      expect(showAppAlertMock).toHaveBeenCalledWith(
+        'Could not update reminder',
+        'Bolo could not replace the old reminder. The previous reminder was kept. Try again.',
+      );
+    });
+
+    it('reports when the replacement is canceled but the old setting cannot be restored', async () => {
+      const setReminder = jest.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      cancelPracticeReminderMock.mockRejectedValueOnce(new Error('old cancel failed'));
+      cancelOtherPracticeRemindersMock.mockRejectedValueOnce(new Error('sweep failed'));
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: 7:00 AM'));
+      await flushMicrotasks();
+
+      expect(cancelPracticeReminderMock.mock.calls.map(([settings]) => settings.notificationId)).toEqual(['old-reminder', 'test-reminder']);
+      expect(setReminder).toHaveBeenNthCalledWith(2, current);
+      expect(showAppAlertMock).toHaveBeenCalledWith(
+        'Could not update reminder',
+        'The replacement reminder was canceled, but Bolo could not restore the previous reminder setting. The old reminder may still be scheduled. Check your reminder and try again.',
+      );
     });
 
     it('leaves the notification scheduled when saving the off setting fails', async () => {
@@ -220,6 +273,7 @@ describe('SettingsScreen lifecycle and UI', () => {
 
       expect(setReminder).toHaveBeenCalledWith({ ...current, enabled: false, notificationId: null });
       expect(cancelPracticeReminderMock).toHaveBeenCalledWith(current);
+      expect(cancelOtherPracticeRemindersMock).toHaveBeenCalledWith(null);
     });
 
     it('restores the saved reminder when the notification cannot be cancelled after turning off', async () => {
@@ -233,6 +287,22 @@ describe('SettingsScreen lifecycle and UI', () => {
       await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith('Could not update reminder', 'native failure'));
       expect(setReminder).toHaveBeenNthCalledWith(1, { ...current, enabled: false, notificationId: null });
       expect(setReminder).toHaveBeenNthCalledWith(2, current);
+    });
+
+    it('warns when turning off fails and the saved reminder cannot be restored', async () => {
+      const setReminder = jest.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      cancelPracticeReminderMock.mockRejectedValueOnce(new Error('native failure'));
+      const view = await renderWithReminder(setReminder);
+
+      await fireEvent.press(view.getByLabelText('Practice reminder time: Off'));
+      await flushMicrotasks();
+
+      expect(showAppAlertMock).toHaveBeenCalledWith(
+        'Could not update reminder',
+        'The reminder may still be scheduled, but Bolo could not restore its setting. Check your reminder and try again.',
+      );
     });
   });
 
@@ -308,7 +378,7 @@ describe('SettingsScreen lifecycle and UI', () => {
     expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
   });
 
-  it('preserves local data and the current identifier when remote deletion fails', async () => {
+  it('deletes local data and warns that the server copy may remain when remote deletion fails', async () => {
     deleteMobileDataMock.mockRejectedValueOnce(new Error('Deletion service unavailable.'));
     const view = await render(<SettingsScreen />);
 
@@ -316,27 +386,26 @@ describe('SettingsScreen lifecycle and UI', () => {
     await act(async () => runAlertAction('Delete your Bolo data?', 'Delete data'));
 
     await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith(
-      'Could not delete data',
-      'Deletion service unavailable.',
+      'Deleted from this device',
+      'Your data on this device was deleted. Bolo couldn’t reach the server, so your reports may still be stored there. To have them deleted, contact support with this old app ID: client-12345678.',
     ));
     expect(deleteMobileDataMock).toHaveBeenCalledWith('client-12345678', expect.any(AbortSignal));
-    expect(clearAllPracticeRemindersMock).not.toHaveBeenCalled();
-    expect(clearAllData).not.toHaveBeenCalled();
+    expect(clearAllPracticeRemindersMock).toHaveBeenCalledTimes(1);
+    expect(clearAllData).toHaveBeenCalledTimes(1);
     expect(view.getByRole('button', { name: 'Delete my Bolo data' }).props.accessibilityState).toEqual({ disabled: false });
   });
 
-  it('keeps local reminder state available for retry when system cancellation fails', async () => {
+  it('continues the local wipe when clearing practice reminders fails', async () => {
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     clearAllPracticeRemindersMock.mockRejectedValueOnce(new Error('Reminder cancellation failed.'));
     const view = await render(<SettingsScreen />);
 
     await fireEvent.press(view.getByRole('button', { name: 'Delete my Bolo data' }));
     await act(async () => runAlertAction('Delete your Bolo data?', 'Delete data'));
 
-    await waitFor(() => expect(showAppAlertMock).toHaveBeenCalledWith(
-      'Could not delete data',
-      'Reminder cancellation failed.',
-    ));
-    expect(clearAllData).not.toHaveBeenCalled();
+    await waitFor(() => expect(clearAllData).toHaveBeenCalledTimes(1));
+    expect(showAppAlertMock).toHaveBeenCalledWith('Bolo data deleted', expect.any(String));
+    expect(warning).toHaveBeenCalledWith('Bolo could not clear every practice reminder before deletion.', expect.any(Error));
   });
 
   it('surfaces a local-clear failure without claiming deletion succeeded', async () => {
@@ -389,6 +458,7 @@ describe('SettingsScreen lifecycle and UI', () => {
     await view.unmount();
     expect(requestSignal?.aborted).toBe(true);
     await flushMicrotasks();
+    expect(clearAllPracticeRemindersMock).not.toHaveBeenCalled();
     expect(clearAllData).not.toHaveBeenCalled();
     expect(showAppAlertMock).not.toHaveBeenCalledWith('Could not delete data', expect.any(String));
   });
