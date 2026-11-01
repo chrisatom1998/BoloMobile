@@ -775,7 +775,7 @@ describe('live theme styles', () => {
     expect(styles.captionLabelBadge.overflow).toBe('visible');
     expect(styles.captionLabel.fontSize).toBeGreaterThanOrEqual(12);
     expect(styles.captionLabel.lineHeight).toBeGreaterThanOrEqual(18);
-    expect(styles.captionLabel.fontWeight).toBe('800');
+    expect(styles.captionLabel.fontWeight).toBe('700');
     expect(styles.captionLabel.letterSpacing).toBeLessThanOrEqual(0.25);
     expect('textTransform' in styles.captionLabel).toBe(false);
     expect('minHeight' in styles.voiceHero).toBe(false);

@@ -7,7 +7,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type PracticeResult = 'correct' | 'incorrect';
 
@@ -176,24 +176,24 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
 
 const useStyles = makeStyles((c) => ({
   container: { gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
-  instructions: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
+  instructions: { ...type.label, color: c.brandText, fontWeight: '700' },
   tray: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
-  trayPlaceholder: { color: c.muted, fontSize: 14, fontStyle: 'italic' },
+  trayPlaceholder: { ...type.caption, color: c.muted, fontStyle: 'italic' },
   trayToken: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: c.night },
-  trayTokenText: { color: c.white, fontSize: 17, fontWeight: '800' },
+  trayTokenText: { ...type.label, color: c.white, fontWeight: '700' },
   trayTokenHindi: hindiType(17),
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  tileText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
-  tileHindi: hindiType(18),
+  tileText: { ...type.label, color: c.brandText, fontWeight: '700' },
+  tileHindi: hindiType(17),
   tileUsed: { backgroundColor: c.background, borderStyle: 'dashed', opacity: 0.5 },
   tileUsedText: { color: c.muted },
   tileLocked: { opacity: 0.4 },
   controls: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
   primary: { minHeight: 44, flexGrow: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  primaryText: { color: c.white, fontSize: 15, fontWeight: '900' },
+  primaryText: { ...type.label, color: c.white, fontWeight: '700' },
   secondary: { minHeight: 44, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  secondaryText: { color: c.ink, fontSize: 14, fontWeight: '800' },
+  secondaryText: { ...type.label, color: c.ink, fontWeight: '700' },
   disabled: { opacity: 0.4 },
-  hint: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  hint: { ...type.caption, color: c.muted },
 }));

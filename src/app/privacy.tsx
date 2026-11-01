@@ -5,7 +5,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme, type } from '@/theme';
 
 export default function PrivacyScreen() {
   const styles = useStyles();
@@ -72,9 +72,9 @@ function PolicyLink({ label, onPress }: { label: string; onPress: () => void }) 
 const useStyles = makeStyles((c) => ({
   content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   section: { gap: spacing.sm },
-  title: { color: c.ink, fontSize: 17, fontWeight: '900' },
-  body: { color: c.muted, fontSize: 15, lineHeight: 23 },
+  title: { ...type.label, color: c.ink, fontWeight: '700' },
+  body: { ...type.body, color: c.muted },
   links: { gap: spacing.sm, paddingTop: spacing.sm },
   link: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paper, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  linkText: { flex: 1, color: c.forestText, fontSize: 14, fontWeight: '800' },
+  linkText: { ...type.label, flex: 1, color: c.brandText, fontWeight: '700' },
 }));

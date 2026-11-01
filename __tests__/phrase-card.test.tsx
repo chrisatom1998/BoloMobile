@@ -197,7 +197,7 @@ describe('PhraseCard', () => {
   it('tightens type for the compact size while keeping Tiro at regular weight', async () => {
     const view = await render(<PhraseCard {...phrase} scriptPreference="both" size="compact" />);
     expect(StyleSheet.flatten(view.getByTestId('phrase-card-devanagari').props.style)).toMatchObject({ fontFamily: hindiFont, fontSize: 18, lineHeight: 26, fontWeight: '400' });
-    expect(StyleSheet.flatten(view.getByTestId('phrase-card-romanized').props.style)).toMatchObject({ fontSize: 14 });
+    expect(StyleSheet.flatten(view.getByTestId('phrase-card-romanized').props.style)).toMatchObject({ fontSize: 13 });
     expect(StyleSheet.flatten(view.getByTestId('phrase-card-english').props.style)).toMatchObject({ fontSize: 13 });
   });
 

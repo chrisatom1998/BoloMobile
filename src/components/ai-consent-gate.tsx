@@ -9,7 +9,7 @@ import { openPublicPage } from '@/lib/public-pages';
 import { observe, observeOncePerSession } from '@/lib/observability';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
 
 type AiConsentPresentation = 'card' | 'sheet';
 
@@ -178,30 +178,30 @@ function ConsentNoticeSheet({ children, onClose, reducedMotion }: { children: Re
 const useStyles = makeStyles((c) => ({
   card: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { minWidth: 0, flex: 1, color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  title: { ...type.headline, minWidth: 0, flex: 1, color: c.ink },
   summary: { gap: spacing.sm },
   summaryItem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  bullet: { color: c.forest, fontSize: 15, lineHeight: 22, fontWeight: '900' },
-  summaryText: { minWidth: 0, flex: 1, color: c.ink, fontSize: 15, lineHeight: 22 },
+  bullet: { ...type.label, color: c.brandText, fontWeight: '700' },
+  summaryText: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
   disclosure: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  disclosureText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
-  disclosureChevron: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  disclosureText: { ...type.label, color: c.brandText, fontWeight: '700' },
+  disclosureChevron: { ...type.label, color: c.brandText, fontWeight: '700' },
   notice: { gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
-  body: { color: c.ink, fontSize: 15, lineHeight: 22 },
-  detail: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  body: { ...type.body, color: c.ink },
+  detail: { ...type.caption, color: c.muted },
   link: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  linkText: { color: c.forestText, fontSize: 14, fontWeight: '800', textDecorationLine: 'underline' },
-  button: { minHeight: 50, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  buttonText: { color: c.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  version: { color: c.mutedSoft, fontSize: 11, lineHeight: 15 },
+  linkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
+  button: buttons.primary,
+  buttonText: buttons.primaryText,
+  version: { ...type.caption, color: c.mutedSoft },
   disabled: { opacity: 0.5 },
   compactCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
-  compactBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  compactBody: { ...type.caption, color: c.muted },
   compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  compactButtonText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  compactButtonText: { ...type.label, color: c.brandText, fontWeight: '700' },
   sheetScreen: { flex: 1, backgroundColor: c.background },
   sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
   sheetClose: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
-  sheetCloseText: { color: c.brandText, fontSize: 17, fontWeight: '600' },
+  sheetCloseText: buttons.quietText,
   sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
 }));

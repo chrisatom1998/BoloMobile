@@ -5,7 +5,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
 import type { ReminderSettings } from '@/state/app-state-types';
-import { displayFont, makeStyles, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, type, buttons } from '@/theme';
 
 function formatReminderLabel(hour: number, minute: number) {
   const normalizedHour = Math.min(23, Math.max(0, hour));
@@ -92,26 +92,12 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.sm,
     padding: spacing.lg,
   },
-  question: {
-    color: c.ink,
-    fontFamily: displayFont,
-    fontSize: 22,
-    fontWeight: '700',
-    lineHeight: 28,
-  },
-  detail: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  question: { ...type.headline, color: c.ink },
+  detail: { ...type.caption, color: c.muted },
   actions: { gap: spacing.sm, marginTop: spacing.xs },
-  yesButton: {
-    alignItems: 'center',
-    backgroundColor: c.gold,
-    borderRadius: radius.pill,
-    borderCurve: 'continuous',
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-  },
-  yesText: { color: c.ink, fontSize: 16, fontWeight: '700' },
+  yesButton: buttons.primary,
+  yesText: buttons.primaryText,
   notNowButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
-  notNowText: { color: c.muted, fontSize: 15, fontWeight: '600' },
+  notNowText: { ...type.label, color: c.muted },
   disabled: { opacity: 0.5 },
 }));

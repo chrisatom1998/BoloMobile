@@ -2,7 +2,7 @@ import { Modal, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
-import { makeStyles, radius, spacing } from '@/theme';
+import { makeStyles, radius, spacing, type } from '@/theme';
 
 export type ChatMessageMenuItem = {
   key: string;
@@ -98,12 +98,12 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.xs,
   },
   sheetWeb: { alignSelf: 'center', width: '100%', maxWidth: 480 },
-  title: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '700', marginBottom: spacing.sm },
+  title: { ...type.caption, color: c.muted, marginBottom: spacing.sm, fontWeight: '700' },
   item: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.background, gap: 2 },
   itemDisabled: { opacity: 0.45 },
-  itemLabel: { color: c.ink, fontSize: 16, lineHeight: 22, fontWeight: '600' },
+  itemLabel: { ...type.label, color: c.ink },
   itemDestructive: { color: c.danger },
-  itemDetail: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  itemDetail: { ...type.caption, color: c.muted },
   cancel: { marginTop: spacing.sm, backgroundColor: 'transparent', alignItems: 'center' },
-  cancelLabel: { color: c.brandText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  cancelLabel: { ...type.label, color: c.brandText, fontWeight: '700' },
 }));
