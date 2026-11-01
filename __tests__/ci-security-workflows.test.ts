@@ -166,8 +166,10 @@ describe('fail-closed merge verification', () => {
     expect(eas.build.preview.env?.BOLO_LIVE_API_URL).toBe('https://api-v2.appdeploy.ai/app/74e39779183cf78fed');
   });
 
-  test('always aggregates every merge job and rejects non-success results', () => {
-    expect(requiredChecks).toContain('if: always()');
+  test('aggregates every merge job unless the run itself was cancelled', () => {
+    expect(requiredChecks).toContain('if: ${{ !cancelled() }}');
+    expect(requiredChecks).not.toContain('if: always()');
+    expect(ciWorkflow).toContain("cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}");
     for (const job of jobs) {
       expect(requiredChecks).toContain(`      - ${job}\n`);
       expect(requiredChecks).toContain(`needs['${job}'].result`);
