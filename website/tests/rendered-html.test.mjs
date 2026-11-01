@@ -74,6 +74,38 @@ test("image endpoint rejects non-relative sources without an IMAGES binding", as
   assert.equal(response.status, 400);
 });
 
+test("image endpoint resolves a normal source against the request origin", async () => {
+  const served = [];
+  const response = await render({
+    path: `/_vinext/image?url=${encodeURIComponent("/images/x.png")}&w=640&q=75`,
+    assets: {
+      fetch: async (request) => {
+        served.push(request.url);
+        return new Response("png-bytes", { status: 200, headers: { "content-type": "image/png" } });
+      },
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(served, ["http://localhost/images/x.png"]);
+});
+
+for (const source of ["/\\evil.example/x", "/%5cevil.example/x", "//evil.example/x"]) {
+  test(`image endpoint rejects a source that could resolve cross-origin: ${source}`, async () => {
+    const served = [];
+    const response = await render({
+      path: `/_vinext/image?url=${encodeURIComponent(source)}&w=640&q=75`,
+      assets: {
+        fetch: async (request) => {
+          served.push(request.url);
+          return new Response("png-bytes", { status: 200 });
+        },
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(served, []);
+  });
+}
+
 test("keeps production copy and required public artwork checked in", async () => {
   const [page, layout] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
