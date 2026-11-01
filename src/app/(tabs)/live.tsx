@@ -50,6 +50,10 @@ const welcome: ChatMessage = {
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const tailFollowThreshold = 48;
+/** Releases a send-follow that never emits a scroll-end event. Longer than a scroll animation. */
+const animatedFollowReleaseMs = 500;
+/** One frame. The send update already consumes a zero-delay frame, so the follow waits for the next one. */
+const tailFollowFrameMs = 16;
 /** Shown instead of the generic network error when a live call cannot even start. */
 export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Lessons and saved phrases work offline.';
 /** The learner's explicit Clear removes saved transcripts but keeps queued reports and their retries. */
@@ -178,6 +182,27 @@ export default function LiveScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const nearBottomRef = useRef(true);
   const followedMessageCountRef = useRef(0);
+  // Pending learner row that should be brought into view. Honored only while
+  // that row is on screen, or for the commit that replaces it with Asha's turn.
+  const forceFollowIdRef = useRef<string | null>(null);
+  // Animated send-follow emits onScroll from mid-flight offsets. Ignore those
+  // until the list is near the tail, the scroll ends, or this timeout fires.
+  const animatedFollowRef = useRef(false);
+  const animatedFollowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseAnimatedFollow = useCallback(() => {
+    animatedFollowRef.current = false;
+    if (animatedFollowTimerRef.current === null) return;
+    clearTimeout(animatedFollowTimerRef.current);
+    animatedFollowTimerRef.current = null;
+  }, []);
+  const armAnimatedFollow = useCallback(() => {
+    animatedFollowRef.current = true;
+    if (animatedFollowTimerRef.current !== null) clearTimeout(animatedFollowTimerRef.current);
+    animatedFollowTimerRef.current = setTimeout(() => {
+      animatedFollowTimerRef.current = null;
+      animatedFollowRef.current = false;
+    }, animatedFollowReleaseMs);
+  }, []);
   const composerMicActionRef = useRef<(() => void) | null>(null);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
   const visibleMessages = useMemo(
@@ -330,24 +355,48 @@ export default function LiveScreen() {
     };
   }, [reducedMotion, screenFocused, scrollTailIntoView]);
 
-  // A new message follows the tail when the reader is already near it. The first
-  // scrollToEnd can run before layout, so retry once on the next frame.
+  // A new message follows the tail when the reader is already near it. A send
+  // names its pending row so the same follow runs after that row commits, even
+  // if they had scrolled up. The first scrollToEnd can run before layout, so
+  // retry once on the next frame. A send animates only after that decision;
+  // mid-flight onScroll is ignored until the tail is reached, the scroll ends, or the reader drags.
   useEffect(() => {
-    const countChanged = messageCount !== followedMessageCountRef.current;
+    const previousCount = followedMessageCountRef.current;
+    const countChanged = messageCount !== previousCount;
     followedMessageCountRef.current = messageCount;
-    if (!aiConsent || messageCount === 0 || !countChanged || !nearBottomRef.current) return;
+    const forceId = forceFollowIdRef.current;
+    const showsForcedRow = forceId !== null && pendingUserMessage?.id === forceId;
+    // A fast success replaces the pending row in the same commit the count grows.
+    // A failure clears the id before that, so a later voice turn cannot inherit it.
+    const forcedSendLanded = forceId !== null && !showsForcedRow && messageCount > previousCount;
+    if (forceId !== null && !showsForcedRow) forceFollowIdRef.current = null;
+    const forceFollow = showsForcedRow || forcedSendLanded;
+    if (!aiConsent || messageCount === 0 || !countChanged || (!nearBottomRef.current && !forceFollow)) return;
+    const animate = forceFollow && !reducedMotion;
+    let settled = false;
+    let firstFrame = 0;
     let secondFrame = 0;
-    const firstFrame = requestAnimationFrame(() => {
-      listRef.current?.scrollToEnd({ animated: false });
-      secondFrame = requestAnimationFrame(() => {
-        listRef.current?.scrollToEnd({ animated: false });
+    const kick = setTimeout(() => {
+      firstFrame = requestAnimationFrame(() => {
+        if (animate) armAnimatedFollow();
+        listRef.current?.scrollToEnd({ animated: animate });
+        secondFrame = requestAnimationFrame(() => {
+          if (animate) armAnimatedFollow();
+          listRef.current?.scrollToEnd({ animated: animate });
+          settled = true;
+          if (!forceFollow) return;
+          forceFollowIdRef.current = null;
+          nearBottomRef.current = true;
+        });
       });
-    });
+    }, tailFollowFrameMs);
     return () => {
+      clearTimeout(kick);
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
+      if (!settled) releaseAnimatedFollow();
     };
-  }, [aiConsent, messageCount]);
+  }, [aiConsent, armAnimatedFollow, messageCount, pendingUserMessage, reducedMotion, releaseAnimatedFollow]);
 
   // Only the outbox's explicit delivery says a queued report was received; an entry
   // that disappears through Discard, consent withdrawal, or Delete Bolo data was not.
@@ -370,6 +419,7 @@ export default function LiveScreen() {
       reportControllers.clear();
       selectionClearTimers.forEach(clearTimeout);
       selectionClearTimers.clear();
+      if (animatedFollowTimerRef.current !== null) clearTimeout(animatedFollowTimerRef.current);
       void stopSpeaking();
     };
   }, []);
@@ -554,6 +604,9 @@ export default function LiveScreen() {
     hapticTap();
     chatActivityRef.current += 1;
     const userMessage: ChatMessage = { id: `you-${Date.now()}`, role: 'you', text };
+    // Tie the follow to this row. A failure clears it before the next paint, so
+    // a later voice turn cannot inherit a send that never stayed on screen.
+    forceFollowIdRef.current = userMessage.id;
     setPendingUserMessage(userMessage);
     setBusy(true);
     setError('');
@@ -562,6 +615,7 @@ export default function LiveScreen() {
     try {
       const result = await sendMobileChat({ text, messages: chatHistory, clientId, responseLanguage }, controller.signal);
       if (!mountedRef.current || controller.signal.aborted) {
+        if (forceFollowIdRef.current === userMessage.id) forceFollowIdRef.current = null;
         if (mountedRef.current) clearPendingUserMessage(userMessage.id);
         return false;
       }
@@ -580,6 +634,7 @@ export default function LiveScreen() {
       }
       return true;
     } catch (cause) {
+      if (forceFollowIdRef.current === userMessage.id) forceFollowIdRef.current = null;
       if (mountedRef.current) clearPendingUserMessage(userMessage.id);
       if (mountedRef.current && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'Asha could not answer right now.');
@@ -835,8 +890,14 @@ export default function LiveScreen() {
         onScroll={(event) => {
           const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
           const distanceFromEnd = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-          nearBottomRef.current = distanceFromEnd <= tailFollowThreshold;
+          const nearBottom = distanceFromEnd <= tailFollowThreshold;
+          if (animatedFollowRef.current && !nearBottom) return;
+          releaseAnimatedFollow();
+          nearBottomRef.current = nearBottom;
         }}
+        onMomentumScrollEnd={releaseAnimatedFollow}
+        onScrollBeginDrag={releaseAnimatedFollow}
+        onScrollEndDrag={releaseAnimatedFollow}
         scrollEventThrottle={16}
         data={aiConsent ? visibleMessages : []}
         keyExtractor={(message) => message.id}
