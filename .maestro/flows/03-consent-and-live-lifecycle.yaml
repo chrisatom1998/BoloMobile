@@ -74,6 +74,8 @@ tags:
     visible: "Your microphone is on"
     timeout: 30000
 - assertVisible: "Mute microphone"
+- assertVisible:
+    id: "live-call-end"
 - tapOn:
     id: "realtime-voice-orb"
 - extendedWaitUntil:

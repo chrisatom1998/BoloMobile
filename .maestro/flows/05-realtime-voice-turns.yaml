@@ -40,21 +40,27 @@ tags:
 - extendedWaitUntil:
     visible: "Your microphone is on"
     timeout: 30000
+- assertVisible: "Listening"
 - assertVisible: "Mute microphone"
+- assertVisible: "Fixed until End"
+# The labeled Mute control in the call bar mirrors the portrait tap.
 - tapOn:
-    id: "realtime-voice-orb"
+    id: "live-call-mute"
 - extendedWaitUntil:
     visible: "Unmute microphone"
     timeout: 15000
 - assertVisible: ".*(Your microphone is muted|Asha is speaking).*"
+- assertVisible: ".*(Muted|Speaking).*"
 - tapOn:
     id: "realtime-voice-orb"
 - extendedWaitUntil:
     visible: "Your microphone is on"
     timeout: 15000
-- tapOn: "End live voice session"
+- tapOn:
+    id: "live-call-end"
 - assertVisible: "Ready when you are"
 - assertVisible: "Start a voice conversation"
+- assertNotVisible: "Fixed until End"
 - scrollUntilVisible:
     element:
       text: "Asha voice language: Hindi"

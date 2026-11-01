@@ -37,8 +37,13 @@ tags:
     id: "realtime-voice-orb"
     text: "Start a voice conversation"
     enabled: true
+# The connected-call bar (Mute/End) must never appear after an unsupported-device failure.
 - assertNotVisible:
-    id: "realtime-voice-end"
+    id: "live-call-controls"
+- assertNotVisible:
+    id: "live-call-end"
+- assertNotVisible: "End live voice session"
+- assertNotVisible: "Fixed until End"
 - assertNotVisible:
     id: "live-transcript-user"
 - assertNotVisible:

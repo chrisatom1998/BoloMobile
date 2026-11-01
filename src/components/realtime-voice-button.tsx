@@ -309,12 +309,19 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
   if (portrait) {
     const recording = voice.status === 'recording';
     const StatusIcon = recording ? MicOff : Mic;
+    // The portrait is the mute/unmute control. End lives in the hosting
+    // screen's control bar (see live.tsx), which receives `voice.disconnect`
+    // through `onDisconnectReady`, so the stage keeps a single tap target.
     return (
       <View style={[styles.stage, styles.stagePortrait, compact && styles.stagePortraitCompact]} testID="realtime-voice-stage">
-        <View pointerEvents="none" style={[styles.ring, styles.portraitRingOuter, compact && styles.portraitRingOuterCompact, connected && styles.portraitRingConnected]} />
         <Animated.View
           pointerEvents="none"
-          style={[styles.ring, styles.portraitRingInner, compact && styles.portraitRingInnerCompact, recording && styles.portraitRingRecording, rippleStyle]}
+          style={[styles.ring, styles.portraitRingOuter, compact && styles.portraitRingOuterCompact, connected && styles.portraitRingOuterConnected, rippleStyle]}
+          testID="realtime-voice-portrait-ripple"
+        />
+        <View
+          pointerEvents="none"
+          style={[styles.ring, styles.portraitRingInner, compact && styles.portraitRingInnerCompact, connected && styles.portraitRingConnected, recording && styles.portraitRingRecording]}
           testID="realtime-voice-portrait-ring"
         />
         <Animated.View style={orbStyle}>
@@ -334,15 +341,10 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
               style={[styles.portraitBadge, compact && styles.portraitBadgeCompact, recording && styles.portraitBadgeRecording, voice.status === 'connecting' && styles.portraitBadgeConnecting]}
               testID="realtime-voice-portrait-badge"
             >
-              <StatusIcon color={recording ? colors.white : colors.ink} size={compact ? 15 : 17} strokeWidth={2.4} />
+              <StatusIcon color={recording ? colors.white : colors.ink} size={compact ? 17 : 20} strokeWidth={2.4} />
             </View>
           </Pressable>
         </Animated.View>
-        {connected ? (
-          <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={[styles.endButton, styles.endButtonDark, styles.endButtonPortrait]}>
-            <X color={colors.white} size={18} />
-          </Pressable>
-        ) : null}
       </View>
     );
   }
@@ -418,21 +420,22 @@ const useStyles = makeStyles((c) => ({
   endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Negative margins centre the button on the orb.
   // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
   endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
-  // Portrait variant: the 112pt (96pt compact) portrait is the control; rings sit around it.
-  stagePortrait: { width: '100%', height: 144 },
-  stagePortraitCompact: { height: 124 },
-  portraitRingOuter: { width: 144, height: 144, borderWidth: 2, borderColor: c.portraitRingFaint },
-  portraitRingOuterCompact: { width: 124, height: 124 },
+  // Portrait variant: the 148pt (120pt compact) portrait is the control. A solid
+  // gold ring hugs it and a faint outer ring ripples while the microphone is on.
+  stagePortrait: { width: '100%', height: 196 },
+  stagePortraitCompact: { height: 164 },
+  portraitRingOuter: { width: 192, height: 192, borderWidth: 2, borderColor: c.portraitRingFaint },
+  portraitRingOuterCompact: { width: 160, height: 160 },
+  portraitRingOuterConnected: { borderColor: c.portraitRing },
+  portraitRingInner: { width: 166, height: 166, borderWidth: 3, borderColor: c.portraitRingFaint },
+  portraitRingInnerCompact: { width: 138, height: 138 },
   portraitRingConnected: { borderColor: c.portraitRing },
-  portraitRingInner: { width: 128, height: 128, borderWidth: 2, borderColor: c.portraitRing },
-  portraitRingInnerCompact: { width: 110, height: 110 },
   portraitRingRecording: { borderWidth: 3, borderColor: c.gold },
-  portraitButton: { width: 112, height: 112, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  portraitButtonCompact: { width: 96, height: 96 },
-  portraitBadge: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: radius.pill, borderWidth: 3, borderColor: c.night, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
-  portraitBadgeCompact: { width: 30, height: 30 },
+  portraitButton: { width: 148, height: 148, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  portraitButtonCompact: { width: 120, height: 120 },
+  portraitBadge: { position: 'absolute', right: 2, bottom: 2, width: 40, height: 40, borderRadius: radius.pill, borderWidth: 3, borderColor: c.night, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  portraitBadgeCompact: { width: 34, height: 34 },
   portraitBadgeRecording: { backgroundColor: c.orbRecording },
   portraitBadgeConnecting: { backgroundColor: c.heroSubtle },
-  endButtonPortrait: { right: 0 },
   disabled: { opacity: 0.5 },
 }));
