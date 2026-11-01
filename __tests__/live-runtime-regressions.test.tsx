@@ -92,6 +92,7 @@ jest.mock('@/components/ai-consent-gate', () => {
 });
 
 const mockVoiceButtonProps: {
+  compact?: boolean;
   history?: unknown;
   onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
 } = {};
@@ -100,6 +101,7 @@ jest.mock('@/components/realtime-voice-button', () => {
   return {
     RealtimeVoiceButton: ({
       children,
+      compact,
       disabled,
       history,
       onConnectionStart,
@@ -113,6 +115,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       responseLanguage,
     }: {
       children?: import('react').ReactNode;
+      compact?: boolean;
       disabled?: boolean;
       history?: unknown;
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
@@ -125,6 +128,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       onTranscriptSnapshot?: (rows: { id: string; speaker: 'you' | 'asha'; text: string; startMs: number; endMs: number; fragments: never[] }[]) => void;
       responseLanguage: 'en' | 'hi';
     }) => {
+      mockVoiceButtonProps.compact = compact;
       mockVoiceButtonProps.history = history;
       mockVoiceButtonProps.onConnectionStart = onConnectionStart;
       const onTurnComplete = (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => onTranscriptSnapshot?.([
@@ -842,7 +846,7 @@ describe('live theme styles', () => {
     expect(styles.example.paddingVertical).toBe(spacing.sm);
     expect(styles.voiceHero.overflow).toBe('visible');
     expect(layout.headerStackBelow).toBe(360);
-    expect(styles.ashaPortraitCollapsed.height).toBe(layout.touchTarget);
+    expect('ashaPortraitCollapsed' in styles).toBe(false);
     expect(styles.askHeadingActions.flexDirection).toBe('row');
     expect(styles.askHeadingActions.flexWrap).toBe('wrap');
     expect(styles.askHeadingActions.justifyContent).toBe('space-between');
@@ -1274,9 +1278,9 @@ describe('immersive live conversation design', () => {
     expect(within(view.getByTestId('live-chat-list')).queryByTestId('composer-mic-toggle')).toBeNull();
     expect(view.getByTestId('composer-mic-toggle').props.accessibilityLabel).toBe('Start a voice conversation');
     expect(view.queryByText('How do I say…?')).toBeNull();
+    // With no call in progress, the line shows once, in the chat, not again as a live caption.
     expect(view.queryByTestId('live-input-caption')).toBeNull();
-    expect(view.getByTestId('live-output-caption').props.accessibilityLiveRegion).toBe('polite');
-    expect(view.getByTestId('live-output-caption').props.children).toBe('Hello there.');
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
     expect(view.queryByLabelText('Connect with Asha')).toBeNull();
 
@@ -1310,9 +1314,25 @@ describe('immersive live conversation design', () => {
     await flushMicrotasks();
   });
 
+  it('shows each line once after a call ends: in the chat, not again as a caption', async () => {
+    const view = await render(<LiveScreen />);
+
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
+    await fireEvent.press(view.getByLabelText('Mock overlapping captions'));
+    expect(view.getByTestId('live-input-caption').props.children).toBe('I speak Hindi');
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(view.queryByTestId('live-input-caption')).toBeNull();
+    expect(view.queryByTestId('live-output-caption')).toBeNull();
+    expect(view.getByLabelText('You: I speak Hindi')).toBeTruthy();
+
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('keeps the latest speaker when a snapshot still ends on the other person', async () => {
     const view = await render(<LiveScreen />);
 
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
     await fireEvent.press(view.getByLabelText('Mock overlapping captions'));
 
     expect(view.getByTestId('live-input-caption').props.children).toBe('I speak Hindi');
@@ -1453,6 +1473,7 @@ describe('immersive live conversation design', () => {
     const stopAnimation = jest.spyOn(Animated.Value.prototype, 'stopAnimation');
     const view = await render(<LiveScreen />);
 
+    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
     await fireEvent.press(view.getByLabelText('Mock learner transcript'));
     mockReducedMotion = true;
     await act(async () => {
@@ -1663,7 +1684,9 @@ describe('immersive live conversation design', () => {
       expect(view.getByText('How do I say…?')).toBeTruthy();
       await act(async () => { scrollList(layout.headerCollapseOffset + 8); });
       expect(view.queryByText('How do I say…?')).toBeNull();
-      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
+      // The photo and its rings shrink together, so the photo still fills the orb.
+      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(96);
+      expect(mockVoiceButtonProps.compact).toBe(true);
       await act(async () => { scrollList(0); });
       expect(view.getByText('How do I say…?')).toBeTruthy();
     } finally {
