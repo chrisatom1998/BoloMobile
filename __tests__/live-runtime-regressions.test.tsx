@@ -4,7 +4,7 @@ import { AccessibilityInfo, Alert, Animated, AppState, Dimensions, FlatList, Key
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
-import { lightColors, opacity, spacing } from '../src/theme';
+import { lightColors, opacity, spacing, typeScale } from '../src/theme';
 
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
@@ -1066,31 +1066,78 @@ describe('immersive live conversation design', () => {
 
   it('shows full Romanized voice turns while retaining the original text for voice playback', async () => {
     const displayReply = romanizeDevanagari(longDevanagariReply);
-    const view = await render(<LiveScreen />);
-
-    await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
-
-    const message = view.getAllByLabelText(/^(?:You|Asha): /u)
-      .find((candidate) => candidate.props.value === displayReply);
-    if (!message) throw new Error('The Romanized Asha message was not rendered.');
-    expect(message.props.value).toBe(displayReply);
-    expect(view.queryByDisplayValue(longDevanagariReply)).toBeNull();
-    const initialStyle = StyleSheet.flatten(message.props.style);
-    expect(initialStyle.height).toBeUndefined();
-    expect(initialStyle.minHeight).toBe(23);
-
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const defaultText = { ...originalWindow, fontScale: 1 };
     await act(async () => {
-      message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
+      Dimensions.set({ screen: { ...originalScreen, fontScale: 1 }, window: defaultText });
       await Promise.resolve();
     });
-    const resizedMessage = view.getAllByLabelText(/^(?:You|Asha): /u)
-      .find((candidate) => candidate.props.value === displayReply);
-    if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
-    expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
-    expect(speech.preloadSpeech).not.toHaveBeenCalled();
+    const view = await render(<LiveScreen />);
+    try {
+      await fireEvent.press(view.getByLabelText('Create long Devanagari Asha reply'));
 
-    await view.unmount();
-    await flushMicrotasks();
+      const message = view.getAllByLabelText(/^(?:You|Asha): /u)
+        .find((candidate) => candidate.props.value === displayReply);
+      if (!message) throw new Error('The Romanized Asha message was not rendered.');
+      expect(message.props.value).toBe(displayReply);
+      expect(view.queryByDisplayValue(longDevanagariReply)).toBeNull();
+      const initialStyle = StyleSheet.flatten(message.props.style);
+      expect(initialStyle.height).toBeUndefined();
+      expect(initialStyle.minHeight).toBe(typeScale.chat.lineHeight);
+
+      await act(async () => {
+        message.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 138 } } });
+        await Promise.resolve();
+      });
+      const resizedMessage = view.getAllByLabelText(/^(?:You|Asha): /u)
+        .find((candidate) => candidate.props.value === displayReply);
+      if (!resizedMessage) throw new Error('The Romanized Asha message was removed after measurement.');
+      expect(StyleSheet.flatten(resizedMessage.props.style).height).toBe(138);
+      expect(speech.preloadSpeech).not.toHaveBeenCalled();
+    } finally {
+      await view.unmount();
+      await flushMicrotasks();
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
+  it('does not pin the welcome bubble height at the next larger text size', async () => {
+    // iOS text size one step above the default: UIContentSizeCategoryExtraLarge.
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largerText = { fontScale: 1.118, height: 852, scale: 3, width: 393 };
+    await act(async () => {
+      Dimensions.set({ screen: largerText, window: largerText });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      const welcome = view.getByLabelText('Asha: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.');
+      const style = StyleSheet.flatten(welcome.props.style);
+      expect(style.height).toBeUndefined();
+      expect(style.minHeight).toBeUndefined();
+
+      await act(async () => {
+        welcome.props.onContentSizeChange({ nativeEvent: { contentSize: { height: 2400, width: 8 } } });
+        await Promise.resolve();
+      });
+      const resized = view.getByLabelText('Asha: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.');
+      const resizedStyle = StyleSheet.flatten(resized.props.style);
+      expect(resizedStyle.height).toBeUndefined();
+      expect(resizedStyle.minHeight).toBeUndefined();
+
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
   });
 
   it('stops an active caption animation before applying reduced motion', async () => {

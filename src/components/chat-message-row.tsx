@@ -1,6 +1,6 @@
 import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Platform, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Platform, Text, TextInput, useWindowDimensions, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
@@ -9,7 +9,7 @@ import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner
 import type { OutboxEntry } from '@/lib/sync-outbox';
 import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
 import type { ChatMessage } from '@/state/app-state-types';
-import { spacing, useTheme } from '@/theme';
+import { spacing, typeScale, useTheme } from '@/theme';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
 // Half the action-row gap, so neighboring targets do not overlap. The row is 44pt tall, so no vertical slop.
@@ -45,10 +45,15 @@ function SelectableChatText({
   style: StyleProp<TextStyle>;
   text: string;
 }) {
-  const [measurement, setMeasurement] = useState<{ height?: number; text: string }>({ text });
-  // A new or recycled message must measure at its natural height before the
-  // measured value is pinned; a one-line initial height clips long turns.
-  const height = measurement.text === text ? measurement.height : undefined;
+  const { fontScale } = useWindowDimensions();
+  // At the default text size, iOS reports a one-line box until content size
+  // arrives, which clips a long turn. Pinning that measured height fixes it.
+  // One step larger (and above), the first content-size event can fire before
+  // the bubble has a width, so the height is the text wrapped one character
+  // per line. Pinning it leaves a tall blank bubble after the width arrives.
+  const pinMeasuredHeight = fontScale <= 1;
+  const [measurement, setMeasurement] = useState<{ fontScale: number; height?: number; text: string }>({ fontScale, text });
+  const height = pinMeasuredHeight && measurement.fontScale === fontScale && measurement.text === text ? measurement.height : undefined;
 
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
@@ -73,14 +78,15 @@ function SelectableChatText({
       contextMenuHidden={false}
       multiline
       onContentSizeChange={(event) => {
-        const nextHeight = Math.max(23, Math.ceil(event.nativeEvent.contentSize.height));
-        setMeasurement((current) => current.text === text && current.height === nextHeight ? current : { height: nextHeight, text });
+        if (!pinMeasuredHeight) return;
+        const nextHeight = Math.max(typeScale.chat.lineHeight, Math.ceil(event.nativeEvent.contentSize.height));
+        setMeasurement((current) => current.fontScale === fontScale && current.text === text && current.height === nextHeight ? current : { fontScale, height: nextHeight, text });
       }}
       onSelectionChange={selectionChanged}
       readOnly
       scrollEnabled={false}
       selectionColor={selectionColor}
-      style={[style, Platform.OS === 'web' ? webChatText : null, { minHeight: 23 }, height === undefined ? undefined : { height }]}
+      style={[style, Platform.OS === 'web' ? webChatText : null, pinMeasuredHeight ? { minHeight: typeScale.chat.lineHeight } : null, height === undefined ? null : { height }]}
       value={text}
     />
   );

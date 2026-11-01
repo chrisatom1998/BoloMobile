@@ -138,6 +138,8 @@ export const typeScale = {
   caption: { fontSize: 13, lineHeight: 18 },
   /** Romanization under a Devanagari caption line. */
   captionSecondary: { fontSize: 15, lineHeight: 21 },
+  /** Asha and learner transcript lines. The leading is the unscaled single-line box. */
+  chat: { fontSize: 16, lineHeight: 23 },
 } as const;
 
 /** Serif display face for Latin headings. Georgia has no Devanagari glyphs; use `hindiFont` for Hindi. */

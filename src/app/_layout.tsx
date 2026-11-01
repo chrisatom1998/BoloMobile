@@ -81,6 +81,7 @@ function AppNavigator() {
           <Stack.Screen name="privacy" options={{ title: 'Privacy & data use' }} />
           <Stack.Screen name="last-session" options={{ title: 'Past sessions' }} />
           <Stack.Screen name="scene/[id]" options={{ title: 'Lesson' }} />
+          <Stack.Screen name="screenshot-chat" options={{ headerShown: false }} />
         </Stack>
       ) : (
         <View accessibilityLabel="Loading Bolo" accessibilityLiveRegion="polite" accessibilityRole="progressbar" style={styles.loading} testID="app-hydration-loading">

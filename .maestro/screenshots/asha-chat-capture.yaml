@@ -1,0 +1,24 @@
+appId: com.bolo.hindi
+name: Capture Asha chat
+---
+- stopApp
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+    permissions:
+      microphone: deny
+      notifications: deny
+- tapOn:
+    text: "Open"
+    optional: true
+- runFlow: ../subflows/dismiss-dev-menu.yaml
+- extendedWaitUntil:
+    visible: "Namaste|Speak with Asha"
+    timeout: 60000
+- tapOn: "Asha"
+- extendedWaitUntil:
+    visible: "Say namaste."
+    timeout: 45000
+- takeScreenshot: ${SHOT}

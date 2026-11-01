@@ -1292,7 +1292,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   userContinued: { borderTopRightRadius: radius.sm },
   messageIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   messageLabel: { color: c.brand, fontSize: 12, lineHeight: 16, fontWeight: '700' },
-  messageText: { alignSelf: 'stretch', color: c.ink, fontSize: 16, lineHeight: 23, margin: 0, padding: 0 },
+  messageText: { alignSelf: 'stretch', color: c.ink, ...typeScale.chat, margin: 0, padding: 0 },
   userText: { color: c.white },
   messageStatus: { color: c.gold, fontSize: 12, lineHeight: 16, fontWeight: '600' },
   messageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },

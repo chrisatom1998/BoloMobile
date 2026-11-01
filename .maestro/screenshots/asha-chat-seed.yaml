@@ -1,0 +1,29 @@
+appId: com.bolo.hindi
+name: Seed Asha chat screenshot
+---
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+    clearState: true
+    clearKeychain: true
+    permissions:
+      microphone: deny
+      notifications: deny
+- tapOn:
+    text: "Open"
+    optional: true
+- runFlow: ../subflows/dismiss-dev-menu.yaml
+- extendedWaitUntil:
+    visible: "Your Hindi plan in one minute"
+    timeout: 60000
+- openLink: "bolo://screenshot-chat"
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "screenshot-chat-ready"
+    timeout: 30000
+- stopApp
