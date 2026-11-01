@@ -26,12 +26,10 @@ export const lightColors = {
   forestSoft: '#DDECE8',
 
   danger: '#A93B2B',
-  dangerSurface: '#B84737',
   dangerSoft: '#FBEDEA',
   dangerLine: '#E4B5AE',
 
   success: '#1C6650',
-  successSoft: '#EBF6F1',
 
   gold: '#E7AC3D',
   goldSoft: '#FFF1C9',
@@ -39,8 +37,6 @@ export const lightColors = {
   goldIcon: '#B87D17',
   /** Readable text on goldSoft surfaces. */
   goldText: '#6B4A10',
-  /** Readable secondary text on a solid gold surface. */
-  goldDeepText: '#4A3408',
 
   /** Neutral progress-track fill behind coloured bars. */
   track: '#EDE6DC',
@@ -51,15 +47,10 @@ export const lightColors = {
   night: '#10201E',
   nightSurface: '#1E302D',
   nightLine: '#34504B',
-  nightNav: '#0B1716',
   white: '#FFFFFF',
   black: '#000000',
 
-  shadowOpacityScale: 1,
-
-  heroRaised: '#18201E',
   heroSubtle: '#BFC9C6',
-  heroGlyph: 'rgba(255, 255, 255, 0.18)',
   /** Faint decorative Devanagari watermark on brand (rust) surfaces. */
   onBrandWatermark: 'rgba(255, 255, 255, 0.08)',
   /** Body text on brand (rust) surfaces. */
@@ -121,10 +112,10 @@ export const layout = {
   headerCollapseOffset: spacing.xxl + spacing.lg,
   /**
    * Dynamic Type at this scale or larger is an accessibility size.
-   * The Asha header starts as a compact bar so the portrait stays on screen.
+   * The Asha header starts as a compact bar with a small avatar so a chat bubble fits.
    */
   accessibilityFontScale: 1.6,
-  /** Caps the Asha title, Private label, and subtitle. */
+  /** Caps the Asha title, Private label, subtitle, and READY status. */
   headerFontScaleCap: 1.3,
   /**
    * Caps the composer so three lines can hold "Ask in English or Hindi…".
@@ -217,8 +208,7 @@ export type NamedStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
 const styleCache = new WeakMap<object, WeakMap<object, NamedStyles>>();
 
 /**
- * Builds a themed stylesheet hook. Results are cached per (factory, palette) pair,
- * so switching schemes reuses stylesheets instead of rebuilding them each render.
+ * Builds a themed stylesheet hook. Results are cached per (factory, palette) pair.
  */
 export function makeStyles<T extends NamedStyles>(factory: (colors: ThemeColors) => T) {
   return function useThemedStyles(): T {

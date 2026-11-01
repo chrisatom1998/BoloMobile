@@ -20,7 +20,6 @@ type LessonPlanSeed = {
   title: string;
   subtitle: string;
   level: string;
-  emoji: string;
   color: string;
   place: string;
   words: [string, string, string];
@@ -147,7 +146,7 @@ function phraseOf({ hi, latin, en }: LessonSeed): Pick<Choice, 'hi' | 'latin' | 
 
 const planSeeds: LessonPlanSeed[] = [
   {
-    id: 'essentials', category: 'Social', title: 'Start speaking', subtitle: 'Ten first phrases for a warm, confident opening', level: 'Starter', emoji: '👋', color: '#a85a43', place: 'Everywhere · first week', words: ['नमस्ते', 'कृपया', 'धन्यवाद'],
+    id: 'essentials', category: 'Social', title: 'Start speaking', subtitle: 'Ten first phrases for a warm, confident opening', level: 'Starter', color: '#a85a43', place: 'Everywhere · first week', words: ['नमस्ते', 'कृपया', 'धन्यवाद'],
     lessons: [
       { title: 'A warm hello', cue: 'A neighbor catches your eye in the stairwell and pauses.', cueHi: 'सीढ़ियों पर पड़ोसी की नज़र आप पर पड़ती है और वे एक पल के लिए ठहर जाते हैं।', hi: 'नमस्ते।', latin: 'Namaste.', en: 'Hello.' },
       { title: 'Say your name', cue: 'Someone extends a hand and waits for you to fill the silence.', cueHi: 'कोई आपकी तरफ़ हाथ बढ़ाता है और चुपचाप इंतज़ार करता है कि आप कुछ कहें।', hi: 'मेरा नाम ... है।', latin: 'Mera naam ... hai.', en: 'My name is ...' },
@@ -162,7 +161,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'connection', category: 'Social', title: 'Make a connection', subtitle: 'Keep a kind conversation moving naturally', level: 'Starter', emoji: '💬', color: '#7b5fa7', place: 'A neighborhood hello', words: ['यहाँ', 'मदद', 'बात'],
+    id: 'connection', category: 'Social', title: 'Make a connection', subtitle: 'Keep a kind conversation moving naturally', level: 'Starter', color: '#7b5fa7', place: 'A neighborhood hello', words: ['यहाँ', 'मदद', 'बात'],
     lessons: [
       { title: 'Ask where someone lives', cue: 'You are chatting on the stoop and wondering if you are neighbors.', cueHi: 'आप घर के बाहर सीढ़ियों पर बैठे गपशप कर रहे हैं और मन में सवाल है कि कहीं आप दोनों पड़ोसी तो नहीं।', hi: 'आप कहाँ रहते हैं?', latin: 'Aap kahaan rahte hain?', en: 'Where do you live?' },
       { title: 'Say you are new', cue: 'The shopkeeper studies you, certain he has never seen your face.', cueHi: 'दुकानदार आपको ग़ौर से देखते हैं, उन्हें पक्का यक़ीन है कि यह चेहरा उन्होंने पहले कभी नहीं देखा।', hi: 'मैं यहाँ नया हूँ।', latin: 'Main yahaan naya hoon.', en: 'I am new here.' },
@@ -177,7 +176,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'food', category: 'Food', title: 'Eat with ease', subtitle: 'Order, customize, and pay at cafés and restaurants', level: 'Beginner', emoji: '🍽️', color: '#c86d32', place: 'A local café', words: ['मेन्यू', 'पानी', 'बिल'],
+    id: 'food', category: 'Food', title: 'Eat with ease', subtitle: 'Order, customize, and pay at cafés and restaurants', level: 'Beginner', color: '#c86d32', place: 'A local café', words: ['मेन्यू', 'पानी', 'बिल'],
     lessons: [
       { title: 'Ask for a menu', cue: 'The waiter stops at your table, ready to take your order.', cueHi: 'वेटर आपकी मेज़ के पास आकर खड़ा हो जाता है और ऑर्डर लेने के लिए तैयार है।', hi: 'मुझे एक मेन्यू दीजिए।', latin: 'Mujhe ek menu dijiye.', en: 'Please give me a menu.' },
       { title: 'Ask for a recommendation', cue: 'Everything on the board looks good and you cannot choose.', cueHi: 'बोर्ड पर सब कुछ अच्छा लग रहा है और आपसे कुछ चुना ही नहीं जा रहा।', hi: 'आज क्या अच्छा है?', latin: 'Aaj kya achchha hai?', en: 'What is good today?' },
@@ -192,7 +191,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'getting-around', category: 'Travel', title: 'Get around town', subtitle: 'Use buses, trains, and taxis with confidence', level: 'Beginner', emoji: '🚌', color: '#287d78', place: 'City transit', words: ['बस', 'किराया', 'स्टॉप'],
+    id: 'getting-around', category: 'Travel', title: 'Get around town', subtitle: 'Use buses, trains, and taxis with confidence', level: 'Beginner', color: '#287d78', place: 'City transit', words: ['बस', 'किराया', 'स्टॉप'],
     lessons: [
       { title: 'Find the bus', cue: 'You are on a corner with no bus stop sign anywhere in sight.', cueHi: 'आप सड़क के कोने पर खड़े हैं और आसपास कहीं बस स्टॉप का बोर्ड नहीं दिख रहा।', hi: 'बस कहाँ से मिलेगी?', latin: 'Bus kahaan se milegi?', en: 'Where can I get the bus?' },
       { title: 'Name your destination', cue: 'The driver looks back at you, waiting to hear where to.', cueHi: 'ड्राइवर पीछे मुड़कर आपकी तरफ़ देखता है और इंतज़ार करता है कि आप बताएँ कहाँ जाना है।', hi: 'मुझे पुराना शहर जाना है।', latin: 'Mujhe puraana shahar jaana hai.', en: 'I need to go to the old city.' },
@@ -207,7 +206,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'directions', category: 'Travel', title: 'Find your way', subtitle: 'Follow and ask for simple directions', level: 'Beginner', emoji: '🧭', color: '#4e7792', place: 'A busy crossing', words: ['सीधा', 'बाएँ', 'रास्ता'],
+    id: 'directions', category: 'Travel', title: 'Find your way', subtitle: 'Follow and ask for simple directions', level: 'Beginner', color: '#4e7792', place: 'A busy crossing', words: ['सीधा', 'बाएँ', 'रास्ता'],
     lessons: [
       { title: 'Go straight', cue: 'A stranger asks you the way, and for once the answer is simple.', cueHi: 'कोई अजनबी आपसे रास्ता पूछ रहा है, और इस बार जवाब बिलकुल आसान है।', hi: 'सीधा जाइए।', latin: 'Seedha jaiye.', en: 'Go straight.' },
       { title: 'Turn left', cue: 'You are guiding a driver who is waiting for the next instruction.', cueHi: 'आप ड्राइवर को रास्ता बता रहे हैं और वो इंतज़ार में है कि अब किधर मुड़ना है।', hi: 'बाएँ मुड़िए।', latin: 'Baen muriye.', en: 'Turn left.' },
@@ -222,7 +221,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'shopping', category: 'Everyday', title: 'Shop and pay', subtitle: 'Compare, choose, and check out politely', level: 'Beginner', emoji: '🛍️', color: '#b27931', place: 'A neighborhood shop', words: ['दाम', 'साइज़', 'रसीद'],
+    id: 'shopping', category: 'Everyday', title: 'Shop and pay', subtitle: 'Compare, choose, and check out politely', level: 'Beginner', color: '#b27931', place: 'A neighborhood shop', words: ['दाम', 'साइज़', 'रसीद'],
     lessons: [
       { title: 'Ask the price', cue: 'You are turning a brass bowl over in your hands, hunting for a price tag.', cueHi: 'आप पीतल का कटोरा हाथ में घुमाते हुए उस पर कीमत का लेबल ढूँढ रहे हैं।', hi: 'यह कितने का है?', latin: 'Yah kitne ka hai?', en: 'How much is this?' },
       { title: 'Ask for less', cue: 'The first number the seller says is clearly a starting number.', cueHi: 'दुकानदार ने जो पहला दाम बताया है, वो तो सिर्फ़ शुरुआत है।', hi: 'थोड़ा कम कीजिए।', latin: 'Thoda kam kijiye.', en: 'Please lower it a little.' },
@@ -237,7 +236,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'daily-life', category: 'Everyday', title: 'Daily life', subtitle: 'Describe routines, weather, and plans at home', level: 'Beginner', emoji: '🏠', color: '#63754c', place: 'Home · every day', words: ['सुबह', 'घर', 'कल'],
+    id: 'daily-life', category: 'Everyday', title: 'Daily life', subtitle: 'Describe routines, weather, and plans at home', level: 'Beginner', color: '#63754c', place: 'Home · every day', words: ['सुबह', 'घर', 'कल'],
     lessons: [
       { title: 'Start the morning', cue: 'A new friend asks what your days actually look like.', cueHi: 'एक नया दोस्त पूछता है कि आपका पूरा दिन आख़िर बीतता कैसे है।', hi: 'मैं सुबह जल्दी उठता हूँ।', latin: 'Main subah jaldi uthta hoon.', en: 'I wake up early in the morning.' },
       { title: 'Make tea', cue: 'The kettle is empty and guests are already on their way over.', cueHi: 'केतली बिल्कुल ख़ाली पड़ी है और मेहमान रास्ते में हैं।', hi: 'मुझे चाय बनानी है।', latin: 'Mujhe chai banaani hai.', en: 'I need to make tea.' },
@@ -252,7 +251,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'health', category: 'Health', title: 'Health and help', subtitle: 'Explain a simple need and get support', level: 'Beginner', emoji: '🩺', color: '#a04c55', place: 'Clinic · pharmacy', words: ['दर्द', 'डॉक्टर', 'दवा'],
+    id: 'health', category: 'Health', title: 'Health and help', subtitle: 'Explain a simple need and get support', level: 'Beginner', color: '#a04c55', place: 'Clinic · pharmacy', words: ['दर्द', 'डॉक्टर', 'दवा'],
     lessons: [
       { title: 'Describe a headache', cue: 'You have been squinting at screens all day and it has caught up with you.', cueHi: 'दिन भर स्क्रीन पर आँखें गड़ाए रहने का असर अब आप पर दिखने लगा है।', hi: 'मुझे सिरदर्द है।', latin: 'Mujhe sirdard hai.', en: 'I have a headache.' },
       { title: 'Ask for a doctor', cue: 'The pharmacist listens and says this is beyond what she can hand over.', cueHi: 'केमिस्ट आपकी बात ध्यान से सुनती हैं, फिर कहती हैं कि इसकी दवा वे ऐसे नहीं दे सकतीं।', hi: 'मुझे डॉक्टर से मिलना है।', latin: 'Mujhe doctor se milna hai.', en: 'I need to see a doctor.' },
@@ -267,7 +266,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'social-life', category: 'Social', title: 'Spend time together', subtitle: 'Make plans and build friendly conversations', level: 'Beginner', emoji: '🌿', color: '#6d5ca3', place: 'Friends · neighbors', words: ['मिलकर', 'साथ', 'परिवार'],
+    id: 'social-life', category: 'Social', title: 'Spend time together', subtitle: 'Make plans and build friendly conversations', level: 'Beginner', color: '#6d5ca3', place: 'Friends · neighbors', words: ['मिलकर', 'साथ', 'परिवार'],
     lessons: [
       { title: 'Meet someone', cue: 'A friend introduces you to their cousin at the door.', cueHi: 'दरवाज़े पर आपका दोस्त आपको अपने कज़िन से मिलवा रहा है।', hi: 'आपसे मिलकर खुशी हुई।', latin: 'Aapse milkar khushi hui.', en: 'Nice to meet you.' },
       { title: 'Ask about a day', cue: 'Your roommate drops onto the sofa looking completely wrung out.', cueHi: 'आपका रूममेट थका-हारा आता है और सीधे सोफ़े पर गिर पड़ता है।', hi: 'आपका दिन कैसा रहा?', latin: 'Aapka din kaisa raha?', en: 'How was your day?' },
@@ -282,7 +281,7 @@ const planSeeds: LessonPlanSeed[] = [
     ],
   },
   {
-    id: 'work', category: 'Work', title: 'Work with clarity', subtitle: 'Coordinate, ask questions, and make commitments', level: 'Intermediate', emoji: '💼', color: '#586b91', place: 'Workday · collaboration', words: ['बैठक', 'काम', 'कल'],
+    id: 'work', category: 'Work', title: 'Work with clarity', subtitle: 'Coordinate, ask questions, and make commitments', level: 'Intermediate', color: '#586b91', place: 'Workday · collaboration', words: ['बैठक', 'काम', 'कल'],
     lessons: [
       { title: 'Flag a delay', cue: 'Traffic is crawling and your meeting starts in ten minutes.', cueHi: 'ट्रैफ़िक रेंग रहा है और आपकी मीटिंग दस मिनट में शुरू होने वाली है।', hi: 'मैं थोड़ी देर से आऊँगा।', latin: 'Main thodi der se aaoonga.', en: 'I will arrive a little late.' },
       { title: 'Start a meeting', cue: 'Everyone is seated and glancing at you to begin.', cueHi: 'सब लोग बैठ चुके हैं और शुरू करने के लिए आपकी तरफ़ देख रहे हैं।', hi: 'क्या हम बैठक शुरू करें?', latin: 'Kya hum baithak shuru karen?', en: 'Shall we start the meeting?' },
@@ -316,8 +315,6 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
   title: lesson.title,
   subtitle: lesson.en,
   level: plan.level,
-  emoji: plan.emoji,
-  color: plan.color,
   beats: guidedPracticeTurns(plan, lessonIndex).map((practice) => ({
     // Asha sets the scene aloud in Hindi; the English cue doubles as the translation.
     npc: practice.target.cueHi,
@@ -341,7 +338,7 @@ if (showCreatorLessons) plannedLessons.push(...creatorLessons);
 if (showCreatorLessons && creatorLessons.length) {
   lessonPlans.push({
     id: 'creator', category: 'Everyday', title: 'My created lessons',
-    subtitle: 'Practice made in Bolo Lesson Creator', level: 'Mixed', emoji: '✨', color: '#285b47',
+    subtitle: 'Practice made in Bolo Lesson Creator', level: 'Mixed', color: '#285b47',
     place: 'Your lesson studio', words: ['हिंदी', 'बात', 'मदद'],
     order: lessonPlans.length + 1, lessonIds: creatorLessons.map((lesson) => lesson.id),
   });

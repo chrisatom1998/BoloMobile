@@ -1,5 +1,4 @@
 import Constants from 'expo-constants';
-import { useSyncExternalStore } from 'react';
 
 /** Outbound microphone numbers read from the WebRTC peer, so we can see where audio stops. */
 export type LiveMicStats = {
@@ -68,12 +67,10 @@ export const liveDiagnosticsEnabled = Constants.expoConfig?.extra?.liveDiagnosti
 
 let current: LiveDiagnostics = EMPTY;
 let startedAt = Date.now();
-const listeners = new Set<() => void>();
 
 export function updateLiveDiagnostics(patch: Partial<LiveDiagnostics>) {
   if (!liveDiagnosticsEnabled) return;
   current = { ...current, ...patch };
-  listeners.forEach((listener) => listener());
 }
 
 /** Each new connection starts from zero counters but keeps nothing stale from the last call. */
@@ -81,7 +78,6 @@ export function resetLiveDiagnostics() {
   if (!liveDiagnosticsEnabled) return;
   current = EMPTY;
   startedAt = Date.now();
-  listeners.forEach((listener) => listener());
 }
 
 /** Stamps an audio-session change with seconds since the call started, so it lines up with the mic level. */
@@ -137,13 +133,4 @@ export function formatLiveDiagnostics(value: LiveDiagnostics) {
 /** Non-hook read of the current values, for tests and one-off logging. */
 export function getLiveDiagnostics(): LiveDiagnostics {
   return current;
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
-
-export function useLiveDiagnostics(): LiveDiagnostics {
-  return useSyncExternalStore(subscribe, () => current, () => current);
 }

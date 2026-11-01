@@ -9,8 +9,6 @@ export const additionalScenes: Scene[] = [
     title: 'Cab pickup',
     subtitle: 'Meet your driver and confirm the ride',
     level: 'Beginner',
-    emoji: '🚕',
-    color: '#2f7f78',
     beats: [
       {
         npc: 'नमस्ते, आप कहाँ खड़े हैं?',
@@ -55,8 +53,6 @@ export const additionalScenes: Scene[] = [
     title: 'Street food stall',
     subtitle: 'Order a snack at the spice level you want',
     level: 'Beginner',
-    emoji: '🥣',
-    color: '#cf6f2e',
     beats: [
       {
         npc: 'क्या खिलाऊँ?',
@@ -101,8 +97,6 @@ export const additionalScenes: Scene[] = [
     title: 'Breakfast café',
     subtitle: 'Order breakfast and settle the bill',
     level: 'Beginner',
-    emoji: '🥞',
-    color: '#b85b3e',
     beats: [
       {
         npc: 'नाश्ते में क्या लेंगे?',
@@ -147,8 +141,6 @@ export const additionalScenes: Scene[] = [
     title: 'Dentist visit',
     subtitle: 'Describe tooth pain clearly',
     level: 'Intermediate',
-    emoji: '🦷',
-    color: '#4f7793',
     beats: [
       {
         npc: 'आपके मुँह में कहाँ दर्द है?',
@@ -193,8 +185,6 @@ export const additionalScenes: Scene[] = [
     title: 'Urgent care',
     subtitle: 'Share essential information in an emergency',
     level: 'Intermediate',
-    emoji: '🚑',
-    color: '#a94d4d',
     beats: [
       {
         npc: 'मरीज़ को क्या परेशानी है?',
@@ -239,8 +229,6 @@ export const additionalScenes: Scene[] = [
     title: 'Wedding invitation',
     subtitle: 'Accept an invitation and ask the details',
     level: 'Intermediate',
-    emoji: '💍',
-    color: '#9b4f73',
     beats: [
       {
         npc: 'रविवार को मेरी शादी है, ज़रूर आइएगा!',
@@ -285,8 +273,6 @@ export const additionalScenes: Scene[] = [
     title: 'Job interview',
     subtitle: 'Discuss experience and availability',
     level: 'Intermediate',
-    emoji: '🧑‍💼',
-    color: '#586b91',
     beats: [
       {
         npc: 'अपने काम के अनुभव के बारे में बताइए।',
@@ -331,8 +317,6 @@ export const additionalScenes: Scene[] = [
     title: 'Deadline update',
     subtitle: 'Explain a delay and agree on a new time',
     level: 'Intermediate',
-    emoji: '📊',
-    color: '#60724b',
     beats: [
       {
         npc: 'क्या रिपोर्ट तैयार है?',
@@ -377,8 +361,6 @@ export const additionalScenes: Scene[] = [
     title: 'Laundry service',
     subtitle: 'Explain a stain and arrange pickup',
     level: 'Beginner',
-    emoji: '🧺',
-    color: '#567b87',
     beats: [
       {
         npc: 'ये कपड़े कब तक चाहिए?',
