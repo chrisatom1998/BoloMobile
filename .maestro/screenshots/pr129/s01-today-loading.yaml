@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: today-loading
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=today&phase=loading"
+- extendedWaitUntil:
+    visible: "Getting today ready"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: today-loading

@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: today-empty
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=today&phase=empty"
+- extendedWaitUntil:
+    visible: "A fresh start"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: today-empty

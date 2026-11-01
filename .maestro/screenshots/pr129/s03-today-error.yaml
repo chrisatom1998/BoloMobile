@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: today-error
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=today&phase=error"
+- extendedWaitUntil:
+    visible: "Today didn't load"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: today-error

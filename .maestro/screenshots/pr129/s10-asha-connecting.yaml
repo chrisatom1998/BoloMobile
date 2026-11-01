@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: asha-connecting
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=asha&phase=connecting"
+- extendedWaitUntil:
+    visible: "Connecting to Asha"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: asha-connecting

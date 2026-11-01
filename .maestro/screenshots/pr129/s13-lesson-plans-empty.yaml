@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: lesson-plans-empty
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=lesson-plans&phase=empty"
+- extendedWaitUntil:
+    visible: "No lessons here yet"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: lesson-plans-empty

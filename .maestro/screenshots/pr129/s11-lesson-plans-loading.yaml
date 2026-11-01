@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: lesson-plans-loading
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=lesson-plans&phase=loading"
+- extendedWaitUntil:
+    visible: "Opening lesson plans"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: lesson-plans-loading

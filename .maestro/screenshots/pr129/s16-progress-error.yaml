@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: progress-error
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=progress&phase=error"
+- extendedWaitUntil:
+    visible: "Progress didn't load"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: progress-error

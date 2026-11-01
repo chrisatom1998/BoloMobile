@@ -1,0 +1,151 @@
+name: PR129 iOS simulator screenshots
+
+# Throwaway harness adapted from PR #110's ios-simulator-screenshots workflow.
+# Runs only on screenshots/pr129-* branches, which are never opened as PRs.
+on:
+  push:
+    branches:
+      - 'screenshots/pr129-states'
+
+concurrency:
+  group: pr129-simulator-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  shots:
+    runs-on: macos-26
+    timeout-minutes: 150
+    env:
+      CI: 1
+      EXPO_NO_TELEMETRY: 1
+      MAESTRO_CLI_NO_ANALYTICS: 1
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000
+      MAESTRO_VERSION: 2.8.0
+      MAESTRO_SHA256: b3e561161904fb391875ca5834d5b22cf0b01c052dd1b408ad83e30d8f8951b3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - run: npm ci
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=ios --repo-update
+      - name: Build unsigned Release app for the simulator
+        env:
+          EXPO_PUBLIC_BOLO_STATE_FIXTURES: '1'
+        run: |
+          xcodebuild \
+            -workspace ios/Bolo.xcworkspace \
+            -scheme Bolo \
+            -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/BoloDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Package simulator app
+        run: |
+          app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
+          test -d "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/Bolo-simulator.zip"
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+      - name: Create and boot an iPhone 15 (393x852 pt) simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl list runtimes
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')"
+          pinned="com.apple.CoreSimulator.SimRuntime.iOS-26-5"
+          if xcrun simctl list runtimes --json | jq -e --arg id "$pinned" '.runtimes[] | select(.isAvailable and .identifier == $id)' >/dev/null; then runtime_id="$pinned"; fi
+          device_type_id=""; device_name=""
+          # iPhone 15 first; iPhone 16 and 15 Pro share the same 393x852 pt screen.
+          for candidate in "iPhone 15" "iPhone 16" "iPhone 15 Pro"; do
+            device_type_id="$(xcrun simctl list devicetypes --json | jq -r --arg name "$candidate" '[.devicetypes[] | select(.name == $name) | .identifier] | first // empty')"
+            if [[ -n "$device_type_id" ]]; then device_name="$candidate"; break; fi
+          done
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "::error::No iOS runtime or 393x852 iPhone simulator available."
+            xcrun simctl list devicetypes
+            exit 1
+          fi
+          echo "Using ${device_name} on ${runtime_id}"
+          echo "### Simulator: ${device_name} on ${runtime_id}" >> "$GITHUB_STEP_SUMMARY"
+          echo "$device_name on $runtime_id" > simulator.txt
+          udid="$(xcrun simctl create "Bolo PR129 $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false || true
+          /usr/libexec/PlistBuddy -c "Add :DevicePreferences:$udid:ConnectHardwareKeyboard bool false" ~/Library/Preferences/com.apple.iphonesimulator.plist || true
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          open -a Simulator --args -CurrentDeviceUDID "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl ui "$udid" appearance light || true
+          xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
+      - name: Install pinned Maestro CLI
+        run: |
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --output "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
+          echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
+      - name: Capture at default text size and Larger Text one step up
+        timeout-minutes: 90
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p named-screenshots maestro-logs
+          failures=0
+          app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          # "large" is the iOS default content size; "extra-large" is one step up in Larger Text.
+          for size in large extra-large; do
+            xcrun simctl ui "$SIMULATOR_UDID" content_size "$size"
+            for flow in .maestro/screenshots/pr129/s*.yaml; do
+              name="$(basename "$flow" .yaml)"; ok=0
+              for attempt in 1 2 3; do
+                out="maestro-out/$size/$name-$attempt"; rm -rf "$out"; mkdir -p "$out"
+                if maestro test --device "$SIMULATOR_UDID" --format junit --output "maestro-logs/$size-$name-$attempt.xml" \
+                    --debug-output "maestro-logs/$size-$name-$attempt" --test-output-dir "$out" "$flow"; then ok=1; fi
+                while IFS= read -r -d '' png; do cp "$png" "named-screenshots/shot-${size}-$(basename "$png")"; done < <(find "$out" -name '*.png' -print0)
+                [[ $ok -eq 1 ]] && break
+                echo "::warning::$name at $size failed (attempt $attempt)"
+              done
+              [[ $ok -eq 1 ]] || { failures=$((failures+1)); echo "FAILED FLOW: $name at $size"; }
+            done
+          done
+          xcrun simctl ui "$SIMULATOR_UDID" content_size large || true
+          ls -la named-screenshots
+          echo "failed flows: $failures"
+          exit 0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: pr129-screenshots-${{ github.run_id }}
+          path: |
+            named-screenshots
+            simulator.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: pr129-screenshot-logs-${{ github.run_id }}
+          path: maestro-logs
+          if-no-files-found: warn
+          retention-days: 7

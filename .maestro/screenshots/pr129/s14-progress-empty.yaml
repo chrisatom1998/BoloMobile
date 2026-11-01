@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: progress-empty
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=progress&phase=empty"
+- extendedWaitUntil:
+    visible: "Your first lesson"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: progress-empty

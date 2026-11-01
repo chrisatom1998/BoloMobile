@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: phrases-empty
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=phrases&phase=empty"
+- extendedWaitUntil:
+    visible: "Nothing saved yet"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: phrases-empty

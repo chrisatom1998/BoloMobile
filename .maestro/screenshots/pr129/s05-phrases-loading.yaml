@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: phrases-loading
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=phrases&phase=loading"
+- extendedWaitUntil:
+    visible: "Opening your phrases"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: phrases-loading

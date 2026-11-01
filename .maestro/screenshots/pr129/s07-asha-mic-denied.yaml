@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: asha-mic-denied
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=asha&phase=mic-denied"
+- extendedWaitUntil:
+    visible: "The microphone is off"
+    timeout: 45000
+- waitForAnimationToEnd:
+    timeout: 3000
+- takeScreenshot: asha-mic-denied
