@@ -10,6 +10,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { selectNextLesson } from '@/lib/lesson-path';
 import { scenes, type SceneCategory } from '@/data/scenes';
+import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
@@ -60,8 +61,12 @@ export default function PhrasesScreen() {
   const [audioPhrase, setAudioPhrase] = useState('');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
+  // `calendarDay` re-runs the due check after midnight: this tab stays mounted,
+  // and what is due depends on today's date, not only on the saved reviews.
+  const calendarDay = useCalendarDay();
   // List all due phrases here, not the 5-phrase review-session cap from duePhrases.
-  const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay invalidates the clock-based due check.
+  const due = useMemo(() => dueSavedPhrases(phrases, phraseReviews ?? {}, Infinity), [phraseReviews, phrases, calendarDay]);
   const reviews = phraseReviews ?? {};
   const profile = learnerProfile ?? { ...defaultLearnerProfile(), completed: true };
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);

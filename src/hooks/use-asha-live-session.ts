@@ -4,7 +4,7 @@ import type { LiveSessionSetup } from '@/hooks/use-realtime-conversation';
 import { showAppAlert } from '@/lib/app-alert';
 import { logAshaSessionTool } from '@/lib/asha-session-log-store';
 import { buildLiveSessionContext, type LiveToolEnvironment, type LiveToolSnapshot } from '@/lib/live-tools';
-import { dateKey } from '@/lib/storage';
+import { dateKey, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
@@ -62,7 +62,13 @@ export function createAshaToolEnvironment(stateRef: { readonly current: AppState
     preparePhrase: ({ originalText, devanagari }, signal) => prepareSavedPhraseFromText({ clientId: stateRef.current.clientId, text: devanagari ?? originalText }, signal),
     confirmSave: confirmPhraseSave,
     savePhrase: async (phrase) => {
-      const saved = await stateRef.current.togglePhrase(phrase);
+      const result = await stateRef.current.togglePhrase(phrase);
+      if (result === 'full') {
+        // Nothing was saved or evicted; the learner just agreed to save, so say why it did not happen.
+        showAppAlert(SAVED_PHRASES_FULL_TITLE, SAVED_PHRASES_FULL_MESSAGE);
+        return false;
+      }
+      const saved = result === 'saved';
       // The session log remembers what Asha changed, once the change is stored.
       if (saved) logAshaSessionTool({ savedPhrase: phrase.hi });
       return saved;

@@ -4,7 +4,7 @@ import { Dimensions, StyleSheet } from 'react-native';
 
 const mockRouter = { back: jest.fn(), push: jest.fn(), replace: jest.fn() };
 let mockOnboardingMode: string | undefined;
-const mockCompleteOnboarding = jest.fn();
+const mockCompleteOnboarding = jest.fn(async (..._args: unknown[]) => true);
 const mockReviewPhrase = jest.fn();
 const mockDiagnosticsSnapshot = {
   days: {
@@ -339,18 +339,21 @@ describe('previously uncovered audit screens', () => {
     expect(view.queryAllByTestId('progress-day-bar')).toHaveLength(0);
   });
 
-  it('caps a practiced day at the full bar and leaves zero-minute days empty', async () => {
+  it('caps a practiced day at the full bar and draws zero-minute days as 4 pt stubs', async () => {
     mockAppState.practiceHistory = [{ date: dateKey(), seconds: 90, correct: 1, answers: 1, reviews: 0 }];
     const view = await render(<ProgressScreen />);
     const bars = view.getAllByTestId('progress-day-bar').map((bar) => StyleSheet.flatten(bar.props.style));
-    const filled = bars.filter((style) => style.height !== 0);
+    const filled = bars.filter((style) => style.height !== lightColors.track && style.backgroundColor !== lightColors.track);
     expect(filled).toHaveLength(1);
     expect(parseFloat(String(filled[0]?.height))).toBeLessThanOrEqual(100);
     expect(filled[0]?.backgroundColor).toBe(lightColors.gold);
-    expect(bars.filter((style) => style.height === 0)).toHaveLength(6);
+    // Zero-minute days keep a 4 pt track stub so all seven days show.
+    const stubs = bars.filter((style) => style.backgroundColor === lightColors.track);
+    expect(stubs).toHaveLength(6);
+    expect(stubs.every((style) => style.height === 4)).toBe(true);
   });
 
-  it('folds progress stats into one row and shows a dash for accuracy before any answers', async () => {
+  it('lays progress stats out as a grid and shows a dash for accuracy before any answers', async () => {
     mockAppState.phrases = [];
     mockAppState.streak = 1;
     const view = await render(<ProgressScreen />);
