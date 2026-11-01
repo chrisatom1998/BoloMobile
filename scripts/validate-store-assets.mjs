@@ -44,8 +44,9 @@ if (appConfig.ios?.infoPlist?.NSAppTransportSecurity?.NSAllowsArbitraryLoads !==
   throw new Error('iOS production transport security must reject arbitrary HTTP loads.');
 }
 if (!iosOnly && appConfig.android?.adaptiveIcon?.backgroundImage) throw new Error('Android adaptive icon must use the declared solid background color.');
-if (appConfig.plugins?.some((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen' && plugin[1]?.backgroundColor !== '#F5F0E8')) {
-  throw new Error('The splash screen must use Bolo cream, not starter artwork colors.');
+if (appConfig.plugins?.some((plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen' && plugin[1]?.backgroundColor !== '#F6F3ED')) {
+  // Matches lightColors.background in src/theme.ts so the splash and first screen are one seamless launch.
+  throw new Error('The splash screen must use the Bolo theme background (#F6F3ED), not starter artwork colors.');
 }
 
 const listings = JSON.parse(readFileSync(resolve(root, 'store/listings.json'), 'utf8'));
