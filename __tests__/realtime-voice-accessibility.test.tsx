@@ -84,6 +84,22 @@ describe('realtime voice accessibility', () => {
     expect(endStyle.height).toBeGreaterThanOrEqual(44);
   });
 
+  it('keeps a 44 point end-session action beside the compact avatar while connected', async () => {
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="avatar"><Text>Asha</Text></RealtimeVoiceButton>);
+    const end = view.getByLabelText('End live voice session');
+    const endStyle = StyleSheet.flatten(end.props.style);
+    expect(endStyle.width).toBeGreaterThanOrEqual(44);
+    expect(endStyle.height).toBeGreaterThanOrEqual(44);
+    await fireEvent.press(end);
+    expect(mockDisconnect).toHaveBeenCalledTimes(1);
+    await view.unmount();
+
+    mockVoiceStatus = 'disconnected';
+    const idle = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="avatar"><Text>Asha</Text></RealtimeVoiceButton>);
+    expect(idle.getByLabelText('Talk to Asha')).toBeTruthy();
+    expect(idle.queryByLabelText('End live voice session')).toBeNull();
+  });
+
   it('uses the orb to unmute and mute the microphone', async () => {
     const ready = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
     await fireEvent.press(ready.getByLabelText('Unmute microphone'));
