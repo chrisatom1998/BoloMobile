@@ -62,7 +62,7 @@ describe('realtime voice accessibility', () => {
 
     expect(style.width).toBe(168);
     expect(style.height).toBe(168);
-    expect(style.backgroundColor).toBe('#E76B48');
+    expect(style.backgroundColor).toBe(lightColors.orb);
     expect(view.queryByText('Start a voice conversation')).toBeNull();
     expect(view.queryByLabelText('End live voice session')).toBeNull();
     await fireEvent.press(start);
@@ -167,7 +167,7 @@ describe('realtime voice accessibility', () => {
     const end = StyleSheet.flatten(view.getByLabelText('End live voice session').props.style);
 
     expect(stage.width).toBe('100%');
-    expect(end).toMatchObject({ backgroundColor: '#FBEDEA', borderColor: '#E4B5AE', right: 0, top: 28 });
+    expect(end).toMatchObject({ backgroundColor: lightColors.dangerSoft, borderColor: lightColors.dangerLine, right: 0, top: 28 });
   });
   describe('portrait variant', () => {
     const renderPortrait = (props: { compact?: boolean; disabled?: boolean } = {}) => render(
