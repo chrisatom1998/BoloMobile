@@ -745,6 +745,36 @@ describe('live microphone denial', () => {
     expect(view.queryByTestId('mic-open-settings')).toBeNull();
     await view.unmount();
   });
+
+  it('keeps the microphone guidance and Open Settings at the largest text size', async () => {
+    const openSettings = jest.spyOn(Linking, 'openSettings').mockResolvedValue(undefined as never);
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largest = { fontScale: 3.12, height: 852, scale: 3, width: 393 };
+    await act(async () => {
+      Dimensions.set({ screen: largest, window: largest });
+      await Promise.resolve();
+    });
+    const view = await render(<LiveScreen />);
+    try {
+      expect(view.queryByTestId('mic-denied')).toBeNull();
+      await fireEvent.press(view.getByLabelText('Show microphone denied'));
+      expect(view.getByText('The microphone is off')).toBeTruthy();
+      await fireEvent.press(view.getByTestId('mic-open-settings'));
+      expect(openSettings).toHaveBeenCalledTimes(1);
+
+      await fireEvent.press(view.getByLabelText('Show microphone explainer'));
+      expect(view.getByText('Asha needs the microphone to hear you.')).toBeTruthy();
+    } finally {
+      openSettings.mockRestore();
+      await view.unmount();
+      await flushMicrotasks();
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
 });
 
 describe('live composer bottom inset', () => {

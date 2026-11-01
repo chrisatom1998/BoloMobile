@@ -309,7 +309,7 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
   const accessibilityHint = connected ? 'The microphone stays on until you mute it or end the session. You can speak while Asha is speaking.' : 'Starts live conversation with your microphone on.';
 
   if (avatar) {
-    return (
+    const avatarButton = (
       <Pressable
         accessibilityHint={accessibilityHint}
         accessibilityLabel={voice.status === 'disconnected' ? 'Talk to Asha' : labels[voice.status]}
@@ -322,6 +322,16 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
       >
         {children}
       </Pressable>
+    );
+    if (!connected) return avatarButton;
+    // Muting keeps the call open, so the compact header still needs its own way to hang up.
+    return (
+      <View style={styles.avatarRow}>
+        {avatarButton}
+        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={styles.avatarEndButton} testID="realtime-voice-end">
+          <X color={colors.white} size={18} />
+        </Pressable>
+      </View>
     );
   }
 
@@ -438,6 +448,8 @@ const useStyles = makeStyles((c) => ({
   // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
   endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
   avatarButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, overflow: 'hidden' },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  avatarEndButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   // Portrait variant: the 112pt (96pt compact) portrait is the control; rings sit around it.
   stagePortrait: { width: '100%', height: 144 },
   stagePortraitCompact: { height: 124 },

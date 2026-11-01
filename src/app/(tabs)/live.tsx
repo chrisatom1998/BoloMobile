@@ -959,6 +959,18 @@ export default function LiveScreen() {
     </RealtimeVoiceButton>
   );
 
+  const microphoneGuidance = microphonePhase === 'explaining' ? (
+    <Text accessibilityLiveRegion="polite" style={styles.heroBody} testID="mic-explainer">{LIVE_MIC_EXPLAINER}</Text>
+  ) : microphonePhase === 'denied' ? (
+    <View style={styles.micDenied} testID="mic-denied">
+      <Text accessibilityRole="alert" style={styles.heroTitle}>The microphone is off</Text>
+      <Text style={styles.heroBody}>{LIVE_MIC_PERMISSION_MESSAGE}</Text>
+      <Pressable accessibilityLabel="Open Settings to allow microphone access" accessibilityRole="button" onPress={() => void Linking.openSettings()} style={styles.talkButton} testID="mic-open-settings">
+        <Text style={styles.talkButtonText}>Open Settings</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
   const headerTopbar = (
     <View style={[styles.topbar, reflowHeaderLayout && !accessibilityCompact && styles.topbarLarge, { width: heroContentWidth }]} testID="asha-header-topbar">
       {accessibilityCompact ? (
@@ -1098,27 +1110,19 @@ export default function LiveScreen() {
                       <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
                       <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveVoiceText}>{statusKicker}</Text>
                     </View>
-                    {microphonePhase === 'explaining' ? (
-                      <Text accessibilityLiveRegion="polite" style={styles.heroBody} testID="mic-explainer">{LIVE_MIC_EXPLAINER}</Text>
-                    ) : microphonePhase === 'denied' ? (
-                      <View style={styles.micDenied} testID="mic-denied">
-                        <Text accessibilityRole="alert" style={styles.heroTitle}>The microphone is off</Text>
-                        <Text style={styles.heroBody}>{LIVE_MIC_PERMISSION_MESSAGE}</Text>
-                        <Pressable accessibilityLabel="Open Settings to allow microphone access" accessibilityRole="button" onPress={() => void Linking.openSettings()} style={styles.talkButton} testID="mic-open-settings">
-                          <Text style={styles.talkButtonText}>Open Settings</Text>
-                        </Pressable>
-                      </View>
-                    ) : conversationStarted ? (
+                    {microphoneGuidance ?? (conversationStarted ? (
                       <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                     ) : (
                       <>
                         <Text accessibilityLiveRegion="polite" style={styles.heroTitle}>{voiceHeroTitle}</Text>
                         <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                       </>
-                    )}
+                    ))}
                   </View>
                 </View>
                 )}
+                {/* The compact layout drops the stage, so permission guidance renders on its own. */}
+                {accessibilityCompact && microphoneGuidance ? <View style={[styles.heroCopy, { width: heroContentWidth }]}>{microphoneGuidance}</View> : null}
                 {speechCaption ? (
                   <CaptionReveal key={motionMode === 'lively' ? realtimeStatus : 'caption'} mode={motionMode} style={[styles.captionBlock, { width: heroContentWidth }]}>
                     <View style={[styles.captionCard, speechCaption.speaker === 'you' ? styles.captionCardYou : styles.captionCardAsha]}>
