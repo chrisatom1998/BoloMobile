@@ -59,7 +59,6 @@ type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   aiConsent: boolean;
   hydrated: boolean;
   streak: number;
-  dailySteps: number;
   duePhrases: SavedPhrase[];
   reviewStreak: number;
 };
@@ -680,7 +679,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     aiConsent: state.aiConsent !== null,
     hydrated,
     streak: calculateStreak(state.streakDays, completedToday(state.practice)),
-    dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
     duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews, Infinity),
     reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
   }), [state, hydrated]);

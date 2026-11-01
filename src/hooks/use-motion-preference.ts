@@ -46,9 +46,7 @@ export function useMotionPreference(preference: MotionPreference = 'gentle') {
   );
 
   return {
-    lively: mode === 'lively',
     mode,
     reducedMotion: mode === 'reduced',
-    systemReduceMotion,
   };
 }

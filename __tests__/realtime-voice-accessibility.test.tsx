@@ -56,7 +56,7 @@ describe('realtime voice accessibility', () => {
 
   it('uses the large glowing orb as the only visible start control', async () => {
     mockVoiceStatus = 'disconnected';
-    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
     const start = view.getByLabelText('Start a voice conversation');
     const style = StyleSheet.flatten(start.props.style);
 
@@ -71,7 +71,7 @@ describe('realtime voice accessibility', () => {
   });
 
   it('keeps both voice actions at least 44 points and exposes disabled state', async () => {
-    const view = await render(<RealtimeVoiceButton clientId="client-12345678" disabled onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" disabled onError={jest.fn()} />);
     const start = view.getByLabelText('Unmute microphone');
     const end = view.getByLabelText('End live voice session');
 
@@ -85,14 +85,14 @@ describe('realtime voice accessibility', () => {
   });
 
   it('uses the orb to unmute and mute the microphone', async () => {
-    const ready = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const ready = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
     await fireEvent.press(ready.getByLabelText('Unmute microphone'));
     expect(mockStartTurn).toHaveBeenCalledTimes(1);
     expect(haptics.hapticStartRecording).toHaveBeenCalledTimes(1);
     await ready.unmount();
 
     mockVoiceStatus = 'recording';
-    const recording = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const recording = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
     await fireEvent.press(recording.getByLabelText('Mute microphone'));
     expect(mockFinishTurn).toHaveBeenCalledTimes(1);
   });
@@ -108,7 +108,7 @@ describe('realtime voice accessibility', () => {
 
   it('reclaims vertical space with a still-prominent compact orb', async () => {
     mockVoiceStatus = 'disconnected';
-    const view = await render(<RealtimeVoiceButton clientId="client-12345678" compact onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" compact onError={jest.fn()} />);
     const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
     const orb = StyleSheet.flatten(view.getByLabelText('Start a voice conversation').props.style);
 
@@ -120,7 +120,7 @@ describe('realtime voice accessibility', () => {
 
   it('centers the minimal orb in a full-width stage', async () => {
     mockVoiceStatus = 'disconnected';
-    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="minimal" />);
     const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
     const orb = StyleSheet.flatten(view.getByLabelText('Start a voice conversation').props.style);
 
@@ -133,20 +133,20 @@ describe('realtime voice accessibility', () => {
   });
 
   it('offsets the compact end button beyond the orb hit rect', async () => {
-    const compact = await render(<RealtimeVoiceButton clientId="client-12345678" compact onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const compact = await render(<RealtimeVoiceButton clientId="client-12345678" compact onError={jest.fn()} />);
     const compactEnd = StyleSheet.flatten(compact.getByLabelText('End live voice session').props.style);
 
     // In the 220pt compact stage, right -16 starts the 48pt end button at x=188, beyond the 148pt orb's x=184 edge.
     expect(compactEnd.right).toBe(-16);
     await compact.unmount();
 
-    const regular = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} />);
+    const regular = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} />);
     const regularEnd = StyleSheet.flatten(regular.getByLabelText('End live voice session').props.style);
     expect(regularEnd.right ?? 0).toBe(0);
   });
 
   it('places the minimal end control at the full-width stage edge with visible palette colors', async () => {
-    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="minimal" />);
+    const view = await render(<RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="minimal" />);
     const stage = StyleSheet.flatten(view.getByTestId('realtime-voice-stage').props.style);
     const end = StyleSheet.flatten(view.getByLabelText('End live voice session').props.style);
 
@@ -155,7 +155,7 @@ describe('realtime voice accessibility', () => {
   });
   describe('portrait variant', () => {
     const renderPortrait = (props: { compact?: boolean; disabled?: boolean } = {}) => render(
-      <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} onTurnComplete={jest.fn()} size="portrait" tone="dark" {...props}>
+      <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="portrait" tone="dark" {...props}>
         <Text testID="portrait-face">Asha</Text>
       </RealtimeVoiceButton>,
     );

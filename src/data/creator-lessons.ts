@@ -8,8 +8,6 @@ export const creatorLessons: Scene[] = [
     "subtitle": "Order, customize, and pay at cafés and restaurants",
     "category": "Food",
     "level": "Beginner",
-    "emoji": "🍽️",
-    "color": "#c86d32",
     "place": "A local café",
     "words": [
       "मेन्यू",
@@ -185,8 +183,6 @@ export const creatorLessons: Scene[] = [
     "subtitle": "Describe routines, weather, and plans at home",
     "category": "Everyday",
     "level": "Beginner",
-    "emoji": "🏠",
-    "color": "#63754c",
     "place": "Home · every day",
     "words": [
       "सुबह",
