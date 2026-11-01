@@ -259,7 +259,7 @@ describe('previously uncovered audit screens', () => {
     await fireEvent.press(view.getByRole('radio', { name: 'धन्यवाद, Dhanyavaad, Thank you' }));
     expect(view.getByTestId('onboarding-continue').props.accessibilityState).toEqual({ disabled: true });
     await fireEvent.press(view.getByTestId('onboarding-reply-namaste'));
-    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).borderColor).toBe('#D8663C');
+    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).borderColor).toBe('#172523');
     expect(StyleSheet.flatten(view.getByRole('header', { name: 'Hear this' }).props.style).fontFamily).toBe('Georgia');
     await fireEvent.press(view.getByTestId('onboarding-continue'));
 

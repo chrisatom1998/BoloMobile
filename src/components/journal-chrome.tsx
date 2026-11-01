@@ -1,6 +1,6 @@
 import { Text, type StyleProp, type TextStyle } from 'react-native';
 
-import { makeStyles } from '@/theme';
+import { makeStyles, type } from '@/theme';
 
 type DisplayProps = {
   children: string;
@@ -24,19 +24,6 @@ export function JournalKicker({ children, style }: Pick<DisplayProps, 'children'
 }
 
 const useStyles = makeStyles((c) => ({
-  display: {
-    color: c.ink,
-    fontFamily: 'Georgia',
-    fontSize: 31,
-    fontWeight: '700',
-    letterSpacing: -0.7,
-    lineHeight: 37,
-  },
-  kicker: {
-    color: c.brandText,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.05,
-    textTransform: 'uppercase',
-  },
+  display: { ...type.display, color: c.ink },
+  kicker: { ...type.eyebrow, color: c.brandText },
 }));

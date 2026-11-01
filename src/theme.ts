@@ -69,6 +69,11 @@ export const lightColors = {
   /** Gold rings around Asha's tap-to-talk portrait on the night surface. */
   portraitRing: 'rgba(231, 172, 61, 0.5)',
   portraitRingFaint: 'rgba(231, 172, 61, 0.25)',
+  /** Live-orb ring and highlight on the night surface. */
+  orbRingDark: 'rgba(231, 172, 61, 0.35)',
+  orbHighlight: 'rgba(255, 255, 255, 0.17)',
+  /** Brighter gold for the recording state of the gold orb. */
+  goldBright: '#F2BE57',
 } as const;
 
 export type ThemeColors = { [Key in keyof typeof lightColors]: typeof lightColors[Key] extends string ? string : number };
@@ -83,6 +88,8 @@ export const spacing = {
   lg: 16,
   xl: 24,
   xxl: 32,
+  /** Side padding for every screen. */
+  gutter: 20,
 } as const;
 
 export const radius = {
@@ -118,6 +125,30 @@ export function hindiType(fontSize: number) {
     fontWeight: '400',
   } as const satisfies TextStyle;
 }
+
+/**
+ * Type scale. Every text style uses one of these roles (spread it, then add color).
+ * Weights are 400, 600 and 700 only: Georgia ships regular and bold, so 800/900
+ * would be synthesised and smear. Hindi uses `hindiType()`: 28 hero, 20 card, 17 inline.
+ * Documented exceptions: the tab-bar badge (below 12 pt) and decorative numerals
+ * or watermark glyphs of 40 pt and up.
+ */
+export const type = {
+  /** Screen titles: Today greeting, Phrases, Progress, Settings, Onboarding. */
+  display: { fontFamily: displayFont, fontSize: 34, lineHeight: 40, fontWeight: '700' },
+  /** Hero card titles, lesson title. */
+  title: { fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700' },
+  /** Section headings, lesson-list titles, prompts. */
+  headline: { fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '700' },
+  /** Asha's lines, lead text. */
+  bodyLarge: { fontSize: 17, lineHeight: 24, fontWeight: '400' },
+  body: { fontSize: 16, lineHeight: 23, fontWeight: '400' },
+  /** Buttons, segmented options, list names. */
+  label: { fontSize: 16, lineHeight: 20, fontWeight: '600' },
+  /** Metadata, helper text. */
+  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' },
+  eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+} as const satisfies Record<string, TextStyle>;
 
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;
@@ -185,41 +216,64 @@ export function createSharedStyles(c: ThemeColors) {
       borderCurve: 'continuous',
     },
     eyebrow: {
+      ...type.eyebrow,
       color: c.brandText,
-      fontSize: 12,
-      fontWeight: '800',
-      letterSpacing: 0,
-      textTransform: 'uppercase',
     },
     heading: {
+      ...type.display,
       color: c.ink,
-      fontSize: 28,
-      lineHeight: 32,
-      fontWeight: '800',
     },
     body: {
+      ...type.body,
       color: c.muted,
-      fontSize: 16,
-      lineHeight: 23,
     },
-    primaryButton: {
-      minHeight: 52,
-      borderRadius: radius.md,
-      borderCurve: 'continuous',
-      backgroundColor: c.neutralSurface,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'row',
-      gap: spacing.sm,
-      paddingHorizontal: spacing.lg,
-    },
-    primaryButtonText: {
-      color: c.neutralSurfaceText,
-      fontSize: 16,
-      fontWeight: '800',
-    },
+    primaryButton: createButtonStyles(c).primary,
+    primaryButtonText: createButtonStyles(c).primaryText,
   } as const satisfies NamedStyles;
 }
+
+/**
+ * Colour roles. Keep them fixed so every screen reads the same way:
+ * - rust (`brand`): the brand, and the single primary action on a cream screen.
+ * - gold: celebration and streaks, and the action that sits on a rust surface.
+ * - forest: correct answers and success only. Never links, arrows or plain actions.
+ * - ink: text, and the selected state of controls.
+ *
+ * Button variants. A screen shows at most one filled button besides `positive`.
+ * Spread the container into a Pressable style and the matching `*Text` into its label.
+ */
+export function createButtonStyles(c: ThemeColors) {
+  const base = {
+    minHeight: 52,
+    borderRadius: radius.md,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  } as const satisfies ViewStyle;
+  return {
+    /** Rust fill: the one main action on a cream screen. */
+    primary: { ...base, backgroundColor: c.brand },
+    primaryText: { ...type.label, color: c.white, textAlign: 'center' },
+    /** Gold fill: only on rust surfaces. */
+    primaryOnBrand: { ...base, backgroundColor: c.gold },
+    primaryOnBrandText: { ...type.label, color: c.ink, textAlign: 'center' },
+    /** Paper with a strong hairline: supporting actions (Again, Hint, Recalibrate). */
+    secondary: { ...base, backgroundColor: c.paper, borderWidth: 1, borderColor: c.lineStrong },
+    secondaryText: { ...type.label, color: c.ink, textAlign: 'center' },
+    /** Text only: links, Done, All plans. */
+    quiet: { minHeight: 44, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.sm },
+    quietText: { ...type.label, color: c.brandText },
+    /** Forest fill: only the "Got it" grade. */
+    positive: { ...base, backgroundColor: c.forest },
+    positiveText: { ...type.label, color: c.white, textAlign: 'center' },
+  } as const satisfies NamedStyles;
+}
+
+/** Button variants for Bolo's fixed light palette. */
+export const buttons = StyleSheet.create(createButtonStyles(lightColors));
 
 export const useSharedStyles = makeStyles(createSharedStyles);
 

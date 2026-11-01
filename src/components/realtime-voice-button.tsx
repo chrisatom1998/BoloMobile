@@ -1,6 +1,7 @@
+import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 import { Mic, MicOff, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -16,6 +17,7 @@ import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-
 import { boloApiErrorKind, type BoloApiErrorKind } from '@/services/bolo-api';
 import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
+import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
@@ -43,6 +45,10 @@ type Props = {
   tone?: 'light' | 'dark';
   /** `details.kind` carries the typed Bolo API failure so screens never classify by message text. */
   onError: (message: string, details?: RealtimeErrorDetails) => void;
+  /** False while the hosting screen is out of view; a microphone check still pending then never starts a session. */
+  active?: boolean;
+  /** Reports the pre-prompt explainer and a denial that should offer Settings. */
+  onMicrophonePhase?: (phase: LiveMicrophonePhase) => void;
   onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Session start, ready, and end for the on-device session log. Only used when this control owns the session. */
   onSessionEvent?: (event: AshaSessionEvent) => void;
@@ -189,8 +195,13 @@ export function RealtimeVoiceButton(props: Props) {
   return <OwnedRealtimeVoiceButton {...props} />;
 }
 
-function RealtimeVoiceButtonView({ children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
+function RealtimeVoiceButtonView({ active = true, children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
+  const onMicrophonePhaseRef = useRef(onMicrophonePhase);
+  const ensuringRef = useRef(false);
+  // Bumped whenever a pending start must not go ahead: the screen leaves view,
+  // the control is disabled, or it unmounts.
+  const startAttemptRef = useRef(0);
   const blocked = disabled || voice.status === 'connecting';
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
@@ -205,6 +216,31 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
   useEffect(() => {
     onStatusChangeRef.current = onStatusChange;
   }, [onStatusChange]);
+
+  useEffect(() => {
+    onMicrophonePhaseRef.current = onMicrophonePhase;
+  }, [onMicrophonePhase]);
+
+  useEffect(() => {
+    if (active && !disabled) return undefined;
+    startAttemptRef.current += 1;
+    return undefined;
+  }, [active, disabled]);
+
+  useEffect(() => () => {
+    startAttemptRef.current += 1;
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      void getRecordingPermissionsAsync().then((permission) => {
+        if (permission.granted) onMicrophonePhaseRef.current?.('idle');
+      }).catch(() => undefined);
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     onStatusChange?.(voice.status);
@@ -227,7 +263,30 @@ function RealtimeVoiceButtonView({ children, compact = false, disabled = false, 
     // deadlock RemoteIO while the peer applies its remote audio description.
     // Once connected, starting later turns is safe to acknowledge haptically.
     if (voice.status === 'ready' || voice.status === 'responding') hapticStartRecording();
-    void voice.startTurn().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.', errorDetails(cause)));
+    return (async () => {
+      if (voice.status === 'disconnected') {
+        if (ensuringRef.current) return;
+        ensuringRef.current = true;
+        const attempt = ++startAttemptRef.current;
+        try {
+          const allowed = await ensureLiveMicrophone({
+            getPermission: () => getRecordingPermissionsAsync(),
+            requestPermission: () => requestRecordingPermissionsAsync(),
+            onPhase: (phase) => onMicrophonePhaseRef.current?.(phase),
+          });
+          if (!allowed) return;
+          // The learner left the screen or the control was disabled while the
+          // permission check ran; starting now would open the mic off-screen.
+          if (attempt !== startAttemptRef.current) {
+            onMicrophonePhaseRef.current?.('idle');
+            return;
+          }
+        } finally {
+          ensuringRef.current = false;
+        }
+      }
+      await voice.startTurn();
+    })().catch((cause: unknown) => onError(cause instanceof Error ? cause.message : 'Live voice practice failed.', errorDetails(cause)));
   }, [blocked, onError, voice]);
 
   useEffect(() => {
@@ -344,19 +403,19 @@ const useStyles = makeStyles((c) => ({
   orbMinimal: { width: 88, height: 88, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 4 },
   orbActive: { backgroundColor: c.orbActive, shadowOpacity: 0.56 },
   orbRecording: { backgroundColor: c.orbRecording },
-  orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: 'rgba(255, 255, 255, 0.17)' },
-  orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '900' },
-  orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },
+  orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: c.orbHighlight },
+  orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '700' },  // Exception to the type scale: decorative orb glyph.
+  orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },  // Exception: decorative orb glyph.
   endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
   endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
-  ringDark: { borderColor: 'rgba(231, 172, 61, 0.35)' },
+  ringDark: { borderColor: c.orbRingDark },
   ringInnerRecordingDark: { borderWidth: 1.5, borderColor: c.gold },
   orbDark: { backgroundColor: c.gold, shadowColor: c.gold, shadowOpacity: 0.3 },
   orbDarkActive: { backgroundColor: c.gold, shadowOpacity: 0.5 },
-  orbDarkRecording: { backgroundColor: '#F2BE57' },
+  orbDarkRecording: { backgroundColor: c.goldBright },
   orbGlyphDark: { color: c.ink },
-  endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine },
+  endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Negative margins centre the button on the orb.
   // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
   endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
   // Portrait variant: the 112pt (96pt compact) portrait is the control; rings sit around it.

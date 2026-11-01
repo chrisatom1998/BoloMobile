@@ -3,10 +3,9 @@ import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { SearchField } from 'heroui-native/search-field';
 import { BookOpen, Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Platform, Text, View } from 'react-native';
+import { FlatList, Platform, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { SegmentedControl } from '@/components/segmented-control';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { selectNextLesson } from '@/lib/lesson-path';
@@ -21,7 +20,7 @@ import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Filter = 'All' | SceneCategory;
@@ -32,7 +31,6 @@ const replaySpeeds = [
   { label: 'Slow', rate: 0.75 },
   { label: 'Normal', rate: 1 },
 ] as const;
-const speedOptions = replaySpeeds.map(({ label, rate }) => ({ accessibilityLabel: label, label, value: String(rate) }));
 const categoryLabels: Record<SceneCategory, string> = { Everyday: 'Everyday', Food: 'Food', Health: 'Health', Social: 'Social', Travel: 'Travel', Work: 'Work' };
 
 const phraseCategories = new Map<string, SceneCategory>();
@@ -102,6 +100,9 @@ export default function PhrasesScreen() {
 
   // Older builds offered 0.1× and 0.25×; those settings play at the new slowest speed.
   const playbackRate = Math.max(0.5, profile.phrasePlaybackRate ?? 1);
+  const speedIndex = Math.max(0, replaySpeeds.findIndex((speed) => speed.rate === playbackRate));
+  const currentSpeed = replaySpeeds[speedIndex] ?? replaySpeeds[2];
+  const nextSpeed = replaySpeeds[(speedIndex + 1) % replaySpeeds.length] ?? replaySpeeds[0];
 
   function playPhrase(text: string) {
     if (!aiConsent && !hasOfflineSpeech(text)) return;
@@ -126,7 +127,15 @@ export default function PhrasesScreen() {
       <View style={[styles.headerHero, largeTextLayout && styles.headerHeroLarge]} testID="phrases-header-hero">
         <View style={[styles.headerRow, largeTextLayout && styles.headerRowLarge]}>
           <JournalDisplay style={styles.headerTitle}>Phrases</JournalDisplay>
-          {phrases.length > 0 ? <Text style={styles.savedCount}>{savedCount}</Text> : null}
+          {phrases.length > 0 ? (
+            <View style={styles.headerMeta}>
+              <Text style={styles.savedCount}>{savedCount}</Text>
+              {/* One shared Listen speed, like a podcast player. Tapping cycles Slower, Slow, Normal. */}
+              <Pressable accessibilityHint="Changes how fast Listen plays" accessibilityLabel={`Playback speed: ${currentSpeed.label}`} accessibilityRole="button" onPress={() => updateLearnerProfile({ phrasePlaybackRate: nextSpeed.rate })} style={styles.speedButton} testID="phrases-playback-speed">
+                <Text style={styles.speedButtonText}>{currentSpeed.label} speed</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
         <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep.</Text>
       </View>
@@ -148,35 +157,22 @@ export default function PhrasesScreen() {
             </SearchField.Group>
           </SearchField>
           {filterOptions.length >= 2 ? (
-            <SegmentedControl
-              accessibilityLabel="Phrase category"
-              compact
-              onValueChange={setFilter}
-              options={[{ label: 'All', value: 'All' as Filter }, ...filterOptions]}
-              stackedAtLargeText
-              style={styles.segmentedControl}
-              value={activeFilter}
-            />
+            <ScrollView accessibilityLabel="Phrase category" contentContainerStyle={styles.chips} horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              {[{ label: 'All', value: 'All' as Filter }, ...filterOptions].map((option) => {
+                const selected = option.value === activeFilter;
+                return (
+                  <Pressable accessibilityLabel={`Phrase category: ${option.label}`} accessibilityRole="button" accessibilityState={{ selected }} key={option.value} onPress={() => setFilter(option.value)} style={[styles.chip, selected && styles.chipSelected]}>
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{option.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           ) : null}
           {!aiConsent && phrases.some((phrase) => !hasOfflineSpeech(phrase.hi)) ? (
             <Pressable accessibilityHint="Opens Settings" accessibilityRole="link" onPress={() => router.push('/settings')} style={styles.consentNote} testID="phrases-consent-note">
               <Text style={styles.consentNoteText}>Some phrases need Asha&apos;s voice to play. <Text style={styles.consentNoteLink}>Turn on AI coaching in Settings</Text></Text>
             </Pressable>
           ) : null}
-          <View style={styles.speedSetting}>
-            <Text style={styles.speedLabel}>Listen speed</Text>
-            {/* One shared speed, like a podcast player, instead of a row of speed chips on every card. */}
-            <SegmentedControl
-              accessibilityLabel="Playback speed"
-              compact
-              onValueChange={(value) => updateLearnerProfile({ phrasePlaybackRate: Number(value) })}
-              options={speedOptions}
-              stackedAtLargeText
-              style={styles.segmentedControl}
-              testID="phrases-playback-speed"
-              value={String(playbackRate)}
-            />
-          </View>
         </>
       ) : null}
     </View>
@@ -261,60 +257,66 @@ export default function PhrasesScreen() {
 }
 
 const useStyles = makeStyles((c) => ({
-  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: 20, paddingTop: 18, paddingBottom: spacing.xxl },
+  content: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   separator: { height: spacing.md },
   header: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'center', gap: spacing.lg, marginBottom: spacing.lg },
-  headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: 2, paddingTop: spacing.sm },
+  headerHero: { width: '100%', alignItems: 'stretch', justifyContent: 'center', gap: spacing.xs, paddingTop: spacing.sm },
   headerHeroLarge: { alignItems: 'stretch' },
   headerRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.md },
   headerRowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 30, lineHeight: 36, letterSpacing: -0.3 },
-  headerSubtitle: { maxWidth: 310, color: c.muted, fontFamily: displayFont, fontSize: 16, lineHeight: 22, textAlign: 'left' },
+  headerTitle: { ...type.display },
+  headerSubtitle: { ...type.body, maxWidth: 310, color: c.muted, fontFamily: displayFont, textAlign: 'left' },
   headerSubtitleLarge: { maxWidth: '100%' },
-  savedCount: { color: c.muted, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'], paddingBottom: 4 },
-  dueCard: { width: '100%', minHeight: 76, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: spacing.lg, paddingLeft: 18, paddingRight: spacing.lg },
+  savedCount: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], paddingBottom: spacing.xs },
+  dueCard: { width: '100%', minHeight: 76, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.brandSoft, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.lg },
   dueCardLarge: { alignItems: 'flex-start', flexDirection: 'column' },
-  dueCount: { color: c.ink, fontFamily: displayFont, fontSize: 44, lineHeight: 48, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2 },
-  dueTitle: { color: c.ink, fontSize: 16, lineHeight: 21, fontWeight: '600', textAlign: 'left' },
-  dueBody: { color: c.goldDeepText, fontSize: 13, lineHeight: 18, textAlign: 'left' },
-  dueAction: { minHeight: 44, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.ink, paddingHorizontal: spacing.lg },
-  dueActionText: { color: c.white, fontSize: 14, fontWeight: '600' },
+  dueCount: { color: c.ink, fontFamily: displayFont, fontSize: 44, lineHeight: 48, fontWeight: '700', fontVariant: ['lining-nums', 'tabular-nums'] },  // Exception to the type scale: hero numeral.
+  dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs },
+  dueTitle: { ...type.label, color: c.ink, textAlign: 'left' },
+  dueBody: { ...type.caption, color: c.muted, textAlign: 'left' },
+  dueAction: { ...buttons.primary, minHeight: 44 },
+  dueActionText: buttons.primaryText,
   searchField: { width: '100%', alignSelf: 'stretch' },
   searchRow: { width: '100%', minHeight: 48 },
-  search: { minWidth: 0, flex: 1, minHeight: 48, borderRadius: 16, borderCurve: 'continuous', borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.paperRaised, color: c.ink, fontSize: 15, paddingVertical: spacing.sm },
-  segmentedControl: { width: '100%', alignSelf: 'stretch' },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', gap: spacing.md, paddingVertical: 14, paddingLeft: spacing.lg, paddingRight: 14 },
+  search: { ...type.body, minWidth: 0, flex: 1, minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.paperRaised, color: c.ink, paddingVertical: spacing.sm },
+  error: { ...type.caption, color: c.danger },
+  card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', gap: spacing.md, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.lg },
   cardLarge: { gap: spacing.md },
   cardMain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   cardMainLarge: { flexDirection: 'column', alignItems: 'stretch' },
   cardActions: { alignItems: 'center', gap: spacing.xs },
   cardActionsLarge: { flexDirection: 'row', justifyContent: 'flex-end' },
   listenButton: { width: 44, height: 44, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
-  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  copy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2 },
-  hindi: { ...hindiType(21), color: c.ink, textAlign: 'left' },
-  latin: { color: c.brand, fontSize: 14, lineHeight: 20, fontWeight: '500', textAlign: 'left' },
-  english: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
-  masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: 6 },
-  masteryMeter: { flexDirection: 'row', gap: 4 },
+  copy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs },
+  hindi: { ...hindiType(20), color: c.ink, textAlign: 'left' },
+  latin: { ...type.label, color: c.brand, textAlign: 'left' },
+  english: { ...type.caption, color: c.muted, textAlign: 'left' },
+  masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: spacing.sm },
+  masteryMeter: { flexDirection: 'row', gap: spacing.xs },
   masterySegment: { width: 18, height: 4, borderRadius: radius.pill, backgroundColor: c.track },
   masterySegmentFilled: { backgroundColor: c.forest },
-  mastery: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  mastery: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   masteryDue: { color: c.brandText },
-  speedSetting: { width: '100%', gap: spacing.sm },
-  speedLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerMeta: { alignItems: 'flex-end', gap: spacing.xs },
+  speedButton: { ...buttons.secondary, minHeight: 36, paddingHorizontal: spacing.md },
+  speedButtonText: { ...buttons.secondaryText, ...type.caption, fontWeight: '600' },
+  chipRow: { width: '100%', flexGrow: 0 },
+  chips: { gap: spacing.sm, paddingRight: spacing.lg },
+  chip: { minHeight: 36, justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.paper, paddingHorizontal: spacing.md },
+  chipSelected: { backgroundColor: c.ink, borderColor: c.ink },
+  chipText: { ...type.label, color: c.ink },
+  chipTextSelected: { color: c.white },
   disabled: { opacity: 0.4 },
   empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
-  emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  emptyAction: { minWidth: 180, minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.ink, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  emptyActionText: { color: c.white, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  emptyBody: { ...type.body, color: c.muted, textAlign: 'center' },
+  emptyAction: { ...buttons.primary, minWidth: 180 },
+  emptyActionText: buttons.primaryText,
   consentNote: { minHeight: 44, justifyContent: 'center' },
-  consentNoteText: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  consentNoteLink: { color: c.forestText, fontWeight: '700', textDecorationLine: 'underline' },
+  consentNoteText: { ...type.caption, color: c.muted },
+  consentNoteLink: { color: c.brandText, fontWeight: '700', textDecorationLine: 'underline' },
   noResultsBlock: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl },
-  noResults: { color: c.muted, fontSize: 15, textAlign: 'center' },
+  noResults: { ...type.body, color: c.muted, textAlign: 'center' },
   clearFilters: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
-  clearFiltersText: { color: c.forestText, fontSize: 15, fontWeight: '700' },
+  clearFiltersText: { ...type.label, color: c.brandText, fontWeight: '700' },
 }));

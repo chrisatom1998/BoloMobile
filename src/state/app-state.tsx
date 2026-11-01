@@ -5,6 +5,7 @@ import { AppState } from 'react-native';
 import { showAppAlert } from '@/lib/app-alert';
 import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
 import { deleteAllAshaSessions, endLiveCallForDataDeletion, startAshaSessionRetention } from '@/lib/asha-session-log-store';
+import { isSensitiveEnvelope, revealSensitiveValue, sealSensitiveValue } from '@/lib/sensitive-storage';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
@@ -159,8 +160,32 @@ function addDays(key: string, days: number) {
   return dateKey(value);
 }
 
+async function secureStoredEntries(entries: [string, string][]): Promise<[string, string][]> {
+  return Promise.all(entries.map(async ([key, value]) => (
+    key === storageKeys.chatHistory ? [key, await sealSensitiveValue(AsyncStorage, value)] : [key, value]
+  )));
+}
+
 async function persistState(state: PersistedState, keys: PersistedKey[]) {
-  await AsyncStorage.multiSet(storageEntries(state, keys));
+  await AsyncStorage.multiSet(await secureStoredEntries(storageEntries(state, keys)));
+}
+
+async function readStoredChat(raw: string | null): Promise<string | null> {
+  if (raw == null) return null;
+  if (!isSensitiveEnvelope(raw)) {
+    try {
+      await AsyncStorage.setItem(storageKeys.chatHistory, await sealSensitiveValue(AsyncStorage, raw));
+    } catch (error) {
+      console.warn('Bolo could not encrypt saved chat.', error);
+    }
+    return raw;
+  }
+  try {
+    return await revealSensitiveValue(raw, AsyncStorage);
+  } catch (error) {
+    console.warn('Bolo could not read encrypted chat.', error);
+    return null;
+  }
 }
 
 function reportPersistenceFailure(error: unknown, message = 'Your last change was not saved and has been restored. Check available storage and try again.') {
@@ -226,7 +251,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           streakDays: sanitizeStreakDays(readStored(storageKeys.streakDays)),
           clientId,
           aiConsent: sanitizeAiConsent(readStored(storageKeys.aiConsent)),
-          chatHistory: sanitizeChatHistory(readStored(storageKeys.chatHistory)),
+          chatHistory: sanitizeChatHistory(await readStoredChat(readStored(storageKeys.chatHistory))),
           learnerProfile: sanitizeLearnerProfile(readStored(storageKeys.learnerProfile)),
           sceneProgress: sanitizeSceneProgress(readStored(storageKeys.sceneProgress)),
           phraseReviews: sanitizePhraseReviews(readStored(storageKeys.phraseReviews)),
@@ -590,6 +615,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     try {
       // Cancel the scheduled daily reminder before wiping its notificationId,
       // but keep the local wipe independent from native notification failures.
+      // Chat history is sealed the same way as a normal save.
       if (state.reminder.notificationId) {
         try {
           await cancelPracticeReminder(state.reminder);
@@ -597,7 +623,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           console.warn('Bolo could not cancel the practice reminder during data deletion.', error);
         }
       }
-      await enqueuePersistence(() => AsyncStorage.multiSet(entries));
+      await enqueuePersistence(async () => {
+        await AsyncStorage.multiSet(await secureStoredEntries(entries));
+      });
       clearAiVoicePlaybackCache();
       // Storage now holds the defaults; update in-memory state before anything
       // else can fail so the two never diverge.
