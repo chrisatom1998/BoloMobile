@@ -1,5 +1,6 @@
 import { randomUUID } from 'expo-crypto';
 
+import { sanitizeStructuredReply } from '@/lib/structured-reply';
 import type {
   ChatMessage,
   LearnerProfile,
@@ -32,6 +33,9 @@ export const AI_CONSENT_VERSION = 10 as const;
 export const MAX_CHAT_HISTORY_MESSAGES = 100;
 export const MAX_CHAT_MESSAGE_CHARACTERS = 2_400;
 export const MAX_DAILY_PRACTICE_SECONDS = 24 * 60 * 60;
+export const MAX_SAVED_PHRASES = 100;
+export const SAVED_PHRASES_FULL_TITLE = 'Saved phrases full';
+export const SAVED_PHRASES_FULL_MESSAGE = `You have ${MAX_SAVED_PHRASES} saved phrases. Remove one in Phrases to save another.`;
 
 const MAX_CHAT_MESSAGE_ID_CHARACTERS = 128;
 
@@ -170,9 +174,16 @@ function normalizeChatMessage(value: unknown, truncateText: boolean): ChatMessag
 
   const text = truncateText ? rawText.slice(0, MAX_CHAT_MESSAGE_CHARACTERS) : rawText;
   const role: ChatMessage['role'] = rawRole === 'mira' || rawRole === 'arjun' ? 'asha' : rawRole;
-  return message.language === undefined
-    ? { id, role, text }
-    : { id, role, text, language: message.language };
+  // A malformed or oversized structured block is dropped, never the message:
+  // the plain text always renders through the legacy path.
+  const structured = role === 'asha' ? sanitizeStructuredReply((value as { structured?: unknown }).structured) : undefined;
+  return {
+    id,
+    role,
+    text,
+    ...(message.language === undefined ? {} : { language: message.language }),
+    ...(structured ? { structured } : {}),
+  };
 }
 
 function newestUniqueMessages(messages: ChatMessage[]): ChatMessage[] {

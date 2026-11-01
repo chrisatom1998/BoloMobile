@@ -47,6 +47,7 @@ import { SYNC_OUTBOX_CLEARING_KEY, SYNC_OUTBOX_KEY, syncOutbox } from '../src/li
 import { BoloApiError, reportGeneratedMessage } from '../src/services/bolo-api';
 import { observe } from '../src/lib/observability';
 import { cancelPracticeReminder } from '../src/lib/practice-reminder';
+import { HISTORY_SEAL_ACCOUNT, revealSensitiveValue } from '../src/lib/sensitive-storage';
 import { createAiConsentRecord, dateKey, emptyPractice, MAX_DAILY_PRACTICE_SECONDS, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
@@ -160,6 +161,7 @@ function readSnapshot(view: Awaited<ReturnType<typeof render>>) {
 describe('AppStateProvider clearAllData', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.mocked(cancelPracticeReminder).mockImplementation(async (current) => ({ ...current, enabled: false, notificationId: null }));
     asyncStorage.__store.clear();
     reportMock.mockResolvedValue({ reported: true });
     // The outbox is module-level: start every test with an empty, unblocked queue.
@@ -186,14 +188,15 @@ describe('AppStateProvider clearAllData', () => {
       practice: emptyPractice(),
       streakDays: [],
     });
-    expect(asyncStorage.__store.size).toBe(Object.keys(storageKeys).length);
+    expect(asyncStorage.__store.size).toBe(Object.keys(storageKeys).length + (asyncStorage.__store.has(HISTORY_SEAL_ACCOUNT) ? 1 : 0));
     expect(asyncStorage.__store.has(ASHA_SESSION_INDEX_KEY)).toBe(false);
     expect(sessionKeys()).toEqual([]);
     expect(asyncStorage.__store.has(SYNC_OUTBOX_KEY)).toBe(false);
     expect(getAshaSessions()).toEqual([]);
     expect(syncOutbox.getEntries()).toEqual([]);
     expect(asyncStorage.__store.get(storageKeys.aiConsent)).toBe('null');
-    expect(asyncStorage.__store.get(storageKeys.chatHistory)).toBe('[]');
+    expect(await revealSensitiveValue(asyncStorage.__store.get(storageKeys.chatHistory) ?? '')).toBe('[]');
+    expect(asyncStorage.__store.get(storageKeys.chatHistory)).not.toContain('Stored reply');
     expect(asyncStorage.__store.get(storageKeys.clientId)).toBe(next.clientId);
     expect(asyncStorage.__store.get(storageKeys.goal)).toBe('10');
     expect(asyncStorage.__store.get(storageKeys.motionPreference)).toBe('gentle');
@@ -218,6 +221,25 @@ describe('AppStateProvider clearAllData', () => {
     expect(cancelPracticeReminder).toHaveBeenCalledWith(reminder);
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.reminder) ?? 'null')).toMatchObject({ enabled: false, notificationId: null });
     await view.unmount();
+  });
+
+  it('still clears local data when native reminder cancellation fails', async () => {
+    seedEveryStorageKey();
+    const reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'notif-123' };
+    asyncStorage.__store.set(storageKeys.reminder, JSON.stringify(reminder));
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    jest.mocked(cancelPracticeReminder).mockRejectedValueOnce(new Error('native cancel failed'));
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).clientId).toBe('client-old-12345'));
+
+    await fireEvent.press(view.getByLabelText('Clear all provider data'));
+    await waitFor(() => expect(readSnapshot(view).clientId).not.toBe('client-old-12345'));
+
+    expect(view.getByTestId('clear-error').props.children).toBe('');
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.reminder) ?? 'null')).toMatchObject({ enabled: false, notificationId: null });
+    expect(warning).toHaveBeenCalledWith('Bolo could not cancel the practice reminder during data deletion.', expect.any(Error));
+    await view.unmount();
+    warning.mockRestore();
   });
 
   it('rejects a consent change made while a full data clear is in flight', async () => {
@@ -259,7 +281,10 @@ describe('AppStateProvider clearAllData', () => {
     expect(readSnapshot(view)).toEqual(before);
     expect(observe).toHaveBeenCalledWith('runtime_error');
     const progressKeys = Object.values(storageKeys);
-    expect(Object.fromEntries([...asyncStorage.__store].filter(([key]) => progressKeys.includes(key as never)))).toEqual(Object.fromEntries(Object.entries(original).filter(([key]) => progressKeys.includes(key as never))));
+    const persisted = Object.fromEntries(await Promise.all([...asyncStorage.__store].filter(([key]) => progressKeys.includes(key as never)).map(async ([key, value]) => (
+      key === storageKeys.chatHistory ? [key, await revealSensitiveValue(value)] : [key, value]
+    ))));
+    expect(persisted).toEqual(Object.fromEntries(Object.entries(original).filter(([key]) => progressKeys.includes(key as never))));
     // Generations were invalidated before the first await, so the conversation data is gone either way.
     expect(sessionKeys()).toEqual([]);
     expect(asyncStorage.__store.has(ASHA_SESSION_INDEX_KEY)).toBe(false);
@@ -290,8 +315,7 @@ describe('AppStateProvider clearAllData', () => {
     logAshaSessionEvent({ type: 'starting' }, 'en', { id: 'live-now', at: new Date().toISOString() });
     logAshaSessionEvent({ type: 'ready' }, 'en');
     logAshaSessionSnapshot([{ id: 'live-n-0', speaker: 'you', text: 'Namaste', startMs: 0, endMs: 400 }]);
-    await flushMicrotasks();
-    expect(asyncStorage.__store.has(ashaSessionKey('live-now'))).toBe(true);
+    await waitFor(() => expect(asyncStorage.__store.has(ashaSessionKey('live-now'))).toBe(true));
     const order: string[] = [];
     const ender = jest.fn((reason: string) => {
       order.push(`disconnect:${reason}`);

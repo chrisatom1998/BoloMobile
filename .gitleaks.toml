@@ -1,0 +1,11 @@
+title = "Bolo"
+
+[extend]
+useDefault = true
+
+# The first encryption commit named a SecureStore account SENSITIVE_KEY_ACCOUNT.
+# That is a storage name, not a credential. Gitleaks scans every commit in the
+# pull request, so the renamed line still has to be allowlisted.
+[allowlist]
+description = "On-device storage account names, not credentials"
+regexes = ['''bolo-sensitive-key-v1''', '''bolo-history-seal-v1''']

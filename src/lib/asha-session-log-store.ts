@@ -1,10 +1,12 @@
 /**
- * AsyncStorage persistence for the Asha session log. Each session has its own
+ * Encrypted persistence for the Asha session log. Each session has its own
  * key plus a small index of ids, so a save during a call rewrites only the
- * active session. One serialized write queue coalesces transcript writes in the
- * style of `replaceLiveChatSnapshot`. Hydration happens once, repairs partial
- * writes, applies retention, and turns a record left `active` by a killed app
- * into `interrupted`; callers await it before a new call can start.
+ * active session. Values are AES-GCM ciphertext; the key names stay stable so
+ * a save still touches one record. One serialized write queue coalesces
+ * transcript writes in the style of `replaceLiveChatSnapshot`. Hydration
+ * happens once, repairs partial writes, migrates leftover plaintext, applies
+ * retention, and turns a record left `active` by a killed app into
+ * `interrupted`; callers await it before a new call can start.
  *
  * A capture generation guards deletion: Delete Bolo data and the learner's
  * Clear bump it, so late rows, finalization, tool callbacks, and queued writes
@@ -39,6 +41,7 @@ import {
   type AshaSnapshotRow,
 } from '@/lib/asha-session-log';
 import { observe } from '@/lib/observability';
+import { wrapSensitiveStorage } from '@/lib/sensitive-storage';
 import { createLocalId } from '@/lib/storage';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
 
@@ -54,7 +57,8 @@ type LocalStorage = {
 // Lazy like observability: pure UI tests import the capture hooks without a native bridge.
 function storage(): LocalStorage {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return (require('@react-native-async-storage/async-storage') as { default: LocalStorage }).default;
+  const asyncStorage = (require('@react-native-async-storage/async-storage') as { default: LocalStorage }).default;
+  return wrapSensitiveStorage(asyncStorage);
 }
 
 async function allSessionKeys(): Promise<string[]> {

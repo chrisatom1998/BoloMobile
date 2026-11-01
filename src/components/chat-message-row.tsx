@@ -1,14 +1,19 @@
-import { BookmarkPlus, Flag, Volume2 } from 'lucide-react-native';
+import { BookmarkPlus, Ellipsis, Flag } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
+import { ChatMessageMenu, type ChatMessageMenuItem } from '@/components/chat-message-menu';
+import { PhraseCard } from '@/components/phrase-card';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
+import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { hindiSourcePhrase } from '@/lib/contextual-word-definition';
-import { canonicalTranscriptSource, displayHindiTranscript } from '@/lib/learner-phrase-display';
+import { legacyTranscriptDisplay, type LegacyTranscriptDisplay } from '@/lib/learner-phrase-display';
+import { phraseCardLines } from '@/lib/phrase-card-lines';
+import { structuredHindiSource, structuredSaveCandidates } from '@/lib/structured-reply';
+import { sourceTextForLegacySelection } from '@/lib/transcript-selection';
+import type { ChatMessage, ScriptPreference, StructuredCorrection, StructuredPhrase } from '@/state/app-state-types';
 import type { OutboxEntry } from '@/lib/sync-outbox';
-import { sourceTextForDisplayedSelection } from '@/lib/transcript-selection';
-import type { ChatMessage } from '@/state/app-state-types';
 import { spacing, useTheme } from '@/theme';
 
 const MAX_ACCESSIBLE_REPLY_CHARACTERS = 56;
@@ -20,33 +25,48 @@ const webChatText = { resize: 'none' } as TextStyle;
 const selectableTextFrame: ViewStyle = { alignSelf: 'stretch', minHeight: 23 };
 const hiddenSizer: TextStyle = { opacity: 0 };
 
+export function phrasePlaybackKey(messageId: string, phrase: Pick<StructuredPhrase, 'devanagari'>) {
+  return `${messageId}\u0000${phrase.devanagari}`;
+}
+
 function messageActionExcerpt(text: string) {
   const normalized = text.replace(/\s+/gu, ' ').trim();
   if (normalized.length <= MAX_ACCESSIBLE_REPLY_CHARACTERS) return normalized;
   return `${normalized.slice(0, MAX_ACCESSIBLE_REPLY_CHARACTERS).trimEnd()}…`;
 }
 
+/**
+ * Read-only, selectable chat text. Hindi runs render in the Tiro face (tagged
+ * hi-IN) as nested spans inside the TextInput on native, so the learner can
+ * still highlight words and Save maps the highlight back to the Devanagari
+ * source. Web textareas cannot hold spans, so the flat string is used there.
+ */
 function SelectableChatText({
   accessibilityHint,
   accessibilityLabel,
   accessibilityLiveRegion,
+  display,
+  hindiStyle,
   onSelectedText,
   onSelectionCollapsed,
   selectionColor,
-  sourceText,
   style,
-  text,
+  testID,
 }: {
   accessibilityHint: string;
   accessibilityLabel: string;
   accessibilityLiveRegion?: 'none' | 'polite' | 'assertive';
+  display: LegacyTranscriptDisplay;
+  hindiStyle: StyleProp<TextStyle>;
   onSelectedText: (selection: { sourceText: string; text: string }) => void;
   onSelectionCollapsed: () => void;
   selectionColor: string;
-  sourceText: string;
   style: StyleProp<TextStyle>;
-  text: string;
+  testID?: string;
 }) {
+  const text = display.displayText;
+  const useSpans = Platform.OS !== 'web' && display.hasDevanagari;
+
   const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
     const { end, start } = event.nativeEvent.selection;
     if (end <= start) {
@@ -56,16 +76,21 @@ function SelectableChatText({
     const excerpt = text.slice(start, end).trim();
     if (!excerpt) return;
     onSelectedText({
-      sourceText: sourceTextForDisplayedSelection({ displayText: text, end, sourceText, start }),
+      sourceText: sourceTextForLegacySelection(display, { end, start }),
       text: excerpt,
     });
-  }, [onSelectedText, onSelectionCollapsed, sourceText, text]);
+  }, [display, onSelectedText, onSelectionCollapsed, text]);
 
   // A hidden Text sizes the bubble; the selectable TextInput sits on top. Pinning
   // the input to its own contentSize kept stale tall heights from narrow layouts.
+  const renderContent = (withTestID: boolean) => useSpans ? display.spans.map((span, index) => (
+    span.script === 'devanagari'
+      ? <Text accessibilityLanguage="hi-IN" key={index} style={hindiStyle} testID={withTestID && testID ? `${testID}-devanagari` : undefined}>{span.text}</Text>
+      : <Text key={index}>{span.text}</Text>
+  )) : text;
   return (
     <View style={selectableTextFrame}>
-      <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[style, hiddenSizer]}>{text}</Text>
+      <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[style, hiddenSizer]}>{renderContent(false)}</Text>
       <TextInput
         accessibilityHint={accessibilityHint}
         accessibilityLabel={accessibilityLabel}
@@ -78,8 +103,55 @@ function SelectableChatText({
         scrollEnabled={false}
         selectionColor={selectionColor}
         style={[style, Platform.OS === 'web' ? webChatText : null, StyleSheet.absoluteFill]}
-        value={text}
-      />
+        testID={testID}
+        {...(useSpans ? {} : { value: text })}
+      >
+        {useSpans ? renderContent(true) : null}
+      </TextInput>
+    </View>
+  );
+}
+
+function CorrectionTable({
+  correction,
+  index,
+  messageId,
+  scriptPreference,
+  stacked,
+  styles,
+}: {
+  correction: StructuredCorrection;
+  index: number;
+  messageId: string;
+  scriptPreference: ScriptPreference;
+  stacked: boolean;
+  styles: ReturnType<typeof createLiveStyles>;
+}) {
+  const said = phraseCardLines({ devanagari: correction.youSaid.devanagari, romanized: correction.youSaid.romanized, scriptPreference });
+  const say = phraseCardLines({ devanagari: correction.say.devanagari, romanized: correction.say.romanized, english: correction.say.english, scriptPreference });
+  const testID = `chat-correction-${messageId}-${index}`;
+  return (
+    <View style={styles.correction} testID={testID}>
+      <View style={[styles.correctionRow, stacked && styles.correctionRowStacked]} testID={`${testID}-you-said`}>
+        <Text style={styles.correctionLabel}>You said</Text>
+        <View style={styles.correctionWords}>
+          {said.devanagari ? <Text accessibilityLanguage="hi-IN" style={[styles.correctionHindi, styles.correctionStruck]}>{said.devanagari}</Text> : null}
+          {said.romanized ? <Text style={[styles.correctionRoman, styles.correctionStruck]}>{said.romanized}</Text> : null}
+        </View>
+      </View>
+      <View style={[styles.correctionRow, styles.correctionSay, stacked && styles.correctionRowStacked]} testID={`${testID}-say`}>
+        <Text style={[styles.correctionLabel, styles.correctionSayLabel]}>Say</Text>
+        <View style={styles.correctionWords}>
+          {say.devanagari ? <Text accessibilityLanguage="hi-IN" style={styles.correctionHindi}>{say.devanagari}</Text> : null}
+          {say.romanized ? <Text style={[styles.correctionRoman, styles.correctionSayRoman]}>{say.romanized}</Text> : null}
+          {say.english ? <Text style={styles.correctionEnglish}>{say.english}</Text> : null}
+        </View>
+      </View>
+      {correction.note ? (
+        <Text style={styles.correctionNote}>
+          {legacyTranscriptDisplay(correction.note, { normalizeKnown: false, scriptPreference }).displayText}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -88,11 +160,13 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   aiConsent,
   continuesNext,
   continuesPrevious,
+  hasSelectedText,
   isPending,
   isWelcome,
   message,
   onOpenPhrasePicker,
   onOpenWordDefinition,
+  onPlayPhrase,
   onPlayReply,
   onDiscardReport,
   onReport,
@@ -100,19 +174,27 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onSelectionCollapsed,
   onSelectedText,
   playbackLocked,
+  playingPhrase = null,
+  reducedMotion = false,
   queuedReport,
   reported,
   reporting,
+  scriptPreference,
   styles,
 }: {
   aiConsent: boolean;
   continuesNext: boolean;
   continuesPrevious: boolean;
+  /** True while the learner has words highlighted in this message; a highlight beats the structured candidates. */
+  hasSelectedText?: (messageId: string) => boolean;
   isPending: boolean;
   isWelcome: boolean;
   message: ChatMessage;
-  onOpenPhrasePicker: (message: ChatMessage) => void;
+  /** `prefill` is the canonical phrase from a structured reply; omitted for the selection-based legacy path. */
+  onOpenPhrasePicker: (message: ChatMessage, prefill?: StructuredPhrase) => void;
   onOpenWordDefinition: (sourcePhrase: string) => void;
+  /** Speaks one phrase's Devanagari (not the whole reply). */
+  onPlayPhrase?: (message: ChatMessage, phrase: StructuredPhrase) => void;
   onPlayReply: (message: ChatMessage) => void;
   onDiscardReport?: (entryId: string) => void;
   onReport: (message: ChatMessage) => void;
@@ -120,44 +202,176 @@ export const ChatMessageRow = memo(function ChatMessageRow({
   onSelectedText: (messageId: string, selection: { sourceText: string; text: string }) => void;
   onSelectionCollapsed: (messageId: string) => void;
   playbackLocked: boolean;
+  /** `phrasePlaybackKey` of the phrase whose audio is loading or playing. */
+  playingPhrase?: string | null;
   /** A report for this reply waiting in the sync outbox, or one the outbox gave up on. */
   queuedReport?: Pick<OutboxEntry, 'id' | 'state' | 'lastError'>;
+  reducedMotion?: boolean;
   reported: boolean;
   reporting: boolean;
+  scriptPreference: ScriptPreference;
   styles: ReturnType<typeof createLiveStyles>;
 }) {
   const { colors } = useTheme();
-  const normalizeKnown = message.role === 'asha' && message.language === 'hi';
-  const displayText = useMemo(() => displayHindiTranscript(message.text, normalizeKnown), [message.text, normalizeKnown]);
-  const selectionSource = useMemo(() => canonicalTranscriptSource(message.text, normalizeKnown), [message.text, normalizeKnown]);
-  const sourcePhrase = useMemo(() => hindiSourcePhrase(selectionSource) || (message.language === 'hi' ? message.text : ''), [message.language, message.text, selectionSource]);
-  const excerpt = useMemo(() => messageActionExcerpt(displayText), [displayText]);
+  const largeTextLayout = useLargeTextLayout();
   const isYou = message.role === 'you';
+  const structured = !isYou ? message.structured : undefined;
+  const normalizeKnown = message.role === 'asha' && message.language === 'hi';
+  const legacy = useMemo(() => legacyTranscriptDisplay(message.text, { normalizeKnown, scriptPreference }), [message.text, normalizeKnown, scriptPreference]);
+  const introText = structured?.intro;
+  const outroText = structured?.outro;
+  const intro = useMemo(() => introText ? legacyTranscriptDisplay(introText, { normalizeKnown: false, scriptPreference }) : null, [introText, scriptPreference]);
+  const outro = useMemo(() => outroText ? legacyTranscriptDisplay(outroText, { normalizeKnown: false, scriptPreference }) : null, [outroText, scriptPreference]);
+  const saveCandidates = useMemo(() => structured ? structuredSaveCandidates(structured) : [], [structured]);
+  const sourcePhrase = useMemo(() => {
+    if (structured) return hindiSourcePhrase(structuredHindiSource(structured));
+    return hindiSourcePhrase(legacy.selectionSource) || (message.language === 'hi' ? message.text : '');
+  }, [legacy.selectionSource, message.language, message.text, structured]);
+  const excerpt = useMemo(() => messageActionExcerpt(legacy.accessibleText), [legacy.accessibleText]);
+  const [menu, setMenu] = useState<'actions' | 'save' | null>(null);
   const messageHint = isWelcome
     ? 'Read-only message.'
-    : 'Read-only message. Highlight words, then use Save selection below.';
+    : 'Read-only message. Highlight words, then use Save phrase below.';
 
   const selectedText = useCallback((selection: { sourceText: string; text: string }) => {
     onSelectedText(message.id, selection);
   }, [message.id, onSelectedText]);
   const selectionCollapsed = useCallback(() => onSelectionCollapsed(message.id), [message.id, onSelectionCollapsed]);
-  const openPhrasePicker = useCallback(() => onOpenPhrasePicker(message), [message, onOpenPhrasePicker]);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const savePhrase = useCallback(() => {
+    if (hasSelectedText?.(message.id)) onOpenPhrasePicker(message);
+    else if (saveCandidates.length === 1) onOpenPhrasePicker(message, saveCandidates[0]);
+    else if (saveCandidates.length > 1) setMenu('save');
+    else onOpenPhrasePicker(message);
+  }, [hasSelectedText, message, onOpenPhrasePicker, saveCandidates]);
   const openWordDefinition = useCallback(() => { if (sourcePhrase) onOpenWordDefinition(sourcePhrase); }, [onOpenWordDefinition, sourcePhrase]);
   const playReply = useCallback(() => onPlayReply(message), [message, onPlayReply]);
   const report = useCallback(() => onReport(message), [message, onReport]);
   const retryReport = useCallback(() => { if (queuedReport) onRetryReport?.(queuedReport.id); }, [onRetryReport, queuedReport]);
   const discardReport = useCallback(() => { if (queuedReport) onDiscardReport?.(queuedReport.id); }, [onDiscardReport, queuedReport]);
   const showActions = !isPending && !isWelcome;
-  const reportControl = isWelcome ? null : queuedReport?.state === 'failed' ? (
-    <>
-      <View accessibilityLabel={`Report could not be sent: ${excerpt}. ${queuedReport.lastError ?? ''}`.trim()} accessibilityRole="text" style={styles.smallAction}><Flag color={colors.dangerSoft} size={15} /><Text style={[styles.smallActionText, styles.failedReportText]}>Couldn’t send</Text></View>
-      <Pressable accessibilityHint="Sends this report again when Bolo is reachable." accessibilityLabel={`Retry report: ${excerpt}`} accessibilityRole="button" hitSlop={actionHitSlop} onPress={retryReport} style={styles.smallAction}><Text style={styles.smallActionText}>Retry</Text></Pressable>
-      <Pressable accessibilityHint="Removes this unsent report from the device." accessibilityLabel={`Discard report: ${excerpt}`} accessibilityRole="button" hitSlop={actionHitSlop} onPress={discardReport} style={styles.smallAction}><Text style={styles.smallActionText}>Discard</Text></Pressable>
-    </>
-  ) : queuedReport ? (
-    <Pressable accessibilityHint="Saved on this device and sent when you are back online." accessibilityLabel={`Report queued: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: true }} disabled hitSlop={actionHitSlop} style={[styles.smallAction, styles.disabled]}><Flag color={colors.muted} size={15} /><Text style={styles.smallActionText}>Waiting to send</Text></Pressable>
+  const hindiStyle = useMemo(() => [styles.messageHindi, isYou && styles.userText], [isYou, styles.messageHindi, styles.userText]);
+
+  const actionItems = useMemo<ChatMessageMenuItem[]>(() => {
+    const items: ChatMessageMenuItem[] = [];
+    if (sourcePhrase) {
+      items.push({
+        key: 'words',
+        label: 'Words',
+        accessibilityLabel: `Explore Hindi words: ${excerpt}`,
+        accessibilityHint: aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.',
+        disabled: !aiConsent,
+        onPress: openWordDefinition,
+      });
+    }
+    if (!isYou) {
+      items.push({
+        key: 'listen',
+        label: 'Listen',
+        accessibilityLabel: `Read reply aloud: ${excerpt}`,
+        accessibilityHint: !aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : 'Reads the whole reply aloud.',
+        disabled: !aiConsent || playbackLocked,
+        onPress: playReply,
+      });
+      if (queuedReport?.state === 'failed') {
+        items.push({
+          key: 'retry-report',
+          label: 'Retry report',
+          accessibilityLabel: `Retry report: ${excerpt}`,
+          accessibilityHint: 'Sends this report again when Bolo is reachable.',
+          onPress: retryReport,
+        });
+        items.push({
+          key: 'discard-report',
+          label: 'Discard report',
+          accessibilityLabel: `Discard report: ${excerpt}`,
+          accessibilityHint: 'Removes this unsent report from the device.',
+          destructive: true,
+          onPress: discardReport,
+        });
+      } else {
+        items.push({
+          key: 'report',
+          label: reported ? 'Reported' : queuedReport ? 'Report queued' : reporting ? 'Reporting…' : 'Report',
+          accessibilityLabel: `Report reply: ${excerpt}`,
+          destructive: !reported && !queuedReport,
+          disabled: reported || reporting || Boolean(queuedReport),
+          onPress: report,
+        });
+      }
+    }
+    return items;
+  }, [aiConsent, excerpt, isYou, openWordDefinition, playReply, playbackLocked, queuedReport, report, reported, reporting, retryReport, discardReport, sourcePhrase]);
+
+  const saveItems = useMemo<ChatMessageMenuItem[]>(() => saveCandidates.map((phrase, index) => ({
+    key: `save-${index}`,
+    label: phrase.romanized,
+    accessibilityLabel: `Save phrase: ${phrase.romanized}`,
+    detail: phrase.english || undefined,
+    onPress: () => onOpenPhrasePicker(message, phrase),
+  })), [message, onOpenPhrasePicker, saveCandidates]);
+
+  const body = structured ? (
+    <View style={styles.structuredBody} testID={`chat-structured-${message.id}`}>
+      {intro ? (
+        <SelectableChatText
+          accessibilityHint={messageHint}
+          accessibilityLabel={`Asha: ${intro.accessibleText}`}
+          accessibilityLiveRegion="polite"
+          display={intro}
+          hindiStyle={hindiStyle}
+          onSelectedText={selectedText}
+          onSelectionCollapsed={selectionCollapsed}
+          selectionColor={colors.brand}
+          style={styles.messageText}
+        />
+      ) : null}
+      {structured.phrases?.map((phrase, index) => {
+        const key = phrasePlaybackKey(message.id, phrase);
+        return (
+          <PhraseCard
+            devanagari={phrase.devanagari}
+            english={phrase.english}
+            key={`${phrase.devanagari}-${index}`}
+            listenDisabled={!aiConsent || playbackLocked}
+            listenHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking.' : 'Plays only this Hindi phrase.'}
+            onListen={onPlayPhrase ? () => onPlayPhrase(message, phrase) : undefined}
+            playing={playingPhrase === key}
+            romanized={phrase.romanized}
+            scriptPreference={scriptPreference}
+            style={styles.phraseCard}
+            testID={`chat-phrase-${message.id}-${index}`}
+          />
+        );
+      })}
+      {structured.corrections?.map((correction, index) => (
+        <CorrectionTable correction={correction} index={index} key={`${correction.say.devanagari}-${index}`} messageId={message.id} scriptPreference={scriptPreference} stacked={largeTextLayout} styles={styles} />
+      ))}
+      {outro ? (
+        <SelectableChatText
+          accessibilityHint={messageHint}
+          accessibilityLabel={`Asha: ${outro.accessibleText}`}
+          display={outro}
+          hindiStyle={hindiStyle}
+          onSelectedText={selectedText}
+          onSelectionCollapsed={selectionCollapsed}
+          selectionColor={colors.brand}
+          style={styles.messageText}
+        />
+      ) : null}
+    </View>
   ) : (
-    <Pressable accessibilityLabel={`Report reply: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: reported || reporting }} disabled={reported || reporting} hitSlop={actionHitSlop} onPress={report} style={[styles.smallAction, reporting && styles.disabled]}><Flag color={reported ? colors.success : colors.muted} size={15} /><Text style={[styles.smallActionText, reported && styles.reportedText]}>{reported ? 'Reported' : reporting ? 'Reporting…' : 'Report'}</Text></Pressable>
+    <SelectableChatText
+      accessibilityHint={messageHint}
+      accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${legacy.accessibleText}`}
+      accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
+      display={legacy}
+      hindiStyle={hindiStyle}
+      onSelectedText={selectedText}
+      onSelectionCollapsed={selectionCollapsed}
+      selectionColor={isYou ? colors.gold : colors.brand}
+      style={[styles.messageText, isYou && styles.userText]}
+    />
   );
 
   return (
@@ -168,31 +382,55 @@ export const ChatMessageRow = memo(function ChatMessageRow({
             <Text style={[styles.messageLabel, isYou && styles.userText]}>{isYou ? 'You' : 'Asha'}</Text>
           </View>
         )}
-        <SelectableChatText
-          accessibilityHint={messageHint}
-          accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${displayText}`}
-          accessibilityLiveRegion={message.role === 'asha' && !isWelcome ? 'polite' : 'none'}
-          onSelectionCollapsed={selectionCollapsed}
-          onSelectedText={selectedText}
-          selectionColor={isYou ? colors.gold : colors.brand}
-          sourceText={selectionSource}
-          style={[styles.messageText, isYou && styles.userText]}
-          text={displayText}
-        />
+        {body}
         {isPending ? <Text style={styles.messageStatus}>Sending…</Text> : null}
         {showActions ? (
           <View style={[styles.messageActions, isYou && styles.messageActionsYou]}>
-            {!isWelcome ? <Pressable accessibilityHint="Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming." accessibilityLabel={`Save transcript phrase: ${excerpt}`} accessibilityRole="button" hitSlop={actionHitSlop} onPress={openPhrasePicker} style={styles.smallAction}><BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} /><Text style={[styles.smallActionText, isYou && styles.userText]}>Save selection</Text></Pressable> : null}
-            {!isWelcome && !isPending && sourcePhrase ? <Pressable accessibilityHint={aiConsent ? 'Opens the Hindi-only word tray with contextual English explanations.' : 'Agree to connected AI processing to unpack this message.'} accessibilityLabel={`Explore Hindi words: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent }} disabled={!aiConsent} hitSlop={actionHitSlop} onPress={openWordDefinition} style={[styles.smallAction, !aiConsent && styles.disabled]}><Text style={[styles.smallActionText, isYou && styles.userText]}>Words</Text></Pressable> : null}
-            {message.role === 'asha' ? (
-              <>
-                <Pressable accessibilityHint={!aiConsent ? 'Agree to connected AI processing to enable Listen.' : playbackLocked ? 'Wait until Asha finishes speaking before playing another reply.' : undefined} accessibilityLabel={`Read reply aloud: ${excerpt}`} accessibilityRole="button" accessibilityState={{ disabled: !aiConsent || playbackLocked }} disabled={!aiConsent || playbackLocked} hitSlop={actionHitSlop} onPress={playReply} style={[styles.smallAction, (!aiConsent || playbackLocked) && styles.disabled]}><Volume2 color={colors.forest} size={16} /><Text style={styles.smallActionText}>Listen</Text></Pressable>
-                {reportControl}
-              </>
+            <Pressable
+              accessibilityHint={saveCandidates.length ? 'Opens the phrase picker with Asha’s Hindi, romanization and meaning filled in.' : 'Saves the words you highlighted. If nothing is highlighted, opens the full message for trimming.'}
+              accessibilityLabel={`Save phrase: ${excerpt}`}
+              accessibilityRole="button"
+              hitSlop={actionHitSlop}
+              onPress={savePhrase}
+              style={styles.smallAction}
+              testID={`chat-save-${message.id}`}
+            >
+              <BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} />
+              <Text style={[styles.smallActionText, isYou && styles.userText]}>Save phrase</Text>
+            </Pressable>
+            {actionItems.length ? (
+              <Pressable
+                accessibilityHint={isYou ? 'Opens Words.' : 'Opens Words, Listen and Report.'}
+                accessibilityLabel={`More actions: ${excerpt}`}
+                accessibilityRole="button"
+                onPress={() => setMenu('actions')}
+                style={styles.moreAction}
+                testID={`chat-more-${message.id}`}
+              >
+                <Ellipsis color={isYou ? colors.white : colors.muted} size={20} />
+              </Pressable>
+            ) : null}
+            {reported || reporting || queuedReport ? (
+              <View accessibilityState={queuedReport && queuedReport.state !== 'failed' ? { disabled: true } : undefined} accessibilityLabel={queuedReport ? (queuedReport.state === 'failed' ? `Report could not be sent: ${excerpt}. ${queuedReport.lastError ?? ''}`.trim() : `Report queued: ${excerpt}`) : undefined} style={styles.reportStatus}>
+                <Flag color={reported ? colors.success : queuedReport?.state === 'failed' ? colors.dangerSoft : colors.muted} size={14} />
+                <Text style={[styles.smallActionText, reported && styles.reportedText, queuedReport?.state === 'failed' && styles.failedReportText]}>
+                  {reported ? 'Reported' : queuedReport?.state === 'failed' ? 'Couldn’t send' : queuedReport ? 'Waiting to send' : 'Reporting…'}
+                </Text>
+              </View>
             ) : null}
           </View>
         ) : null}
       </View>
+      {menu ? (
+        <ChatMessageMenu
+          items={menu === 'save' ? saveItems : actionItems}
+          onClose={closeMenu}
+          reducedMotion={reducedMotion}
+          testID={`chat-menu-${message.id}`}
+          title={menu === 'save' ? 'Which phrase do you want to save?' : `${isYou ? 'Your message' : 'Asha’s reply'}: ${excerpt}`}
+          visible
+        />
+      ) : null}
     </View>
   );
 });

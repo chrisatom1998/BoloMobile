@@ -5,25 +5,30 @@ const mockRequestPermissions = jest.fn();
 const mockSchedule = jest.fn();
 const mockCancel = jest.fn();
 const mockCancelAll = jest.fn();
+const mockGetAllScheduled = jest.fn();
 
 jest.mock('expo-notifications', () => ({
   AndroidImportance: { DEFAULT: 3 },
   IosAuthorizationStatus: { PROVISIONAL: 3 },
   SchedulableTriggerInputTypes: { DAILY: 'daily' },
-  cancelScheduledNotificationAsync: (...args: unknown[]) => mockCancel(...args),
   cancelAllScheduledNotificationsAsync: () => mockCancelAll(),
+  cancelScheduledNotificationAsync: (...args: unknown[]) => mockCancel(...args),
+  getAllScheduledNotificationsAsync: () => mockGetAllScheduled(),
   getPermissionsAsync: (...args: unknown[]) => mockGetPermissions(...args),
   requestPermissionsAsync: (...args: unknown[]) => mockRequestPermissions(...args),
   scheduleNotificationAsync: (...args: unknown[]) => mockSchedule(...args),
   setNotificationChannelAsync: jest.fn(),
 }));
 
-import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
+import { applyRestoredReminder, cancelOtherPracticeReminders, cancelPracticeReminder, clearAllPracticeReminders, schedulePracticeReminder } from '../src/lib/practice-reminder';
 
 describe('practice reminders', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCancel.mockResolvedValue(undefined);
+    mockCancelAll.mockResolvedValue(undefined);
     mockGetPermissions.mockResolvedValue({ granted: true });
+    mockGetAllScheduled.mockResolvedValue([]);
     mockSchedule.mockResolvedValue('reminder-1');
   });
 
@@ -35,7 +40,7 @@ describe('practice reminders', () => {
       content: {
         title: 'A little Hindi goes a long way',
         body: 'Your next Bolo scene and phrase review are ready.',
-        data: { url: '/review' },
+        data: { kind: 'bolo-practice-reminder', url: '/review' },
       },
       trigger: { type: 'daily', hour: 20, minute: 15 },
     });
@@ -51,6 +56,55 @@ describe('practice reminders', () => {
     }, 15, 42);
 
     expect(result).toEqual({ enabled: true, hour: 15, minute: 42, notificationId: 'reminder-1', offerAnswered: true });
+  });
+
+  it('schedules the replacement before cancelling the previous reminder', async () => {
+    const order: string[] = [];
+    mockSchedule.mockImplementationOnce(async () => { order.push('schedule'); return 'reminder-2'; });
+    mockCancel.mockImplementationOnce(async () => { order.push('cancel'); });
+
+    const result = await schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20);
+
+    expect(order).toEqual(['schedule', 'cancel']);
+    expect(mockCancel).toHaveBeenCalledWith('reminder-1');
+    expect(result).toEqual({ enabled: true, hour: 20, minute: 0, notificationId: 'reminder-2' });
+  });
+
+  it('sweeps the old reminder when its first cancellation attempt fails', async () => {
+    const scheduled = [
+      { identifier: 'reminder-1', content: { data: { kind: 'bolo-practice-reminder' } }, trigger: {} },
+      { identifier: 'reminder-2', content: { data: { kind: 'bolo-practice-reminder' } }, trigger: {} },
+    ];
+    mockSchedule.mockResolvedValueOnce('reminder-2');
+    mockGetAllScheduled.mockImplementation(async () => scheduled);
+    mockCancel
+      .mockRejectedValueOnce(new Error('first cancel failed'))
+      .mockImplementation(async (id: string) => {
+        const index = scheduled.findIndex((request) => request.identifier === id);
+        if (index >= 0) scheduled.splice(index, 1);
+      });
+
+    const result = await schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20);
+
+    expect(result.notificationId).toBe('reminder-2');
+    expect(scheduled.map(({ identifier }) => identifier)).toEqual(['reminder-2']);
+    expect(mockCancel.mock.calls.map(([id]) => id)).toEqual(['reminder-1', 'reminder-1']);
+  });
+
+  it('keeps the previous reminder when scheduling the replacement fails', async () => {
+    mockSchedule.mockRejectedValueOnce(new Error('native failure'));
+
+    await expect(schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20)).rejects.toThrow('native failure');
+    expect(mockCancel).not.toHaveBeenCalled();
+  });
+
+  it('drops the replacement when the previous reminder cannot be cancelled', async () => {
+    mockSchedule.mockResolvedValueOnce('reminder-2');
+    mockCancel.mockRejectedValueOnce(new Error('cancel failed'));
+    mockGetAllScheduled.mockRejectedValueOnce(new Error('could not inspect reminders'));
+
+    await expect(schedulePracticeReminder({ enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1' }, 20)).rejects.toThrow('cancel failed');
+    expect(mockCancel.mock.calls.map(([id]) => id)).toEqual(['reminder-1', 'reminder-2']);
   });
 
   it('requests permission when needed and rejects a denied request', async () => {
@@ -70,10 +124,36 @@ describe('practice reminders', () => {
     expect(result).toEqual({ enabled: false, hour: 20, minute: 15, notificationId: null });
   });
 
-  it('removes every scheduled reminder during data deletion', async () => {
+  it('removes every scheduled notification during data deletion', async () => {
     await clearAllPracticeReminders();
 
     expect(mockCancelAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cancel unrelated notifications during a reminder sweep', async () => {
+    mockGetAllScheduled.mockResolvedValueOnce([
+      { identifier: 'keep-reminder', content: { data: { kind: 'bolo-practice-reminder' } }, trigger: {} },
+      { identifier: 'old-reminder', content: { data: {} }, trigger: {} },
+      { identifier: 'other-notification', content: { data: { kind: 'something-else' } }, trigger: {} },
+    ]);
+
+    await cancelOtherPracticeReminders('keep-reminder', ['old-reminder']);
+
+    expect(mockCancel).toHaveBeenCalledTimes(1);
+    expect(mockCancel).toHaveBeenCalledWith('old-reminder');
+  });
+
+  it('sweeps an unmarked legacy reminder with an unknown id', async () => {
+    mockGetAllScheduled.mockResolvedValueOnce([
+      { identifier: 'keep-reminder', content: { data: { kind: 'bolo-practice-reminder', url: '/review' } }, trigger: {} },
+      { identifier: 'unknown-legacy-reminder', content: { data: { url: '/review' } }, trigger: {} },
+      { identifier: 'other-notification', content: { data: { url: '/other' } }, trigger: {} },
+    ]);
+
+    await cancelOtherPracticeReminders('keep-reminder');
+
+    expect(mockCancel).toHaveBeenCalledTimes(1);
+    expect(mockCancel).toHaveBeenCalledWith('unknown-legacy-reminder');
   });
 
   describe('restoring a reminder from a progress backup', () => {

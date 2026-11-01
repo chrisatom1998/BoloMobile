@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { TapPressable } from '@/components/tap-pressable';
-import { displayFont, makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type MinimizeProps = {
   onPress: () => void;
@@ -91,28 +91,9 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.md,
     paddingHorizontal: spacing.xl,
   },
-  kicker: {
-    color: c.gold,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  title: {
-    color: c.white,
-    fontFamily: displayFont,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  body: {
-    maxWidth: 300,
-    color: c.heroSubtle,
-    fontSize: 16,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
+  kicker: { ...type.eyebrow, color: c.gold },
+  title: { ...type.display, color: c.white, textAlign: 'center' },
+  body: { ...type.body, maxWidth: 300, color: c.heroSubtle, textAlign: 'center' },
   returnButton: {
     minHeight: 48,
     marginTop: spacing.sm,
@@ -123,9 +104,5 @@ const useStyles = makeStyles((c) => ({
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
-  returnText: {
-    color: c.ink,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  returnText: { ...type.label, color: c.ink },
 }));

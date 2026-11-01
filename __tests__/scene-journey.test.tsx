@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
-import { Dimensions, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Dimensions, ScrollView, StyleSheet } from 'react-native';
 
 import { lessonHindiLabel } from '../src/lib/lesson-display';
 import type { SceneAttempt, ScriptPreference } from '../src/state/app-state-types';
@@ -21,7 +21,7 @@ const mockCancelNotification = jest.fn(async (..._args: unknown[]) => undefined)
 const mockGetNotificationPermissions = jest.fn();
 const mockRequestNotificationPermissions = jest.fn();
 const mockScheduleNotification = jest.fn();
-const mockTogglePhrase = jest.fn();
+const mockTogglePhrase = jest.fn(async (..._args: unknown[]) => 'saved' as 'saved' | 'removed' | 'full' | 'failed');
 const mockWordDefinitionSheet = jest.fn((_props: unknown) => null);
 const mockAppState = {
   aiConsent: true,
@@ -90,7 +90,7 @@ jest.mock('@/components/word-definition-sheet', () => ({
 }));
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer , touch: jest.fn() }),
 }));
 
 jest.mock('@/lib/speech', () => ({
@@ -765,6 +765,19 @@ describe('SceneScreen primary journey', () => {
     expect(remove.props.accessibilityState).toEqual({ selected: true });
     await fireEvent.press(remove);
     expect(mockTogglePhrase).toHaveBeenLastCalledWith(target);
+  });
+
+  it('explains a full saved-phrase collection instead of silently dropping the save', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockTogglePhrase.mockResolvedValueOnce('full');
+    const target = scenes[0]?.beats[0]?.choices.find((choice) => choice.correct)!;
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+
+    await fireEvent.press(view.getByLabelText('Save phrase'));
+    expect(mockTogglePhrase).toHaveBeenCalledWith(target);
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Saved phrases full', 'You have 100 saved phrases. Remove one in Phrases to save another.'));
+    alert.mockRestore();
   });
 
   it('shows Romanized Hindi word chips while preserving the source word for definitions', async () => {
