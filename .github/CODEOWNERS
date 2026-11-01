@@ -4,8 +4,6 @@
 /README.md @chrisatom1998
 /eas.json @chrisatom1998
 /docs/security-exceptions.md @chrisatom1998
-/docs/ios-release-runbook.md @chrisatom1998
-/docs/ios-screenshot-checklist.md @chrisatom1998
 /.easignore @chrisatom1998
 /scripts/assert-audit-exceptions.mjs @chrisatom1998
 /scripts/assert-release-provenance.mjs @chrisatom1998
