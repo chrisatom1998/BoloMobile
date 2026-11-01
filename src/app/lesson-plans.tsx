@@ -1,14 +1,20 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
+import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
-import { getScene } from '@/data/scenes';
+import { bundledScenes, getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
+import { PlanIcon } from '@/components/plan-icon';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
+import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
+
+/** Scroll distance after which the plan's large in-page title has left the screen. */
+const DETAIL_TITLE_SCROLL_OFFSET = 120;
 
 export default function LessonPlansScreen() {
   const router = useRouter();
@@ -16,25 +22,12 @@ export default function LessonPlansScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
-  const { sceneProgress } = useAppState();
+  const { learnerProfile, sceneProgress } = useAppState();
   const selectedPlanId = Array.isArray(planId) ? planId[0] : planId;
   const selectedPlan = lessonPlans.find((plan) => plan.id === selectedPlanId);
-  const inProgressLesson = lessonPlans
-    .flatMap((plan) => plan.lessonIds.map((lessonId) => ({ lessonId, plan })))
-    .filter(({ lessonId }) => {
-      const progress = sceneProgress[lessonId];
-      return (progress?.completions ?? 0) === 0 && (progress?.lastBeatIndex ?? 0) > 0;
-    })
-    .reduce<{ lessonId: string; plan: LessonPlan } | undefined>((selected, candidate) => {
-      if (!selected) return candidate;
-      const candidateTime = Date.parse(sceneProgress[candidate.lessonId]?.lastPracticedAt ?? '');
-      const selectedTime = Date.parse(sceneProgress[selected.lessonId]?.lastPracticedAt ?? '');
-      const normalizedCandidateTime = Number.isNaN(candidateTime) ? 0 : candidateTime;
-      const normalizedSelectedTime = Number.isNaN(selectedTime) ? 0 : selectedTime;
-      return normalizedCandidateTime > normalizedSelectedTime ? candidate : selected;
-    }, undefined);
-  const nextPlan = lessonPlans.find((plan) => plan.lessonIds.some((lessonId) => (sceneProgress[lessonId]?.completions ?? 0) === 0));
-  const currentPlan = inProgressLesson?.plan ?? nextPlan ?? lessonPlans[lessonPlans.length - 1]!;
+  const activeLesson = inProgressLesson(sceneProgress);
+  const currentPlan = currentLessonPlan(sceneProgress, learnerProfile);
+  const guidedLessonCount = lessonPlans.filter((plan) => plan.id !== 'creator').reduce((total, plan) => total + plan.lessonIds.length, 0);
 
   if (selectedPlan) {
     return <PlanLessons plan={selectedPlan} router={router} sceneProgress={sceneProgress} />;
@@ -46,8 +39,8 @@ export default function LessonPlansScreen() {
       <View style={[styles.heading, largeTextLayout && styles.headingLarge]} testID="lesson-plans-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>Guided curriculum</JournalKicker>
-          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>{`One path, ${lessonPlans.reduce((total, plan) => total + plan.lessonIds.length, 0)} small wins.`}</JournalDisplay>
-          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Explore the guided plans or practice your own created lessons.</Text>
+          <JournalDisplay style={[styles.title, largeTextLayout && styles.titleLarge]}>{`One path, ${guidedLessonCount} small wins.`}</JournalDisplay>
+          <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Move in order, one useful Hindi phrase at a time. Each lesson only practices phrases you have already met.</Text>
         </View>
       </View>
 
@@ -57,7 +50,7 @@ export default function LessonPlansScreen() {
           const nextIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
           const percent = Math.round(completed / plan.lessonIds.length * 100);
           const isCurrent = plan.id === currentPlan.id;
-          const activeLessonIndex = inProgressLesson?.plan.id === plan.id ? plan.lessonIds.indexOf(inProgressLesson.lessonId) : -1;
+          const activeLessonIndex = activeLesson?.plan.id === plan.id ? plan.lessonIds.indexOf(activeLesson.lessonId) : -1;
           const status = isCurrent
             ? activeLessonIndex >= 0
               ? `In progress · Lesson ${activeLessonIndex + 1}`
@@ -68,9 +61,9 @@ export default function LessonPlansScreen() {
                   : 'Up next'
             : completed === plan.lessonIds.length
               ? 'Complete'
-              : plan.order > currentPlan.order
-                ? 'Later plan'
-                : 'Available';
+              : completed > 0
+                ? `${completed} of ${plan.lessonIds.length} done`
+                : '';
           const action = isCurrent
             ? nextIndex < 0
               ? 'Review plan'
@@ -82,7 +75,7 @@ export default function LessonPlansScreen() {
               : 'Open plan';
           return (
             <PressableFeedback
-              accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${status}, ${completed} of ${plan.lessonIds.length} lessons complete`}
+              accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${status ? `${status}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
               accessibilityRole="button"
               accessibilityState={{ selected: isCurrent }}
               key={plan.id}
@@ -96,11 +89,11 @@ export default function LessonPlansScreen() {
             >
               <View style={[styles.planAccent, { backgroundColor: plan.color }]} />
               <View style={styles.planTopline}>
-                <Text style={[styles.planOrder, isCurrent && styles.planOrderCurrent]}>Plan {String(plan.order).padStart(2, '0')} · {status}</Text>
-                <Text style={styles.planMeta}>{completed}/{plan.lessonIds.length} complete</Text>
+                <Text style={[styles.planOrder, isCurrent && styles.planOrderCurrent]}>Plan {String(plan.order).padStart(2, '0')}{status ? ` · ${status}` : ''}</Text>
+                {completed > 0 || isCurrent ? <Text style={styles.planMeta}>{completed}/{plan.lessonIds.length} complete</Text> : null}
               </View>
               <View style={styles.planTitleRow}>
-                <Text style={styles.planEmoji}>{plan.emoji}</Text>
+                <PlanIcon planId={plan.id} />
                 <View style={styles.planCopy}>
                   <Text style={[styles.planTitle, !isCurrent && styles.planTitleCompact]}>{plan.title}</Text>
                   {isCurrent ? <Text style={styles.planSubtitle}>{plan.subtitle}</Text> : null}
@@ -116,6 +109,34 @@ export default function LessonPlansScreen() {
           );
         })}
       </View>
+
+      <View style={styles.sceneShelfHeading} testID="real-life-scenes">
+        <JournalKicker>Real-life scenes</JournalKicker>
+        <JournalDisplay style={[styles.sceneShelfTitle, largeTextLayout && styles.titleLarge]}>Try it in the moment.</JournalDisplay>
+        <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>Short conversations at a chai stall, in a rickshaw, at the doctor. Pick any one, in any order.</Text>
+      </View>
+      <View accessibilityLabel={`${bundledScenes.length} real-life scenes`} style={styles.plans}>
+        {bundledScenes.map((scene) => {
+          const done = (sceneProgress[scene.id]?.completions ?? 0) > 0;
+          return (
+            <PressableFeedback
+              accessibilityLabel={`${scene.title}, ${scene.subtitle}, ${scene.level}${done ? ', complete' : ''}`}
+              accessibilityRole="button"
+              key={scene.id}
+              onPress={() => router.push({ pathname: '/scene/[id]', params: { id: scene.id } })}
+              style={[styles.sceneCard, largeTextLayout && styles.planCardLarge]}
+              testID={`real-life-scene-${scene.id}`}
+            >
+              <PlanIcon category={scene.category} size={18} />
+              <View style={styles.planCopy}>
+                <Text style={styles.sceneTitle}>{scene.title}</Text>
+                <Text style={styles.planSubtitle}>{scene.subtitle} · {scene.level}{done ? ' · Done' : ''}</Text>
+              </View>
+              <Text style={styles.lessonArrow}>›</Text>
+            </PressableFeedback>
+          );
+        })}
+      </View>
     </ScrollView>
   );
 }
@@ -124,6 +145,8 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
+  const [titleVisible, setTitleVisible] = useState(false);
+  const [canGoBack] = useState(() => router.canGoBack());
   const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
   const nextLessonIndex = plan.lessonIds.findIndex((id) => (sceneProgress[id]?.completions ?? 0) === 0);
   const inProgressLessonId = plan.lessonIds
@@ -146,19 +169,26 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   const percent = Math.round(completed / plan.lessonIds.length * 100);
 
   return (
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.detailContent} style={sharedStyles.screen}>
-      <Stack.Screen options={{ headerLargeTitle: false, title: plan.title }} />
-      <PressableFeedback
-        accessibilityLabel="Back to all lesson plans"
-        accessibilityRole="button"
-        onPress={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/lesson-plans');
-        }}
-        style={styles.backButton}
-      >
-        <Text style={styles.backButtonText}>← All lesson plans</Text>
-      </PressableFeedback>
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      contentContainerStyle={styles.detailContent}
+      onScroll={(event) => setTitleVisible(event.nativeEvent.contentOffset.y > DETAIL_TITLE_SCROLL_OFFSET)}
+      scrollEventThrottle={32}
+      style={sharedStyles.screen}
+    >
+      {/* The nav title stays empty until the large in-page title scrolls away, so the name is not shown twice. */}
+      <Stack.Screen options={{ headerLargeTitle: false, title: titleVisible ? plan.title : '' }} />
+      {canGoBack ? null : (
+        // The nav back button covers this when there is history; keep a way back for deep links.
+        <PressableFeedback
+          accessibilityLabel="Back to all lesson plans"
+          accessibilityRole="button"
+          onPress={() => router.replace('/lesson-plans')}
+          style={styles.backButton}
+        >
+          <Text style={styles.backButtonText}>← All lesson plans</Text>
+        </PressableFeedback>
+      )}
       <View style={[styles.detailHeading, largeTextLayout && styles.headingLarge]} testID="lesson-plan-detail-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>{`Plan ${String(plan.order).padStart(2, '0')} · Guided curriculum`}</JournalKicker>
@@ -205,7 +235,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
                 <Text style={styles.lessonTitle}>{lesson.title}</Text>
                 <Text style={styles.lessonSubtitle}>{lesson.subtitle}</Text>
               </View>
-              <Text style={styles.lessonArrow}>→</Text>
+              <Text style={styles.lessonArrow}>›</Text>
             </PressableFeedback>
           );
         })}
@@ -222,48 +252,51 @@ const useStyles = makeStyles((c) => ({
   headingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   headingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   headingCopyLarge: { flex: 0, width: '100%' },
-  title: { maxWidth: 320, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  title: { ...type.display, textAlign: 'left' },
   titleLarge: { maxWidth: '100%' },
-  detailTitle: { maxWidth: 320, fontSize: 30, lineHeight: 36, textAlign: 'left' },
+  detailTitle: { ...type.display, textAlign: 'left' },
   detailTitleLarge: { maxWidth: '100%' },
-  intro: { maxWidth: 310, color: c.muted, fontSize: 14, lineHeight: 20 },
+  intro: { ...type.caption, maxWidth: 310, color: c.muted },
   introLarge: { maxWidth: '100%' },
   backButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  backButtonText: { color: c.forestText, fontSize: 14, fontWeight: '900' },
+  backButtonText: buttons.quietText,
   plans: { width: '100%', gap: spacing.md },
   detailSummary: { width: '100%', gap: spacing.sm, borderRadius: radius.lg, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
   detailSummaryTopline: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  detailSummaryLabel: { color: c.ink, fontSize: 14, fontWeight: '900' },
-  detailSummaryPercent: { color: c.brandText, fontSize: 14, fontWeight: '900', fontVariant: ['tabular-nums'] },
-  detailCue: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  detailSummaryLabel: { ...type.label, color: c.ink, fontWeight: '700' },
+  detailSummaryPercent: { ...type.label, color: c.brandText, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
+  detailCue: { ...type.caption, color: c.muted },
   lessons: { width: '100%', gap: spacing.sm },
   lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
-  lessonCardCurrent: { borderColor: c.gold, backgroundColor: c.goldSoft },
+  lessonCardCurrent: { backgroundColor: c.brandSoft, borderLeftWidth: 4, borderLeftColor: c.brand },
   lessonCardLarge: { alignItems: 'flex-start', minHeight: 96, padding: spacing.lg },
-  lessonNumberText: { minWidth: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontSize: 17, lineHeight: 22, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  lessonNumberText: { ...type.bodyLarge, minWidth: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
   lessonNumberTextComplete: { color: c.forestText },
   lessonNumberTextCurrent: { color: c.ink },
-  lessonCopy: { minWidth: 0, flex: 1, gap: 2 },
-  lessonStatus: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  lessonTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 18, lineHeight: 23, fontWeight: '700' },
-  lessonSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  lessonArrow: { color: c.forestText, fontSize: 22, fontWeight: '900' },
+  lessonCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  lessonStatus: { ...type.eyebrow, color: c.brandText },
+  lessonTitle: { ...type.headline, color: c.ink },
+  lessonSubtitle: { ...type.caption, color: c.muted },
+  lessonArrow: { ...type.headline, color: c.mutedSoft, fontWeight: '400' },
   planCard: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm },
-  planCardCurrent: { borderColor: c.gold, backgroundColor: c.goldSoft },
+  planCardCurrent: { borderColor: c.brand, backgroundColor: c.brandSoft },
   planCardCompact: { gap: spacing.xs, paddingVertical: spacing.sm },
   planCardLarge: { padding: spacing.lg, gap: spacing.sm },
   planAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   planTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  planOrder: { color: c.brandText, fontSize: 11, fontWeight: '900', letterSpacing: 0.9, textTransform: 'uppercase' },
-  planOrderCurrent: { color: c.forestText },
-  planMeta: { color: c.muted, fontSize: 12, fontWeight: '800', fontVariant: ['tabular-nums'] },
+  planOrder: { ...type.eyebrow, color: c.brandText },
+  planOrderCurrent: { color: c.brandText },
+  planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
   planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  planEmoji: { fontSize: 28 },
-  planCopy: { minWidth: 0, flex: 1, gap: 2 },
-  planTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
-  planTitleCompact: { fontSize: 18, lineHeight: 23 },
-  planSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  planCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  planTitle: { ...type.headline, color: c.ink },
+  planTitleCompact: { ...type.headline },
+  planSubtitle: { ...type.caption, color: c.muted },
   track: { width: '100%', height: 7, overflow: 'hidden', borderRadius: radius.pill, backgroundColor: c.backgroundWarm },
   fill: { height: '100%', borderRadius: radius.pill },
-  planAction: { color: c.forestText, fontSize: 13, fontWeight: '900' },
+  planAction: { ...type.caption, color: c.brandText, fontWeight: '700' },
+  sceneShelfHeading: { width: '100%', gap: spacing.xs, marginTop: spacing.lg },
+  sceneShelfTitle: { ...type.title, maxWidth: 320, textAlign: 'left' },
+  sceneCard: { width: '100%', minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
+  sceneTitle: { ...type.bodyLarge, color: c.ink, fontFamily: 'Georgia', fontWeight: '700' },
 }));

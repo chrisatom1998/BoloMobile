@@ -18,6 +18,12 @@ tags:
 - tapOn: "Asha"
 - scrollUntilVisible:
     element:
+      text: "Talk with Asha"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Talk with Asha"
+- scrollUntilVisible:
+    element:
       text: "Enable live practice"
     direction: DOWN
     timeout: 20000

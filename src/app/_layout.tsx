@@ -15,7 +15,7 @@ import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routin
 import { observe } from '@/lib/observability';
 import { AshaVoiceSessionProvider } from '@/state/asha-voice-session';
 import { AppStateProvider, useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, spacing, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, spacing, useTheme, type } from '@/theme';
 
 export default function RootLayout() {
   useHindiFont();
@@ -56,7 +56,7 @@ function AppNavigator() {
             headerShadowVisible: false,
             headerStyle: { backgroundColor: colors.background },
             headerTintColor: colors.ink,
-            headerTitleStyle: { color: colors.ink, fontSize: 17, fontWeight: '600' },
+            headerTitleStyle: { ...type.label, color: colors.ink },
             // Large titles use the same serif as the tab screens' own headings.
             headerLargeTitleShadowVisible: false,
             headerLargeStyle: { backgroundColor: colors.background },
@@ -79,7 +79,8 @@ function AppNavigator() {
           <Stack.Screen name="settings" options={{ title: 'Settings', headerLargeTitle: true }} />
           <Stack.Screen name="diagnostics" options={{ title: 'Private diagnostics' }} />
           <Stack.Screen name="privacy" options={{ title: 'Privacy & data use' }} />
-          <Stack.Screen name="scene/[id]" options={{ title: 'Practice scene' }} />
+          <Stack.Screen name="last-session" options={{ title: 'Last session' }} />
+          <Stack.Screen name="scene/[id]" options={{ title: 'Lesson' }} />
         </Stack>
       ) : (
         <View accessibilityLabel="Loading Bolo" accessibilityLiveRegion="polite" accessibilityRole="progressbar" style={styles.loading} testID="app-hydration-loading">
@@ -102,7 +103,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
 
 const useStyles = makeStyles((c) => ({
   sheetDone: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
-  sheetDoneText: { color: c.brandText, fontSize: 17, fontWeight: '600' },
+  sheetDoneText: { ...type.label, color: c.brandText },
   loading: {
     flex: 1,
     alignItems: 'center',

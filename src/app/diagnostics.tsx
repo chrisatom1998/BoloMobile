@@ -2,8 +2,27 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
-import { getObservabilitySnapshot, type ObservabilitySnapshot } from '@/lib/observability';
-import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
+import { getObservabilitySnapshot, type ObservabilityEvent, type ObservabilitySnapshot } from '@/lib/observability';
+import { makeStyles, radius, spacing, useSharedStyles, type } from '@/theme';
+
+/** Plain names for the counters, so support screenshots read as sentences rather than event ids. */
+const eventLabels: Record<ObservabilityEvent, string> = {
+  app_opened: 'Times Bolo opened',
+  onboarding_completed: 'Setup finished',
+  scene_started: 'Lessons started',
+  scene_completed: 'Lessons finished',
+  consent_viewed: 'Privacy notice shown',
+  consent_accepted: 'Asha coaching turned on',
+  consent_declined: 'Asha coaching declined',
+  voice_connection_succeeded: 'Live voice connected',
+  voice_connection_failed: 'Live voice failed to connect',
+  ai_request_succeeded: 'Asha replies received',
+  ai_request_failed: 'Asha replies that failed',
+  review_completed: 'Reviews finished',
+  retention_day_1: 'Came back the next day',
+  retention_day_7: 'Came back a week later',
+  runtime_error: 'App errors caught',
+};
 
 export default function DiagnosticsScreen() {
   const styles = useStyles();
@@ -31,9 +50,9 @@ export default function DiagnosticsScreen() {
       </View>
       {loading ? <Text accessibilityLiveRegion="polite" style={styles.empty}>Loading private diagnostics…</Text> : rows.length ? rows.map(([day, events]) => (
         <View key={day} style={styles.card}>
-          <Text style={styles.day}>{day}</Text>
+          <Text style={styles.day}>{new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</Text>
           {Object.entries(events).map(([event, counter]) => (
-            <View key={event} style={styles.row}><Text style={styles.event}>{event.replaceAll('_', ' ')}</Text><Text style={styles.count}>{counter?.count ?? 0}{counter?.totalDurationMs && counter.count > 0 ? ` · ${Math.round(counter.totalDurationMs / counter.count)} ms avg` : ''}</Text></View>
+            <View key={event} style={styles.row}><Text style={styles.event}>{eventLabels[event as ObservabilityEvent] ?? event.replaceAll('_', ' ')}</Text><Text style={styles.count}>{counter?.count ?? 0}{counter?.totalDurationMs && counter.count > 0 ? ` · ${Math.round(counter.totalDurationMs / counter.count)} ms avg` : ''}</Text></View>
           ))}
         </View>
       )) : <Text style={styles.empty}>No diagnostics recorded yet.</Text>}
@@ -44,12 +63,12 @@ export default function DiagnosticsScreen() {
 const useStyles = makeStyles((c) => ({
   content: { padding: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
   notice: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
-  title: { color: c.ink, fontSize: 20, lineHeight: 26, fontWeight: '900' },
-  body: { color: c.muted, fontSize: 14, lineHeight: 21 },
+  title: { ...type.headline, color: c.ink },
+  body: { ...type.caption, color: c.muted },
   card: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
-  day: { color: c.brandDark, fontSize: 13, fontWeight: '900' },
+  day: { ...type.caption, color: c.brandDark, fontWeight: '700' },
   row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
-  event: { color: c.ink, fontSize: 13, fontWeight: '700', textTransform: 'capitalize' },
-  count: { color: c.muted, fontSize: 12 },
-  empty: { color: c.muted, fontSize: 15, textAlign: 'center', padding: spacing.xl },
+  event: { ...type.caption, color: c.ink, fontWeight: '700' },
+  count: { ...type.caption, color: c.muted },
+  empty: { ...type.body, color: c.muted, textAlign: 'center', padding: spacing.xl },
 }));

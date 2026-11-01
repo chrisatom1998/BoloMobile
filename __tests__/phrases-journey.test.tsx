@@ -132,7 +132,7 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    expect(view.getByText('Everything is reviewed for today.')).toBeTruthy();
+    expect(view.getByText('New phrases come back for review tomorrow.')).toBeTruthy();
     expect(view.getByText('नमस्ते')).toBeTruthy();
     expect(view.getByText(learnerPhraseLatin(mockPhrase.hi, mockPhrase.latin))).toBeTruthy();
     expect(view.getByText('Hello')).toBeTruthy();
@@ -147,11 +147,12 @@ describe('PhrasesScreen primary journey', () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    for (const [label, rate] of [['0.1×', 0.1], ['0.25×', 0.25], ['0.5×', 0.5], ['0.75×', 0.75], ['Normal', 1]] as const) {
-      await fireEvent.press(view.getByLabelText(`Playback speed: ${label}`));
-      expect(mockUpdateLearnerProfile).toHaveBeenLastCalledWith({ phrasePlaybackRate: rate });
-    }
+    // One header button cycles Normal -> Slower -> Slow -> Normal.
+    await fireEvent.press(view.getByLabelText('Playback speed: Normal'));
+    expect(mockUpdateLearnerProfile).toHaveBeenLastCalledWith({ phrasePlaybackRate: 0.5 });
     expect(speakTextMock).not.toHaveBeenCalled();
+    // Speeds below half were unintelligible, so they are no longer offered.
+    expect(view.queryByLabelText('Playback speed: 0.1×')).toBeNull();
   });
 
   it('removes a phrase only after destructive confirmation', async () => {
@@ -190,7 +191,7 @@ it('uses the remembered playback speed for Listen and highlights it', async () =
   mockAppState.phrases = [mockPhrase];
   mockAppState.learnerProfile.phrasePlaybackRate = 0.75;
   const view = await render(<PhrasesScreen />);
-  expect(view.getByLabelText('Playback speed: 0.75×').props.accessibilityState.selected).toBe(true);
+  expect(view.getByLabelText('Playback speed: Slow')).toBeTruthy();
   await fireEvent.press(view.getByLabelText(`Hear ${mockPhrase.hi}`));
   await waitFor(() => expect(speakTextMock).toHaveBeenLastCalledWith(mockPhrase.hi, undefined, 0.75));
   mockAppState.learnerProfile.phrasePlaybackRate = 1;

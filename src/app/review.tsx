@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { Check, RotateCcw, Volume2 } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
@@ -12,7 +12,7 @@ import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -121,8 +121,8 @@ export default function ReviewScreen() {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
         <Text accessibilityRole="header" style={styles.title}>Save a phrase to start reviewing</Text>
-        <Text style={styles.body}>Natural answers saved from scenes will become quick recall cards here.</Text>
-        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Choose a scene</Text></Pressable>
+        <Text style={styles.body}>Tap the bookmark on an answer during a lesson, and it becomes a quick recall card here.</Text>
+        <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </ScrollView>
     );
   }
@@ -130,6 +130,8 @@ export default function ReviewScreen() {
   if (!phrase) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
+        {/* The body button is the way out here; a second "Done" in the header only doubled it. */}
+        <Stack.Screen options={{ headerRight: () => null }} />
         <View style={styles.doneMark}><Check color={colors.white} size={34} /></View>
         <Text style={sharedStyles.eyebrow}>Review complete</Text>
         <Text accessibilityRole="header" style={styles.title}>{correct} of {session.length} remembered</Text>
@@ -171,16 +173,17 @@ export default function ReviewScreen() {
         {hintUsed && !listenFirst ? <Text style={styles.hintNote} testID="review-hint-note">Hint used, so this card counts as Again.</Text> : null}
         {audioError ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
       </View>
-      {revealed ? (
-        // Optional practice: grading never waits on a recording. Keying by card
-        // remounts the recorder so feedback never carries over to the next phrase.
-        <PronunciationRecorder key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
-      ) : null}
+      {/* Grading sits right under the answer so it is never pushed below optional pronunciation practice. */}
       {revealed ? (
         <View style={styles.grades}>
           <Pressable accessibilityRole="button" onPress={() => grade(false)} style={[styles.gradeButton, styles.againButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
           <Pressable accessibilityRole="button" onPress={() => grade(true)} style={[styles.gradeButton, styles.gotItButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
         </View>
+      ) : null}
+      {revealed ? (
+        // Optional practice: grading never waits on a recording. Keying by card
+        // remounts the recorder so feedback never carries over to the next phrase.
+        <PronunciationRecorder compact key={`${index}-${phrase.hi}`} lessonTitle="Review" onActivityChange={setRecorderBusy} target={phrase} />
       ) : null}
     </ScrollView>
   );
@@ -190,30 +193,30 @@ const useStyles = makeStyles((c) => ({
   screen: { flexGrow: 1, backgroundColor: c.background, padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   center: { flexGrow: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
   header: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
-  progress: { color: c.ink, fontSize: 15, fontWeight: '900' },
-  mastery: { color: c.muted, fontSize: 14, fontWeight: '700' },
+  progress: { ...type.label, color: c.ink, fontWeight: '700' },
+  mastery: { ...type.label, color: c.muted, fontWeight: '700' },
   track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
   trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
-  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 300, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
-  prompt: { color: c.ink, fontSize: 29, lineHeight: 37, fontWeight: '900', textAlign: 'center' },
+  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 240, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  prompt: { ...type.display, color: c.ink, textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
-  hindi: { ...hindiType(34), color: c.ink, textAlign: 'center' },
-  latin: { color: c.forestText, fontSize: 18, lineHeight: 25, fontWeight: '700', textAlign: 'center' },
+  hindi: { ...hindiType(28), color: c.ink, textAlign: 'center' },
+  latin: { ...type.bodyLarge, color: c.brandText, textAlign: 'center', fontWeight: '600' },
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
   audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  audioText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
-  hintNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  audioText: { ...type.label, color: c.brandText },
+  hintNote: { ...type.caption, color: c.muted },
+  error: { ...type.caption, color: c.danger, textAlign: 'center' },
   disabled: { opacity: 0.4 },
-  revealButton: { minHeight: 52, borderRadius: radius.md, backgroundColor: c.neutralSurface, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  revealText: { color: c.neutralSurfaceText, fontSize: 16, fontWeight: '900' },
+  revealButton: buttons.primary,
+  revealText: buttons.primaryText,
   grades: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   gradeButton: { minWidth: 140, flexGrow: 1, minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  againButton: { backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine },
+  againButton: { backgroundColor: c.paper, borderWidth: 1, borderColor: c.lineStrong },
   gotItButton: { backgroundColor: c.forest },
-  againText: { color: c.danger, fontSize: 16, fontWeight: '900' },
-  gotItText: { color: c.white, fontSize: 16, fontWeight: '900' },
-  doneMark: { width: 72, height: 72, borderRadius: 25, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
-  title: { color: c.ink, fontSize: 27, lineHeight: 34, fontWeight: '900', textAlign: 'center' },
-  body: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  againText: buttons.secondaryText,
+  gotItText: { ...type.label, color: c.white, fontWeight: '700' },
+  doneMark: { width: 72, height: 72, borderRadius: radius.xl, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
+  title: { ...type.title, color: c.ink, textAlign: 'center' },
+  body: { ...type.body, color: c.muted, textAlign: 'center' },
 }));

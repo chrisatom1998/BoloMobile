@@ -2,6 +2,7 @@ import { act, fireEvent, render, renderHook, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
+import { revealSensitiveValue } from '../src/lib/sensitive-storage';
 import { defaultSceneProgress, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
@@ -10,6 +11,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
   const storage = {
     __store: store,
+    getItem: jest.fn(async (key: string) => store.get(key) ?? null),
     multiGet: jest.fn(async (keys: string[]) => keys.map((key) => [key, store.get(key) ?? null])),
     multiSet: jest.fn(async (entries: [string, string][]) => {
       entries.forEach(([key, value]) => store.set(key, value));
@@ -32,6 +34,11 @@ const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage
   multiSet: jest.Mock;
 };
 const { showAppAlert } = jest.requireMock('../src/lib/app-alert') as { showAppAlert: jest.Mock };
+
+async function storedChat(fallback = 'null'): Promise<unknown> {
+  const raw = asyncStorage.__store.get(storageKeys.chatHistory);
+  return JSON.parse(raw == null ? fallback : await revealSensitiveValue(raw));
+}
 const { observe } = jest.requireMock('../src/lib/observability') as { observe: jest.Mock };
 
 function deferred<T>() {
@@ -97,7 +104,7 @@ describe('chat history provider persistence', () => {
     await waitFor(() => expect(first.getByTestId('history').props.children).toBe(
       'asha-saved:Previously saved.|you-new:My completed turn.|asha-new:A completed reply.',
     ));
-    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? '[]')).toEqual([
+    await waitFor(async () => expect(await storedChat('[]')).toEqual([
       { id: 'asha-saved', role: 'asha', text: 'Previously saved.', language: 'en' },
       { id: 'you-new', role: 'you', text: 'My completed turn.' },
       { id: 'asha-new', role: 'asha', text: 'A completed reply.', language: 'en' },
@@ -110,7 +117,7 @@ describe('chat history provider persistence', () => {
 
     await fireEvent.press(restored.getByLabelText('Clear chat history'));
     await waitFor(() => expect(restored.getByTestId('history').props.children).toBe('empty'));
-    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    expect(await storedChat()).toEqual([]);
     expect(asyncStorage.__store.get(storageKeys.clientId)).toBe('client-12345678');
 
     await restored.unmount();
@@ -120,7 +127,7 @@ describe('chat history provider persistence', () => {
     await waitFor(() => expect(cleared.getByTestId('history').props.children).toContain('asha-new:A completed reply.'));
     await fireEvent.press(cleared.getByLabelText('Clear all data'));
     await waitFor(() => expect(cleared.getByTestId('history').props.children).toBe('empty'));
-    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    expect(await storedChat()).toEqual([]);
     await cleared.unmount();
   });
 
@@ -131,7 +138,7 @@ describe('chat history provider persistence', () => {
     asyncStorage.multiSet.mockClear();
     await fireEvent.press(view.getByLabelText('Stream revisable snapshots'));
     expect(view.getByTestId('history').props.children).toBe('old:Previous session|live-1:Hello there 49');
-    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? '[]')).toEqual([
+    await waitFor(async () => expect(await storedChat('[]')).toEqual([
       { id: 'old', role: 'asha', text: 'Previous session' },
       { id: 'live-1', role: 'you', text: 'Hello there 49' },
     ]));
@@ -179,7 +186,7 @@ describe('chat history provider persistence', () => {
     for (const [key, value] of before) {
       if (key !== storageKeys.chatHistory) expect(asyncStorage.__store.get(key)).toBe(value);
     }
-    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    expect(await storedChat()).toEqual([]);
     await unmount();
   });
 
@@ -197,7 +204,7 @@ describe('chat history provider persistence', () => {
         await expect(result.current.clearChatHistory()).resolves.toBe(false);
       });
       expect(result.current.chatHistory).toEqual(oldHistory);
-      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual(oldHistory);
+      expect(await storedChat()).toEqual(oldHistory);
       expect(showAppAlert).toHaveBeenCalledWith('Could not save on this device', expect.any(String));
     } finally {
       await unmount();
@@ -218,12 +225,14 @@ describe('chat history provider persistence', () => {
       asyncStorage.multiSet.mockImplementationOnce(() => firstWrite.promise);
       let first!: Promise<boolean>;
       let second!: Promise<boolean>;
+      const writesBeforeClear = asyncStorage.multiSet.mock.calls.length;
       await act(async () => {
         first = result.current.clearChatHistory();
         second = result.current.clearChatHistory();
       });
       expect(first).toBe(second);
       expect(result.current.chatHistory).toEqual([]);
+      await waitFor(() => expect(asyncStorage.multiSet.mock.calls.length).toBeGreaterThan(writesBeforeClear));
       await act(async () => {
         firstWrite.reject(new Error('disk full'));
         expect(await Promise.all([first, second])).toEqual([false, false]);
@@ -233,7 +242,7 @@ describe('chat history provider persistence', () => {
         expect(await result.current.clearChatHistory()).toBe(true);
       });
       expect(result.current.chatHistory).toEqual([]);
-      expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+      expect(await storedChat()).toEqual([]);
     } finally {
       await unmount();
       warning.mockRestore();
@@ -267,7 +276,7 @@ describe('chat history provider persistence', () => {
       expect(await Promise.all([first, second])).toEqual([true, true]);
     });
     expect(result.current.chatHistory).toEqual([]);
-    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    expect(await storedChat()).toEqual([]);
     await unmount();
   });
 
@@ -312,7 +321,7 @@ describe('chat history provider persistence', () => {
 
     firstWrite.resolve();
     await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]));
+    await waitFor(async () => expect(await storedChat()).toEqual([]));
     await view.unmount();
   }, 20_000);
 
@@ -341,7 +350,7 @@ describe('chat history provider persistence', () => {
     firstWrite.resolve();
     await waitFor(() => expect(asyncStorage.multiSet).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(view.getByTestId('history').props.children).toBe('empty'));
-    expect(JSON.parse(asyncStorage.__store.get(storageKeys.chatHistory) ?? 'null')).toEqual([]);
+    expect(await storedChat()).toEqual([]);
     expect(asyncStorage.__store.get(storageKeys.clientId)).not.toBe(originalClientId);
     await view.unmount();
   }, 20_000);

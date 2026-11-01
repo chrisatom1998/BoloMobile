@@ -31,9 +31,18 @@ jest.mock('expo-audio', () => ({
     getRecordingPermissionsAsync: jest.fn(async () => ({ granted: false })),
     requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: false })),
   },
+  RecordingPresets: { HIGH_QUALITY: {} },
+  requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  setAudioModeAsync: jest.fn(async () => undefined),
+  useAudioRecorder: jest.fn(() => ({ isRecording: false })),
+  useAudioRecorderState: jest.fn(() => ({ isRecording: false })),
 }));
 
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
+
+jest.mock('@/lib/offline-voice-player', () => ({
+  playOfflineSpeech: jest.fn(async () => true),
+}));
 
 jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
@@ -100,7 +109,7 @@ describe('previously uncovered audit screens', () => {
   it('does not display an infinite diagnostics average for a zero-count counter', async () => {
     const view = await render(<DiagnosticsScreen />);
 
-    await waitFor(() => expect(view.getByText('ai request succeeded')).toBeTruthy());
+    await waitFor(() => expect(view.getByText('Asha replies received')).toBeTruthy());
     expect(view.queryByText(/Infinity/u)).toBeNull();
     expect(view.getByText('0')).toBeTruthy();
   });
@@ -238,34 +247,73 @@ describe('previously uncovered audit screens', () => {
     });
   });
 
-  it('keeps the onboarding daily goal numeric through selection and submission', async () => {
+  it('writes the same profile fields from three screens, with reply language and daily minutes as defaults', async () => {
     const view = await render(<OnboardingScreen />);
-    await fireEvent.press(view.getByRole('radio', { name: '5 minutes' }));
-    await fireEvent.press(view.getByRole('button', { name: 'Build my practice plan' }));
 
-    expect(mockCompleteOnboarding).toHaveBeenCalledWith(expect.any(Object), 5);
+    expect(view.getByRole('header', { name: 'Hear this' })).toBeTruthy();
+    expect(view.queryByText('Check microphone access')).toBeNull();
+    expect(view.queryByText('Asha’s replies')).toBeNull();
+    expect(view.queryByRole('radio', { name: '5 minutes' })).toBeNull();
+    expect(view.getByTestId('onboarding-continue').props.accessibilityState).toEqual({ disabled: true });
+
+    await fireEvent.press(view.getByRole('radio', { name: 'धन्यवाद, Dhanyavaad, Thank you' }));
+    expect(view.getByTestId('onboarding-continue').props.accessibilityState).toEqual({ disabled: true });
+    await fireEvent.press(view.getByTestId('onboarding-reply-namaste'));
+    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).borderColor).toBe('#172523');
+    expect(StyleSheet.flatten(view.getByRole('header', { name: 'Hear this' }).props.style).fontFamily).toBe('Georgia');
+    await fireEvent.press(view.getByTestId('onboarding-continue'));
+
+    await fireEvent.press(view.getByRole('radio', { name: 'Beginner, I know greetings and a few phrases.' }));
+    await fireEvent.press(view.getByRole('radio', { name: 'Transliteration first' }));
+    await fireEvent.press(view.getByTestId('onboarding-continue'));
+    await fireEvent.press(view.getByRole('radio', { name: 'Travel' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Start practicing' }));
+
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith({
+      level: 'beginner',
+      microphoneTested: false,
+      primaryGoal: 'travel',
+      responseLanguage: 'en',
+      scriptPreference: 'latin',
+    }, 10);
+    expect(mockRouter.replace).toHaveBeenCalledWith('/');
   });
 
-  it('seeds recalibration from saved preferences and offers a cancel exit', async () => {
+  it('seeds recalibration from saved preferences and keeps reply language, minutes, and the microphone flag', async () => {
     mockOnboardingMode = 'recalibrate';
     mockAppState.goal = 5;
     mockAppState.learnerProfile = {
       completed: true,
+      displayName: 'Chris',
       level: 'intermediate',
       microphoneTested: true,
+      phrasePlaybackRate: 0.75,
       primaryGoal: 'travel',
       responseLanguage: 'hi',
       scriptPreference: 'latin',
     };
     const view = await render(<OnboardingScreen />);
 
+    expect(view.queryByRole('header', { name: 'Hear this' })).toBeNull();
     expect(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }).props.accessibilityState).toEqual({ checked: true });
     expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
+    await fireEvent.press(view.getByTestId('onboarding-continue'));
     expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
-    expect(view.getByRole('radio', { name: 'Hindi first' }).props.accessibilityState).toEqual({ checked: true });
-    expect(view.getByRole('radio', { name: '5 minutes' }).props.accessibilityState).toEqual({ checked: true });
     await fireEvent.press(view.getByRole('button', { name: 'Cancel recalibration' }));
     expect(mockRouter.back).toHaveBeenCalledTimes(1);
+
+    const saving = await render(<OnboardingScreen />);
+    await fireEvent.press(saving.getByTestId('onboarding-continue'));
+    await fireEvent.press(saving.getByRole('button', { name: 'Save my practice plan' }));
+    expect(mockCompleteOnboarding).toHaveBeenCalledWith({
+      displayName: 'Chris',
+      level: 'intermediate',
+      microphoneTested: true,
+      phrasePlaybackRate: 0.75,
+      primaryGoal: 'travel',
+      responseLanguage: 'hi',
+      scriptPreference: 'latin',
+    }, 5);
   });
 
   it('keeps review controls reachable in a scrolling Dynamic Type layout', async () => {
@@ -283,16 +331,12 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('Your first lesson')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
     expect(view.getByText('Plan 01 · Lesson 1 of 10 · 10 turns')).toBeTruthy();
-    expect(view.getByText('0 scenes learned · 0 reviews this week')).toBeTruthy();
-    expect(view.getByText('No practice streak yet')).toBeTruthy();
-    expect(view.getByText('No activity yet')).toBeTruthy();
-    expect(view.queryByText('Your Hindi is taking root.')).toBeNull();
-    expect(view.queryByText('Your garden starts with one small turn.')).toBeNull();
-    expect(view.getByText('Last 7 days')).toBeTruthy();
-    expect(view.getByText('बोलो', { includeHiddenElements: true }).props['aria-hidden']).toBe(true);
-    for (const bar of view.getAllByTestId('progress-day-bar')) {
-      expect(StyleSheet.flatten(bar.props.style)).toMatchObject({ height: 0, minHeight: 0 });
-    }
+    expect(view.getByText('Your week, streak and saved phrases will show up here after your first lesson.')).toBeTruthy();
+    // A brand-new learner sees one clear next step, not a wall of zeros.
+    expect(view.queryByText('No practice streak yet')).toBeNull();
+    expect(view.queryByText('Last 7 days')).toBeNull();
+    expect(view.queryByTestId('progress-stats')).toBeNull();
+    expect(view.queryAllByTestId('progress-day-bar')).toHaveLength(0);
   });
 
   it('caps a practiced day at the full bar and leaves zero-minute days empty', async () => {
@@ -308,6 +352,7 @@ describe('previously uncovered audit screens', () => {
 
   it('folds progress stats into one row and shows a dash for accuracy before any answers', async () => {
     mockAppState.phrases = [];
+    mockAppState.streak = 1;
     const view = await render(<ProgressScreen />);
 
     expect(view.getByTestId('progress-stats').children).toHaveLength(4);
@@ -360,7 +405,7 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('Current lesson')).toBeTruthy();
     expect(view.getByText('Say your name')).toBeTruthy();
     expect(view.getByText('Plan 01 · Lesson 2 of 10 · Turn 4 of 10')).toBeTruthy();
-    expect(view.getByText('3-day practice streak')).toBeTruthy();
+    expect(view.getByTestId('progress-stat-streak').props.accessibilityLabel).toBe('3 day practice streak');
     await fireEvent.press(view.getByLabelText('Continue lesson: Say your name'));
     expect(mockRouter.push).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-02' } });
   });

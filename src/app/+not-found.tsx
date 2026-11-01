@@ -2,7 +2,7 @@ import { Stack, useRouter } from 'expo-router';
 import { ScrollView, Text } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
-import { makeStyles, spacing, useSharedStyles } from '@/theme';
+import { makeStyles, spacing, useSharedStyles, type } from '@/theme';
 
 export default function NotFoundScreen() {
   const router = useRouter();
@@ -23,6 +23,6 @@ export default function NotFoundScreen() {
 
 const useStyles = makeStyles((c) => ({
   content: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl, gap: spacing.lg },
-  title: { color: c.ink, fontSize: 28, lineHeight: 35, fontWeight: '900' },
-  body: { color: c.muted, fontSize: 16, lineHeight: 24 },
+  title: { ...type.display, color: c.ink },
+  body: { ...type.body, color: c.muted },
 }));

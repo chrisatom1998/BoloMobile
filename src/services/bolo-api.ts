@@ -1,14 +1,20 @@
 import Constants from 'expo-constants';
 
-import type { AshaResponseLanguage, ChatMessage, SavedPhrase } from '@/state/app-state-types';
+import type { AshaResponseLanguage, ChatMessage, SavedPhrase, StructuredReply } from '@/state/app-state-types';
 import { displayHindiTranscript, learnerPhraseLatin } from '@/lib/learner-phrase-display';
+import { sanitizeStructuredReply, STRUCTURED_REPLY_FORMAT } from '@/lib/structured-reply';
 import { buildContextualWordDefinitionPrompt, hindiSourcePhrase, hindiWordTokens, MAX_WORD_DEFINITION_SOURCE_CHARACTERS } from '@/lib/contextual-word-definition';
 import { HINDI_SPEECH_LANGUAGE, HINDI_SPEECH_LOCALE } from '@/lib/hindi-pronunciation';
 import { knownSavedPhrase } from '@/lib/known-hindi-phrases';
+import { signalNetworkAvailable } from '@/lib/network-signal';
 import { observe } from '@/lib/observability';
 
 const FALLBACK_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const REQUEST_TIMEOUT_MS = 30_000;
+const OFFLINE_MESSAGE = 'Bolo is unavailable right now. Check your connection and try again.';
+const TIMEOUT_MESSAGE = 'The request timed out. Check your connection and try again.';
+const CANCELED_MESSAGE = 'The request was canceled.';
+const MAX_RETRY_AFTER_MS = 24 * 60 * 60 * 1000;
 const MAX_AI_AUDIO_BASE64_CHARACTERS = 8_000_000;
 const MAX_TRANSCRIPT_CHARACTERS = 1_200;
 const MAX_GENERATED_TEXT_CHARACTERS = 2_400;
@@ -41,7 +47,7 @@ export function getBoloLiveApiUrl() {
     } catch { /* Surface the same actionable configuration message. */ }
   }
   if (__DEV__) console.warn('Live voice is not configured in this build. Set BOLO_LIVE_API_URL to a trusted HTTPS GPT-Live server.');
-  throw new BoloApiError('Live voice isn’t available right now. You can still type to Asha.');
+  throw new BoloApiError('Live voice isn’t available right now. You can still type to Asha.', { kind: 'config' });
 }
 
 export type AiVoiceAudio = {
@@ -49,10 +55,12 @@ export type AiVoiceAudio = {
   mimeType: 'audio/mpeg';
 };
 
-type MobileChatResponse = {
+export type MobileChatResponse = {
   transcript: string;
   reply: string;
   language: 'en' | 'hi';
+  /** Only present when the server honoured `replyFormat` and the block validated. */
+  structured?: StructuredReply;
 };
 
 type VoiceCoachResponse = {
@@ -94,6 +102,11 @@ type MobileChatInput = {
   messages: ChatMessage[];
   clientId: string;
   responseLanguage?: AshaResponseLanguage;
+  /**
+   * Ask `/api/mobile-chat` for a structured-v1 block. Older servers ignore the field.
+   * Word explanations leave this false so they stay plain English prose.
+   */
+  structuredReply?: boolean;
 };
 
 type SavedPhrasePreparationInput = {
@@ -105,11 +118,47 @@ type SavedPhrasePreparationInput = {
   text: string;
 };
 
+/**
+ * Why a Bolo request failed, decided from the failure itself and never from
+ * message text. `network` and `timeout` are the only kinds that mean the
+ * device could not reach Bolo; callers use them for offline copy and retries.
+ */
+export type BoloApiErrorKind = 'network' | 'timeout' | 'aborted' | 'config' | 'invalid_payload' | 'http';
+
 export class BoloApiError extends Error {
-  constructor(message: string, readonly status?: number) {
+  readonly kind: BoloApiErrorKind;
+  readonly status?: number;
+  /** From a `Retry-After` header on a 429, when the server sent one. */
+  readonly retryAfterMs?: number;
+
+  constructor(message: string, options: { kind: BoloApiErrorKind; status?: number; retryAfterMs?: number }) {
     super(message);
     this.name = 'BoloApiError';
+    this.kind = options.kind;
+    if (options.status !== undefined) this.status = options.status;
+    if (options.retryAfterMs !== undefined) this.retryAfterMs = options.retryAfterMs;
   }
+}
+
+/** The typed kind of a Bolo failure, or null for errors that did not come from the API layer. */
+export function boloApiErrorKind(error: unknown): BoloApiErrorKind | null {
+  return error instanceof BoloApiError ? error.kind : null;
+}
+
+/** Only these failures mean the device could not reach Bolo at all. */
+export function isOfflineBoloApiError(error: unknown): boolean {
+  const kind = boloApiErrorKind(error);
+  return kind === 'network' || kind === 'timeout';
+}
+
+/** Parses a `Retry-After` header (seconds or an HTTP date) into a bounded delay. */
+export function parseRetryAfterMs(value: string | null | undefined, now = Date.now()): number | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const trimmed = value.trim();
+  const seconds = /^\d+$/u.test(trimmed) ? Number(trimmed) : NaN;
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(trimmed) - now;
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
+  return Math.min(MAX_RETRY_AFTER_MS, Math.round(ms));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -129,6 +178,21 @@ function isMobileChatResponse(value: unknown): value is MobileChatResponse {
     && isBoundedTextAllowingEmpty(value.transcript, MAX_TRANSCRIPT_CHARACTERS)
     && isBoundedText(value.reply, MAX_GENERATED_TEXT_CHARACTERS)
     && (value.language === 'en' || value.language === 'hi');
+}
+
+/**
+ * The plain `reply` stays required so old builds keep working. A `structured`
+ * block is optional: when present it is validated strictly and dropped (not
+ * rejected) if it is malformed or oversized, so the reply still renders.
+ */
+function normalizeMobileChatResponse(value: MobileChatResponse & { structured?: unknown }): MobileChatResponse {
+  const structured = sanitizeStructuredReply(value.structured);
+  return {
+    transcript: value.transcript,
+    reply: value.reply,
+    language: value.language,
+    ...(structured ? { structured } : {}),
+  };
 }
 
 function isVoiceCoachResponse(value: unknown): value is VoiceCoachResponse {
@@ -174,36 +238,67 @@ async function post<T>(
 ): Promise<T> {
   const startedAt = Date.now();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
   const abort = () => controller.abort();
   if (signal?.aborted) controller.abort();
   else signal?.addEventListener('abort', abort, { once: true });
   try {
+    if (signal?.aborted) throw new BoloApiError(CANCELED_MESSAGE, { kind: 'aborted' });
     const response = await fetch(`${baseUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const payload: unknown = await response.json().catch(() => null);
+    let payload: unknown = null;
+    let bodyError: unknown = null;
+    try {
+      payload = await response.json();
+    } catch (error) {
+      bodyError = error;
+    }
     const message = isRecord(payload) && typeof payload.error === 'string' ? payload.error : undefined;
-    if (!response.ok) throw new BoloApiError(message || 'Bolo could not complete that request.', response.status);
-    if (!validate(payload)) throw new BoloApiError('Bolo returned an invalid response. Please try again.', response.status);
+    if (!response.ok) {
+      // A non-2xx stays an HTTP failure even when its body is unreadable.
+      const retryAfterMs = response.status === 429 ? parseRetryAfterMs(readHeader(response, 'Retry-After')) : undefined;
+      throw new BoloApiError(message || 'Bolo could not complete that request.', { kind: 'http', status: response.status, ...(retryAfterMs ? { retryAfterMs } : {}) });
+    }
+    // Reading a successful body can still be cut short by our timer, the caller, or the
+    // transport; those keep their transient classification below. Only malformed JSON,
+    // which the runtime reports as a SyntaxError, is an invalid payload.
+    if (bodyError !== null && !(bodyError instanceof SyntaxError)) throw bodyError;
+    if (!validate(payload)) throw new BoloApiError('Bolo returned an invalid response. Please try again.', { kind: 'invalid_payload', status: response.status });
     observe('ai_request_succeeded', Date.now() - startedAt);
+    // Any completed request proves the API is reachable, so queued work can retry now.
+    signalNetworkAvailable();
     return payload;
   } catch (error) {
     // A caller-initiated cancel (screen unmount, replaying another phrase) is not
     // a failure; only timeouts, network errors, and bad responses count.
     if (!signal?.aborted) observe('ai_request_failed', Date.now() - startedAt);
     if (error instanceof BoloApiError) throw error;
-    if (error instanceof Error && error.name === 'AbortError') {
-      if (signal?.aborted) throw new BoloApiError('The request was canceled.');
-      throw new BoloApiError('The request timed out. Check your connection and try again.');
-    }
-    throw new BoloApiError('Bolo is unavailable right now. Check your connection and try again.');
+    // Classify by what happened, never by the error's text: the caller's signal
+    // means cancellation, our own timer means a timeout, anything else is transport.
+    if (signal?.aborted) throw new BoloApiError(CANCELED_MESSAGE, { kind: 'aborted' });
+    if (timedOut) throw new BoloApiError(TIMEOUT_MESSAGE, { kind: 'timeout' });
+    throw new BoloApiError(OFFLINE_MESSAGE, { kind: 'network' });
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener('abort', abort);
+  }
+}
+
+function readHeader(response: { headers?: unknown }, name: string): string | null {
+  const headers = response.headers;
+  if (!headers || typeof headers !== 'object' || typeof (headers as { get?: unknown }).get !== 'function') return null;
+  try {
+    return (headers as { get(name: string): string | null }).get(name);
+  } catch {
+    return null;
   }
 }
 
@@ -226,11 +321,16 @@ export function buildMobileChatPayload(input: MobileChatInput) {
     clientId: input.clientId,
     languageMode: MOBILE_LANGUAGE_MODE,
     responseLanguage: input.responseLanguage,
+    // Servers that predate the structured contract ignore this field.
+    // Omitted for plain-prose callers (word explanations) so a structured server
+    // does not turn those requests into phrase JSON.
+    ...(input.structuredReply === false ? {} : { replyFormat: STRUCTURED_REPLY_FORMAT }),
   };
 }
 
-export function sendMobileChat(input: MobileChatInput, signal?: AbortSignal) {
-  return post('/api/mobile-chat', buildMobileChatPayload(input), isMobileChatResponse, signal);
+export async function sendMobileChat(input: MobileChatInput, signal?: AbortSignal): Promise<MobileChatResponse> {
+  const result = await post('/api/mobile-chat', buildMobileChatPayload(input), isMobileChatResponse, signal);
+  return normalizeMobileChatResponse(result);
 }
 
 export async function getContextualWordDefinition(input: {
@@ -241,9 +341,9 @@ export async function getContextualWordDefinition(input: {
   const phrase = hindiSourcePhrase(input.phrase);
   const word = input.word.trim();
   if (!phrase || !hindiWordTokens(phrase).includes(word)) {
-    throw new BoloApiError('Choose a Hindi word from this phrase.');
+    throw new BoloApiError('Choose a Hindi word from this phrase.', { kind: 'invalid_payload' });
   }
-  if (phrase.length > MAX_WORD_DEFINITION_SOURCE_CHARACTERS) throw new BoloApiError('Choose a shorter Hindi excerpt for word meanings.');
+  if (phrase.length > MAX_WORD_DEFINITION_SOURCE_CHARACTERS) throw new BoloApiError('Choose a shorter Hindi excerpt for word meanings.', { kind: 'invalid_payload' });
   const sourceMessages: ChatMessage[] = [];
   for (let start = 0; start < phrase.length; start += 600) {
     sourceMessages.push({ id: `word-source-${start}`, role: 'you', text: phrase.slice(start, start + 600) });
@@ -251,11 +351,12 @@ export async function getContextualWordDefinition(input: {
   const result = await sendMobileChat({
     clientId: input.clientId,
     messages: sourceMessages,
+    structuredReply: false,
     text: buildContextualWordDefinitionPrompt({ phrase, word }),
   }, signal);
   const explanation = result.reply.trim();
   if (!isBoundedText(explanation, 600) || /[\u0900-\u097f]/u.test(explanation)) {
-    throw new BoloApiError('Bolo could not explain that word. Please try again.');
+    throw new BoloApiError('Bolo could not explain that word. Please try again.', { kind: 'invalid_payload' });
   }
   return explanation;
 }
@@ -283,15 +384,15 @@ function isSavedPhrase(value: unknown): value is SavedPhrase {
 
 export async function prepareSavedPhraseFromText(input: SavedPhrasePreparationInput, signal?: AbortSignal): Promise<SavedPhrase> {
   const selectedText = input.text.trim();
-  if (signal?.aborted) throw new BoloApiError('The request was canceled.');
-  if (!selectedText) throw new BoloApiError('Select some transcript text first.');
-  if (selectedText.length > 500) throw new BoloApiError('Select a shorter excerpt (up to 500 characters).');
+  if (signal?.aborted) throw new BoloApiError(CANCELED_MESSAGE, { kind: 'aborted' });
+  if (!selectedText) throw new BoloApiError('Select some transcript text first.', { kind: 'invalid_payload' });
+  if (selectedText.length > 500) throw new BoloApiError('Select a shorter excerpt (up to 500 characters).', { kind: 'invalid_payload' });
 
   // Keep the entire retained Hindi selection, including punctuation and all
   // sentences. Extracting just the longest Hindi fragment loses selected words.
   const originalSource = input.sourceText?.trim() || '';
   const sourceHindi = isHindiText(originalSource) ? originalSource : isHindiText(selectedText) ? selectedText : '';
-  if (sourceHindi.length > 500) throw new BoloApiError('Select a shorter excerpt (up to 500 characters).');
+  if (sourceHindi.length > 500) throw new BoloApiError('Select a shorter excerpt (up to 500 characters).', { kind: 'invalid_payload' });
   const lessonPhrase = knownSavedPhrase(sourceHindi || selectedText);
   if (lessonPhrase) return sourceHindi
     ? { ...lessonPhrase, hi: sourceHindi, latin: displayHindiTranscript(sourceHindi) }
@@ -305,7 +406,7 @@ export async function prepareSavedPhraseFromText(input: SavedPhrasePreparationIn
     isSavedPhrase,
     signal,
   );
-  if (signal?.aborted) throw new BoloApiError('The request was canceled.');
+  if (signal?.aborted) throw new BoloApiError(CANCELED_MESSAGE, { kind: 'aborted' });
   const phrase = {
     hi: sourceHindi || result.hi.trim(),
     latin: input.preserveRomanizedText && isLatinText(selectedText)
@@ -314,7 +415,7 @@ export async function prepareSavedPhraseFromText(input: SavedPhrasePreparationIn
     en: result.en.trim(),
   };
   if (!isSavedPhrase(phrase)) {
-    throw new BoloApiError('Bolo could not fit all phrase details. Select a shorter excerpt or fill the details manually.');
+    throw new BoloApiError('Bolo could not fit all phrase details. Select a shorter excerpt or fill the details manually.', { kind: 'invalid_payload' });
   }
   return phrase;
 }
@@ -379,7 +480,7 @@ export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal)
       || input.history.some((row) => !isRecord(row) || !['you', 'asha'].includes(row.role) || typeof row.text !== 'string')))
     || (input.mode !== undefined && !(LIVE_MODES as readonly string[]).includes(input.mode))
     || (input.clientTools !== undefined && typeof input.clientTools !== 'boolean')) {
-    return Promise.reject(new BoloApiError('Bolo could not start this live voice session.'));
+    return Promise.reject(new BoloApiError('Bolo could not start this live voice session.', { kind: 'invalid_payload' }));
   }
   const context = sanitizeLiveCallContext(input.context);
   return post('/api/live-call', {
@@ -395,7 +496,7 @@ export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal)
 
 export function requestAiVoiceAudio(text: string, signal?: AbortSignal, language?: AshaResponseLanguage) {
   const boundedText = text.trim().slice(0, AI_VOICE_TEXT_LIMIT);
-  if (!boundedText) return Promise.reject(new BoloApiError('There is no text to read aloud.'));
+  if (!boundedText) return Promise.reject(new BoloApiError('There is no text to read aloud.', { kind: 'invalid_payload' }));
   return post('/api/phrase-audio', {
     text: boundedText,
     ...(language === HINDI_SPEECH_LANGUAGE ? { language: HINDI_SPEECH_LANGUAGE, locale: HINDI_SPEECH_LOCALE } : {}),
@@ -413,6 +514,10 @@ export async function checkPronunciation(input: {
   return { ...result, outcome: result.transcript.trim() ? 'speech' as const : 'no-speech' as const };
 }
 
+/**
+ * Sends exactly the existing report payload. Local outbox ids are never included:
+ * `/api/report-message` has not confirmed it tolerates a `reportId` field.
+ */
 export function reportGeneratedMessage(input: { clientId: string; message: string; reason: ReportReason }, signal?: AbortSignal) {
   return post('/api/report-message', {
     clientId: input.clientId,

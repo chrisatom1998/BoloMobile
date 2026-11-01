@@ -3,10 +3,11 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { LessonReminderOffer } from '@/components/lesson-reminder-offer';
 import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { isWordOrderPracticeable } from '@/components/practice-mode';
@@ -24,24 +25,20 @@ import { useSpeakText } from '@/hooks/use-speak-text';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { SceneAttempt } from '@/state/app-state-types';
 import { observe } from '@/lib/observability';
+import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiWordTokens } from '@/lib/contextual-word-definition';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { shuffleChoices } from '@/lib/shuffle-choices';
-import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
+import { trimTerminalPunctuation } from '@/lib/text';
+import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
-
-const ALTERNATE_INCORRECT_COACH = {
-  en: 'Close—try again.',
-  hi: 'करीब है—फिर से कोशिश कीजिए।',
-  latin: 'Karib hai—phir se koshish kijiye.',
-};
 
 export default function SceneRoute() {
   const { id } = useLocalSearchParams<{ id: string | string[] }>();
@@ -57,7 +54,8 @@ function SceneScreen() {
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
   const sceneId = Array.isArray(id) ? id[0] : id;
-  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, sceneProgress, togglePhrase } = useAppState();
+  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, reminder: storedReminder, sceneProgress, setReminder, togglePhrase } = useAppState();
+  const reminder = storedReminder ?? defaultReminderSettings();
   const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
   const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
   const sourceScene = useMemo(() => getScene(sceneId ?? ''), [sceneId]);
@@ -75,7 +73,6 @@ function SceneScreen() {
         ? { ...choice, hi: personalize(choice.hi), latin: personalize(choice.latin), en: personalize(choice.en) } : choice),
     })) };
   }, [practiceName, sourceScene, usesName]);
-  const [offlineSelected, setOfflineSelected] = useState(false);
   const [showAiDetails, setShowAiDetails] = useState(false);
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
@@ -88,7 +85,7 @@ function SceneScreen() {
     };
   }, [scene]);
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
-  const { elapsedSeconds, reset: resetTimer } = useForegroundTimer();
+  const { elapsedSeconds, reset: resetTimer, touch: touchTimer } = useForegroundTimer();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const savedProgress = scene ? sceneProgress?.[scene.id] : undefined;
   const [legacyCheckpoint] = useState(() => !savedProgress?.attempt && (savedProgress?.lastBeatIndex ?? 0) > 0);
@@ -112,12 +109,15 @@ function SceneScreen() {
   const [resolution, setResolution] = useState<null | 'correct' | 'incorrect'>(null);
   const [choiceNonce, setChoiceNonce] = useState(0);
   const [wordOrderRetryNonce, setWordOrderRetryNonce] = useState(0);
-  const [score, setScore] = useState(initialAttempt?.score ?? 0);
+  const [finishedSeconds, setFinishedSeconds] = useState(0);
   const [correctCount, setCorrectCount] = useState(initialAttempt?.correct ?? 0);
   const [answerCount, setAnswerCount] = useState(initialAttempt?.total ?? 0);
   const [done, setDone] = useState(false);
+  const [reminderOffer, setReminderOffer] = useState<'hidden' | 'open' | 'closed'>('hidden');
   const [showHint, setShowHint] = useState(false);
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
+  // A first wrong pick keeps the right answer hidden so "Try again" means something.
+  const [answerShown, setAnswerShown] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
 
   const [wordSheet, setWordSheet] = useState<{ word: string; phrase: string } | null>(null);
@@ -171,8 +171,13 @@ function SceneScreen() {
     key: `${scene?.id ?? 'missing-scene'}:${beatIndex}:${choiceNonce}`,
   }), [beatIndex, choiceNonce, currentBeat, effectiveMode, scene?.id]);
 
+  // Guided Starter and Beginner lessons set the scene in long Hindi narration, well above the level they teach.
+  const englishFirstSetup = Boolean(guidedLesson) && (scene?.level === 'Starter' || scene?.level === 'Beginner');
+
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
+  // English-first lessons skip it: their above-level Hindi narration plays only when the learner taps Listen.
   useEffect(() => {
+    if (englishFirstSetup) return;
     if (!autoPlayKey || npcLine === undefined || situationPromptSpeech === undefined) return;
     if (resolution !== null) return;
     if (pronunciationBusy) return;
@@ -182,7 +187,7 @@ function SceneScreen() {
     // consent or pronunciation activity still speaks when the effect re-runs.
     autoPlayedBeatRef.current = autoPlayKey;
     void speakText(situationPromptSpeech).catch(() => {});
-  }, [aiConsent, autoPlayKey, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
+  }, [aiConsent, autoPlayKey, englishFirstSetup, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
 
   if (!scene || !currentBeat || !currentTarget) {
     return (
@@ -219,16 +224,18 @@ function SceneScreen() {
     : beat.tip;
   const saved = phrases.some((phrase) => phrase.hi === target.hi);
   const correct = resolution === 'correct';
-  const feedbackReply = picked !== null
-    ? beat.choices[picked]?.reply ?? ''
-    : resolution === 'correct'
-      ? 'बहुत अच्छा।'
-      : resolution === 'incorrect'
-        ? ALTERNATE_INCORRECT_COACH.hi
-        : '';
+  // Asha only replies in Hindi to a right answer; a wrong one gets plain English, not a blanket "close".
+  const feedbackReply = resolution === 'correct'
+    ? picked !== null && picked >= 0 ? beat.choices[picked]?.reply ?? 'बहुत अच्छा।' : 'बहुत अच्छा।'
+    : '';
+  const pickedChoice = picked !== null && picked >= 0 ? beat.choices[picked] : undefined;
+  const choiceAnswerHidden = resolution === 'incorrect' && effectiveMode === 'choice' && !answerShown;
+  const answerVisible = resolution === 'correct' || (resolution === 'incorrect' && !choiceAnswerHidden);
   const englishMistakeFeedback = resolution === 'incorrect'
-    ? picked !== null
-      ? beat.choices[picked]?.feedback ?? ''
+    ? pickedChoice
+      ? choiceAnswerHidden
+        ? `That line means “${trimTerminalPunctuation(pickedChoice.en)}.” Try once more, or show the answer.`
+        : pickedChoice.feedback ?? ''
       : buildAlternateFeedback({ en: target.en, latin: target.latin })
     : '';
 
@@ -239,13 +246,13 @@ function SceneScreen() {
 
   function recordAnswer(isCorrect: boolean) {
     if (attemptRef.current.answeredBeatIndex === beatIndex) return;
+    touchTimer();
     if (currentUsesName) updateLearnerProfile?.({ displayName: practiceName.trim() });
     const previous = attemptRef.current;
     const attempt = { ...previous, score: previous.score + (isCorrect ? 50 : 0), correct: previous.correct + Number(isCorrect), total: previous.total + 1,
       weakPhrases: isCorrect ? previous.weakPhrases : [...new Set([...previous.weakPhrases, target.hi])],
       seconds: elapsedBeforeResumeRef.current + elapsedSeconds(), answeredBeatIndex: beatIndex };
     attemptRef.current = attempt;
-    setScore(attempt.score);
     setCorrectCount(attempt.correct);
     setAnswerCount(attempt.total);
     checkpointScene?.(activeScene.id, beatIndex, attempt);
@@ -255,12 +262,12 @@ function SceneScreen() {
     if (isCorrect) return 'Natural choice!';
     if (effectiveMode === 'wordOrder') return 'Check the word order.';
     if (effectiveMode === 'recallReveal') return 'Keep practicing this phrase.';
-    return 'Not quite—notice the pattern.';
+    return answerShown ? 'Here’s the natural answer.' : 'Not that one.';
   }
 
-  function announceResult(isCorrect: boolean) {
+  function announceResult(isCorrect: boolean, title = resultTitle(isCorrect)) {
     // Android reads the new result via focus/live updates; iOS needs an explicit announcement.
-    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(resultTitle(isCorrect));
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(title);
   }
 
   function choose(index: number) {
@@ -271,16 +278,19 @@ function SceneScreen() {
     pickedRef.current = index;
     setPicked(index);
     recordAnswer(choice.correct);
-    announceResult(choice.correct);
+    // A second miss reveals the answer, so announce the title the screen is about to show.
+    announceResult(choice.correct, !choice.correct && alreadyResolvedIncorrect ? 'Here’s the natural answer.' : undefined);
     if (choice.correct) {
       hapticSuccess();
       setResolution('correct');
+      play(choice.reply);
     }
     else {
       hapticWarning();
+      // The second miss on a turn shows the answer instead of offering a third guess.
+      if (alreadyResolvedIncorrect) setAnswerShown(true);
       setResolution('incorrect');
     }
-    play(choice.reply);
   }
 
   function handleAlternateResult(result: 'correct' | 'incorrect') {
@@ -295,11 +305,10 @@ function SceneScreen() {
       return;
     }
     setResolution('incorrect');
-    play(ALTERNATE_INCORRECT_COACH.hi);
   }
 
   function tryAgain() {
-    if ((effectiveMode !== 'choice' && effectiveMode !== 'wordOrder') || resolution !== 'incorrect' || pronunciationBusy) return;
+    if ((effectiveMode !== 'choice' && effectiveMode !== 'wordOrder') || resolution !== 'incorrect' || answerShown || pronunciationBusy) return;
     pendingResolutionScrollRef.current = false;
     pickedRef.current = null;
     setPicked(null);
@@ -318,6 +327,10 @@ function SceneScreen() {
     clearAudioError();
     if (beatIndex === activeScene.beats.length - 1) {
       completedRef.current = true;
+      const completions = Object.values(sceneProgress ?? {}).reduce((sum, progress) => sum + (progress.completions ?? 0), 0);
+      if (completions === 0 && reminder.enabled !== true && reminder.offerAnswered !== true) {
+        setReminderOffer((current) => (current === 'closed' ? current : 'open'));
+      }
       markSceneComplete(activeScene.id, elapsedBeforeResumeRef.current + elapsedSeconds(), {
         attemptId: attemptRef.current.id,
         score: attemptRef.current.score,
@@ -326,6 +339,7 @@ function SceneScreen() {
         weakPhrases: attemptRef.current.weakPhrases,
       });
       observe('scene_completed');
+      setFinishedSeconds(elapsedBeforeResumeRef.current + elapsedSeconds());
       setDone(true);
       return;
     }
@@ -338,6 +352,7 @@ function SceneScreen() {
     setResolution(null);
     setShowHint(false);
     setAlreadyResolvedIncorrect(false);
+    setAnswerShown(false);
     closeWordSheet();
     setChoiceNonce((value) => value + 1);
   }
@@ -354,8 +369,8 @@ function SceneScreen() {
     setResolution(null);
     setShowHint(false);
     setAlreadyResolvedIncorrect(false);
+    setAnswerShown(false);
     closeWordSheet();
-    setScore(0);
     setCorrectCount(0);
     setAnswerCount(0);
     attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
@@ -390,6 +405,7 @@ function SceneScreen() {
     router.replace('/');
   }
 
+  const isGuided = Boolean(guidedLesson);
   const completionAction = guidedLesson?.nextLessonId
     ? 'Next lesson'
     : guidedLesson
@@ -402,21 +418,34 @@ function SceneScreen() {
         <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
         <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-complete`} style={styles.finishIntro} testID="scene-completion-motion">
           <View style={styles.finishBadge}><Star color={colors.white} fill={colors.white} size={34} /></View>
-          <Text style={sharedStyles.eyebrow}>Scene complete</Text>
+          <Text style={sharedStyles.eyebrow}>{isGuided ? 'Lesson complete' : 'Scene complete'}</Text>
           <View style={styles.finishHeading}>
             <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : "hi-IN"} style={[styles.finishHindi, scriptPreference !== 'latin' && styles.finishHindiScript]} testID="scene-completion-headline">{lessonHindiLabel('आपने कर दिखाया!', scriptPreference, 'Aapne kar dikhaya!')}</Text>
             <Text style={styles.finishGloss} testID="scene-completion-gloss">You did it!</Text>
           </View>
-          <Text style={styles.finishTitle} testID="scene-completion-title">You navigated {activeScene.title} in Hindi.</Text>
+          <Text style={styles.finishTitle} testID="scene-completion-title">You finished “{activeScene.title}.”</Text>
           <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>
         </MotionReveal>
         <View style={styles.finishStats}>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{score}</Text><Text style={styles.finishLabel}>points</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{answerCount}</Text><Text style={styles.finishLabel}>correct first try</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{answerCount}</Text><Text style={styles.finishLabel}>lesson turns</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{answerCount}</Text><Text style={styles.finishLabel}>right first try</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{Math.max(1, Math.round(finishedSeconds / 60))} min</Text><Text style={styles.finishLabel}>practiced</Text></View>
         </View>
+        {reminderOffer === 'open' ? (
+          <LessonReminderOffer
+            onAnswered={(next) => {
+              setReminderOffer('closed');
+              // If saving fails the stored reminder rolls back, so cancel the
+              // notification that was just scheduled instead of orphaning it.
+              // A rejected save counts as a failed one.
+              void setReminder(next).catch(() => false).then(async (saved) => {
+                if (!saved && next.notificationId) await cancelPracticeReminder(next);
+              }).catch(() => undefined);
+            }}
+            reminder={reminder}
+          />
+        ) : null}
         <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
-        <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Replay scene</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
           <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={styles.tertiaryButton} testID="scene-completion-tertiary">
             <Text style={styles.tertiaryText}>Back to Today</Text>
@@ -504,7 +533,7 @@ function SceneScreen() {
       style={styles.answerActions}
       testID="scene-answer-actions"
     >
-      {resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') ? (
+      {resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') && !answerShown ? (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: pronunciationBusy }}
@@ -517,10 +546,16 @@ function SceneScreen() {
           <Text style={styles.tryAgainText}>Try again</Text>
         </Pressable>
       ) : null}
-      <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
-        <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
-        <ChevronRight color={colors.ink} size={18} />
-      </Pressable>
+      {choiceAnswerHidden ? (
+        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); setAnswerShown(true); }} style={styles.secondaryButton} testID="scene-show-answer">
+          <Text style={styles.secondaryText}>Show answer</Text>
+        </Pressable>
+      ) : (
+        <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
+          <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
+          <ChevronRight color={colors.white} size={18} />
+        </Pressable>
+      )}
     </View>
   ) : null;
 
@@ -563,27 +598,25 @@ function SceneScreen() {
           </View>
           <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
         </View>
-        {/* Title and score share one row so Asha's line and the answer fit on screen without scrolling. */}
+        {/* Title and tally share one row so Asha's line and the answer fit on screen without scrolling. */}
         <View style={styles.titleRow}>
           <Text accessibilityRole="header" style={styles.sceneTitle}>{activeScene.title}</Text>
           <View style={styles.hudRow}>
             <View style={styles.hud}><Text style={styles.hudText}>{correctCount} correct</Text></View>
-            <View accessible accessibilityLabel={`${score} points`} style={styles.hud}><Star color={colors.gold} fill={colors.gold} size={15} /><Text style={styles.hudText}>{score}</Text></View>
           </View>
         </View>
       </View>
 
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
-      {initialBeatIndex > 0 ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Continuing at turn {initialBeatIndex + 1}.</Text> : null}
+      {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <FadingNotice style={styles.resumeNoticeQuiet}>Picking up where you left off.</FadingNotice> : null}
 
       {!aiConsent ? (
-        <View style={styles.hint}>
-          {!offlineSelected ? <>
-            <Text style={styles.hintBody}>This lesson works offline. Connected coaching is optional.</Text>
-            <Pressable accessibilityRole="button" onPress={() => setOfflineSelected(true)} style={sharedStyles.primaryButton} testID="scene-offline-continue"><Text style={sharedStyles.primaryButtonText}>Continue with offline lesson</Text></Pressable>
-          </> : <Text style={styles.hintBody}>Offline lesson ready — no AI consent needed.</Text>}
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAiDetails }} onPress={() => setShowAiDetails((shown) => !shown)} style={styles.tertiaryButton} testID="scene-ai-details"><Text style={styles.tertiaryText}>{showAiDetails ? 'Hide connected coaching details' : 'About optional connected coaching'}</Text></Pressable>
+        <View style={styles.offlineNote}>
+          {/* Lessons never needed a choice here: they always run offline. One quiet line, details on request. */}
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAiDetails }} hitSlop={8} onPress={() => setShowAiDetails((shown) => !shown)} testID="scene-ai-details">
+            <Text style={styles.offlineNoteText}>Works offline · <Text style={styles.offlineNoteLink}>{showAiDetails ? 'Hide Asha coaching details' : 'Add Asha coaching'}</Text></Text>
+          </Pressable>
           {showAiDetails ? <AiConsentGate /> : null}
         </View>
       ) : null}
@@ -614,10 +647,22 @@ function SceneScreen() {
               <Text style={styles.speakerText}>Listen</Text>
             </Pressable>
           </View>
-          <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, scriptPreference !== 'latin' && styles.npcHindi, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
-            ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
-            : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
-          <Text style={styles.translation}>{beat.translation}</Text>
+          {englishFirstSetup ? (
+            <>
+              {/* Starter and Beginner lessons lead with the moment in English; the Hindi stays one tap of Listen away. */}
+              <Text style={[styles.setupEnglish, largeTextLayout && styles.npcLarge]}>{beat.translation}</Text>
+              <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.setupHindi, scriptPreference !== 'latin' && styles.setupHindiScript]}>{scriptPreference === 'both'
+                ? <>{beat.npc}{'\n'}<Text style={styles.setupHindi}>{romanizeDevanagari(beat.npc)}</Text></>
+                : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
+            </>
+          ) : (
+            <>
+              <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, scriptPreference !== 'latin' && styles.npcHindi, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
+                ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
+                : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
+              <Text style={styles.translation}>{beat.translation}</Text>
+            </>
+          )}
         </View>
       </View>
 
@@ -659,8 +704,8 @@ function SceneScreen() {
           <View key={choicePresentation.key} style={styles.choices} testID="scene-choices">
             {choicePresentation.choices.map(({ item: choice, sourceIndex }) => {
               const selected = picked === sourceIndex;
-              const revealed = picked !== null && choice.correct;
-              const answered = picked !== null;
+              const revealed = picked !== null && choice.correct && answerVisible;
+              const answered = picked !== null && (answerVisible || selected);
               const wrong = selected && !choice.correct;
               const answerStatus = revealed ? ', correct answer' : wrong ? ', your answer, incorrect' : '';
               const accessibilityLabel = answered
@@ -715,7 +760,6 @@ function SceneScreen() {
               <View style={styles.resultCopy}>
                 <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{resultTitle(correct)}</Text>
                 {englishMistakeFeedback ? <Text style={[styles.resultBody, styles.resultWrongText]} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
-                {englishMistakeFeedback ? <Text style={styles.resultTip}>Pattern: {effectiveTip}</Text> : null}
                 {resolution === 'incorrect' && effectiveMode === 'wordOrder' ? (
                   <View style={styles.wordOrderSolution} testID="scene-word-order-solution">
                     <Text style={styles.wordOrderSolutionLabel}>NATURAL ORDER</Text>
@@ -723,14 +767,7 @@ function SceneScreen() {
                     {scriptPreference !== 'devanagari' ? <Text style={styles.wordOrderSolutionLatin}>{target.latin}</Text> : null}
                   </View>
                 ) : null}
-                {picked === null && resolution === 'incorrect' ? (
-                  <View style={styles.alternateCoachNote} testID="scene-alternate-coach-note">
-                    <Text style={styles.alternateCoachLabel}>ASHA’S COACH NOTE</Text>
-                    {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.alternateCoachHindi}>{ALTERNATE_INCORRECT_COACH.hi}</Text> : null}
-                    {scriptPreference !== 'devanagari' ? <Text style={styles.alternateCoachLatin}>{ALTERNATE_INCORRECT_COACH.latin}</Text> : null}
-                    <Text style={styles.alternateCoachEnglish}>{ALTERNATE_INCORRECT_COACH.en}</Text>
-                  </View>
-                ) : feedbackReply ? <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.resultHindi, scriptPreference !== 'latin' && styles.resultHindiScript]}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
+                {feedbackReply ? <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.resultHindi, scriptPreference !== 'latin' && styles.resultHindiScript]}>{lessonHindiLabel(feedbackReply, scriptPreference)}</Text> : null}
               </View>
             </MotionReveal>
           </View>
@@ -738,7 +775,7 @@ function SceneScreen() {
 
         {recoveryActionsFirst ? answerActions : null}
 
-        {resolution !== null ? (
+        {answerVisible ? (
           <>
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
@@ -772,7 +809,7 @@ function SceneScreen() {
           </>
         ) : null}
 
-        {aiConsent && !needsName && resolution !== null ? (
+        {aiConsent && !needsName && answerVisible ? (
           <View testID="scene-pronunciation">
             <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
           </View>
@@ -784,134 +821,147 @@ function SceneScreen() {
   );
 }
 
+/** A one-line status that is read out, then fades away after 3 s so it does not linger above the turn. */
+function FadingNotice({ children, style }: { children: string; style: StyleProp<TextStyle> }) {
+  const [opacity] = useState(() => new Animated.Value(1));
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const animation = Animated.timing(opacity, { toValue: 0, duration: 400, delay: 3000, useNativeDriver: true });
+    animation.start(({ finished }) => { if (finished) setGone(true); });
+    return () => animation.stop();
+  }, [opacity]);
+  if (gone) return null;
+  return <Animated.Text accessibilityLiveRegion="polite" style={[style, { opacity }]}>{children}</Animated.Text>;
+}
+
 const useStyles = makeStyles((c) => ({
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: 14 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: spacing.lg },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: spacing.md },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   closeButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
   progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
-  beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
   beatSegmentFilled: { backgroundColor: c.brand },
-  turn: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  turn: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.xs },
-  sceneTitle: { flexShrink: 1, color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 29, fontWeight: '700', letterSpacing: -0.3 },
+  sceneTitle: { ...type.title, flexShrink: 1, color: c.ink },
   hudRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: 10 },
-  hudText: { color: c.ink, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  resumeNotice: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '700', textAlign: 'center' },
+  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md },
+  hudText: { ...type.caption, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
+  resumeNotice: { ...type.caption, color: c.brandText, textAlign: 'left', fontWeight: '600' },
+  resumeNoticeQuiet: { ...type.caption, color: c.muted, textAlign: 'left' },
   // Asha's face sits at the top of her bubble; the tightened top-left corner reads as a chat tail.
-  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
   asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
+  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: radius.xl, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
   speakerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  speakerName: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },
-  npc: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
-  npcHindi: hindiType(21),
+  speakerName: { ...type.caption, color: c.muted, fontWeight: '600' },
+  npc: { ...type.headline, color: c.ink, fontWeight: '600' },
+  npcHindi: hindiType(20),
   npcLarge: {},
-  npcLatin: { color: c.brandText, fontFamily: 'System', fontSize: 15, lineHeight: 22, fontWeight: '500' },
-  translation: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
+  npcLatin: { ...type.label, fontFamily: 'System', color: c.brandText },
+  translation: { ...type.bodyLarge, color: c.muted },
+  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
-  speakerText: { color: c.brandText, fontSize: 13, fontWeight: '600' },
+  speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },
-  learnerBubble: { maxWidth: '82%', backgroundColor: c.brand, borderRadius: 22, borderBottomRightRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  learnerText: { color: c.white, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
-  learnerTextHindi: hindiType(19),
+  learnerBubble: { maxWidth: '82%', backgroundColor: c.brand, borderRadius: radius.xl, borderBottomRightRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md }, // Small radius on one corner draws the speech-bubble tail.
+  learnerText: { ...type.headline, color: c.white, fontWeight: '600' },
+  learnerTextHindi: hindiType(20),
   disabled: { opacity: 0.4 },
-  audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: spacing.lg, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  audioError: { ...type.caption, color: c.danger },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  answerTitle: { minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },
-  hintButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
-  hintButtonActive: { backgroundColor: c.gold },
-  hintButtonText: { color: c.goldText, fontSize: 13, fontWeight: '600' },
-  hintButtonTextActive: { color: c.goldDeepText },
+  answerTitle: { ...type.bodyLarge, minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontWeight: '600' },
+  hintButton: { ...buttons.secondary, minWidth: 44, minHeight: 44, borderRadius: radius.pill, paddingHorizontal: spacing.md },
+  hintButtonActive: { backgroundColor: c.ink, borderColor: c.ink },
+  hintButtonText: { ...type.caption, color: c.ink, fontWeight: '600' },
+  hintButtonTextActive: { color: c.white },
   choices: { gap: spacing.sm },
   choice: { minHeight: 64, backgroundColor: c.paperRaised, borderColor: c.lineStrong, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
   choiceCorrect: { borderColor: c.forest, backgroundColor: c.forest },
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
-  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 2 },
+  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: spacing.xs },
   choiceCopyLarge: { flex: 0, width: '100%' },
   choiceHindi: { ...hindiType(20), width: '100%', color: c.ink },
   choiceHindiCorrect: { color: c.white },
   choiceHindiWrong: { color: c.danger },
-  choiceRomanized: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  choiceMeaning: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  choiceRomanized: { ...type.caption, color: c.muted },
+  choiceMeaning: { ...type.caption, color: c.muted },
   choiceMetaCorrect: { color: c.white, opacity: 0.85 },
   choiceMetaWrong: { color: c.danger, opacity: 0.85 },
-  hint: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.goldSoft, justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
+  offlineNote: { gap: spacing.sm },
+  offlineNoteText: { ...type.caption, color: c.muted },
+  offlineNoteLink: { color: c.brandText, fontWeight: '700' },
+  setupEnglish: { ...type.label, color: c.ink },
+  setupHindi: { ...type.caption, color: c.muted },
+  setupHindiScript: { ...hindiType(17), color: c.muted },
   nameStep: { flexGrow: 1 },
   nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  nameStepTitle: { color: c.ink, fontFamily: displayFont, fontSize: 30, lineHeight: 36, fontWeight: '700', letterSpacing: -0.3 },
-  nameStepBody2: { color: c.muted, fontSize: 16, lineHeight: 22 },
-  nameStepNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  nameStepTitle: { ...type.display, color: c.ink },
+  nameStepBody2: { ...type.body, color: c.muted },
+  nameStepNote: { ...type.caption, color: c.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  nameRowText: { flexShrink: 1, color: c.muted, fontSize: 13, fontWeight: '600' },
-  nameRowLink: { color: c.brandText, fontSize: 13, fontWeight: '800' },
-  nameInput: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink, fontSize: 18 },
-  hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  nameRowText: { ...type.caption, flexShrink: 1, color: c.muted, fontWeight: '600' },
+  nameRowLink: { ...type.caption, color: c.brandText, fontWeight: '700' },
+  nameInput: { ...type.headline, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink },
+  hintBody: { ...type.caption, color: c.muted },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },
   resultWrongText: { color: c.danger },
   resultLarge: { alignItems: 'stretch' },
   resultCopy: { gap: spacing.xs },
-  resultTitle: { color: c.forestText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  resultBody: { color: c.ink, fontSize: 14, lineHeight: 20 },
-  resultTip: { color: c.muted, fontSize: 13, lineHeight: 19 },
-  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.dangerLine, borderTopWidth: 1, paddingTop: spacing.md, gap: 2 },
-  wordOrderSolutionLabel: { color: c.muted, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  wordOrderSolutionHindi: { ...hindiType(22), color: c.ink },
-  wordOrderSolutionLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
-  alternateCoachNote: { marginTop: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: 2 },
-  alternateCoachLabel: { color: c.ink, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  alternateCoachHindi: { ...hindiType(19), color: c.ink },
-  alternateCoachLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
-  alternateCoachEnglish: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  resultHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
-  resultHindiScript: hindiType(19),
+  resultTitle: { ...type.label, color: c.forestText, fontWeight: '700' },
+  resultBody: { ...type.caption, color: c.ink },
+  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.dangerLine, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.xs },
+  wordOrderSolutionLabel: { ...type.eyebrow, color: c.muted },
+  wordOrderSolutionHindi: { ...hindiType(20), color: c.ink },
+  wordOrderSolutionLatin: { ...type.label, color: c.brandText },
+  resultHindi: { ...type.headline, color: c.ink, fontWeight: '600' },
+  resultHindiScript: hindiType(20),
   answerActions: { gap: spacing.sm },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '600' },
-  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  nextText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  tryAgainText: { ...type.label, color: c.brandText },
+  nextButton: { ...buttons.primary, width: '100%', alignSelf: 'stretch' },
+  nextText: buttons.primaryText,
   saveRow: { backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   saveRowLarge: { alignItems: 'stretch', flexDirection: 'column' },
   saveCopy: { flex: 1, gap: spacing.xs },
   saveCopyLarge: { flex: 0, width: '100%' },
-  saveTitle: { color: c.ink, fontSize: 15, fontWeight: '600' },
-  saveMeaning: { color: c.muted, fontSize: 13 },
+  saveTitle: { ...type.label, color: c.ink },
+  saveMeaning: { ...type.caption, color: c.muted },
   saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   saveButtonLarge: { alignSelf: 'flex-start' },
   saveButtonActive: { backgroundColor: c.brand, borderColor: c.brand },
   wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.brandSoft, padding: spacing.lg },
-  wordTrayTitle: { color: c.brandText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  wordTrayHint: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  wordTrayTitle: { ...type.label, color: c.brandText, fontWeight: '700' },
+  wordTrayHint: { ...type.caption, color: c.muted },
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  wordTokenText: { color: c.brandText, fontFamily: displayFont, fontSize: 17, lineHeight: 24, fontWeight: '600' },
-  wordTokenHindi: hindiType(18),
+  wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600' },
+  wordTokenHindi: hindiType(17),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
   finishBadge: { width: 74, height: 74, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   finishHeading: { alignItems: 'stretch', gap: spacing.xs },
-  finishHindi: { color: c.brandDark, fontFamily: displayFont, fontSize: 28, lineHeight: 36, fontWeight: '700', textAlign: 'center' },
-  finishHindiScript: hindiType(30),
-  finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
-  finishTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', textAlign: 'center' },
-  notFoundBody: { color: c.muted, fontSize: 16, lineHeight: 23, textAlign: 'center', maxWidth: 320 },
+  finishHindi: { ...type.display, color: c.brandDark, textAlign: 'center' },
+  finishHindiScript: hindiType(28),
+  finishGloss: { ...type.body, color: c.muted, textAlign: 'center' },
+  finishTitle: { ...type.title, color: c.ink, textAlign: 'center' },
+  notFoundBody: { ...type.body, color: c.muted, textAlign: 'center', maxWidth: 320 },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
-  finishValue: { color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 30, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  finishLabel: { color: c.muted, fontSize: 12, textAlign: 'center' },
+  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: spacing.xs },
+  finishValue: { ...type.title, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
+  finishLabel: { ...type.caption, color: c.muted, textAlign: 'center' },
   secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  secondaryText: { ...type.label, color: c.ink },
   tertiaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  tertiaryText: { color: c.forestText, fontSize: 14, fontWeight: '700' },
+  tertiaryText: { ...type.label, color: c.brandText },
 }));

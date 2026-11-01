@@ -4,7 +4,13 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before 
 
 # Model roles
 
-Use Claude Code first for all coding work. Use Cursor (grok-4.7, fast off, medium effort) only as a backup when Claude Code can't do the task, and ask Chris before using any pricier model.
+- Claude Code builds features, pages, multi-file changes, and refactors.
+- Codex reviews every Claude Code build and handles bugs, failing tests, small changes, and code review.
+- Agent Desk (Grok Bot) handles routing, research, specs, docs, and planning.
+- Whichever agent didn't build a change reviews it.
+- Claude Code and Codex cover for each other on the same branch, picking up from a handoff note. If both are unavailable, use a Cursor cloud agent (grok-4.7, fast off, medium effort).
+- Every task gets its own `desk/` branch and ends as a pull request. Nothing merges to main without Chris's yes.
+- Ask Chris before using any pricier model.
 
 # Cloud Agent
 
@@ -17,3 +23,7 @@ On boot, the marketing site listens on port 3000 and the Expo app listens on por
 # Expo version pins (iPhone live-voice microphone)
 
 `expo` is pinned to 57.0.27, `expo-modules-core` / `expo-constants` to 57.0.21, and `package.json` → `expo.install.exclude` lists the packages held at their Oct 21 2026 versions. The Oct 29 Expo patch releases made the iPhone microphone send silence in Asha live voice (bisected on a device 2026-10-30, PR #82). `expo-doctor` would otherwise ask to upgrade them back. Remove the pins and the exclude list together, and only after live voice has been checked on a real iPhone: two Asha calls in a row, with the phone unplugged from the Mac and Continuity Camera off, since a cabled Mac can claim the iPhone microphone and make every app on the phone record silence.
+
+# Design system
+
+UI work follows `docs/design-system.md` (type roles, colour roles, button variants, spacing and radius tokens in `src/theme.ts`). Keep the orange, serif, original look.

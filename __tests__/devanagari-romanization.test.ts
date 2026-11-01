@@ -35,4 +35,22 @@ describe('loanword vowels and rare signs', () => {
       expect(romanizeDevanagari(sample)).not.toMatch(/[\u0900-\u097F]/u);
     }
   });
+
+  it('keeps unknown Latin, English names and punctuation as typed', () => {
+    expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
+    expect(romanizeDevanagari('Chris, bolo "chai"!')).toBe('Chris, bolo "chai"!');
+  });
+});
+
+describe('every consonant letter', () => {
+  const ranges: Array<[number, number]> = [[0x0915, 0x0939], [0x0958, 0x095f], [0x0979, 0x0979], [0x097b, 0x097c], [0x097e, 0x097f]];
+  const letters = ranges.flatMap(([start, end]) => Array.from({ length: end - start + 1 }, (_value, offset) => String.fromCodePoint(start + offset)));
+
+  it.each(letters)('romanizes %s to Latin without dropping it', (letter) => {
+    const latin = romanizeDevanagari(`${letter}ा`);
+    // A dropped consonant leaves only the vowel sign's "aa".
+    expect(latin.toLowerCase()).not.toMatch(/^a+$/u);
+    expect(latin).toMatch(/[A-Za-z]/u);
+    expect(latin).not.toMatch(/[\u0900-\u097F]/u);
+  });
 });

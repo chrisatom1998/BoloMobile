@@ -20,6 +20,14 @@ tags:
 - assertNotVisible: "Live translate"
 - scrollUntilVisible:
     element:
+      text: "Talk with Asha"
+    direction: DOWN
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+- tapOn: "Talk with Asha"
+- scrollUntilVisible:
+    element:
       text: "Enable live practice"
     direction: DOWN
     visibilityPercentage: 100

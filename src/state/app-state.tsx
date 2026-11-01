@@ -4,11 +4,14 @@ import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
+import { deleteAllAshaSessions, endLiveCallForDataDeletion, startAshaSessionRetention } from '@/lib/asha-session-log-store';
+import { isSensitiveEnvelope, revealSensitiveValue, sealSensitiveValue } from '@/lib/sensitive-storage';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
 import { clearObservability, observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { restorableProgressKeys, type RestorableProgress } from '@/lib/progress-backup';
 import { updatePracticeWidget } from '@/lib/practice-widget';
+import { syncOutbox } from '@/lib/sync-outbox';
 import {
   appendChatHistory,
   replaceChatHistorySnapshot,
@@ -17,6 +20,7 @@ import {
   dateKey,
   defaultLearnerProfile,
   defaultPhraseReview,
+  nextDate,
   defaultReminderSettings,
   defaultSceneProgress,
   emptyPractice,
@@ -146,8 +150,32 @@ function addDays(key: string, days: number) {
   return dateKey(value);
 }
 
+async function secureStoredEntries(entries: [string, string][]): Promise<[string, string][]> {
+  return Promise.all(entries.map(async ([key, value]) => (
+    key === storageKeys.chatHistory ? [key, await sealSensitiveValue(AsyncStorage, value)] : [key, value]
+  )));
+}
+
 async function persistState(state: PersistedState, keys: PersistedKey[]) {
-  await AsyncStorage.multiSet(storageEntries(state, keys));
+  await AsyncStorage.multiSet(await secureStoredEntries(storageEntries(state, keys)));
+}
+
+async function readStoredChat(raw: string | null): Promise<string | null> {
+  if (raw == null) return null;
+  if (!isSensitiveEnvelope(raw)) {
+    try {
+      await AsyncStorage.setItem(storageKeys.chatHistory, await sealSensitiveValue(AsyncStorage, raw));
+    } catch (error) {
+      console.warn('Bolo could not encrypt saved chat.', error);
+    }
+    return raw;
+  }
+  try {
+    return await revealSensitiveValue(raw, AsyncStorage);
+  } catch (error) {
+    console.warn('Bolo could not read encrypted chat.', error);
+    return null;
+  }
 }
 
 function reportPersistenceFailure(error: unknown, message = 'Your last change was not saved and has been restored. Check available storage and try again.') {
@@ -213,7 +241,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           streakDays: sanitizeStreakDays(readStored(storageKeys.streakDays)),
           clientId,
           aiConsent: sanitizeAiConsent(readStored(storageKeys.aiConsent)),
-          chatHistory: sanitizeChatHistory(readStored(storageKeys.chatHistory)),
+          chatHistory: sanitizeChatHistory(await readStoredChat(readStored(storageKeys.chatHistory))),
           learnerProfile: sanitizeLearnerProfile(readStored(storageKeys.learnerProfile)),
           sceneProgress: sanitizeSceneProgress(readStored(storageKeys.sceneProgress)),
           phraseReviews: sanitizePhraseReviews(readStored(storageKeys.phraseReviews)),
@@ -280,6 +308,31 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     };
   }, [enqueuePersistence, hydrated, replaceState]);
 
+  // Queued network work (report retries) runs only with consent and the current client id,
+  // and flushes on foreground, on any successful Bolo request, and on its own backoff timer.
+  useEffect(() => syncOutbox.start(), []);
+  // One announcement per delivered report for the whole app; screens only update their rows.
+  useEffect(() => syncOutbox.subscribeDelivered(() => {
+    showAppAlert('Report received', 'Thank you. This reply was sent for review.');
+  }), []);
+  // Saved Asha sessions expire on foreground too, not only at hydration.
+  useEffect(() => startAshaSessionRetention(), []);
+  useEffect(() => {
+    if (!hydrated) return;
+    // Without consent nothing may be queued. A queue that survived a withdrawal whose
+    // cleanup failed is removed now, before consent can be granted again; sending stays
+    // blocked until that removal succeeds.
+    if (stateRef.current.aiConsent === null) {
+      void syncOutbox.clear().catch((error: unknown) => {
+        console.warn('Bolo could not remove queued reports left from a consent withdrawal.', error);
+      });
+    }
+  }, [hydrated]);
+  useEffect(() => {
+    if (!hydrated) return;
+    syncOutbox.setContext({ clientId: state.clientId, enabled: state.aiConsent !== null, consentSince: state.aiConsent?.acceptedAt });
+  }, [hydrated, state.aiConsent, state.clientId]);
+
   useEffect(() => {
     if (!hydrated) return;
     updatePracticeWidget({
@@ -324,7 +377,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         : [...current.phrases, phrase].slice(-100);
       const phraseReviews = { ...current.phraseReviews };
       if (exists) delete phraseReviews[phrase.hi];
-      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview();
+      // A phrase saved during a lesson was just practiced, so its first recall is tomorrow, not "Due now".
+      else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview(nextDate(dateKey()));
       // The 100-phrase cap can drop the oldest phrase; drop its review entry too
       // so orphans never accumulate in storage.
       const kept = new Set(phrases.map((saved) => saved.hi));
@@ -488,6 +542,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
   const setAiConsent = useCallback(async (aiConsent: boolean) => {
     if (clearingAllDataRef.current) return false;
+    // Withdrawing consent drops every queued network operation (pending, in-flight,
+    // and failed reports) before anything else can await; re-granting never resurrects them.
+    const outboxCleared = aiConsent ? null : syncOutbox.clear().then(() => true, () => false);
     let nextConsent: PersistedState['aiConsent'];
     try {
       nextConsent = await enqueuePersistence(() => persistAiConsentChoice(aiConsent));
@@ -500,6 +557,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       return false;
     }
     if (!clearingAllDataRef.current) replaceState({ ...stateRef.current, aiConsent: nextConsent });
+    if (outboxCleared && !(await outboxCleared)) {
+      reportPersistenceFailure(new Error('queued reports were not removed'), 'AI consent is withdrawn, but Bolo could not remove the reports waiting to be sent. They will not be sent; open Settings again to retry removing them.');
+    }
     return true;
   }, [enqueuePersistence, replaceState]);
 
@@ -520,6 +580,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const clearAllData = useCallback(async () => {
     if (clearingAllDataRef.current) return;
     clearingAllDataRef.current = true;
+    // End any live call first so its finalization runs as `data_deleted` and is
+    // never stored, then invalidate the session log and outbox generations before
+    // any await or identifier rotation. Late rows, tool callbacks, and queued
+    // writes from before this point are discarded; stale flush loops stop.
+    endLiveCallForDataDeletion();
+    const sessionDeletion = deleteAllAshaSessions().then(() => true, (error: unknown) => {
+      console.warn('Bolo could not clear the Asha session log.', error);
+      return false;
+    });
+    const outboxDeletion = syncOutbox.clear().then(() => true, (error: unknown) => {
+      console.warn('Bolo could not clear queued reports.', error);
+      return false;
+    });
     const next: PersistedState = {
       ...initialState,
       practice: emptyPractice(),
@@ -530,7 +603,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       // Cancel the scheduled daily reminder before wiping its notificationId,
       // otherwise the OS notification keeps firing with no way to turn it off.
       if (state.reminder.notificationId) await cancelPracticeReminder(state.reminder);
-      await enqueuePersistence(() => AsyncStorage.multiSet(entries));
+      await enqueuePersistence(async () => {
+        await AsyncStorage.multiSet(await secureStoredEntries(entries));
+      });
       clearAiVoicePlaybackCache();
       // Storage now holds the defaults; update in-memory state before anything
       // else can fail so the two never diverge.
@@ -538,9 +613,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } catch (error) {
       console.warn('Bolo could not clear local data.', error);
       observe('runtime_error');
-      throw new Error('Bolo could not clear local data. Your existing local data was left in place.');
+      const [sessionsCleared, outboxCleared] = await Promise.all([sessionDeletion, outboxDeletion]);
+      throw new Error(sessionsCleared && outboxCleared
+        ? 'Bolo could not clear local data. Saved Asha sessions and queued reports were removed, but your other existing local data was left in place.'
+        : 'Bolo could not clear local data. Your existing local data was left in place.');
     } finally {
       clearingAllDataRef.current = false;
+    }
+    // The Asha session log and queued reports live outside PersistedState but hold
+    // the same conversations, so Delete Bolo data must remove them as well.
+    const [sessionsCleared, outboxCleared] = await Promise.all([sessionDeletion, outboxDeletion]);
+    if (!sessionsCleared || !outboxCleared) {
+      observe('runtime_error');
+      throw new Error('Bolo cleared your progress but could not clear saved Asha sessions or queued reports. Try Delete Bolo data again.');
     }
     try {
       await clearObservability();

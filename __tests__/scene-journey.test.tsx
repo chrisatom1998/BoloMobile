@@ -16,6 +16,11 @@ const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
 const mockMarkSceneComplete = jest.fn();
+const mockSetReminder = jest.fn(async () => true);
+const mockCancelNotification = jest.fn(async (..._args: unknown[]) => undefined);
+const mockGetNotificationPermissions = jest.fn();
+const mockRequestNotificationPermissions = jest.fn();
+const mockScheduleNotification = jest.fn();
 const mockTogglePhrase = jest.fn();
 const mockWordDefinitionSheet = jest.fn((_props: unknown) => null);
 const mockAppState = {
@@ -27,9 +32,22 @@ const mockAppState = {
   markSceneComplete: mockMarkSceneComplete,
   motionPreference: 'gentle' as 'gentle' | 'lively' | 'reduced',
   phrases: [] as { en: string; hi: string; latin: string }[],
-  sceneProgress: {} as Record<string, { lastBeatIndex: number; attempt?: SceneAttempt }>,
+  reminder: { enabled: false, hour: 19, minute: 0, notificationId: null as string | null, offerAnswered: undefined as boolean | undefined },
+  sceneProgress: {} as Record<string, { attempt?: SceneAttempt; completions?: number; lastBeatIndex: number }>,
+  setReminder: mockSetReminder,
   togglePhrase: mockTogglePhrase,
 };
+
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: { DEFAULT: 3 },
+  IosAuthorizationStatus: { PROVISIONAL: 3 },
+  SchedulableTriggerInputTypes: { DAILY: 'daily' },
+  cancelScheduledNotificationAsync: (...args: unknown[]) => mockCancelNotification(...args),
+  getPermissionsAsync: (...args: unknown[]) => mockGetNotificationPermissions(...args),
+  requestPermissionsAsync: (...args: unknown[]) => mockRequestNotificationPermissions(...args),
+  scheduleNotificationAsync: (...args: unknown[]) => mockScheduleNotification(...args),
+  setNotificationChannelAsync: jest.fn(async () => undefined),
+}));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
@@ -72,7 +90,7 @@ jest.mock('@/components/word-definition-sheet', () => ({
 }));
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer , touch: jest.fn() }),
 }));
 
 jest.mock('@/lib/speech', () => ({
@@ -137,7 +155,11 @@ describe('SceneScreen primary journey', () => {
     mockAppState.learnerProfile = { scriptPreference: 'both', displayName: '' };
     mockAppState.motionPreference = 'gentle';
     mockAppState.phrases = [];
+    mockAppState.reminder = { enabled: false, hour: 19, minute: 0, notificationId: null, offerAnswered: undefined };
     mockAppState.sceneProgress = {};
+    mockGetNotificationPermissions.mockResolvedValue({ granted: false, ios: { status: 1 } });
+    mockRequestNotificationPermissions.mockResolvedValue({ granted: true, ios: { status: 2 } });
+    mockScheduleNotification.mockResolvedValue('reminder-1');
     mockElapsedSeconds.mockReturnValue(42);
     speakTextMock.mockResolvedValue(true);
   });
@@ -147,7 +169,13 @@ describe('SceneScreen primary journey', () => {
     const wrong = view.getByLabelText(choiceLabel('chai', 0, 1));
 
     await fireEvent.press(wrong);
-    expect(view.getByText('Not quite—notice the pattern.')).toBeTruthy();
+    expect(view.getByText('Not that one.')).toBeTruthy();
+    // The right answer stays hidden after a miss, so the learner can try again or ask for it.
+    expect(view.queryByLabelText(choiceLabel('chai', 0, 0, 1))).toBeNull();
+    expect(view.queryByRole('button', { name: 'Continue' })).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
+    expect(view.getByText('Here’s the natural answer.')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Try again' })).toBeNull();
     expect(view.getByLabelText(choiceLabel('chai', 0, 1, 1)).props.accessibilityState).toEqual({ disabled: true, selected: true });
     expect(view.getByLabelText(choiceLabel('chai', 0, 0, 1)).props.accessibilityState).toEqual({ disabled: true, selected: false });
 
@@ -155,7 +183,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('Turn 2 of 2')).toBeTruthy();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
     expect(view.getByText('Natural choice!')).toBeTruthy();
-    expect(view.getByText('50')).toBeTruthy();
+    expect(view.queryByText('50')).toBeNull();
 
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
@@ -181,9 +209,97 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Back to Today' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
 
-    await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  async function finishChaiLesson() {
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    return view;
+  }
+
+  it('offers a practice reminder once on the first finished lesson and asks permission only after yes', async () => {
+    const view = await finishChaiLesson();
+
+    expect(view.getByText('Remind me tomorrow at this time?')).toBeTruthy();
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Not now' }));
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
+    expect(mockScheduleNotification).not.toHaveBeenCalled();
+    expect(mockSetReminder).toHaveBeenCalledWith(expect.objectContaining({ enabled: false, offerAnswered: true }));
+    expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
+  });
+
+  it('requests notification permission only when the first-lesson reminder is accepted', async () => {
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockRequestNotificationPermissions).toHaveBeenCalledTimes(1));
+    expect(mockScheduleNotification).toHaveBeenCalledTimes(1);
+    expect(mockSetReminder).toHaveBeenCalledWith(expect.objectContaining({
+      enabled: true,
+      notificationId: 'reminder-1',
+      offerAnswered: true,
+    }));
+    expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+  });
+
+  it('cancels the newly scheduled reminder when saving it fails', async () => {
+    mockSetReminder.mockResolvedValueOnce(false);
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockCancelNotification).toHaveBeenCalledWith('reminder-1'));
+    expect(mockScheduleNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the scheduled reminder when saving it succeeds', async () => {
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockSetReminder).toHaveBeenCalled());
+    await act(async () => {
+      await mockSetReminder.mock.results[0]?.value;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCancelNotification).not.toHaveBeenCalled();
+  });
+
+  it('cancels the newly scheduled reminder when saving it throws', async () => {
+    mockSetReminder.mockRejectedValueOnce(new Error('storage full'));
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockCancelNotification).toHaveBeenCalledWith('reminder-1'));
+  });
+
+  it('does not offer a reminder after a lesson was already finished or the offer was answered', async () => {
+    mockAppState.sceneProgress = { friend: { completions: 1, lastBeatIndex: 0 } };
+    const finished = await finishChaiLesson();
+    expect(finished.queryByText('Remind me tomorrow at this time?')).toBeNull();
+
+    mockAppState.sceneProgress = {};
+    mockAppState.reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1', offerAnswered: undefined };
+    const enabled = await finishChaiLesson();
+    expect(enabled.queryByText('Remind me tomorrow at this time?')).toBeNull();
+
+    mockAppState.reminder = { enabled: false, hour: 19, minute: 0, notificationId: null, offerAnswered: true };
+    const answered = await finishChaiLesson();
+    expect(answered.queryByText('Remind me tomorrow at this time?')).toBeNull();
   });
 
   it('closes the lesson from its own header button', async () => {
@@ -257,7 +373,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.queryByText(beat.tip)).toBeNull();
   });
 
-  it('reveals natural word order and keeps Asha’s coach note separate across a no-score retry', async () => {
+  it('reveals natural word order across a no-score retry', async () => {
     mockSceneId = 'plan-essentials-06';
     mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
     const target = getScene(mockSceneId)!.beats[4]!.choices.find((choice) => choice.correct)!;
@@ -276,10 +392,8 @@ describe('SceneScreen primary journey', () => {
     expect(solution.getByText(target.hi)).toBeTruthy();
     expect(solution.getByText(target.latin)).toBeTruthy();
     expect(solution.queryByText(ALTERNATE_COACH_HINDI)).toBeNull();
-    const coach = within(view.getByTestId('scene-alternate-coach-note'));
-    expect(coach.getByText(ALTERNATE_COACH_HINDI)).toBeTruthy();
-    expect(coach.getByText('Karib hai—phir se koshish kijiye.')).toBeTruthy();
-    expect(coach.getByText('Close—try again.')).toBeTruthy();
+    // Asha's generic "close, try again" note was retired; the natural order above is the coaching.
+    expect(view.queryByTestId('scene-alternate-coach-note')).toBeNull();
     const recoveryActions = within(view.getByTestId('scene-answer-actions'));
     expect(recoveryActions.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(recoveryActions.getByRole('button', { name: 'Continue' })).toBeTruthy();
@@ -341,7 +455,10 @@ describe('SceneScreen primary journey', () => {
 
     expect(view.queryByTestId('scene-result-feedback')).toBeNull();
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrong)));
+    expect(view.getByTestId('scene-result-feedback').props.children)
+      .toBe(`That line means “${wrong.en.replace(/[.!?。]+$/, '')}.” Try once more, or show the answer.`);
 
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByTestId('scene-result-feedback').props.children).toBe(wrong.feedback);
   });
 
@@ -378,7 +495,7 @@ describe('SceneScreen primary journey', () => {
       weakPhrases: [],
     });
 
-    await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
     await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
@@ -428,6 +545,8 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByLabelText('Hide Asha’s hint').props.accessibilityState).toEqual({ expanded: true });
 
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0, 1)));
+    expect(view.queryByText('Keep the natural answer')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
     expect(view.getByText('Keep the natural answer')).toBeTruthy();
     expect(view.getByText('Unpack the answer')).toBeTruthy();
     expect(view.getByRole('button', { name: 'Continue' }).props.style).toEqual(expect.objectContaining({
@@ -441,7 +560,7 @@ describe('SceneScreen primary journey', () => {
     expect(testIds.indexOf('scene-words')).toBeLessThan(testIds.indexOf('scene-pronunciation'));
   });
 
-  it('shows Devanagari and Romanized Hindi before a choice and reveals English for every option after a tap', async () => {
+  it('shows Devanagari and Romanized Hindi before a choice and reveals English for every option once the answer is shown', async () => {
     const beat = getScene('chai')!.beats[0]!;
     const view = await render(<SceneScreen />);
     const choicesBefore = view.getByTestId('scene-choices');
@@ -458,6 +577,12 @@ describe('SceneScreen primary journey', () => {
     }
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(beat.choices[1]!)));
+    // Before the answer is shown, only the learner's own pick explains itself in English.
+    const choicesMissed = view.getByTestId('scene-choices');
+    for (const choice of beat.choices) {
+      expect(within(choicesMissed).queryAllByText(choice.en)).toHaveLength(choice === beat.choices[1] ? 1 : 0);
+    }
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     const choicesAfter = view.getByTestId('scene-choices');
     const buttonsAfter = within(choicesAfter).getAllByRole('button');
@@ -502,6 +627,7 @@ describe('SceneScreen primary journey', () => {
     });
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(wrongChoice)));
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     expect(StyleSheet.flatten(view.getByLabelText(choiceAccessibilityLabel(wrongChoice, wrongChoice)).props.style)).toMatchObject({
       backgroundColor: lightColors.dangerSoft,
@@ -533,12 +659,14 @@ describe('SceneScreen primary journey', () => {
       .map((button) => String(button.props.accessibilityLabel))).toEqual(displayOrder);
 
     await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor)));
+    expect(view.getByText('Not that one.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show answer' }));
 
     expect(view.getByLabelText(choiceAccessibilityLabel(selectedDistractor, selectedDistractor)).props.accessibilityState)
       .toEqual({ disabled: true, selected: true });
     expect(view.getByLabelText(choiceAccessibilityLabel(target, selectedDistractor)).props.accessibilityState)
       .toEqual({ disabled: true, selected: false });
-    expect(view.getByText('Not quite—notice the pattern.')).toBeTruthy();
+    expect(view.getByText('Here’s the natural answer.')).toBeTruthy();
     expect(view.getByText('0 correct')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Save phrase'));
     expect(mockTogglePhrase).toHaveBeenCalledWith(target);
@@ -570,7 +698,7 @@ describe('SceneScreen primary journey', () => {
       expect(shuffleSpy).toHaveBeenCalledTimes(1);
       await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
       await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
-      await fireEvent.press(view.getByRole('button', { name: 'Replay scene' }));
+      await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
 
       expect(view.getByText('Turn 1 of 1')).toBeTruthy();
       expect(shuffleSpy).toHaveBeenCalledTimes(2);
@@ -689,6 +817,18 @@ describe('SceneScreen primary journey', () => {
     expect(stopSpeakingMock).toHaveBeenCalled();
   });
 
+  it('leads guided starter lessons with English and keeps their Hindi narration behind Listen', async () => {
+    mockSceneId = 'plan-essentials-01';
+    const beat = getScene(mockSceneId)!.beats[0]!;
+    const view = await render(<SceneScreen />);
+    expect(view.getByText(beat.translation)).toBeTruthy();
+    expect(view.getByText(romanizeDevanagari(beat.npc))).toBeTruthy();
+    await act(async () => { await Promise.resolve(); });
+    expect(speakTextMock).not.toHaveBeenCalled();
+    await fireEvent.press(view.getByLabelText('Hear Asha'));
+    expect(speakTextMock).toHaveBeenCalledTimes(1);
+  });
+
   it('stacks the scene HUD, answer choices, and follow-up controls at accessibility text sizes', async () => {
     const window = Dimensions.get('window');
     const screen = Dimensions.get('screen');
@@ -748,7 +888,8 @@ describe('lesson audit regressions', () => {
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 27, {
       attemptId: 'new-attempt', correct: 1, total: 2, score: 50, weakPhrases: ['एक चाय दीजिए।'],
     });
-    expect(final.getByText('points')).toBeTruthy();
+    expect(final.getByText('right first try')).toBeTruthy();
+    expect(final.queryByText('points')).toBeNull();
   });
 
   it('does not count a correct answer twice when reloading before Continue', async () => {
@@ -831,13 +972,15 @@ describe('lesson audit regressions', () => {
     expect(view.getByText('Practicing as Chris')).toBeTruthy();
   });
 
-  it('offers an offline action and keeps the consent details optional', async () => {
+  it('works offline by default and keeps the consent details optional', async () => {
     mockAppState.aiConsent = false;
     const view = await render(<SceneScreen />);
     expect(view.getByTestId('scene-ai-details').props.accessibilityState.expanded).toBe(false);
-    await fireEvent.press(view.getByTestId('scene-offline-continue'));
+    expect(view.getByText('Works offline · Add Asha coaching')).toBeTruthy();
+    expect(view.queryByTestId('scene-offline-continue')).toBeNull();
     await fireEvent.press(view.getByTestId('scene-choice-0'));
     expect(view.getByTestId('scene-continue')).toBeTruthy();
-    expect(view.getByText('Offline lesson ready — no AI consent needed.')).toBeTruthy();
+    await fireEvent.press(view.getByTestId('scene-ai-details'));
+    expect(view.getByTestId('scene-ai-details').props.accessibilityState.expanded).toBe(true);
   });
 });

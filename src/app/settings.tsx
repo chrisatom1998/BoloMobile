@@ -15,15 +15,24 @@ import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminder
 import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
+import { syncOutbox } from '@/lib/sync-outbox';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { MotionPreference, ReminderSettings } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
   const normalizedHour = Math.min(23, Math.max(0, Math.round(hour)));
   const normalizedMinute = Math.min(59, Math.max(0, Math.round(minute)));
   return `${normalizedHour % 12 || 12}:${String(normalizedMinute).padStart(2, '0')} ${normalizedHour >= 12 ? 'PM' : 'AM'}`;
+}
+
+/** Morning, lunch, and evening choices; a time restored from a backup stays listed so it still shows as selected. */
+const reminderPresetHours = [7, 9, 12, 18, 19, 20, 21] as const;
+function reminderHours(savedHour?: number) {
+  const hours: number[] = [...reminderPresetHours];
+  if (savedHour !== undefined && !hours.includes(savedHour)) hours.push(savedHour);
+  return hours.sort((a, b) => a - b);
 }
 
 const motionDescriptions: Record<MotionPreference, string> = {
@@ -66,7 +75,7 @@ export default function SettingsScreen() {
     if (withdrawing) return;
     showAppAlert(
       'Withdraw AI processing consent?',
-      'AI Listen, typed coaching, live voice, and pronunciation feedback will stop working until you consent again. Written scenes and saved phrases still work offline.',
+      'AI Listen, typed coaching, live voice, and pronunciation feedback will stop working until you consent again. Lessons, reviews and saved phrases still work offline.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Withdraw', style: 'destructive', onPress: () => void performWithdrawal() },
@@ -103,6 +112,13 @@ export default function SettingsScreen() {
     const controller = new AbortController();
     deletionRef.current = controller;
     try {
+      // Drop queued reports before asking the server to delete: otherwise a retry could
+      // file one after the deletion (a successful request wakes the outbox), recreating
+      // a report the learner just deleted. clear() blocks sending synchronously; if its
+      // storage removal fails, sending stays blocked and clearAllData() retries it.
+      void syncOutbox.clear().catch((error: unknown) => {
+        console.warn('Bolo could not clear queued reports before deletion.', error);
+      });
       await deleteMobileData(clientId, controller.signal);
       await clearAllPracticeReminders();
       await clearAllData();
@@ -208,7 +224,7 @@ export default function SettingsScreen() {
     const exported = new Date(backup.exportedAt).toLocaleDateString();
     showAppAlert(
       'Replace progress on this device?',
-      `Restoring the backup from ${exported} replaces the saved phrases, reviews, scene progress, streaks, goal, and learning preferences on this device. Your AI consent choice and Asha chat history are not changed.`,
+      `Restoring the backup from ${exported} replaces the saved phrases, reviews, lesson progress, streaks, goal, and learning preferences on this device. Your AI consent choice and Asha chat history are not changed.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Restore', style: 'destructive', onPress: () => void performRestore(backup) },
@@ -310,7 +326,7 @@ export default function SettingsScreen() {
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><Sparkles color={colors.forest} size={22} /></View>
-          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Movement</Text><Text style={styles.body}>Choose how much the interface moves</Text></View>
+          <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Motion</Text><Text style={styles.body}>Gentle movement, or almost none</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Animation style</Text>
         <SegmentedControl
@@ -319,10 +335,11 @@ export default function SettingsScreen() {
           compact
           onValueChange={setMotionPreference}
           options={[
-            { label: 'System', value: 'system' },
             { label: 'Gentle', value: 'gentle' },
-            { label: 'Lively', value: 'lively' },
             { label: 'Reduced', value: 'reduced' },
+            // Older builds offered System and Lively; keep whichever one is saved visible until it is changed.
+            ...(motionPreference === 'system' ? [{ label: 'System', value: 'system' as const }] : []),
+            ...(motionPreference === 'lively' ? [{ label: 'Lively', value: 'lively' as const }] : []),
           ]}
           stacked={stackMotionPreferences}
           stackedAtLargeText
@@ -347,13 +364,11 @@ export default function SettingsScreen() {
           onValueChange={(next) => void changeReminder(next === 'off' ? undefined : Number(next))}
           options={[
             { label: 'Off', value: 'off' },
-            { label: formatReminderTime(9), value: '9' },
-            { label: formatReminderTime(19), value: '19' },
-            { label: formatReminderTime(20), value: '20' },
+            ...reminderHours(reminder.enabled ? reminder.hour : undefined).map((hour) => ({ label: formatReminderTime(hour), value: String(hour) })),
           ]}
           stackedAtLargeText
           testID="practice-reminder-control"
-          value={reminder.enabled ? String(reminder.hour) as '9' | '19' | '20' : 'off'}
+          value={reminder.enabled ? String(reminder.hour) : 'off'}
         />
       </View>
 
@@ -367,18 +382,12 @@ export default function SettingsScreen() {
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: withdrawing }} disabled={withdrawing} onPress={withdraw} style={[styles.destructiveButton, withdrawing && styles.disabled]}><Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{withdrawing ? 'Saving…' : 'Withdraw consent'}</Text></Pressable>
         </View>
       ) : (
-        <AiConsentGate><View /></AiConsentGate>
+        <AiConsentGate compact={{ body: 'Asha coaching is off. Lessons, reviews and saved-phrase audio all work offline without it.', label: 'Review and turn on Asha coaching' }}><View /></AiConsentGate>
       )}
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/privacy')} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]} testID="settings-privacy-link">
         <View style={styles.icon}><LockKeyhole color={colors.ink} size={22} /></View>
         <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Privacy & data use</Text><Text style={styles.body}>Read the in-app data summary</Text></View>
-        <ChevronRight color={colors.muted} size={20} />
-      </Pressable>
-
-      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
-        <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
-        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Private diagnostics</Text><Text style={styles.body}>View content-free reliability counters stored on this device</Text></View>
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
@@ -400,12 +409,18 @@ export default function SettingsScreen() {
         <ChevronRight color={colors.muted} size={20} />
       </Pressable>
 
+      <Pressable accessibilityRole="button" onPress={() => router.push('/diagnostics' as Href)} style={[styles.linkCard, largeTextLayout && styles.linkCardLarge]}>
+        <View style={styles.icon}><Activity color={colors.ink} size={22} /></View>
+        <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text style={styles.title}>Diagnostics for support</Text><Text style={styles.body}>Simple counts that help us fix problems. Stays on this phone.</Text></View>
+        <ChevronRight color={colors.muted} size={20} />
+      </Pressable>
+
       <View style={styles.card} testID="settings-progress-backup">
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
           <View style={styles.icon}><ArchiveRestore color={colors.forest} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Progress backup</Text><Text style={styles.body}>Keep your progress when you change phones</Text></View>
         </View>
-        <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, scene progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
+        <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, lesson progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
         <View style={[styles.buttonRow, largeTextLayout && styles.buttonRowLarge]}>
           <Pressable
             accessibilityHint="Opens the share sheet to save a backup file"
@@ -439,7 +454,7 @@ export default function SettingsScreen() {
           <View style={styles.icon}><DatabaseBackup color={colors.danger} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Delete Bolo data</Text><Text style={styles.body}>Reports and this device&apos;s local data</Text></View>
         </View>
-        <Text style={styles.detail}>Bolo first deletes reports associated with your random app identifier. It then clears local data and rotates that identifier. If the request fails, the identifier is kept so you can retry.</Text>
+        <Text style={styles.detail}>Deletes any reports you sent from this phone, then erases your phrases, progress and settings here. If Bolo can&apos;t reach its server, nothing is erased and you can try again.</Text>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: deleting }} disabled={deleting} onPress={confirmDeletion} style={[styles.destructiveButton, deleting && styles.disabled]}>
           <Trash2 color={colors.danger} size={18} /><Text style={styles.destructiveText}>{deleting ? 'Deleting…' : 'Delete my Bolo data'}</Text>
         </Pressable>
@@ -461,22 +476,22 @@ const useStyles = makeStyles((c) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, gap: 3 },
+  copy: { flex: 1, gap: spacing.xs },
   copyLarge: { flex: 0, width: '100%' },
-  title: { color: c.ink, fontSize: 16, fontWeight: '900' },
-  body: { color: c.muted, fontSize: 13 },
-  detail: { color: c.muted, fontSize: 14, lineHeight: 21 },
-  motionPriority: { color: c.muted, fontSize: 12, lineHeight: 18 },
+  title: { ...type.label, color: c.ink, fontWeight: '700' },
+  body: { ...type.caption, color: c.muted },
+  detail: { ...type.caption, color: c.muted },
+  motionPriority: { ...type.caption, color: c.muted },
   destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  destructiveText: { color: c.danger, fontSize: 15, fontWeight: '800' },
+  destructiveText: { ...type.label, color: c.danger, fontWeight: '700' },
   disabled: { opacity: 0.5 },
-  choiceLabel: { color: c.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  choiceLabel: { ...type.eyebrow, color: c.muted },
+  secondaryButton: buttons.secondary,
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   buttonRowLarge: { flexDirection: 'column' },
   backupButton: { flexGrow: 1, flexBasis: 160, flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
-  secondaryText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  secondaryText: buttons.secondaryText,
   backupText: { flexShrink: 1 },
   about: { padding: spacing.lg, gap: spacing.sm },
-  aboutText: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  aboutText: { ...type.caption, color: c.muted },
 }));
