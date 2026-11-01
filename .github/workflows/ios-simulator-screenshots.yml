@@ -1,0 +1,340 @@
+name: iOS simulator screenshots
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches:
+      - 'screenshots/pr-*'
+  workflow_dispatch:
+    inputs:
+      screens:
+        description: 'Comma-separated screen ids, all, or none. Empty uses the branch map.'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: ios-simulator-screenshots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      screens: ${{ steps.plan.outputs.screens }}
+      build: ${{ steps.plan.outputs.build }}
+      prefix: ${{ steps.plan.outputs.prefix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+      - id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true && 'true' || 'false' }}
+          PR_USER: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}
+          PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
+          PR_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          set -euo pipefail
+          changed="$RUNNER_TEMP/screenshot-changed-files.txt"
+          : > "$changed"
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            git diff --name-only "$PR_BASE_SHA" HEAD > "$changed"
+          fi
+          decision="$(node scripts/ios-screenshot-plan.mjs --should-run --event "$EVENT_NAME" --draft "$PR_DRAFT" --user "$PR_USER" --labels "$PR_LABELS" --files "$changed")"
+          echo "run=$decision" >> "$GITHUB_OUTPUT"
+          {
+            echo "### iOS simulator screenshots"
+            if [[ "$decision" == "true" ]]; then
+              echo "Gate passed."
+            else
+              echo "Skipped the macOS build."
+              echo "A pull request runs screenshots when it changes \`src/**\`, \`assets/**\`, \`app.json\`, \`app.config.*\`, \`package.json\`, \`package-lock.json\`, \`.maestro/**\`, or this workflow."
+              echo "The \`screenshots\` label also opts a pull request in, including a draft."
+              echo "Dependabot pull requests are skipped."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - id: plan
+        if: steps.decide.outputs.run == 'true'
+        env:
+          SCREENSHOT_BRANCH: ${{ github.head_ref || github.ref_name }}
+          SCREENSHOT_SCREENS_INPUT: ${{ github.event.inputs.screens || '' }}
+        run: |
+          set -euo pipefail
+          screens="$(node scripts/ios-screenshot-plan.mjs --branch "$SCREENSHOT_BRANCH" --input "$SCREENSHOT_SCREENS_INPUT")"
+          echo "screens=$screens" >> "$GITHUB_OUTPUT"
+          if [[ "$screens" == "none" ]]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$SCREENSHOT_BRANCH" == screenshots/pr-* ]]; then
+            echo "prefix=pr${SCREENSHOT_BRANCH#screenshots/pr-}" >> "$GITHUB_OUTPUT"
+          else
+            echo "prefix=main" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "Branch \`$SCREENSHOT_BRANCH\` captures \`$screens\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ios-simulator-build:
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.SCREENSHOT_RUNNER == 'hosted' && 'macos-26' || fromJSON('["self-hosted","macOS","bolo-screenshots"]') }}
+    timeout-minutes: 75
+    env:
+      CI: 1
+      EXPO_NO_TELEMETRY: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Use the Xcode installed on this runner
+        run: |
+          set -euo pipefail
+          developer=""
+          best=0
+          for app in /Applications/Xcode*.app; do
+            bin="$app/Contents/Developer/usr/bin/xcodebuild"
+            if [[ ! -x "$bin" ]]; then
+              continue
+            fi
+            version="$("$bin" -version | awk 'NR==1 { print $2 }')"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            score=$((major * 1000 + minor))
+            if (( score > best )); then
+              best="$score"
+              developer="$app/Contents/Developer"
+            fi
+          done
+          if [[ -z "$developer" ]]; then
+            developer="$(xcode-select -p)"
+          fi
+          echo "DEVELOPER_DIR=$developer" >> "$GITHUB_ENV"
+          echo "Using $developer"
+          "$developer/usr/bin/xcodebuild" -version
+      - run: npm ci
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+      - name: Install CocoaPods dependencies
+        run: pod install --project-directory=ios --repo-update
+      - name: Validate App Intents and the local Expo module
+        run: node scripts/validate-native-project.mjs --require-workspace
+      - name: Build unsigned Release app for the simulator
+        run: |
+          xcodebuild \
+            -workspace ios/Bolo.xcworkspace \
+            -scheme Bolo \
+            -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/BoloDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Package simulator app
+        run: |
+          app="$RUNNER_TEMP/BoloDerivedData/Build/Products/Release-iphonesimulator/Bolo.app"
+          test -d "$app"
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/Bolo-simulator.zip"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: bolo-ios-screenshots-app-${{ github.run_id }}
+          path: ${{ runner.temp }}/Bolo-simulator.zip
+          if-no-files-found: error
+          retention-days: 3
+      - name: Clean up simulator and DerivedData
+        if: always()
+        run: |
+          xcrun simctl shutdown all || true
+          xcrun simctl delete "$SIM_UDID" || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData/Bolo* || true
+
+  capture:
+    needs: [gate, ios-simulator-build]
+    if: needs.gate.outputs.run == 'true' && needs.gate.outputs.build == 'true' && needs.ios-simulator-build.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.SCREENSHOT_RUNNER == 'hosted' && 'macos-26' || fromJSON('["self-hosted","macOS","bolo-screenshots"]') }}
+    timeout-minutes: 45
+    env:
+      CI: 1
+      MAESTRO_CLI_NO_ANALYTICS: 1
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: 300000
+      MAESTRO_VERSION: 2.8.0
+      MAESTRO_SHA256: b3e561161904fb391875ca5834d5b22cf0b01c052dd1b408ad83e30d8f8951b3
+      SCREENSHOT_SCREENS: ${{ needs.gate.outputs.screens }}
+      SCREENSHOT_PREFIX: ${{ needs.gate.outputs.prefix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: '.nvmrc'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Use the Xcode installed on this runner
+        run: |
+          set -euo pipefail
+          developer=""
+          best=0
+          for app in /Applications/Xcode*.app; do
+            bin="$app/Contents/Developer/usr/bin/xcodebuild"
+            if [[ ! -x "$bin" ]]; then
+              continue
+            fi
+            version="$("$bin" -version | awk 'NR==1 { print $2 }')"
+            major="${version%%.*}"
+            rest="${version#*.}"
+            minor="${rest%%.*}"
+            score=$((major * 1000 + minor))
+            if (( score > best )); then
+              best="$score"
+              developer="$app/Contents/Developer"
+            fi
+          done
+          if [[ -z "$developer" ]]; then
+            developer="$(xcode-select -p)"
+          fi
+          echo "DEVELOPER_DIR=$developer" >> "$GITHUB_ENV"
+          echo "Using $developer"
+          "$developer/usr/bin/xcodebuild" -version
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: bolo-ios-screenshots-app-${{ github.run_id }}
+          path: ${{ runner.temp }}/bolo-artifact
+      - name: Unpack simulator app
+        run: |
+          ditto -x -k "$RUNNER_TEMP/bolo-artifact/Bolo-simulator.zip" "$RUNNER_TEMP/bolo-app"
+          test -d "$RUNNER_TEMP/bolo-app/Bolo.app"
+      - name: Create and boot the simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_id="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable == true and (.identifier | startswith("com.apple.CoreSimulator.SimRuntime.iOS-")))] | sort_by(.version | split(".") | map(tonumber)) | last | .identifier // empty')"
+          device_name="iPhone 15"
+          device_type_id="$(xcrun simctl list devicetypes --json | jq -r --arg name "$device_name" '[.devicetypes[] | select(.name == $name) | .identifier] | first // empty')"
+          if [[ -z "$runtime_id" || -z "$device_type_id" ]]; then
+            echo "::error::No available iOS runtime or iPhone 15 simulator device type."
+            xcrun simctl list runtimes
+            xcrun simctl list devicetypes
+            exit 1
+          fi
+          echo "Using ${device_name} on ${runtime_id}"
+          echo "### Simulator" >> "$GITHUB_STEP_SUMMARY"
+          echo "${device_name} on ${runtime_id}" >> "$GITHUB_STEP_SUMMARY"
+          udid="$(xcrun simctl create "Bolo screenshots $GITHUB_RUN_ID" "$device_type_id" "$runtime_id")"
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid"
+          open -a Simulator --args -CurrentDeviceUDID "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl ui "$udid" appearance light || true
+          xcrun simctl status_bar "$udid" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
+      - name: Install the app
+        run: |
+          xcrun simctl install "$SIM_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+          xcrun simctl get_app_container "$SIM_UDID" com.bolo.hindi app
+      - name: Install pinned Maestro CLI
+        run: |
+          curl --fail --silent --show-error --location \
+            --proto '=https' --proto-redir '=https' \
+            --retry 3 --output "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP/maestro"
+          echo "$RUNNER_TEMP/maestro/maestro/bin" >> "$GITHUB_PATH"
+      - name: Capture screens
+        timeout-minutes: 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          flows=()
+          while IFS= read -r flow; do
+            [[ -n "$flow" ]] && flows+=("$flow")
+          done < <(node scripts/ios-screenshot-plan.mjs --flows --input "$SCREENSHOT_SCREENS")
+          if [[ "${#flows[@]}" -eq 0 ]]; then
+            echo "::error::No screenshot flows for $SCREENSHOT_SCREENS"
+            exit 1
+          fi
+          capture() {
+            rm -rf maestro-junit.xml maestro-artifacts ios-simulator-screenshots
+            maestro test \
+              --device "$SIM_UDID" \
+              --format junit \
+              --output maestro-junit.xml \
+              --debug-output maestro-artifacts/driver-logs \
+              --test-output-dir ios-simulator-screenshots \
+              "${flows[@]}"
+          }
+          reboot_simulator() {
+            xcrun simctl shutdown "$SIM_UDID" || true
+            xcrun simctl boot "$SIM_UDID" || true
+            open -a Simulator --args -CurrentDeviceUDID "$SIM_UDID" || true
+            xcrun simctl bootstatus "$SIM_UDID" -b
+            xcrun simctl ui "$SIM_UDID" appearance light || true
+            xcrun simctl status_bar "$SIM_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularMode active --cellularBars 4 || true
+            xcrun simctl install "$SIM_UDID" "$RUNNER_TEMP/bolo-app/Bolo.app"
+          }
+          if ! capture; then
+            echo "::warning::Screenshot flows failed; rebooting the simulator and retrying once."
+            rm -rf maestro-attempt-1
+            mkdir -p maestro-attempt-1
+            if [[ -f maestro-junit.xml ]]; then mv maestro-junit.xml maestro-attempt-1/maestro-junit.xml; fi
+            if [[ -d maestro-artifacts ]]; then mv maestro-artifacts maestro-attempt-1/maestro-artifacts; fi
+            if [[ -d ios-simulator-screenshots ]]; then mv ios-simulator-screenshots maestro-attempt-1/ios-simulator-screenshots; fi
+            reboot_simulator
+            capture
+          fi
+      - name: Name screenshots
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p named-screenshots
+          if [[ -d ios-simulator-screenshots ]]; then
+            while IFS= read -r -d '' png; do
+              cp "$png" "named-screenshots/${SCREENSHOT_PREFIX}-$(basename "$png")"
+            done < <(find ios-simulator-screenshots -name '*.png' -print0)
+          fi
+          node scripts/ios-screenshot-plan.mjs --check --dir named-screenshots --input "$SCREENSHOT_SCREENS" --prefix "$SCREENSHOT_PREFIX"
+          find named-screenshots -name '*.png' | sort
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: ios-simulator-screenshots-${{ needs.gate.outputs.prefix }}-${{ github.run_id }}
+          path: named-screenshots
+          if-no-files-found: warn
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: ios-simulator-screenshot-logs-${{ needs.gate.outputs.prefix }}-${{ github.run_id }}
+          path: |
+            maestro-junit.xml
+            maestro-artifacts
+            maestro-attempt-1
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Clean up simulator and DerivedData
+        if: always()
+        run: |
+          xcrun simctl shutdown all || true
+          xcrun simctl delete "$SIM_UDID" || true
+          rm -rf ~/Library/Developer/Xcode/DerivedData/Bolo* || true
