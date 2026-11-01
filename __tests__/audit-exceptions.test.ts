@@ -54,10 +54,6 @@ function emptyAcceptance(): AcceptanceRecord {
   };
 }
 
-function activeAcceptance(): AcceptanceRecord {
-  return emptyAcceptance();
-}
-
 function advisory(ghsa: string, title: string) {
   return {
     source: ghsa,
@@ -114,19 +110,12 @@ describe('dependency audit exceptions', () => {
     expect(result.failures.join(' ')).toContain('not approved by the audit gate');
   });
 
-  it('accepts a clean audit with the active exception record', () => {
-    const result = evaluate(cleanAudit(), activeAcceptance());
-
-    expect(result.ok).toBe(true);
-    expect(result.failures).toEqual([]);
-    expect(result.accepted).toEqual([]);
-  });
-
   it('accepts a clean audit when no high-severity exceptions are approved', () => {
     const result = evaluate(cleanAudit(), emptyAcceptance());
 
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
+    expect(result.accepted).toEqual([]);
   });
 
   it('rejects the retired braces and node-forge advisories if they reappear', () => {
@@ -169,7 +158,7 @@ describe('dependency audit exceptions', () => {
       },
     };
 
-    expect(evaluate(audit, activeAcceptance()).ok).toBe(true);
+    expect(evaluate(audit, emptyAcceptance()).ok).toBe(true);
   });
 
   it('fails closed on a pure high-severity via cycle', () => {
