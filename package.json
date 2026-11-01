@@ -96,7 +96,7 @@
     "production:validate": "node ./scripts/validate-production-config.mjs",
     "native:validate": "node ./scripts/validate-native-project.mjs",
     "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs",
-    "postinstall": "node ./scripts/patch-query-string-decoder.mjs && node ./scripts/patch-glob-minimatch.mjs && node ./scripts/patch-minimatch-callable.mjs"
+    "postinstall": "node ./scripts/patch-query-string-decoder.mjs"
   },
   "expo": {
     "doctor": {
@@ -129,13 +129,34 @@
   "overrides": {
     "uuid": "^11.1.1",
     "brace-expansion": "^5.0.12",
-    "minimatch@^3.0.0": "11.0.3",
+    "minimatch@^3.0.0": {
+      "brace-expansion": "1.1.21"
+    },
     "minimatch@^10.0.0": "11.0.3",
     "glob@^13.0.0": "14.0.3",
+    "eslint-plugin-import": {
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
+    },
+    "eslint-plugin-react": {
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
+    },
+    "eslint-plugin-jsx-a11y": {
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
+    },
     "test-exclude": {
-      ".": "8.0.0",
-      "glob": "14.0.3",
-      "minimatch": "11.0.3"
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
     },
     "node-forge": "1.4.2",
     "zod": "4.6.7",
