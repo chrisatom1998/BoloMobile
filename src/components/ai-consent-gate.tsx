@@ -9,7 +9,7 @@ import { openPublicPage } from '@/lib/public-pages';
 import { observe, observeOncePerSession } from '@/lib/observability';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
 
 type AiConsentPresentation = 'card' | 'sheet';
 
@@ -125,7 +125,7 @@ export function AiConsentGate({
             Core lesson and saved-phrase audio is bundled with Bolo and works offline without sending text anywhere. After you agree, Bolo uses its service and OpenAI for generated Asha speech, submitted text, live voice turns, and pronunciation recordings. Typed coaching and live voice startup include a short recent conversation history. Starting live voice requests microphone permission and opens a WebRTC media stream. Your microphone stays on continuously until you mute it by tapping the orb. Tap again to unmute; you can speak while Asha is speaking. The stream is released when you tap End (the close control), leave the screen, or the app leaves the foreground. Minimizing Asha keeps that same live session while you browse other screens in Bolo; it still ends when you tap End or the app leaves the foreground. Live voice does not create a recording file or capture microphone audio in the background. Asha&apos;s spoken reply travels directly from OpenAI to the app. To tailor live voice, Bolo also sends your learner level, the suggested lesson, a few of its phrases, and a few of your saved phrases; during the call Asha can ask the app for a summary of your lessons, progress, and saved phrases, save a phrase only after you approve it in the app, and record lesson practice. Those requests and their results pass through OpenAI. A random app identifier is used for safety and deletion requests. Do not include sensitive personal information.
           </Text>
           <Text style={styles.detail}>
-            Saved phrases, learning progress, preferences, reminder settings, content-free reliability counters, and up to 100 recent Asha chat messages are stored unencrypted on this device; live voice shares only the parts described above. Reliability counters contain no messages, transcripts, audio, phrases, identifiers, or error text and are never uploaded. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
+            Saved phrases, learning progress, preferences, reminder settings, and content-free reliability counters are stored unencrypted on this device. Up to 100 recent Asha chat messages are encrypted on this device; live voice shares only the parts described above. Reliability counters contain no messages, transcripts, audio, phrases, identifiers, or error text and are never uploaded. Bolo stores generated content off device only when you choose Report, keeps those reports for up to 90 days, and lets you delete local data and reports from Settings. OpenAI does not use API data to train models unless the developer opts in and may retain abuse-monitoring logs for up to 30 days unless different data controls apply. You can withdraw consent at any time.
           </Text>
         </View>
       ) : null}
@@ -178,30 +178,30 @@ function ConsentNoticeSheet({ children, onClose, reducedMotion }: { children: Re
 const useStyles = makeStyles((c) => ({
   card: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.xl, gap: spacing.md },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { minWidth: 0, flex: 1, color: c.ink, fontFamily: 'Georgia', fontSize: 22, lineHeight: 28, fontWeight: '700' },
+  title: { ...type.headline, minWidth: 0, flex: 1, color: c.ink },
   summary: { gap: spacing.sm },
   summaryItem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  bullet: { color: c.forest, fontSize: 15, lineHeight: 22, fontWeight: '900' },
-  summaryText: { minWidth: 0, flex: 1, color: c.ink, fontSize: 15, lineHeight: 22 },
+  bullet: { ...type.label, color: c.brandText, fontWeight: '700' },
+  summaryText: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
   disclosure: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  disclosureText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
-  disclosureChevron: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  disclosureText: { ...type.label, color: c.brandText, fontWeight: '700' },
+  disclosureChevron: { ...type.label, color: c.brandText, fontWeight: '700' },
   notice: { gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
-  body: { color: c.ink, fontSize: 15, lineHeight: 22 },
-  detail: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  body: { ...type.body, color: c.ink },
+  detail: { ...type.caption, color: c.muted },
   link: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  linkText: { color: c.forestText, fontSize: 14, fontWeight: '800', textDecorationLine: 'underline' },
-  button: { minHeight: 50, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  buttonText: { color: c.white, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  version: { color: c.mutedSoft, fontSize: 11, lineHeight: 15 },
+  linkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
+  button: buttons.primary,
+  buttonText: buttons.primaryText,
+  version: { ...type.caption, color: c.mutedSoft },
   disabled: { opacity: 0.5 },
   compactCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
-  compactBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  compactBody: { ...type.caption, color: c.muted },
   compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  compactButtonText: { color: c.forestText, fontSize: 14, fontWeight: '800' },
+  compactButtonText: { ...type.label, color: c.brandText, fontWeight: '700' },
   sheetScreen: { flex: 1, backgroundColor: c.background },
   sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
   sheetClose: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
-  sheetCloseText: { color: c.brandText, fontSize: 17, fontWeight: '600' },
+  sheetCloseText: buttons.quietText,
   sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
 }));

@@ -6,7 +6,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type PracticeResult = 'correct' | 'incorrect';
 
@@ -131,23 +131,23 @@ export function RecallRevealPractice({ disabled = false, scriptPreference = 'bot
 
 const useStyles = makeStyles((c) => ({
   container: { gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
-  instructions: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '900' },
+  instructions: { ...type.label, color: c.brandText, fontWeight: '700' },
   promptCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, gap: spacing.xs },
-  promptEyebrow: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  promptText: { color: c.ink, fontSize: 20, lineHeight: 27, fontWeight: '900' },
+  promptEyebrow: { ...type.eyebrow, color: c.brandText },
+  promptText: { ...type.headline, color: c.ink },
   hiddenCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderStyle: 'dashed', borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
-  hiddenText: { color: c.muted, fontSize: 14, lineHeight: 20, fontStyle: 'italic', textAlign: 'center' },
+  hiddenText: { ...type.caption, color: c.muted, fontStyle: 'italic', textAlign: 'center' },
   answerCard: { padding: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, gap: spacing.xs },
-  answerEyebrow: { color: c.heroSubtle, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  answerHindi: { ...hindiType(22), color: c.white },
-  answerLatin: { color: c.heroSubtle, fontSize: 15, lineHeight: 20, fontWeight: '700' },
+  answerEyebrow: { ...type.eyebrow, color: c.heroSubtle },
+  answerHindi: { ...hindiType(20), color: c.white },
+  answerLatin: { ...type.label, color: c.heroSubtle, fontWeight: '700' },
   primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  primaryText: { color: c.white, fontSize: 15, fontWeight: '900' },
+  primaryText: { ...type.label, color: c.white, fontWeight: '700' },
   gradeRow: { flexDirection: 'row', gap: spacing.sm },
   gradeWrong: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  gradeWrongText: { color: c.danger, fontSize: 15, fontWeight: '900' },
+  gradeWrongText: { ...type.label, color: c.danger, fontWeight: '700' },
   gradeRight: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.success, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  gradeRightText: { color: c.white, fontSize: 15, fontWeight: '900' },
+  gradeRightText: { ...type.label, color: c.white, fontWeight: '700' },
   disabled: { opacity: 0.4 },
-  footer: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  footer: { ...type.caption, color: c.muted },
 }));

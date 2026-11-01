@@ -11,15 +11,17 @@ import { speakText } from '@/lib/speech';
 import { checkPronunciation, reportGeneratedMessage, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type Props = {
+  /** Review sheet: no tinted panel or heading, just an outlined "Record pronunciation" row. */
+  compact?: boolean;
   lessonTitle: string;
   onActivityChange?: (active: boolean) => void;
   target: SavedPhrase;
 };
 
-export function PronunciationRecorder({ lessonTitle, onActivityChange, target }: Props) {
+export function PronunciationRecorder({ compact = false, lessonTitle, onActivityChange, target }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const [feedback, setFeedback] = useState('');
@@ -70,17 +72,20 @@ export function PronunciationRecorder({ lessonTitle, onActivityChange, target }:
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.copy}>
-        <Sparkles color={colors.brandText} size={18} />
-        <View style={styles.text}>
-          <Text style={styles.title}>Practice this answer</Text>
-          <Text style={styles.body}>Record up to 15 seconds. Asha will check one useful sound or rhythm detail.</Text>
+    <View style={compact ? styles.compactContainer : styles.container}>
+      {compact ? null : (
+        <View style={styles.copy}>
+          <Sparkles color={colors.brandText} size={18} />
+          <View style={styles.text}>
+            <Text style={styles.title}>Practice this answer</Text>
+            <Text style={styles.body}>Record up to 15 seconds. Asha will check one useful sound or rhythm detail.</Text>
+          </View>
         </View>
-      </View>
+      )}
       <AiConsentGate compact={{ body: 'Recording uses Asha coaching, which sends your clip to Bolo and OpenAI.' }}>
         <VoiceTurnButton
           idleLabel="Record pronunciation"
+          variant={compact ? 'secondary' : 'primary'}
           onActivityChange={onActivityChange}
           onRecordingReady={async ({ audioBase64, mimeType }) => {
             const controller = new AbortController();
@@ -127,12 +132,13 @@ const useStyles = makeStyles((c) => ({
     padding: spacing.lg,
     gap: spacing.md,
   },
+  compactContainer: { gap: spacing.md },
   copy: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   text: { flex: 1, gap: spacing.xs },
-  title: { color: c.brandText, fontSize: 15, fontWeight: '800' },
-  body: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  title: { ...type.label, color: c.brandText, fontWeight: '700' },
+  body: { ...type.caption, color: c.muted },
   feedbackCard: { gap: spacing.sm },
-  feedback: { color: c.ink, fontSize: 15, lineHeight: 22, fontWeight: '600' },
+  feedback: { ...type.label, color: c.ink },
   reportButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
-  reportText: { color: c.muted, fontSize: 12, fontWeight: '700' },
+  reportText: { ...type.caption, color: c.muted, fontWeight: '700' },
 }));

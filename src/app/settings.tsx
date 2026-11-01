@@ -11,7 +11,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { openPublicPage, type PublicPage } from '@/lib/public-pages';
 import { observe } from '@/lib/observability';
-import { applyRestoredReminder, cancelPracticeReminder, clearAllPracticeReminders, NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
+import { applyRestoredReminder, cancelOtherPracticeReminders, cancelPracticeReminder, clearAllPracticeReminders, NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
 import { parseProgressBackup, progressBackupFileName, serializeProgressBackup, type ProgressBackup } from '@/lib/progress-backup';
 import { pickProgressBackupText, ProgressBackupFileError, shareProgressBackup } from '@/lib/progress-backup-file';
 import { DEFAULT_MOTION_PREFERENCE, defaultLearnerProfile, defaultReminderSettings } from '@/lib/storage';
@@ -19,7 +19,7 @@ import { syncOutbox } from '@/lib/sync-outbox';
 import { deleteMobileData } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { MotionPreference, ReminderSettings } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export function formatReminderTime(hour: number, minute = 0) {
   const normalizedHour = Math.min(23, Math.max(0, Math.round(hour)));
@@ -110,27 +110,52 @@ export default function SettingsScreen() {
     deletionInFlightRef.current = true;
     setDeleting(true);
     const controller = new AbortController();
+    const oldClientId = clientId;
     deletionRef.current = controller;
     try {
-      // Drop queued reports before asking the server to delete: otherwise a retry could
-      // file one after the deletion (a successful request wakes the outbox), recreating
-      // a report the learner just deleted. clear() blocks sending synchronously; if its
-      // storage removal fails, sending stays blocked and clearAllData() retries it.
-      void syncOutbox.clear().catch((error: unknown) => {
-        console.warn('Bolo could not clear queued reports before deletion.', error);
-      });
-      await deleteMobileData(clientId, controller.signal);
-      await clearAllPracticeReminders();
-      await clearAllData();
-      if (mountedRef.current) {
-        showAppAlert('Bolo data deleted', 'Stored reports and data on this device were deleted. Bolo created a new random app identifier.');
+      let serverError: unknown;
+      try {
+        // Drop queued reports before asking the server to delete: otherwise a retry could
+        // file one after the deletion (a successful request wakes the outbox), recreating
+        // a report the learner just deleted. clear() blocks sending synchronously; if its
+        // storage removal fails, sending stays blocked and clearAllData() retries it.
+        void syncOutbox.clear().catch((error: unknown) => {
+          console.warn('Bolo could not clear queued reports before deletion.', error);
+        });
+        await deleteMobileData(oldClientId, controller.signal);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        serverError = error;
       }
-    } catch (error) {
-      if (mountedRef.current && !controller.signal.aborted) {
-        showAppAlert(
-          'Could not delete data',
-          error instanceof Error ? error.message : 'Your data and current identifier were kept so you can try again.',
-        );
+      if (controller.signal.aborted) return;
+      try {
+        await clearAllPracticeReminders();
+      } catch (error) {
+        console.warn('Bolo could not clear every practice reminder before deletion.', error);
+      }
+      if (controller.signal.aborted) return;
+      try {
+        await clearAllData();
+        if (mountedRef.current) {
+          if (serverError) {
+            // Keep the pre-wipe id in the warning so support can locate the old server copy after clearAllData rotates it.
+            showAppAlert('Deleted from this device', `Your data on this device was deleted. Bolo couldn’t reach the server, so your reports may still be stored there. To have them deleted, contact support with this old app ID: ${oldClientId}.`);
+          } else {
+            showAppAlert('Bolo data deleted', 'Stored reports and data on this device were deleted. Bolo created a new random app identifier.');
+          }
+        }
+      } catch (error) {
+        if (mountedRef.current) {
+          const localMessage = error instanceof Error ? error.message : 'Bolo could not delete all data from this device. Check available storage and try again.';
+          // clearAllData can rotate the id before it throws, so a retry would use the new id.
+          // When the server copy was not deleted, keep the old id in front of the learner for support.
+          showAppAlert(
+            'Could not delete data',
+            serverError
+              ? `${localMessage} Bolo also couldn’t reach the server, so your reports may still be stored there. To have them deleted, contact support with this old app ID: ${oldClientId}.`
+              : localMessage,
+          );
+        }
       }
     } finally {
       if (deletionRef.current === controller) {
@@ -144,7 +169,7 @@ export default function SettingsScreen() {
   function confirmDeletion() {
     showAppAlert(
       'Delete your Bolo data?',
-      'This permanently deletes reports tied to this installation, recent Asha chat history, saved phrases, practice progress, your consent choice, and the current random app identifier.',
+      'This permanently deletes reports tied to this installation, recent Asha chat history, saved phrases, practice progress, your consent choice, and the current random app identifier. Data on this device is deleted even if Bolo can’t reach the server.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete data', style: 'destructive', onPress: () => void performDeletion() },
@@ -156,10 +181,44 @@ export default function SettingsScreen() {
     if (savingReminder) return;
     setSavingReminder(true);
     try {
-      const next = hour === undefined
-        ? await cancelPracticeReminder(reminder)
-        : await schedulePracticeReminder(reminder, hour);
-      setReminder(next);
+      // The current notification is only cancelled once the new setting is
+      // stored: a failed save is already reported and rolls the setting back,
+      // so the previous reminder must still be scheduled. A rejected save
+      // counts as a failed one.
+      if (hour === undefined) {
+        const disabled = { ...reminder, enabled: false, notificationId: null };
+        if (!(await setReminder(disabled).catch(() => false))) return;
+        try {
+          await cancelPracticeReminder(reminder);
+          await cancelOtherPracticeReminders(null).catch(() => undefined);
+        } catch (error) {
+          // The notification is still scheduled, so put the saved setting back to match it.
+          if (!(await setReminder(reminder).catch(() => false))) {
+            throw new Error('The reminder may still be scheduled, but Bolo could not restore its setting. Check your reminder and try again.');
+          }
+          throw error;
+        }
+        return;
+      }
+      // Schedule the new time alongside the current notification rather than replacing it.
+      const next = await schedulePracticeReminder({ ...reminder, notificationId: null }, hour);
+      if (!(await setReminder(next).catch(() => false))) {
+        await cancelPracticeReminder(next).catch(() => undefined);
+        return;
+      }
+      if (reminder.notificationId && reminder.notificationId !== next.notificationId) {
+        // A failure here is retried by the sweep below, which also knows the previous id.
+        await cancelPracticeReminder(reminder).catch(() => undefined);
+      }
+      try {
+        // Also removes marked reminders left behind by an earlier interrupted update.
+        await cancelOtherPracticeReminders(next.notificationId, reminder.notificationId ? [reminder.notificationId] : []);
+      } catch {
+        // The new reminder is scheduled and saved, so keep it. Rolling back to the previous id is
+        // unsafe: the sweep settles each cancellation separately, so it may already have removed
+        // that reminder even though it reported a failure.
+        throw new Error('A second reminder may still be scheduled. Check your reminders and try again.');
+      }
     } catch (error) {
       if (error instanceof NotificationPermissionError) {
         showAppAlert('Could not update reminder', error.message, [
@@ -476,22 +535,22 @@ const useStyles = makeStyles((c) => ({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
-  copy: { flex: 1, gap: 3 },
+  copy: { flex: 1, gap: spacing.xs },
   copyLarge: { flex: 0, width: '100%' },
-  title: { color: c.ink, fontSize: 16, fontWeight: '900' },
-  body: { color: c.muted, fontSize: 13 },
-  detail: { color: c.muted, fontSize: 14, lineHeight: 21 },
-  motionPriority: { color: c.muted, fontSize: 12, lineHeight: 18 },
+  title: { ...type.label, color: c.ink, fontWeight: '700' },
+  body: { ...type.caption, color: c.muted },
+  detail: { ...type.caption, color: c.muted },
+  motionPriority: { ...type.caption, color: c.muted },
   destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-  destructiveText: { color: c.danger, fontSize: 15, fontWeight: '800' },
+  destructiveText: { ...type.label, color: c.danger, fontWeight: '700' },
   disabled: { opacity: 0.5 },
-  choiceLabel: { color: c.muted, fontSize: 12, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
-  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  choiceLabel: { ...type.eyebrow, color: c.muted },
+  secondaryButton: buttons.secondary,
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   buttonRowLarge: { flexDirection: 'column' },
   backupButton: { flexGrow: 1, flexBasis: 160, flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
-  secondaryText: { color: c.forestText, fontSize: 14, fontWeight: '800', textAlign: 'center' },
+  secondaryText: buttons.secondaryText,
   backupText: { flexShrink: 1 },
   about: { padding: spacing.lg, gap: spacing.sm },
-  aboutText: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  aboutText: { ...type.caption, color: c.muted },
 }));
