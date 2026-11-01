@@ -104,7 +104,6 @@ jest.mock('@/components/realtime-voice-button', () => {
       history,
       onConnectionStart,
       onError,
-      onInputTranscriptComplete,
       onMicrophonePhase,
       onSessionEvent,
       onStatusChange,
@@ -118,7 +117,6 @@ jest.mock('@/components/realtime-voice-button', () => {
       history?: unknown;
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
       onError: (message: string, details?: { kind?: string }) => void;
-      onInputTranscriptComplete?: (result: { itemId: string; transcript: string }) => void;
       onMicrophonePhase?: (phase: 'idle' | 'explaining' | 'denied') => void;
       onSessionEvent?: (event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
@@ -149,7 +147,6 @@ jest.mock('@/components/realtime-voice-button', () => {
           accessibilityState: { disabled: Boolean(disabled) },
           disabled,
           onPress: () => {
-            onInputTranscriptComplete?.({ itemId: 'mock-input', transcript: 'Namaste' });
             onTurnComplete({ transcript: 'Namaste', reply: 'Hello there.', language: 'en' });
           },
         },
@@ -160,7 +157,6 @@ jest.mock('@/components/realtime-voice-button', () => {
         {
           accessibilityLabel: 'Create long Devanagari Asha reply',
           onPress: () => {
-            onInputTranscriptComplete?.({ itemId: 'mock-hindi-input', transcript: 'मेरा नाम क्रिस है।' });
             onTurnComplete({
               transcript: 'मेरा नाम क्रिस है।',
               reply: longDevanagariReply,

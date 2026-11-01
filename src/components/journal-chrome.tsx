@@ -9,11 +9,6 @@ type DisplayProps = {
   style?: StyleProp<TextStyle>;
 };
 
-/**
- * Shared visual language for the editorial Bolo surfaces. These are deliberately
- * simple native primitives so the learning UI remains fast, accessible, and
- * independent of the web-only HeroUI packages.
- */
 export function JournalDisplay({ children, maxFontSizeMultiplier, numberOfLines, style }: DisplayProps) {
   const styles = useStyles();
   return <Text accessibilityRole="header" maxFontSizeMultiplier={maxFontSizeMultiplier} numberOfLines={numberOfLines} style={[styles.display, style]}>{children}</Text>;

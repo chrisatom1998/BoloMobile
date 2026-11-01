@@ -11,7 +11,6 @@ import { colors } from '../src/theme';
 const mockRouterPush = jest.fn();
 const mockSetGoal = jest.fn();
 const mockAppState = {
-  dailySteps: 1,
   duePhrases: [] as { en: string; hi: string; latin: string }[],
   goal: 10 as 5 | 10 | 15,
   hydrated: true,
@@ -60,7 +59,6 @@ function collectTestIds(node: unknown, ids: string[] = []) {
 describe('HomeScreen primary journey', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAppState.dailySteps = 1;
     mockAppState.goal = 10;
     mockAppState.hydrated = true;
     mockAppState.duePhrases = [];
