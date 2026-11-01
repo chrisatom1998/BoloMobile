@@ -22,7 +22,7 @@ let autoStart = true;
 const emit = (event: Record<string, unknown>) => peerOptions.onMessage(JSON.stringify(event));
 async function flush() { for (let i = 0; i < 60; i++) await Promise.resolve(); }
 function mount(options: Partial<Parameters<typeof useRealtimeConversation>[0]> = {}) {
-  return renderHook(() => useRealtimeConversation({ clientId: 'client-12345678', onError: jest.fn(), onTurnComplete: jest.fn(), ...options }));
+  return renderHook(() => useRealtimeConversation({ clientId: 'client-12345678', onError: jest.fn(), ...options }));
 }
 function acknowledge(enabled: boolean) {
   const events = jest.mocked(peer.send).mock.calls.map(([event]) => event);
@@ -199,9 +199,7 @@ describe('GPT-Live conversation lifecycle', () => {
 
   it('keeps exact overlapping transcript fragments revisable and independent of audio or turn completion', async () => {
     const onTranscriptSnapshot = jest.fn();
-    const onTurnComplete = jest.fn();
-    const onInputTranscriptComplete = jest.fn();
-    const { result, unmount } = await mount({ onTranscriptSnapshot, onTurnComplete, onInputTranscriptComplete });
+    const { result, unmount } = await mount({ onTranscriptSnapshot });
     await act(async () => { await result.current.connect(); });
     await act(async () => {
       emit({ type: 'session.input_transcript.delta', event_id: 'u2', delta: 'Hello', start_ms: 300, end_ms: 500 });
@@ -217,8 +215,6 @@ describe('GPT-Live conversation lifecycle', () => {
     expect(result.current.isPlaying).toBe(false);
     expect(result.current.status).toBe('ready');
     expect(speakText).not.toHaveBeenCalled();
-    expect(onTurnComplete).not.toHaveBeenCalled();
-    expect(onInputTranscriptComplete).not.toHaveBeenCalled();
     await unmount();
   });
 
@@ -325,7 +321,7 @@ describe('GPT-Live conversation lifecycle', () => {
   });
 
   it('reconnects after response language changes instead of sending immutable session.update', async () => {
-    const { result, rerender, unmount } = await renderHook(({ language }: { language: 'en' | 'hi' }) => useRealtimeConversation({ clientId: 'client-12345678', responseLanguage: language, onError: jest.fn(), onTurnComplete: jest.fn() }), { initialProps: { language: 'en' } });
+    const { result, rerender, unmount } = await renderHook(({ language }: { language: 'en' | 'hi' }) => useRealtimeConversation({ clientId: 'client-12345678', responseLanguage: language, onError: jest.fn() }), { initialProps: { language: 'en' } });
     await act(async () => { await result.current.connect(); });
     await rerender({ language: 'hi' });
     expect(result.current.status).toBe('disconnected');
@@ -337,7 +333,7 @@ describe('GPT-Live conversation lifecycle', () => {
   });
 
   it('ends the session when consent is withdrawn while mounted', async () => {
-    const { result, rerender, unmount } = await renderHook(({ enabled }: { enabled: boolean }) => useRealtimeConversation({ clientId: 'client-12345678', enabled, onError: jest.fn(), onTurnComplete: jest.fn() }), { initialProps: { enabled: true } });
+    const { result, rerender, unmount } = await renderHook(({ enabled }: { enabled: boolean }) => useRealtimeConversation({ clientId: 'client-12345678', enabled, onError: jest.fn() }), { initialProps: { enabled: true } });
     await act(async () => { await result.current.connect(); });
     expect(result.current.status).toBe('ready');
     await rerender({ enabled: false });

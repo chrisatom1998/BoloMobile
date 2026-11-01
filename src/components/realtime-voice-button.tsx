@@ -15,7 +15,7 @@ import Animated, {
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
 import { boloApiErrorKind, type BoloApiErrorKind } from '@/services/bolo-api';
-import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { makeStyles, radius, spacing, useTheme } from '@/theme';
@@ -49,7 +49,6 @@ type Props = {
   active?: boolean;
   /** Reports the pre-prompt explainer and a denial that should offer Settings. */
   onMicrophonePhase?: (phase: LiveMicrophonePhase) => void;
-  onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Session start, ready, and end for the on-device session log. Only used when this control owns the session. */
   onSessionEvent?: (event: AshaSessionEvent) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
@@ -58,7 +57,6 @@ type Props = {
   onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
-  onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
   responseLanguage?: AshaResponseLanguage;
   /**
    * When set, this control renders an existing session instead of owning one.
@@ -185,8 +183,8 @@ function errorDetails(cause: unknown): RealtimeErrorDetails {
 }
 
 function OwnedRealtimeVoiceButton(props: Props) {
-  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
-  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
+  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, responseLanguage = 'en' } = props;
+  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, responseLanguage });
   return <RealtimeVoiceButtonView {...props} owned voice={voice} />;
 }
 
