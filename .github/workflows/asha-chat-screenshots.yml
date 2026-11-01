@@ -108,19 +108,36 @@ jobs:
           mkdir -p named-screenshots
           capture() {
             local shot="$1"
-            rm -rf "ios-simulator-screenshots-$shot"
+            local out="ios-simulator-screenshots-$shot"
+            rm -rf "$out"
             maestro test \
               --device "$SIM_UDID" \
               -e "SHOT=$shot" \
               --debug-output "maestro-artifacts-$shot" \
-              --test-output-dir "ios-simulator-screenshots-$shot" \
+              --test-output-dir "$out" \
               .maestro/screenshots/asha-chat-capture.yaml
-            png="$(find "ios-simulator-screenshots-$shot" -name '*.png' -print | head -n 1)"
+            mkdir -p "named-screenshots/all-$shot"
+            find "$out" "$HOME/.maestro/tests" -name '*.png' -print 2>/dev/null | sort > "named-screenshots/all-$shot/files.txt" || true
+            # Maestro also stores a shot from earlier in the flow. The chat
+            # screenshot is the last png written, named for this shot when the
+            # takeScreenshot path is expanded.
+            png=""
+            if [[ -f "$shot.png" ]]; then png="$shot.png"; fi
+            if [[ -z "$png" && -f "$out/$shot.png" ]]; then png="$out/$shot.png"; fi
             if [[ -z "$png" ]]; then
+              png="$(find "$out" "$HOME/.maestro/tests" -name "$shot.png" -print 2>/dev/null | head -n 1 || true)"
+            fi
+            if [[ -z "$png" ]]; then
+              png="$(find "$out" -name '*.png' -print 2>/dev/null | while IFS= read -r file; do stat -f '%m %N' "$file"; done | sort -n | tail -n 1 | cut -d' ' -f2-)"
+            fi
+            if [[ -z "$png" || ! -f "$png" ]]; then
               echo "::error::No screenshot produced for $shot"
+              find "$out" -print | sort || true
               exit 1
             fi
+            echo "Using $png for $shot"
             cp "$png" "named-screenshots/$shot.png"
+            find "$out" -name '*.png' -exec cp {} "named-screenshots/all-$shot/" \;
           }
           # "large" is the iOS default content size. "extra-large" is one step up.
           # Set the size before each launch so the app reads it at startup.
@@ -141,6 +158,8 @@ jobs:
           name: asha-chat-screenshots-${{ github.run_id }}
           path: |
             named-screenshots
+            ios-simulator-screenshots-asha-chat-default
+            ios-simulator-screenshots-asha-chat-larger
             maestro-artifacts-seed
             maestro-artifacts-asha-chat-default
             maestro-artifacts-asha-chat-larger

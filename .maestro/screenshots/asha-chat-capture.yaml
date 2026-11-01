@@ -19,6 +19,9 @@ name: Capture Asha chat
     timeout: 60000
 - tapOn: "Asha"
 - extendedWaitUntil:
+    visible: "Speak with Asha"
+    timeout: 45000
+- extendedWaitUntil:
     visible: "Say namaste."
     timeout: 45000
 - takeScreenshot: ${SHOT}
