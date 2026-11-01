@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The lesson name step now shrinks above the iOS keyboard (a padding KeyboardAvoidingView around the step), so the bottom-pinned Continue stays visible while typing and a tap on it lands while the keyboard is up.
+- The "Change" practice-name link and the "Add Asha coaching" line on a lesson now respond to a 44pt tall touch area, with no change to how they look.
+- The native splash screen is held until saved progress has hydrated (and released on a startup crash), so the launch no longer flashes the loading view, and its background now matches the app's theme background (#F6F3ED instead of #F5F0E8).
+- The iOS microphone permission prompt now explains that Asha listens during live practice and that audio reaches Bolo's voice service only while a session is on.
 - Snapshotted the quick-review session at mount so grading a phrase no longer shrinks the live due list underneath the advancing card index, which skipped phrases, produced "2 of 1 remembered" summaries, and could drop the learner into an unrequested low-mastery session instead of the completion screen.
 - Scored resumed scenes over the beats actually answered after the checkpoint instead of the full beat count, which permanently understated best accuracy and practice-history answer totals.
 - Cancelled the scheduled daily practice reminder during "Delete my Bolo data" so the OS notification can no longer keep firing with no way to turn it off after its stored identifier is wiped.

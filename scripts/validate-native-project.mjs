@@ -87,7 +87,7 @@ if (!/<key>UIApplicationSupportsMultipleScenes<\/key>\s*<false\s*\/>/.test(infoP
   throw new Error(`${infoPlistPath} must set UIApplicationSupportsMultipleScenes to false.`);
 }
 
-const microphoneUsageDescription = 'Allow Bolo to use your microphone for Hindi practice and conversations.';
+const microphoneUsageDescription = "Asha, Bolo's AI Hindi tutor, listens through your microphone during live practice. Audio is sent to Bolo's voice service only while a session is on.";
 mustOccurExactlyOnce(infoPlist, '<key>NSMicrophoneUsageDescription</key>', infoPlistPath);
 mustOccurExactlyOnce(infoPlist, `<string>${microphoneUsageDescription}</string>`, infoPlistPath);
 mustOccurExactlyOnce(infoPlist, '<key>NSAllowsArbitraryLoads</key>', infoPlistPath);

@@ -41,7 +41,7 @@ info = {
     'CFBundleVersion': '1',
     'ITSAppUsesNonExemptEncryption': False,
     'NSAppTransportSecurity': {'NSAllowsArbitraryLoads': False},
-    'NSMicrophoneUsageDescription': 'Allow Bolo to use your microphone for Hindi practice and conversations.',
+    'NSMicrophoneUsageDescription': "Asha, Bolo's AI Hindi tutor, listens through your microphone during live practice. Audio is sent to Bolo's voice service only while a session is on.",
     'UIDeviceFamily': [1],
 }
 with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
