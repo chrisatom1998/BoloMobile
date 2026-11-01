@@ -96,7 +96,7 @@
     "production:validate": "node ./scripts/validate-production-config.mjs",
     "native:validate": "node ./scripts/validate-native-project.mjs",
     "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs",
-    "postinstall": "node ./scripts/patch-query-string-decoder.mjs && node ./scripts/patch-glob-minimatch.mjs"
+    "postinstall": "node ./scripts/patch-query-string-decoder.mjs && node ./scripts/patch-glob-minimatch.mjs && node ./scripts/patch-minimatch-callable.mjs"
   },
   "expo": {
     "doctor": {

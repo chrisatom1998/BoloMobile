@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const original = [
+// Remove this patch on a Jest 30 upgrade. Jest 29 (via jest-expo) still
+// requires glob 7, whose matcher expects minimatch 3 RegExps. minimatch 11
+// uses Matcher objects instead. Glob 14 does not export glob.default.sync,
+// which jest-runtime and @jest/reporters call, so glob 7 has to stay.
+
+const originalBlock = [
   '  var rawGlob = pn._glob',
   "  var dotOk = this.dot || rawGlob.charAt(0) === '.'",
   '',
@@ -20,7 +26,7 @@ const original = [
   '      }',
 ].join('\n');
 
-const patched = [
+const patchedBlock = [
   '  // minimatch 11 exposes magic portions as Matcher objects, not RegExps.',
   "  var rawGlob = pn && (pn._glob || pn.pattern) || ''",
   "  var dotOk = this.dot || String(rawGlob).charAt(0) === '.'",
@@ -39,6 +45,11 @@ const patched = [
   '        m = matched',
   '      }',
 ].join('\n');
+
+const upstreamSha256 = {
+  'sync.js': '0f61227f4b55297f1ad16798c53e6a6dd55d633856f153133716413b7c5f61ad',
+  'glob.js': 'b8f35657ca927593d0f9e1aae3a8cfe9c33c697bf3c5733c2f6727f25ae25be1',
+};
 
 function walk(dir, found) {
   let entries;
@@ -79,30 +90,37 @@ function walk(dir, found) {
   }
 }
 
+function upstreamSource(source) {
+  return source.includes(patchedBlock) ? source.replace(patchedBlock, originalBlock) : source;
+}
+
+function writeAtomic(filePath, contents) {
+  const temporary = `${filePath}.bolo-tmp`;
+  writeFileSync(temporary, contents);
+  renameSync(temporary, filePath);
+}
+
 export function patchGlobMinimatch(appRoot = process.cwd()) {
   const found = [];
   walk(join(appRoot, 'node_modules'), found);
-  if (found.length === 0) {
-    throw new Error('Expected at least one glob 7.2.3 install for Jest.');
-  }
-  let patchedCount = 0;
-  let already = 0;
+  // npm ci --omit=dev does not install Jest, and Jest 30 will drop glob 7.
+  if (found.length === 0) return 'skipped';
+
+  const pending = [];
   for (const packageDir of found) {
     for (const fileName of ['sync.js', 'glob.js']) {
       const filePath = join(packageDir, fileName);
       const source = readFileSync(filePath, 'utf8');
-      if (source.includes(patched)) {
-        already += 1;
-        continue;
-      }
-      if (!source.includes(original)) {
+      const original = upstreamSource(source);
+      const hash = createHash('sha256').update(original).digest('hex');
+      if (hash !== upstreamSha256[fileName] || !original.includes(originalBlock)) {
         throw new Error(`Unrecognized glob 7.2.3 ${fileName}. Review the minimatch 11 compatibility patch; no file was changed.`);
       }
-      writeFileSync(filePath, source.replace(original, patched));
-      patchedCount += 1;
+      if (source === original) pending.push({ filePath, contents: source.replace(originalBlock, patchedBlock) });
     }
   }
-  return patchedCount > 0 ? `patched ${patchedCount}` : `already patched ${already}`;
+  for (const file of pending) writeAtomic(file.filePath, file.contents);
+  return pending.length > 0 ? `patched ${pending.length}` : `already patched ${found.length * 2}`;
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
