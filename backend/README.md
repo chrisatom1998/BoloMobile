@@ -8,7 +8,15 @@ When connecting the iOS client to an appropriate trusted server, import `createL
 const routes = createLiveRoutes({ allowMobileRequest, validClientId, openAI, json, error, secrets });
 ```
 
-Adapt the returned route handlers to your server framework. Include `clientId + '-live'` in mobile data deletion rate-event identifiers when integrating the rate limiter. `OPENAI_API_KEY` belongs in server secrets, never in the iOS bundle.
+Adapt the returned route handlers to your server framework. Call `createLiveRoutes` once per process and reuse the handlers. Include `clientId + '-live'` in mobile data deletion rate-event identifiers when integrating the rate limiter. `OPENAI_API_KEY` belongs in server secrets, never in the iOS bundle.
+
+Pass the client address on the live-call handler argument, not in the JSON body:
+
+```ts
+routes['POST /api/live-call'][0]({ body, clientAddress: socket.remoteAddress });
+```
+
+`clientAddress` is the single peer address the server already trusts (the socket address, or the one client IP a proxy has already authenticated). This module does not read `X-Forwarded-For`. Omit it only when the host has no trusted address; the daily cap still applies.
 
 - `POST /api/live-call` accepts `{ clientId, offerSdp, responseLanguage?: 'en' | 'hi', mode?: 'hindi-immersion' | 'hindi-english-help' | 'beginner' | 'conversation' | 'lesson', context?: LiveContext, clientTools?: boolean, history?: { role: 'you' | 'asha', text: string }[] }`. It returns `{ answerSdp, sessionId }`. Unknown body fields are ignored, so older app builds that send none of the optional fields keep working.
   - `mode` defaults to `conversation`. Without `responseLanguage`, `hindi-immersion` selects Hindi; otherwise English.
@@ -31,8 +39,55 @@ Security notes: a modified client can send the two extra events, but they can on
 
 ## Operations
 
-- Reuses the existing per-client/global request limits with a separate `-live` bucket. It rejects malformed/oversized offers, aborts upstream calls after 20 seconds, bounds upstream response bodies (96 KiB for sessions, 16 KiB for model lookups), and returns safe errors. Failures log `Live call failed` with only this module's own reason codes (for example `live_upstream_failed`) or the error class name, never upstream messages, SDP, transcripts, or credentials.
+- The app generates `clientId` on the device and the server only checks its shape (`8-64` letters, digits, and hyphens). `allowMobileRequest(clientId + '-live', 12)` therefore gives every new identifier its own bucket. A caller that rotates `clientId` used to be able to create unlimited billable GPT-Live sessions. The per-identifier limiter still runs first, so an install that keeps a stable id behaves as before, and a denial from that limiter does not consume the shared budgets below.
+- After the per-client check, a process-local UTC-day budget reserves one session before the API key is read or OpenAI is called. A blank key returns `503` and gives that reservation back, so a misconfigured server does not use up the day's cap. An over-cap request does not read the key:
+  - `BOLO_LIVE_DAILY_SESSION_CAP` (default `2000`): session creates for this process per UTC day, across every client id and address. `0` refuses every new session.
+  - `BOLO_LIVE_IP_SESSION_LIMIT` (default `480`): session creates per trusted `clientAddress` per UTC day. `0` refuses every request that includes an address. Requests with no address skip only this budget.
+- Blank values and anything other than a whole number from `0` through `999999999` fall back to the default. The reservation is synchronous, so parallel requests cannot all pass a stale check. The slot is returned when the key is missing or reading it throws. A create that is sent to OpenAI keeps the slot whether that call succeeds or fails, so a client cannot recycle the cap by aborting.
+- These counters live in the `createLiveRoutes` closure. They are not shared across instances or across a host that constructs routes per request. Size the cap with the instance count in mind. Also set a hard usage limit on the OpenAI project; this route caps session creates, and a session that is already open continues between the device and OpenAI.
+- One address can be a household, a school, or a carrier NAT. If legitimate users on a shared network start receiving `429` responses, raise `BOLO_LIVE_IP_SESSION_LIMIT`. The daily cap is what bounds the bill.
+- An address that is not one IPv4 or IPv6 address is rejected with `400` and does not create a session or consume either budget. IPv4-mapped `::ffff:a.b.c.d` counts as `a.b.c.d`. The route does not parse a forwarded-header list.
+- The address table keeps at most 10,000 addresses per process. A new address past that, after stale days are dropped, is refused. The daily cap still applies to requests with no address.
+- Device attestation is not enforced. `clientId` does not prove the caller is a genuine Bolo install. Binding session creates to Apple App Attest or Play Integrity requires a device-side assertion and server verification with store credentials, which would reject every build shipped today. Until that client change exists, the daily cap is the cost control.
+- The route rejects malformed or oversized offers, aborts upstream calls after 20 seconds, bounds upstream response bodies (96 KiB for sessions, 16 KiB for model lookups), and returns safe errors. Limit responses use the same `429` body as the per-client limiter (`Please wait before starting another voice session.`). Failures log `Live call failed` with only this module's own reason codes (for example `live_upstream_failed`) or the error class name, never upstream messages, SDP, transcripts, credentials, or client addresses.
 
 Run `npx jest __tests__/live-backend.test.ts --runInBand` from the repository root. After deploying, verify `GET /api/live-status`, then test a real microphone conversation, interruptions, mute/unmute, transcript display, and hangup on a native development build. Model retrieval is not a substitute for a device audio check.
 
 Contract references verified October 6, 2026: [Create Live session](https://developers.openai.com/api/reference/resources/live/methods/create), [WebRTC](https://developers.openai.com/api/docs/guides/voice-webrtc?api=live), [Delegation](https://developers.openai.com/api/docs/guides/live-delegation), [Prompting](https://developers.openai.com/api/docs/guides/live-prompting).
+
+## Typed chat: structured replies (`mobile-chat-structured.ts`)
+
+`mobile-chat-structured.ts` is an undeployed, portable reference for the `/api/mobile-chat` structured reply contract. The deployed mobile-chat server source is not in this repository, so this module must be integrated and deployed separately; nothing here changes `live.ts` or any deployed service.
+
+### Request
+
+Asha chat sends `replyFormat: 'structured-v1'` on `/api/mobile-chat` (`src/services/bolo-api.ts`). A server that does not know the field must ignore it and answer exactly as before. Word-explanation calls omit `replyFormat` so they stay plain English prose. `wantsStructuredReply(body)` returns `true` only for `replyFormat: 'structured-v1'` with `responseLanguage !== 'hi'`: Hindi-mode replies stay Devanagari prose, which the app renders per the learner's script preference. Empty strings on optional fields are treated as absent, the same way as `null`.
+
+### Response
+
+The response keeps the existing required fields and adds one optional block:
+
+```json
+{
+  "transcript": "...",
+  "reply": "Less sugar in your tea? Ask the waiter politely:\nचाय में चीनी कम डालिए। (chaay mein cheeni kam daaliye.) — Please put less sugar in the tea.",
+  "language": "en",
+  "structured": {
+    "version": 1,
+    "intro": "Less sugar in your tea? Ask the waiter politely:",
+    "phrases": [{ "devanagari": "चाय में चीनी कम डालिए।", "romanized": "chaay mein cheeni kam daaliye.", "english": "Please put less sugar in the tea." }],
+    "corrections": [{ "youSaid": { "devanagari": "डालो", "romanized": "daalo" }, "say": { "devanagari": "डालिए", "romanized": "daaliye", "english": "please put" }, "note": "daalo is for friends; a waiter gets the polite ending." }],
+    "outro": "Want to try ordering?"
+  }
+}
+```
+
+- `reply` stays required and readable: old app builds render it unchanged, and the current app uses it for speech, reports and history for older servers. `readableReply(structured)` produces it: every Devanagari phrase is followed by its single romanization in parentheses, which the app's legacy renderer recognises and never duplicates.
+- `structured` is optional and versioned (`version: 1`). Limits (identical in the app's `src/lib/structured-reply.ts`): `intro`/`outro` ≤ 600 characters of English prose; ≤ 8 `phrases`; ≤ 6 `corrections`; each `devanagari` is Devanagari script without Latin letters; each `romanized`/`english`/`note` has no Devanagari; every line ≤ 300 characters; the serialized block ≤ 6,000 UTF-8 bytes. `youSaid` needs at least one script; `say.english` and `note` are optional.
+- Validation is strict but tolerant: `sanitizeStructuredReply` ignores unknown fields and returns `undefined` for a malformed, oversized or empty block. Both server and app then drop the block and fall back to `reply`; a bad block never fails the response.
+
+### Producing it
+
+Ask the model for JSON with `STRUCTURED_REPLY_JSON_SCHEMA` (OpenAI strict structured outputs: optional fields are nullable) and append `structuredReplyInstructions()` to Asha's English-mode instructions. Then call `normalizeStructuredMobileChatReply({ transcript, language, modelOutput })`: it parses the JSON (tolerating a fenced block), validates it, builds `reply`, and returns `{ transcript, reply, language, structured? }`, or `null` when nothing readable came back so the server can retry or answer with its usual error. Plain-text model output (the model ignored the schema) is returned as the `reply` with no `structured` block.
+
+Run `npx jest __tests__/mobile-chat-structured.test.ts --runInBand`. `scripts/validate-live-services.mjs` sends `replyFormat` and validates the shape of any `structured` block the deployed service returns (`scripts/lib/mobile-chat-checks.mjs`).

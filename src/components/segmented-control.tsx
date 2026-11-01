@@ -3,7 +3,7 @@ import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-nat
 
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { hapticSelect } from '@/lib/haptics';
-import { makeStyles, spacing } from '@/theme';
+import { makeStyles, spacing, type, radius } from '@/theme';
 
 export type SegmentOption<T extends string> = {
   accessibilityLabel?: string;
@@ -168,18 +168,18 @@ const useStyles = makeStyles((c) => ({
     alignSelf: 'stretch',
     minHeight: 52,
     overflow: 'hidden',
-    borderRadius: 16,
+    borderRadius: radius.md,
     borderCurve: 'continuous',
     borderColor: c.line,
     borderWidth: 1,
     backgroundColor: c.paper,
-    padding: 4,
+    padding: spacing.xs,
     boxShadow: '0 3px 10px rgba(0, 0, 0, 0.04)',
   },
   listCompact: {
     minHeight: 50,
-    borderRadius: 14,
-    padding: 3,
+    borderRadius: radius.md,
+    padding: spacing.xs,
   },
   listDisabled: {
     opacity: 0.55,
@@ -189,29 +189,24 @@ const useStyles = makeStyles((c) => ({
     minWidth: 0,
     minHeight: 44,
     flex: 1,
-    borderRadius: 12,
+    borderRadius: radius.sm,
     borderCurve: 'continuous',
     paddingHorizontal: spacing.sm,
   },
   triggerCompact: {
     minHeight: 44,
-    borderRadius: 11,
+    borderRadius: radius.sm,
   },
   indicator: {
-    borderRadius: 12,
+    borderRadius: radius.sm,
     borderCurve: 'continuous',
     backgroundColor: c.neutralSurface,
     boxShadow: '0 2px 5px rgba(0, 0, 0, 0.15)',
   },
   indicatorCompact: {
-    borderRadius: 11,
+    borderRadius: radius.sm,
   },
-  label: {
-    color: c.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  label: { ...type.label, color: c.muted, textAlign: 'center' },
   labelSelected: {
     color: c.neutralSurfaceText,
   },
@@ -228,7 +223,7 @@ const useStyles = makeStyles((c) => ({
   },
   stackedTrigger: {
     minHeight: 48,
-    borderRadius: 16,
+    borderRadius: radius.md,
     borderCurve: 'continuous',
     borderColor: c.line,
     borderWidth: 1,
@@ -251,12 +246,7 @@ const useStyles = makeStyles((c) => ({
   stackedTriggerPressed: {
     opacity: 0.82,
   },
-  stackedLabel: {
-    color: c.muted,
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  stackedLabel: { ...type.caption, color: c.muted, textAlign: 'center', fontWeight: '700' },
   stackedLabelSelected: {
     color: c.neutralSurfaceText,
   },

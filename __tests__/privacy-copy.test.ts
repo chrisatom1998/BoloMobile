@@ -57,7 +57,10 @@ describe('live voice privacy copy', () => {
     const declarations = read('store/privacy-declarations.md');
     const releaseValidation = read('scripts/validate-release-live.mjs');
 
-    expect(consent).toMatch(/up to 100 recent Asha chat messages[\s\S]{0,80}unencrypted[\s\S]{0,80}this device/iu);
+    expect(consent).toMatch(/up to 100 recent Asha chat messages are encrypted on this device/iu);
+    expect(consent).toMatch(/stored unencrypted on this device/iu);
+    expect(inAppPolicy).toMatch(/Asha chat messages are encrypted on this device/iu);
+    expect(inAppPolicy).toMatch(/encrypted Asha session log/iu);
     expect(inAppPolicy).toMatch(/up to 100 recent typed and transcribed Asha chat messages/iu);
     expect(inAppPolicy).toMatch(/Clear chat[\s\S]{0,120}removes only the saved typed and voice chat[\s\S]{0,100}does not delete reports/iu);
     expect(settings).toMatch(/permanently deletes[\s\S]{0,100}recent Asha chat history/iu);

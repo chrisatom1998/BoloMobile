@@ -41,6 +41,18 @@ describe('practice reminders', () => {
     });
   });
 
+  it('keeps the first-lesson offer answer when a reminder is scheduled', async () => {
+    const result = await schedulePracticeReminder({
+      enabled: false,
+      hour: 19,
+      minute: 0,
+      notificationId: null,
+      offerAnswered: true,
+    }, 15, 42);
+
+    expect(result).toEqual({ enabled: true, hour: 15, minute: 42, notificationId: 'reminder-1', offerAnswered: true });
+  });
+
   it('requests permission when needed and rejects a denied request', async () => {
     mockGetPermissions.mockResolvedValue({ granted: false });
     mockRequestPermissions.mockResolvedValue({ granted: false, ios: { status: 1 } });

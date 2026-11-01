@@ -223,6 +223,35 @@ describe('connected coaching contract', () => {
     }
   });
 
+  it('asks for the structured reply format and keeps a valid structured block', async () => {
+    expect(buildMobileChatPayload({ text: 'Hello', messages: [], clientId: 'client-12345678' }).replyFormat).toBe('structured-v1');
+    const structured = {
+      version: 1,
+      intro: 'Ask politely:',
+      phrases: [{ devanagari: 'चाय में चीनी कम डालिए।', romanized: 'chaay mein cheeni kam daaliye.', english: 'Please put less sugar in the tea.' }],
+    };
+    const originalFetch = globalThis.fetch;
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ transcript: '', reply: 'Ask politely: चाय में चीनी कम डालिए।', language: 'en', structured: { ...structured, unknownField: 'ignored' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ transcript: '', reply: 'Readable fallback.', language: 'en', structured: { version: 1, phrases: [{ devanagari: 'chaay', romanized: 'chaay', english: 'tea' }] } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ transcript: '', reply: 'Old server reply.', language: 'en' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ transcript: '', reply: '', language: 'en', structured }) });
+    globalThis.fetch = fetchMock as typeof fetch;
+    try {
+      const input = { text: 'Less sugar', messages: [], clientId: 'client-12345678' };
+      await expect(sendMobileChat(input)).resolves.toEqual({ transcript: '', reply: 'Ask politely: चाय में चीनी कम डालिए।', language: 'en', structured });
+      // An invalid block is dropped, never the reply.
+      await expect(sendMobileChat(input)).resolves.toEqual({ transcript: '', reply: 'Readable fallback.', language: 'en' });
+      // A server without the contract keeps working.
+      await expect(sendMobileChat(input)).resolves.toEqual({ transcript: '', reply: 'Old server reply.', language: 'en' });
+      // The plain reply stays required even when a structured block is present.
+      await expect(sendMobileChat(input)).rejects.toThrow('Bolo returned an invalid response.');
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).replyFormat).toBe('structured-v1');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it('accepts an empty transcript for text-only chat replies', async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = jest.fn()

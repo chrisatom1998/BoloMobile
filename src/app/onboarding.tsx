@@ -1,26 +1,57 @@
-import { AudioModule } from 'expo-audio';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { BookOpenText, Check, Languages, Mic, Route, Sparkles, X } from 'lucide-react-native';
-import { useState } from 'react';
-import { AccessibilityInfo, Platform, ScrollView, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { TapPressable as Pressable } from '@/components/tap-pressable';
-import { useAppState } from '@/state/app-state';
-import { observe } from '@/lib/observability';
-import type { LearnerLevel, LearningGoal, AshaResponseLanguage, ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
+import { playOfflineSpeech } from '@/lib/offline-voice-player';
+import { observe } from '@/lib/observability';
+import { useAppState } from '@/state/app-state';
+import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
 
-type Choice<T extends string | number> = { label: string; value: T; detail?: string };
+const ashaPortrait = require('../../assets/images/asha-portrait.png');
+const NAMASTE_CLIP = 'नमस्ते।';
 
-function ChoiceRow<T extends string | number>({ choices, label, onChange, value }: {
+type OnboardingStep = 'listen' | 'level' | 'goal';
+type ReplyId = 'namaste' | 'thanks' | 'bye';
+
+const replies: { id: ReplyId; hi: string; latin: string; en: string; correct: boolean }[] = [
+  { id: 'namaste', hi: 'नमस्ते', latin: 'Namaste', en: 'Hello', correct: true },
+  { id: 'thanks', hi: 'धन्यवाद', latin: 'Dhanyavaad', en: 'Thank you', correct: false },
+  { id: 'bye', hi: 'अलविदा', latin: 'Alvida', en: 'Goodbye', correct: false },
+];
+
+const levels: { value: LearnerLevel; label: string; detail: string }[] = [
+  { value: 'new', label: 'New to Hindi', detail: 'Start with essential patterns.' },
+  { value: 'beginner', label: 'Beginner', detail: 'I know greetings and a few phrases.' },
+  { value: 'intermediate', label: 'Intermediate', detail: 'Give me richer real-life situations.' },
+];
+
+const scripts: { value: ScriptPreference; label: string }[] = [
+  { value: 'both', label: 'Hindi + transliteration' },
+  { value: 'devanagari', label: 'Hindi script only' },
+  { value: 'latin', label: 'Transliteration first' },
+];
+
+const goals: { value: LearningGoal; label: string }[] = [
+  { value: 'conversation', label: 'Everyday conversation' },
+  { value: 'travel', label: 'Travel' },
+  { value: 'family', label: 'Family and friends' },
+  { value: 'work', label: 'Work' },
+];
+
+type Choice<T extends string> = { detail?: string; hindi?: boolean; label: string; value: T };
+
+function ChoiceRow<T extends string>({ choices, label, onChange, testIDFor, value }: {
   choices: Choice<T>[];
   label: string;
   onChange: (value: T) => void;
-  value: T;
+  testIDFor?: (choice: Choice<T>) => string | undefined;
+  value: T | null;
 }) {
-  const { colors } = useTheme();
   const styles = useStyles();
   return (
     <View accessibilityLabel={label} accessibilityRole="radiogroup" style={styles.choices}>
@@ -34,10 +65,11 @@ function ChoiceRow<T extends string | number>({ choices, label, onChange, value 
             accessibilityState={{ checked: selected }}
             onPress={() => onChange(choice.value)}
             style={[styles.choice, selected && styles.choiceSelected]}
+            testID={testIDFor?.(choice)}
           >
-            <View style={[styles.check, selected && styles.checkSelected]}>{selected ? <Check color={colors.white} size={15} /> : null}</View>
+            <View style={[styles.mark, selected && styles.markSelected]}>{selected ? <Text style={styles.markCheck}>✓</Text> : null}</View>
             <View style={styles.choiceCopy}>
-              <Text style={[styles.choiceLabel, selected && styles.choiceLabelSelected]}>{choice.label}</Text>
+              <Text style={[styles.choiceLabel, choice.hindi && styles.choiceHindi]}>{choice.label}</Text>
               {choice.detail ? <Text style={styles.choiceDetail}>{choice.detail}</Text> : null}
             </View>
           </Pressable>
@@ -52,143 +84,190 @@ export default function OnboardingScreen() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const { completeOnboarding, goal: savedGoal, learnerProfile } = useAppState();
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const recalibrating = mode === 'recalibrate' && learnerProfile.completed;
+  const steps: OnboardingStep[] = recalibrating ? ['level', 'goal'] : ['listen', 'level', 'goal'];
+  const [stepIndex, setStepIndex] = useState(0);
+  const step = steps[stepIndex] ?? 'goal';
+  const [replayToken, setReplayToken] = useState(0);
+  const [reply, setReply] = useState<ReplyId | null>(null);
   const [level, setLevel] = useState<LearnerLevel>(recalibrating ? learnerProfile.level : 'new');
   const [scriptPreference, setScriptPreference] = useState<ScriptPreference>(recalibrating ? learnerProfile.scriptPreference : 'both');
   const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>(recalibrating ? learnerProfile.primaryGoal : 'conversation');
-  const [responseLanguage, setResponseLanguage] = useState<AshaResponseLanguage>(recalibrating ? learnerProfile.responseLanguage : 'en');
-  const [goal, setGoal] = useState<5 | 10 | 15>(recalibrating ? savedGoal : 10);
-  const [microphoneTested, setMicrophoneTested] = useState(recalibrating ? learnerProfile.microphoneTested : false);
-  const [microphoneStatus, setMicrophoneStatus] = useState('You can test this later in live practice.');
+  const heardNamaste = reply === 'namaste';
 
-  async function testMicrophone() {
-    const current = await AudioModule.getRecordingPermissionsAsync();
-    const permission = current.granted ? current : await AudioModule.requestRecordingPermissionsAsync();
-    const status = permission.granted ? 'Microphone ready.' : 'Microphone access is off. Typed and written practice still work.';
-    setMicrophoneTested(true);
-    setMicrophoneStatus(status);
-    // Android announces the live region below; iOS ignores accessibilityLiveRegion.
-    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(status);
-  }
+  useEffect(() => {
+    if (step !== 'listen') return undefined;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        await playOfflineSpeech(NAMASTE_CLIP, controller.signal);
+      } catch {
+        // The clip is bundled. A playback failure still leaves the replies on screen.
+      }
+    })();
+    return () => controller.abort();
+  }, [replayToken, step]);
 
   function finish() {
-    completeOnboarding({ level, scriptPreference, primaryGoal, responseLanguage, microphoneTested }, goal);
+    const profile: Omit<LearnerProfile, 'completed'> = {
+      ...(learnerProfile.displayName?.trim() ? { displayName: learnerProfile.displayName.trim() } : {}),
+      ...(learnerProfile.phrasePlaybackRate !== undefined ? { phrasePlaybackRate: learnerProfile.phrasePlaybackRate } : {}),
+      level,
+      scriptPreference,
+      primaryGoal,
+      responseLanguage: recalibrating ? learnerProfile.responseLanguage : 'en',
+      microphoneTested: recalibrating ? learnerProfile.microphoneTested : false,
+    };
+    const dailyMinutes = recalibrating && (savedGoal === 5 || savedGoal === 10 || savedGoal === 15) ? savedGoal : 10;
+    completeOnboarding(profile, dailyMinutes);
     observe('onboarding_completed');
     router.replace('/');
   }
 
+  function continueForward() {
+    if (step === 'listen' && !heardNamaste) return;
+    if (stepIndex >= steps.length - 1) {
+      finish();
+      return;
+    }
+    setStepIndex((current) => current + 1);
+  }
+
+  const stepNumber = stepIndex + 1;
+  const onLastStep = stepIndex >= steps.length - 1;
+  const continueDisabled = step === 'listen' && !heardNamaste;
+  const continueLabel = onLastStep ? (recalibrating ? 'Save my practice plan' : 'Start practicing') : 'Continue';
+
   return (
-    <>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={[
-          styles.content,
-          Platform.OS === 'android' && { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl },
-        ]}
-        style={sharedStyles.screen}
-      >
-        <View style={styles.onboardingHeader}>
-          <View accessible={false} importantForAccessibility="no-hide-descendants" style={styles.brandMark}><Text style={styles.brandMarkText}>ब</Text></View>
+    <ScrollView contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]} style={sharedStyles.screen}>
+      <View style={styles.column}>
+        <View style={styles.header}>
+          <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.brandMark}>ब</Text>
+          <Text style={styles.stepLabel}>{recalibrating ? 'Tune your plan' : `Step ${stepNumber} of ${steps.length}`}</Text>
           {recalibrating ? (
             <Pressable accessibilityLabel="Cancel recalibration" accessibilityRole="button" onPress={() => router.back()} style={styles.cancelButton}>
-              <X color={colors.ink} size={20} />
+              <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
+          ) : <View style={styles.cancelSpacer} />}
+        </View>
+
+        <View style={styles.body}>
+          {step === 'listen' ? (
+            <View style={styles.stack}>
+              <Text accessibilityRole="header" style={styles.heading}>Hear this</Text>
+              <Text accessibilityLanguage="hi-IN" style={styles.hindi}>नमस्ते</Text>
+              <Text style={styles.latin}>Namaste</Text>
+              <Text style={sharedStyles.body}>Saved in the app. No connection and no microphone.</Text>
+              <Pressable accessibilityLabel="Hear नमस्ते again" accessibilityRole="button" onPress={() => setReplayToken((current) => current + 1)} style={styles.hearButton} testID="onboarding-hear-again">
+                <Text style={styles.hearText}>Hear it again</Text>
+              </Pressable>
+              <Text style={styles.prompt}>Which reply fits?</Text>
+              <ChoiceRow
+                choices={replies.map((item) => ({ detail: `${item.latin}, ${item.en}`, hindi: true, label: item.hi, value: item.id }))}
+                label="Reply to नमस्ते"
+                onChange={setReply}
+                testIDFor={(choice) => choice.value === 'namaste' ? 'onboarding-reply-namaste' : undefined}
+                value={reply}
+              />
+              {reply && !heardNamaste ? <Text accessibilityLiveRegion="polite" style={styles.miss}>Listen again — नमस्ते is hello.</Text> : null}
+            </View>
+          ) : null}
+
+          {step === 'level' ? (
+            <View style={styles.stack}>
+              <Text accessibilityRole="header" style={styles.heading}>Where are you starting?</Text>
+              <Text style={sharedStyles.body}>This tunes the first lessons. You can change it later.</Text>
+              <ChoiceRow choices={levels} label="Hindi level" onChange={setLevel} value={level} />
+              <Text accessibilityRole="header" style={styles.subheading}>How should Hindi appear?</Text>
+              <ChoiceRow choices={scripts} label="Hindi script preference" onChange={setScriptPreference} value={scriptPreference} />
+            </View>
+          ) : null}
+
+          {step === 'goal' ? (
+            <View style={styles.stack}>
+              <View style={styles.ashaRow}>
+                <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
+                <View style={styles.ashaCopy}>
+                  <Text accessibilityRole="header" style={styles.heading}>Meet Asha</Text>
+                  <Text style={sharedStyles.body}>Asha is your voice tutor. When you are ready, she practices these lines out loud with you.</Text>
+                </View>
+              </View>
+              <Text accessibilityRole="header" style={styles.subheading}>What matters most?</Text>
+              <ChoiceRow choices={goals} label="Learning goal" onChange={setPrimaryGoal} value={primaryGoal} />
+            </View>
           ) : null}
         </View>
-        <View style={styles.intro}>
-          <Text style={sharedStyles.eyebrow}>{recalibrating ? 'Tune your plan' : 'Welcome to Bolo'}</Text>
-          <Text accessibilityRole="header" style={styles.heading}>{recalibrating ? 'Recalibrate without losing your choices' : 'Your Hindi plan in one minute'}</Text>
-          <Text style={sharedStyles.body}>Choose how you want to learn. You can change these preferences later.</Text>
-        </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionTitle}><Sparkles color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>Where are you starting?</Text></View>
-          <ChoiceRow label="Hindi level" value={level} onChange={setLevel} choices={[
-            { value: 'new', label: 'New to Hindi', detail: 'Start with essential patterns.' },
-            { value: 'beginner', label: 'Beginner', detail: 'I know greetings and a few phrases.' },
-            { value: 'intermediate', label: 'Intermediate', detail: 'Give me richer real-life situations.' },
-          ]} />
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionTitle}><BookOpenText color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>How should Hindi appear?</Text></View>
-          <ChoiceRow label="Hindi script preference" value={scriptPreference} onChange={setScriptPreference} choices={[
-            { value: 'both', label: 'Hindi + transliteration' },
-            { value: 'devanagari', label: 'Hindi script only' },
-            { value: 'latin', label: 'Transliteration first' },
-          ]} />
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionTitle}><Route color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>What matters most?</Text></View>
-          <ChoiceRow label="Learning goal" value={primaryGoal} onChange={setPrimaryGoal} choices={[
-            { value: 'conversation', label: 'Everyday conversation' },
-            { value: 'travel', label: 'Travel' },
-            { value: 'family', label: 'Family and friends' },
-            { value: 'work', label: 'Work' },
-          ]} />
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionTitle}><Languages color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>Asha’s replies</Text></View>
-          <ChoiceRow label="Asha response language" value={responseLanguage} onChange={setResponseLanguage} choices={[
-            { value: 'en', label: 'English first' },
-            { value: 'hi', label: 'Hindi first' },
-          ]} />
-        </View>
-
-        <View style={styles.section}>
-          <Text accessibilityRole="header" style={styles.title}>Daily practice target</Text>
-          <ChoiceRow label="Daily practice target" value={goal} onChange={setGoal} choices={[
-            { value: 5, label: '5 minutes' },
-            { value: 10, label: '10 minutes' },
-            { value: 15, label: '15 minutes' },
-          ]} />
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionTitle}><Mic color={colors.brandDark} size={20} /><Text accessibilityRole="header" style={styles.title}>Optional microphone check</Text></View>
-          <Text style={styles.detail}>Bolo only asks after you tap. Voice is optional, and no recording begins during this check.</Text>
-          <Pressable accessibilityRole="button" onPress={() => void testMicrophone()} style={styles.secondaryButton}>
-            <Text style={styles.secondaryText}>{microphoneTested ? 'Check again' : 'Check microphone access'}</Text>
-          </Pressable>
-          <Text accessibilityLiveRegion="polite" style={styles.status}>{microphoneStatus}</Text>
-        </View>
-
-        <Pressable accessibilityRole="button" onPress={finish} style={sharedStyles.primaryButton}>
-          <Text style={sharedStyles.primaryButtonText}>{recalibrating ? 'Save my practice plan' : 'Build my practice plan'}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: continueDisabled }}
+          disabled={continueDisabled}
+          onPress={continueForward}
+          style={[styles.continueButton, continueDisabled && styles.continueDisabled]}
+          testID={onLastStep ? 'onboarding-start' : 'onboarding-continue'}
+        >
+          <Text style={styles.continueText}>{continueLabel}</Text>
         </Pressable>
-      </ScrollView>
+      </View>
       <StatusBarScrim />
-    </>
+    </ScrollView>
   );
 }
 
 const useStyles = makeStyles((c) => ({
-  content: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.xl },
-  onboardingHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brandMark: { minHeight: 44, justifyContent: 'center' },
-  brandMarkText: { ...hindiType(40), color: c.brand },
-  cancelButton: { width: 44, height: 44, borderRadius: radius.pill, borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
-  intro: { gap: spacing.sm },
-  heading: { color: c.ink, fontSize: 32, lineHeight: 38, fontWeight: '900' },
-  section: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md },
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  title: { flexShrink: 1, color: c.ink, fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  screen: { flexGrow: 1 },
+  column: {
+    alignSelf: 'center',
+    flexGrow: 1,
+    gap: spacing.lg,
+    maxWidth: maxContentWidth,
+    paddingHorizontal: spacing.xl,
+    width: '100%',
+  },
+  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 44 },
+  brandMark: { ...hindiType(28), color: c.brand },
+  stepLabel: { ...type.eyebrow, color: c.brandText },
+  cancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  cancelText: { ...type.label, color: c.ink },
+  cancelSpacer: { width: 64 },
+  body: { flex: 1, justifyContent: 'center' },
+  stack: { gap: spacing.md },
+  heading: { ...type.display, color: c.ink },
+  subheading: { ...type.title, color: c.ink, marginTop: spacing.sm },
+  hindi: { ...hindiType(56), color: c.ink },
+  latin: { ...type.bodyLarge, color: c.brandText },
+  prompt: { ...type.label, color: c.ink, marginTop: spacing.sm, fontWeight: '700' },
+  hearButton: { ...buttons.secondary, alignSelf: 'flex-start', minHeight: 44 },
+  hearText: buttons.secondaryText,
+  miss: { ...type.caption, color: c.muted },
   choices: { gap: spacing.sm },
-  choice: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.background, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  choiceSelected: { borderColor: c.forest, backgroundColor: c.successSoft },
-  check: { width: 24, height: 24, borderRadius: radius.pill, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
-  checkSelected: { borderColor: c.forest, backgroundColor: c.forest },
-  choiceCopy: { minWidth: 0, flex: 1, gap: 2 },
-  choiceLabel: { color: c.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  choiceLabelSelected: { color: c.forestText, fontWeight: '900' },
-  choiceDetail: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  detail: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  secondaryButton: { minHeight: 48, borderRadius: radius.md, borderWidth: 1, borderColor: c.forest, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  secondaryText: { color: c.forestText, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  status: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  choice: {
+    alignItems: 'center',
+    backgroundColor: c.paperRaised,
+    borderColor: c.line,
+    borderCurve: 'continuous',
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    gap: spacing.md,
+    minHeight: 56,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  choiceSelected: { borderColor: c.ink, borderWidth: 2 },
+  mark: { alignItems: 'center', justifyContent: 'center', borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 22, width: 22 },
+  markSelected: { backgroundColor: c.ink, borderColor: c.ink },
+  markCheck: { ...type.caption, color: c.white, fontWeight: '700' },
+  choiceCopy: { flex: 1, gap: spacing.xs, minWidth: 0 },
+  choiceLabel: { ...type.label, color: c.ink, fontWeight: '700' },
+  choiceHindi: { ...hindiType(20) },
+  choiceDetail: { ...type.caption, color: c.muted },
+  ashaRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
+  asha: { backgroundColor: c.brandSoft, borderColor: c.gold, borderRadius: radius.pill, borderWidth: 2, height: 72, width: 72 },
+  ashaCopy: { flex: 1, gap: spacing.sm, minWidth: 0 },
+  continueButton: buttons.primary,
+  continueDisabled: { opacity: 0.45 },
+  continueText: buttons.primaryText,
 }));

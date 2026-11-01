@@ -122,6 +122,34 @@ describe('local progress storage', () => {
     expect(sanitizeChatHistory('{}')).toEqual([]);
   });
 
+  it('loads string-only messages unchanged and keeps only a valid structured block', () => {
+    const structured = {
+      version: 1 as const,
+      intro: 'Ask politely:',
+      phrases: [{ devanagari: 'चाय में चीनी कम डालिए।', romanized: 'chaay mein cheeni kam daaliye.', english: 'Please put less sugar in the tea.' }],
+    };
+    const history = sanitizeChatHistory(JSON.stringify([
+      { id: 'old-you', role: 'you', text: 'Less sugar please' },
+      { id: 'old-asha', role: 'asha', text: 'You can say: चाय में चीनी कम डालिए (chaay mein cheeni kam daaliye).', language: 'en' },
+      { id: 'structured', role: 'asha', text: 'Ask politely: चाय में चीनी कम डालिए।', language: 'en', structured },
+      { id: 'invalid-structured', role: 'asha', text: 'Still readable.', language: 'en', structured: { version: 1, phrases: [{ devanagari: 'chaay', romanized: 'chaay', english: 'tea' }] } },
+      { id: 'oversized-structured', role: 'asha', text: 'Still readable too.', structured: { version: 1, intro: 'x'.repeat(601) } },
+      { id: 'you-structured', role: 'you', text: 'Mine', structured },
+    ]));
+
+    expect(history).toEqual([
+      { id: 'old-you', role: 'you', text: 'Less sugar please' },
+      { id: 'old-asha', role: 'asha', text: 'You can say: चाय में चीनी कम डालिए (chaay mein cheeni kam daaliye).', language: 'en' },
+      { id: 'structured', role: 'asha', text: 'Ask politely: चाय में चीनी कम डालिए।', language: 'en', structured },
+      { id: 'invalid-structured', role: 'asha', text: 'Still readable.', language: 'en' },
+      { id: 'oversized-structured', role: 'asha', text: 'Still readable too.' },
+      { id: 'you-structured', role: 'you', text: 'Mine' },
+    ]);
+    expect(appendChatHistory([], [{ id: 'new', role: 'asha', text: 'Reply', language: 'en', structured }])).toEqual([
+      { id: 'new', role: 'asha', text: 'Reply', language: 'en', structured },
+    ]);
+  });
+
   it('migrates prior coach identities to Asha for display', () => {
     const history = sanitizeChatHistory(JSON.stringify([
       { id: 'legacy-mira', role: 'mira', text: 'नमस्ते!' },
@@ -389,6 +417,8 @@ describe('practice reminder storage', () => {
     expect(sanitizeReminder('{"notificationId":"reminder-1"}').notificationId).toBe('reminder-1');
     expect(sanitizeReminder('{"notificationId":42}').notificationId).toBeNull();
     expect(sanitizeReminder(JSON.stringify({ notificationId: 'x'.repeat(201) })).notificationId).toBeNull();
+    expect(sanitizeReminder('{"offerAnswered":true}').offerAnswered).toBe(true);
+    expect(sanitizeReminder('{"offerAnswered":"true"}').offerAnswered).toBeUndefined();
   });
 });
 

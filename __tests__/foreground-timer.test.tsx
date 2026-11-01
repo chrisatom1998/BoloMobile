@@ -80,4 +80,18 @@ describe('foreground practice timer', () => {
 
     await unmount();
   });
+
+  it('stops counting after the idle limit and resumes on the next touch', async () => {
+    const { result } = await renderHook(() => useForegroundTimer());
+
+    now = 1_000 + 60_000;
+    result.current.touch();
+    // Phone left open for three hours: only the idle limit is credited.
+    now += 3 * 60 * 60 * 1000;
+    expect(result.current.elapsedSeconds()).toBe(60 + 120);
+
+    result.current.touch();
+    now += 30_000;
+    expect(result.current.elapsedSeconds()).toBe(60 + 120 + 30);
+  });
 });

@@ -12,7 +12,7 @@ import { hapticStartRecording, hapticTap, hapticWarning } from '@/lib/haptics';
 import { stopSpeaking } from '@/lib/speech';
 import { endRealtimeVoiceSession, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { deleteRecordingUri, readRecordingUri } from '@/lib/recording-file';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
 
 const MAX_RECORDING_MS = 15_000;
 const MAX_BASE64_CHARACTERS = 6_000_000;
@@ -23,9 +23,11 @@ type Props = {
   idleLabel?: string;
   onActivityChange?: (active: boolean) => void;
   onRecordingReady: (recording: { audioBase64: string; mimeType: string }) => Promise<void>;
+  /** `secondary` is the outlined idle look for optional recording (the review sheet). Recording states stay filled. */
+  variant?: 'primary' | 'secondary';
 };
 
-export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActivityChange, onRecordingReady }: Props) {
+export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActivityChange, onRecordingReady, variant = 'primary' }: Props) {
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const mountedRef = useRef(true);
@@ -238,6 +240,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
   const unavailable = disabled || busy || starting;
   const styles = useStyles();
   const { colors } = useTheme();
+  const quietIdle = variant === 'secondary' && !isRecording && !(busy || starting);
 
   return (
     <View style={styles.wrapper}>
@@ -248,10 +251,10 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
         accessibilityValue={busy || starting ? { text: label } : undefined}
         disabled={unavailable}
         onPress={isRecording ? () => void finish() : () => void start()}
-        style={[styles.button, isRecording && styles.recording, (busy || starting) && styles.working, disabled && styles.disabled]}
+        style={[styles.button, quietIdle && styles.secondary, isRecording && styles.recording, (busy || starting) && styles.working, disabled && styles.disabled]}
       >
-        {isRecording ? <Square color={colors.white} fill={colors.white} size={17} /> : <Mic color={colors.white} size={19} />}
-        <Text style={styles.label}>{label}</Text>
+        {isRecording ? <Square color={colors.white} fill={colors.white} size={17} /> : <Mic color={quietIdle ? colors.ink : colors.white} size={19} />}
+        <Text style={[styles.label, quietIdle && styles.labelSecondary]}>{label}</Text>
       </Pressable>
       {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
       {error && permissionDenied && Platform.OS !== 'web' ? (
@@ -278,10 +281,12 @@ const useStyles = makeStyles((c) => ({
   },
   // Ink, not red: a red recording state would be hard to tell from the brand-coloured idle button.
   recording: { backgroundColor: c.neutralSurface },
+  secondary: { ...buttons.secondary, borderRadius: radius.md },
+  labelSecondary: buttons.secondaryText,
   working: { backgroundColor: c.forestDark },
   disabled: { opacity: 0.5 },
-  label: { color: c.white, fontSize: 15, fontWeight: '800' },
-  error: { color: c.danger, fontSize: 13, lineHeight: 18 },
+  label: { ...type.label, color: c.white, fontWeight: '700' },
+  error: { ...type.caption, color: c.danger },
   settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
-  settingsLinkText: { color: c.forestText, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+  settingsLinkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
 }));

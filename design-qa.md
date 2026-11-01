@@ -2,27 +2,19 @@
 
 ## Comparison target
 
-- Source visual truth: `/Users/chrisjohnson/.codex/generated_images/019fa669-cd6d-7922-80c9-6d6ad24cd695/call_lGr0HKNnvMla7NbvYoEpW6OE.png`
-- Latest annotation source: `/var/folders/vm/ffplws3s3dsfbdr__6l2sbz40000gn/T/codex-clipboard-15535a9b-2b6a-4431-9d9b-f35c7432df97.png`
+- Source visual truth: local capture, not in the repo (generated option, 1214 × 1295).
+- Latest annotation source: local clipboard capture, not in the repo (558 × 440).
 - Source pixels: generated option 1214 × 1295; latest annotation 558 × 440.
-- Rendered implementation: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/annotation-final-full-5.jpg`
+- Rendered implementation: local capture, not in the repo (annotation of the 5-minute state).
 - Implementation capture: iPhone 17 Pro Max simulator, 368 × 800 pixels, Release configuration.
 - State: Today screen scrolled to the learning path and daily target; 5-minute goal selected in the direct comparison; 10-minute goal selected in the second proof capture; 0 minutes and 0% practiced; Chai scene incomplete; Asha turn complete.
 - Density normalization: the latest annotation was scaled to 560 × 443. The 334 × 250 implementation card crop was scaled to 560 × 419 and padded to the same 560 × 443 frame without stretching.
 
+The comparison images lived on one machine under a local Codex folder and a temporary clipboard path. They are not checked into this repo, so this note keeps the findings and drops those paths.
+
 ## Evidence
 
-- Full-view implementation: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/annotation-final-full-5.jpg`
-- Focused source/implementation comparison: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/comparison.png`
-- Latest annotated 5-minute comparison: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/annotation-comparison.png`
-- Latest 10-minute state proving the idle 5-minute gold marker: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/annotation-implementation-10.png`
-- Marker alignment before/after comparison: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/dot-alignment-comparison.png`
-- Final aligned 5-minute state: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/dot-alignment-after-5.png`
-- Runtime centerline before/after comparison: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/centerline-before-after.png`
-- Final center and right-endpoint states: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/centerline-final-10.png` and `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/centerline-final-15.png`
-- Magnified runtime checks: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/centerline-final-apex-8x.png` and `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/centerline-final-left-8x.png`
-- Endpoint-label before/after comparison: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/label-overlap-before-after.png`
-- Final 5-, 10-, and 15-minute states after the label correction: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/label-overlap-final-5.png`, `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/label-overlap-final-10.png`, and `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/label-overlap-final-15.png`
+- Full-view implementation, focused comparison, annotated 5-minute comparison, 10-minute idle-marker proof, marker alignment, centerline checks, and endpoint-label states were local simulator captures. They are not in the repo.
 - Focused inspection was required because the dial labels, marker positions, arc proportions, and status pills were too small to judge reliably in the full simulator screenshot.
 
 ## Findings
@@ -37,24 +29,24 @@
 
 ## Comparison history
 
-1. Initial implementation evidence: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/iteration-1-full.png`
+1. Initial implementation. Local capture, not in the repo.
    - P2: the first arc was wider and shallower than the selected Garden Sundial, and the goal value sat too close to the curve.
    - Fix: narrowed the endpoints, increased the arc rise, moved the selected value below the apex, centered the status pills, and removed excess space beneath the dial.
-2. Post-fix evidence: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/comparison.png`
+2. Post-fix comparison. Local capture, not in the repo.
    - The selected terracotta marker now sits at the 10-minute apex, the 5/15 endpoints mirror the source, the goal value is clear inside the arc, and no P0/P1/P2 mismatch remains.
-3. User annotation refinement: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/annotation-comparison.png`
+3. User annotation refinement. Local capture, not in the repo.
    - P2: the arc crowded the selected goal value, the progress copy sat too close to the Chai/Asha controls, and the idle 5-minute endpoint used a hollow marker.
    - Fix: translated the curve and all three marker dots upward by 10 points without reshaping the progress path, added 8 points above the status controls, and made the idle 5-minute endpoint gold.
    - Verification: the 5-minute selected state keeps its terracotta marker, while the 10-minute selected state visibly shows a filled gold 5-minute marker. The raised curve, labels, goal value, progress copy, and status controls do not overlap or clip.
-4. Marker-on-curve refinement: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/dot-alignment-comparison.png`
+4. Marker-on-curve refinement. Local capture, not in the repo.
    - P2: all three markers hovered slightly above the curve instead of being centered on it.
    - Fix: lowered only the marker centers, using the curve's exact endpoint and apex positions. The 5/15 markers now use a 2-point bottom offset and the 10 marker uses 1.5 points.
    - Superseded finding: source-coordinate math aligned, but later user feedback and magnified runtime pixels showed the SVG viewport was scaling the curve differently from the markers. The visible centers still missed the rendered curve.
-5. Runtime centerline correction: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/centerline-before-after.png`
+5. Runtime centerline correction. Local capture, not in the repo.
    - P2: the rendered curve crossed the lower portion of the selected center dot and ended down/right of the left dot even though their source coordinates matched.
    - Fix: gave the curve an explicit 136-point viewport with no aspect-ratio padding, then placed both endpoint controls at the same responsive percentages as the curve endpoints.
    - Verification: the selected 10-minute dot is centered on the true curve apex; the 5- and 15-minute dot centers sit on their respective rendered endpoints. The 8× inspections confirm the curve meets the centers, while labels, touch targets, curve height, progress behavior, and surrounding spacing remain unchanged.
-6. Endpoint-label overlap correction: `/Users/chrisjohnson/.codex/visualizations/2026/07/28/019fa669-cd6d-7922-80c9-6d6ad24cd695/garden-sundial-qa/label-overlap-before-after.png`
+6. Endpoint-label overlap correction. Local capture, not in the repo.
    - P2: after the marker centerline was corrected, the rising sides of the arc crossed the inward edge of the 5- and 15-minute labels.
    - Fix: moved only the visible 5-minute label 8 points left and the visible 15-minute label 8 points right. The curve, marker centers, and 48-point controls stayed fixed.
    - Verification: the labels remain clear of the arc in the 5-, 10-, and 15-minute simulator states. All three marker centers remain on the curve, and goal selection still updates the real persisted setting.
