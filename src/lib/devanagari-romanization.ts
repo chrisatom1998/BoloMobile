@@ -10,6 +10,17 @@ const INDEPENDENT_VOWELS: Record<string, string> = {
   ऐ: 'ai',
   ओ: 'o',
   औ: 'au',
+  // Loanword and regional vowels: ऑटो (auto), डॉक्टर (doctor), ऍप (app).
+  ऑ: 'o',
+  ऍ: 'e',
+  ऄ: 'a',
+  ॲ: 'a',
+  ऎ: 'e',
+  ऒ: 'o',
+  ॠ: 'ree',
+  ऌ: 'li',
+  ॡ: 'lee',
+  ॐ: 'om',
 };
 
 const VOWEL_SIGNS: Record<string, string> = {
@@ -23,6 +34,13 @@ const VOWEL_SIGNS: Record<string, string> = {
   'ै': 'ai',
   'ो': 'o',
   'ौ': 'au',
+  'ॉ': 'o',
+  'ॅ': 'e',
+  'ॆ': 'e',
+  'ॊ': 'o',
+  'ॄ': 'ree',
+  'ॢ': 'li',
+  'ॣ': 'lee',
 };
 
 const CONSONANTS: Record<string, string> = {
@@ -33,6 +51,9 @@ const CONSONANTS: Record<string, string> = {
   प: 'p', फ: 'ph', ब: 'b', भ: 'bh', म: 'm',
   य: 'y', र: 'r', ल: 'l', व: 'v', श: 'sh', ष: 'sh', स: 's', ह: 'h', ळ: 'l',
   'क़': 'q', 'ख़': 'kh', 'ग़': 'gh', 'ज़': 'z', 'ड़': 'd', 'ढ़': 'dh', 'फ़': 'f', 'य़': 'y',
+  // Precomposed letters outside the core set, so none is dropped from Latin output.
+  '\u0929': 'n', '\u0931': 'r', '\u0934': 'zh', '\u0979': 'zh', '\u097B': 'g', '\u097C': 'j', '\u097E': 'd', '\u097F': 'b',
+  '\u0958': 'q', '\u0959': 'kh', '\u095A': 'gh', '\u095B': 'z', '\u095C': 'd', '\u095D': 'dh', '\u095E': 'f', '\u095F': 'y',
 };
 
 const MARKS: Record<string, string> = {
@@ -47,6 +68,7 @@ const DIGITS: Record<string, string> = {
   '५': '5', '६': '6', '७': '7', '८': '8', '९': '9',
 };
 
+const DEVANAGARI_BLOCK = /[\u0900-\u097F]/u;
 const VIRAMA = '्';
 const NUKTA = '़';
 const DEVANAGARI_LETTER_OR_MARK = /[\u0900-\u0963\u0971-\u097F]/u;
@@ -126,11 +148,15 @@ export function romanizeDevanagari(text: string) {
       result += digit;
       continue;
     }
-    if (character === '।' || character === '॥') {
+    if (character === '।' || character === '॥' || character === '॰') {
       result += '.';
       continue;
     }
-    if (character !== VIRAMA && character !== NUKTA) result += character;
+    // Anything else still in the Devanagari block (Vedic accents, rare signs)
+    // is dropped: the Latin output must never carry Devanagari, because
+    // latin-only learners rely on this transform to hide the script entirely.
+    if (DEVANAGARI_BLOCK.test(character)) continue;
+    result += character;
   }
 
   return capitalizeSentences(result);
