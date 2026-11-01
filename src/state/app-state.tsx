@@ -53,9 +53,12 @@ type SceneCompletion = {
   weakPhrases: string[];
 };
 
+export type StoragePhase = 'loading' | 'ready' | 'error';
+
 type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
   aiConsent: boolean;
   hydrated: boolean;
+  storagePhase: StoragePhase;
   streak: number;
   dailySteps: number;
   duePhrases: SavedPhrase[];
@@ -83,6 +86,7 @@ type AppActions = {
   setMotionPreference: (preference: MotionPreference) => void;
   restoreProgress: (progress: RestorableProgress) => Promise<boolean>;
   clearAllData: () => Promise<void>;
+  retryStorageLoad: () => void;
 };
 
 type AppStateValue = AppStateSlices & AppActions;
@@ -182,6 +186,8 @@ export async function persistAiConsentChoice(aiConsent: boolean) {
 export function AppStateProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<PersistedState>(initialState);
   const [hydrated, setHydrated] = useState(false);
+  const [storagePhase, setStoragePhase] = useState<StoragePhase>('loading');
+  const [storageReload, setStorageReload] = useState(0);
   // State updaters may run more than once in development. Keep persistence
   // outside React's state setter so a render retry cannot write twice.
   const stateRef = useRef<PersistedState>(initialState);
@@ -226,6 +232,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           motionPreference: sanitizeMotionPreference(readStored(storageKeys.motionPreference)),
         };
         if (active) {
+          setStoragePhase('ready');
           replaceState(next);
           setHydrated(true);
           if (clientId !== readStored(storageKeys.clientId)) {
@@ -240,6 +247,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         observe('runtime_error');
         if (active) {
           const fallback = { ...initialState, clientId: sanitizeClientId(null) };
+          setStoragePhase('error');
           replaceState(fallback);
           setHydrated(true);
           showAppAlert('Could not load saved progress', 'Bolo opened with temporary defaults. Check available storage before making changes.');
@@ -249,7 +257,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return () => {
       active = false;
     };
-  }, [enqueuePersistence, replaceState]);
+  }, [enqueuePersistence, replaceState, storageReload]);
+
+  const retryStorageLoad = useCallback(() => {
+    setStoragePhase('loading');
+    setStorageReload((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -626,17 +639,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setMotionPreference,
     restoreProgress,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, restoreProgress, clearAllData]);
+    retryStorageLoad,
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, restoreProgress, clearAllData, retryStorageLoad]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,
     aiConsent: state.aiConsent !== null,
     hydrated,
+    storagePhase,
     streak: calculateStreak(state.streakDays, completedToday(state.practice)),
     dailySteps: Number(state.practice.chaiDone) + Number(state.practice.liveDone),
     duePhrases: dueSavedPhrases(state.phrases, state.phraseReviews, Infinity),
     reviewStreak: calculateStreak(state.reviewStreakDays, state.reviewStreakDays.includes(dateKey())),
-  }), [state, hydrated]);
+  }), [state, hydrated, storagePhase]);
 
   return (
     <AppActionsContext.Provider value={actions}>

@@ -11,6 +11,10 @@ import { AiConsentGate } from '@/components/ai-consent-gate';
 import { AshaMinimizeButton, AshaMinimizedCover, AshaSwipeToMinimize } from '@/components/asha-minimize-control';
 import { AshaTypingRow, ChatMessageRow, phrasePlaybackKey } from '@/components/chat-message-row';
 import { JournalDisplay } from '@/components/journal-chrome';
+import { ErrorState } from '@/components/states/ErrorState';
+import { LoadingState } from '@/components/states/LoadingState';
+import { StateAction } from '@/components/states/state-action';
+import { usePreviewPhase } from '@/components/states/preview-context';
 import { LiveComposer } from '@/components/live-composer';
 import { QueuedReportRow } from '@/components/queued-report-row';
 import { RealtimeVoiceButton, type RealtimeErrorDetails } from '@/components/realtime-voice-button';
@@ -32,6 +36,7 @@ import { hapticTap } from '@/lib/haptics';
 import { ashaInviteAction, ashaInviteLine, ashaInviteSharing } from '@/lib/asha-invite';
 import { LIVE_MIC_EXPLAINER, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
+import { asAshaPhase, selectAshaState } from '@/lib/screen-states';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
@@ -40,7 +45,7 @@ import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/ser
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme } from '@/theme';
+import { control, displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -105,6 +110,7 @@ export default function LiveScreen() {
   // 390 and wider fit the title and Private badge on one row. Narrower phones stack them.
   const reflowHeaderLayout = largeTextLayout || fontScale >= 1.2 || windowWidth < 390;
   const { elapsedSeconds, reset: resetPracticeTimer, touch: touchPracticeTimer } = useForegroundTimer();
+  const preview = usePreviewPhase('asha');
   const { addPracticeSeconds, aiConsent, appendChatMessages, replaceLiveChatSnapshot, chatHistory, clearChatHistory, clientId, learnerProfile, markLiveTurn, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews = {}, phrases = [], togglePhrase, updateLearnerProfile } = useAppState();
   const { mode: motionMode, reducedMotion } = useMotionPreference(motionPreference);
   const floatingAsha = useAshaVoiceSession();
@@ -219,6 +225,17 @@ export default function LiveScreen() {
     recording: 'Speak naturally, even while Asha talks. Tap to mute.',
     responding: 'Your mic is muted. Tap Asha to speak at any time.',
   }[realtimeStatus];
+  const ashaPhase = asAshaPhase(preview) ?? selectAshaState({
+    connecting: realtimeStatus === 'connecting',
+    micDenied: microphonePhase === 'denied',
+    offline: error === LIVE_OFFLINE_MESSAGE,
+    unavailable: Boolean(audioError) || (error.length > 0 && error !== LIVE_OFFLINE_MESSAGE && error !== LIVE_MIC_PERMISSION_MESSAGE),
+  });
+  const retryAsha = useCallback(() => {
+    setError('');
+    clearAudioError();
+    composerMicActionRef.current?.();
+  }, [clearAudioError]);
   const composerMicLabel = {
     disconnected: 'Start a voice conversation',
     connecting: 'Connecting…',
@@ -815,6 +832,50 @@ export default function LiveScreen() {
     ? { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', responding: 'SPEAKING' }[realtimeStatus]
     : 'LIVE VOICE';
 
+  const forcedAsha = asAshaPhase(preview);
+  if (forcedAsha === 'mic-denied' || forcedAsha === 'offline' || forcedAsha === 'unavailable' || forcedAsha === 'connecting') {
+    return (
+      <View style={styles.screen} testID="asha-forced-state">
+        {forcedAsha === 'mic-denied' ? (
+          <ErrorState
+            accessibilityLabel="Open Settings to allow microphone access"
+            actionLabel="Open Settings"
+            body={LIVE_MIC_PERMISSION_MESSAGE}
+            onAction={() => { void Linking.openSettings(); }}
+            testID="asha-mic-denied"
+            title="The microphone is off"
+            tone="night"
+          />
+        ) : null}
+        {forcedAsha === 'offline' ? (
+          <ErrorState
+            accessibilityLabel="Go to today’s lesson"
+            actionLabel="Go to today’s lesson"
+            body={LIVE_OFFLINE_MESSAGE}
+            onAction={() => router.push('/' as Href)}
+            testID="asha-offline"
+            title="You're offline"
+            tone="night"
+          />
+        ) : null}
+        {forcedAsha === 'unavailable' ? (
+          <ErrorState
+            accessibilityLabel="Retry connecting to Asha"
+            actionLabel="Retry"
+            body="Her voice didn't connect. Your phrases are still here."
+            onAction={retryAsha}
+            testID="asha-unavailable"
+            title="Asha is unavailable"
+            tone="night"
+          />
+        ) : null}
+        {forcedAsha === 'connecting' ? (
+          <LoadingState body="Opening a private live voice session…" testID="asha-connecting" title="Connecting to Asha" tone="night" />
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.screen}>
       <FlatList
@@ -937,7 +998,7 @@ export default function LiveScreen() {
                     </View>
                     {microphonePhase === 'explaining' ? (
                       <Text accessibilityLiveRegion="polite" style={styles.heroBody} testID="mic-explainer">{LIVE_MIC_EXPLAINER}</Text>
-                    ) : microphonePhase === 'denied' ? (
+                    ) : ashaPhase === 'mic-denied' ? (
                       <View style={styles.micDenied} testID="mic-denied">
                         <Text accessibilityRole="alert" style={styles.heroTitle}>The microphone is off</Text>
                         <Text style={styles.heroBody}>{LIVE_MIC_PERMISSION_MESSAGE}</Text>
@@ -945,6 +1006,8 @@ export default function LiveScreen() {
                           <Text style={styles.talkButtonText}>Open Settings</Text>
                         </Pressable>
                       </View>
+                    ) : ashaPhase === 'connecting' && !conversationStarted ? (
+                      <LoadingState body="Opening a private live voice session…" testID="asha-connecting" title="Connecting to Asha" tone="night" />
                     ) : conversationStarted ? (
                       <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                     ) : (
@@ -1085,6 +1148,9 @@ export default function LiveScreen() {
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
+        ) : null}
+        {ashaPhase === 'unavailable' && (error.length > 0 || audioError) ? (
+          <StateAction accessibilityLabel="Retry connecting to Asha" label="Retry" onPress={retryAsha} testID="asha-retry" tone="night" />
         ) : null}
         {error === LIVE_OFFLINE_MESSAGE ? (
           <Pressable accessibilityRole="link" accessibilityLabel="Go to today’s lesson" hitSlop={8} onPress={() => router.push('/' as Href)} style={styles.settingsLink}>
@@ -1303,7 +1369,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   noticeBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.nightLine, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   noticeText: { flex: 1, color: c.white, fontSize: 13, lineHeight: 18 },
   error: { flex: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
-  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLink: { alignSelf: 'flex-start', minHeight: control.minTarget, justifyContent: 'center' },
   settingsLinkText: { color: c.white, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 } as const);
 

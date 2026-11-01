@@ -7,6 +7,10 @@ import { FlatList, Platform, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
+import { EmptyState } from '@/components/states/EmptyState';
+import { ErrorState } from '@/components/states/ErrorState';
+import { LoadingState } from '@/components/states/LoadingState';
+import { usePreviewPhase } from '@/components/states/preview-context';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { JournalDisplay } from '@/components/journal-chrome';
 import { selectNextLesson } from '@/lib/lesson-path';
@@ -16,6 +20,7 @@ import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
+import { asContentPhase, selectPhrasesState, storagePhaseFromState } from '@/lib/screen-states';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
@@ -57,7 +62,8 @@ export default function PhrasesScreen() {
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
-  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, updateLearnerProfile, sceneProgress: savedSceneProgress } = useAppState();
+  const preview = usePreviewPhase('phrases');
+  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, retryStorageLoad, updateLearnerProfile, sceneProgress: savedSceneProgress, ...phraseState } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const [audioPhrase, setAudioPhrase] = useState('');
   const [query, setQuery] = useState('');
@@ -176,6 +182,49 @@ export default function PhrasesScreen() {
       ) : null}
     </View>
   );
+
+  const phrasesPhase = asContentPhase(preview) ?? selectPhrasesState({
+    savedCount: phrases.length,
+    storagePhase: storagePhaseFromState(phraseState),
+  });
+
+  if (phrasesPhase === 'loading') {
+    return (
+      <View style={sharedStyles.screen} testID="phrases-state">
+        <LoadingState body="One moment." testID="phrases-loading" title="Opening your phrases" />
+      </View>
+    );
+  }
+
+  if (phrasesPhase === 'error') {
+    return (
+      <View style={sharedStyles.screen} testID="phrases-state">
+        <ErrorState
+          accessibilityLabel="Retry loading saved phrases"
+          actionLabel="Retry"
+          body="Your saved lines are still on this phone. Try again."
+          onAction={retryStorageLoad}
+          testID="phrases-error"
+          title="Phrases didn't load"
+        />
+      </View>
+    );
+  }
+
+  if (phrasesPhase === 'empty') {
+    return (
+      <View style={sharedStyles.screen} testID="phrases-state">
+        <EmptyState
+          accessibilityLabel={nextLesson.action}
+          actionLabel={nextLesson.action}
+          body="Practice a lesson, then save any useful phrase you want to keep."
+          onAction={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
+          testID="phrases-empty"
+          title="Nothing saved yet"
+        />
+      </View>
+    );
+  }
 
   return (
     <>

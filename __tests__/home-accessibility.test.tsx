@@ -23,7 +23,7 @@ jest.mock('@/state/app-state', () => ({
     phrases: [],
     practice: { chaiDone: false, date: '2026-07-14', liveDone: false, seconds: 0 },
     setGoal: jest.fn(),
-    streak: 0,
+    streak: 1,
   }),
 }));
 
@@ -33,7 +33,7 @@ describe('home accessibility', () => {
   it('provides 44 point targets and selected state for compact controls', async () => {
     const view = await render(<HomeScreen />);
     const settings = view.getByLabelText('Settings');
-    const streak = view.getByLabelText('0 day practice streak');
+    const streak = view.getByLabelText('1 day practice streak');
     const firstPlan = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
     const nextStep = view.getByTestId('today-next-step');
     const topbar = view.getByTestId('today-topbar');
@@ -55,7 +55,7 @@ describe('home accessibility', () => {
     };
     visit(view.getByTestId('today-goal-dial'));
     expect(leakedAccessibilityProps).toEqual([]);
-    expect(view.getByText('0 days')).toBeTruthy();
+    expect(view.getByText('1 day')).toBeTruthy();
     expect(StyleSheet.flatten(nextStep.props.style).minHeight).toBeGreaterThanOrEqual(44);
     for (const tile of ['today-talk-with-asha', 'today-saved-phrases', 'today-plan-catalog']) {
       expect(StyleSheet.flatten(view.getByTestId(tile).props.style).minHeight).toBeGreaterThanOrEqual(44);
