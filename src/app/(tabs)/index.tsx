@@ -1,7 +1,7 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowRight, AudioLines, BookOpenText, Check, Flame, ListOrdered, Settings } from 'lucide-react-native';
+import { ArrowRight, Check, Flame, Settings } from 'lucide-react-native';
 import { useCallback, useMemo } from 'react';
 import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -20,11 +20,13 @@ import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { createButtonStyles, hindiType, makeStyles, maxContentWidth, radius, spacing, type NamedStyles, type, useSharedStyles, useTheme } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
-const goalRingRadius = 27;
+const goalRingSize = 76;
+const goalRingStroke = 6;
+const goalRingRadius = (goalRingSize - goalRingStroke) / 2;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
 /** Due phrases previewed on the review step; the last one fades to hint at the rest. */
 const reviewPreviewLimit = 3;
@@ -49,8 +51,8 @@ export default function HomeScreen() {
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
   const contentTopPadding = Platform.OS === 'android'
-    ? Math.max(18, (StatusBar.currentHeight ?? 0) + spacing.md)
-    : 18;
+    ? Math.max(spacing.lg, (StatusBar.currentHeight ?? 0) + spacing.md)
+    : spacing.lg;
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
@@ -62,7 +64,9 @@ export default function HomeScreen() {
   // Whole minutes drive both the label and the ring so they never disagree.
   const minutesToday = Math.floor(practice.seconds / 60);
   const goalPercent = Math.min(100, Math.round(minutesToday / goal * 100));
-  const minutesLabel = minutesToday > 999 ? '999+' : String(minutesToday);
+  // Past the goal the ring shows "15+" rather than a lopsided "911 of 15 min".
+  const goalMet = minutesToday > goal;
+  const minutesLabel = goalMet ? `${goal}+` : String(minutesToday);
   // Every due phrase counts here, not the 5-phrase review-session cap from duePhrases.
   // `calendarDay` re-runs these after midnight: this tab stays mounted, and
   // phrases can fall due overnight without their references changing.
@@ -205,25 +209,25 @@ export default function HomeScreen() {
             style={styles.goalDial}
             testID="today-goal-dial"
           >
-            <Svg aria-hidden height={64} pointerEvents="none" style={styles.goalRing} viewBox="0 0 64 64" width={64}>
-              <Circle cx={32} cy={32} fill="none" r={goalRingRadius} stroke="rgba(255, 255, 255, 0.22)" strokeWidth={6} />
+            <Svg aria-hidden height={goalRingSize} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${goalRingSize} ${goalRingSize}`} width={goalRingSize}>
+              <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.onBrandTrack} strokeWidth={goalRingStroke} />
               {goalPercent > 0 ? (
                 <Circle
-                  cx={32}
-                  cy={32}
+                  cx={goalRingSize / 2}
+                  cy={goalRingSize / 2}
                   fill="none"
                   r={goalRingRadius}
                   stroke={colors.gold}
                   strokeDasharray={`${goalRingLength * goalPercent / 100} ${goalRingLength}`}
                   strokeLinecap="round"
-                  strokeWidth={6}
+                  strokeWidth={goalRingStroke}
                 />
               ) : null}
             </Svg>
             <View pointerEvents="none" style={styles.goalValue}>
               {/* Long practice days used to push the number out of the ring. */}
               <Text numberOfLines={1} style={[styles.goalMinutes, minutesLabel.length >= 3 && styles.goalMinutesLong]}>{minutesLabel}</Text>
-              <Text style={styles.goalUnit} testID="today-goal-value">of {goal} min</Text>
+              <Text style={styles.goalUnit} testID="today-goal-value">{goalMet ? 'min' : `of ${goal} min`}</Text>
             </View>
           </View>
         </View>
@@ -275,30 +279,6 @@ export default function HomeScreen() {
           </PressableFeedback>
         </View>
       </MotionReveal>
-
-      <View style={styles.jumpSection}>
-        <Text style={styles.jumpLabel}>Or jump to</Text>
-        <View style={[styles.jumpRow, largeTextLayout && styles.jumpRowLarge]} testID="today-jump-row">
-          <PressableFeedback accessibilityLabel="Talk with Asha" accessibilityRole="button" onPress={() => router.push('/live' as Href)} style={styles.jumpTile} testID="today-talk-with-asha">
-            <AudioLines color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>Asha</Text>
-          </PressableFeedback>
-          <PressableFeedback
-            accessibilityLabel={dueCount > 0 ? `Saved phrases, ${plural(dueCount, 'phrase')} due` : 'Saved phrases'}
-            accessibilityRole="button"
-            onPress={() => router.push('/phrases' as Href)}
-            style={styles.jumpTile}
-            testID="today-saved-phrases"
-          >
-            <BookOpenText color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>Phrases</Text>
-          </PressableFeedback>
-          <PressableFeedback accessibilityLabel={`Browse all ${lessonPlans.length} plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.jumpTile} testID="today-plan-catalog">
-            <ListOrdered color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>All plans</Text>
-          </PressableFeedback>
-        </View>
-      </View>
     </View>
   ), [colors, dateLine, dayComplete, dueCount, goal, goalPercent, hero, largeTextLayout, minutesLabel, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, visibleSteps, watermark]);
 
@@ -325,7 +305,9 @@ export default function HomeScreen() {
             <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
               <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
                 <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')}</Text>
+                <PressableFeedback accessibilityLabel={`Browse all ${lessonPlans.length} plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.allPlans} testID="today-plan-catalog">
+                  <Text style={styles.allPlansText}>All plans</Text>
+                </PressableFeedback>
               </View>
               <PressableFeedback
                 accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
@@ -357,78 +339,77 @@ export default function HomeScreen() {
   );
 }
 
-const useStyles = makeStyles((c) => ({
-  list: { width: '100%', alignItems: 'stretch', paddingHorizontal: 20, paddingTop: 18, paddingBottom: spacing.xxl },
+const useStyles = makeStyles((c) => {
+  const button = createButtonStyles(c);
+  return {
+  list: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'stretch', gap: spacing.md, marginBottom: spacing.lg },
-  planCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', gap: 10 },
+  planCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', gap: spacing.md },
   topbar: { width: '100%', minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   topbarLarge: { minHeight: 0, flexDirection: 'column', alignItems: 'stretch', gap: spacing.md, paddingRight: 0 },
-  greetingCopy: { minWidth: 0, flex: 1, gap: 2 },
-  dateLine: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '500' },
+  greetingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  dateLine: { ...type.caption, color: c.muted },
   greetingRow: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', columnGap: spacing.sm },
-  greeting: { fontSize: 30, lineHeight: 36, letterSpacing: -0.3 },
-  greetingHindi: { ...hindiType(22), color: c.brand },
+  greeting: { ...type.display },
+  greetingHindi: { ...hindiType(20), color: c.brand },
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: 10, paddingRight: spacing.md },
-  streakText: { color: c.ink, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  settingsButton: { width: 48, height: 48, minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
-  hero: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: 20, gap: spacing.lg },
+  streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: spacing.md, paddingRight: spacing.md },
+  streakText: { ...type.label, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
+  settingsButton: { width: 44, height: 44, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
+  hero: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: spacing.gutter, gap: spacing.lg },
   heroDone: { backgroundColor: c.forest },
-  heroWatermark: { ...hindiType(168), position: 'absolute', right: -14, top: -50, color: 'rgba(255, 255, 255, 0.10)' },
+  // Parked at the bottom-right corner, faint, so it never crosses the ring or the title.
+  heroWatermark: { ...hindiType(168), position: 'absolute', right: -14, bottom: -64, color: c.onBrandWatermark },
   heroHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   heroHeaderLarge: { flexDirection: 'column-reverse', alignItems: 'flex-start' },
-  heroCopy: { minWidth: 0, flex: 1, gap: 6 },
+  heroCopy: { minWidth: 0, flex: 1, gap: spacing.sm },
   heroTopline: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  heroChip: { borderRadius: radius.pill, backgroundColor: c.gold, paddingHorizontal: 9, paddingVertical: 4 },
-  heroChipText: { color: c.ink, fontSize: 11, lineHeight: 15, fontWeight: '600', letterSpacing: 0.9 },
-  heroMeta: { color: c.brandSoft, fontSize: 13, lineHeight: 18 },
-  heroTitle: { color: c.white, fontFamily: displayFont, fontSize: 30, lineHeight: 34, fontWeight: '700', letterSpacing: -0.3 },
-  heroSubtitle: { color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
-  goalDial: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
+  heroChip: { borderRadius: radius.pill, backgroundColor: c.gold, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
+  heroChipText: { ...type.eyebrow, color: c.ink },
+  heroMeta: { ...type.caption, color: c.brandSoft },
+  heroTitle: { ...type.title, color: c.white },
+  heroSubtitle: { ...type.body, color: c.onBrandText },
+  goalDial: { width: goalRingSize, height: goalRingSize, alignItems: 'center', justifyContent: 'center' },
   // Rotating the whole ring starts the arc at 12 o'clock without SVG transform props, which web rejects.
   goalRing: { transform: [{ rotate: '-90deg' }] },
   goalValue: { position: 'absolute', alignItems: 'center' },
-  goalMinutes: { color: c.white, fontFamily: displayFont, fontSize: 17, lineHeight: 19, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  goalMinutesLong: { fontSize: 13, lineHeight: 16 },
-  goalUnit: { color: '#FBEFE8', fontSize: 9, lineHeight: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  goalMinutes: { ...type.headline, color: c.white, fontVariant: ['lining-nums', 'tabular-nums'] },
+  goalMinutesLong: { ...type.label, fontFamily: type.headline.fontFamily, fontWeight: '700' },
+  goalUnit: { ...type.eyebrow, textTransform: 'none', letterSpacing: 0, fontWeight: '600', color: c.onBrandText, fontVariant: ['lining-nums', 'tabular-nums'] },
   heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  heroWord: { maxWidth: '100%', borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.14)', paddingHorizontal: spacing.md, paddingVertical: 6 },
+  heroWord: { maxWidth: '100%', borderRadius: radius.sm, backgroundColor: c.onBrandChip, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   heroWordFaded: { opacity: 0.5 },
-  heroWordText: { ...hindiType(16), color: c.white },
-  heroWordLatin: { color: c.white, fontSize: 15, lineHeight: 22, fontWeight: '500' },
-  ashaInvite: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: 18, borderCurve: 'continuous', backgroundColor: 'rgba(255, 255, 255, 0.10)', paddingVertical: 10, paddingHorizontal: spacing.md },
+  heroWordText: { ...hindiType(17), color: c.white },
+  heroWordLatin: { ...type.body, color: c.white },
+  ashaInvite: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.onBrandCallout, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
   ashaPortrait: { width: 48, height: 48, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  ashaInviteText: { minWidth: 0, flex: 1, color: '#FBEFE8', fontSize: 14, lineHeight: 19 },
-  steps: { gap: 2, borderTopColor: 'rgba(255, 255, 255, 0.18)', borderTopWidth: 1, paddingTop: spacing.md },
+  ashaInviteText: { ...type.body, minWidth: 0, flex: 1, color: c.onBrandText },
+  steps: { gap: spacing.xs, borderTopColor: c.onBrandLine, borderTopWidth: 1, paddingTop: spacing.md },
   stepRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  stepDot: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: 'rgba(255, 255, 255, 0.5)', borderWidth: 2 },
+  stepDot: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: c.onBrandOutline, borderWidth: 2 },
   stepDotDone: { backgroundColor: c.gold, borderColor: c.gold },
-  stepDotCurrent: { backgroundColor: 'rgba(231, 172, 61, 0.25)', borderColor: c.gold },
-  stepLabel: { minWidth: 0, flex: 1, color: '#FBEFE8', fontSize: 15, lineHeight: 20 },
+  stepDotCurrent: { backgroundColor: c.onBrandGoldTint, borderColor: c.gold },
+  stepLabel: { ...type.body, minWidth: 0, flex: 1, color: c.onBrandText },
   stepLabelDone: { color: c.brandSoft, textDecorationLine: 'line-through' },
-  stepLabelCurrent: { color: c.white, fontWeight: '700' },
-  stepMeta: { color: c.brandSoft, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
+  stepLabelCurrent: { color: c.white, fontWeight: '600' },
+  stepMeta: { ...type.caption, color: c.brandSoft, fontVariant: ['lining-nums', 'tabular-nums'] },
   heroFooter: { flexDirection: 'row' },
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  heroButton: { minHeight: 52, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },
-  heroButtonText: { color: c.ink, fontSize: 17, fontWeight: '700' },
-  jumpSection: { gap: 10 },
-  jumpLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
-  jumpRow: { flexDirection: 'row', gap: spacing.sm },
-  jumpRowLarge: { flexDirection: 'column' },
-  jumpTile: { minWidth: 0, minHeight: 72, flex: 1, justifyContent: 'center', gap: 6, borderRadius: 18, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: 10 },
-  jumpTitle: { color: c.ink, fontSize: 14, lineHeight: 19, fontWeight: '600' },
-  pathHeading: { width: '100%', flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
+  heroButton: { ...button.primaryOnBrand, flex: 1 },
+  heroButtonText: button.primaryOnBrandText,
+  pathHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   pathHeadingLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  pathTitle: { fontSize: 18, lineHeight: 24, letterSpacing: -0.2, fontWeight: '600' },
-  pathMeta: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  planCard: { width: '100%', minHeight: 48, gap: 10, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg },
+  pathTitle: { ...type.headline },
+  allPlans: button.quiet,
+  allPlansText: button.quietText,
+  planCard: { width: '100%', minHeight: 48, gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg },
   planCopy: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   planCopyLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  planTitle: { minWidth: 0, flexShrink: 1, color: c.ink, fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  planMeta: { color: c.muted, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
-  planSegments: { flexDirection: 'row', gap: 6 },
+  planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },
+  planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
+  planSegments: { flexDirection: 'row', gap: spacing.xs },
   planSegment: { minWidth: 0, flex: 1, height: 6, borderRadius: radius.pill, backgroundColor: c.line },
   planSegmentDone: { backgroundColor: c.brand },
   planSegmentCurrent: { backgroundColor: c.goldIcon },
-}));
+  } satisfies NamedStyles;
+});
