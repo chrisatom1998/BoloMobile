@@ -2,7 +2,7 @@ import { act, fireEvent, render, waitFor, within } from '@testing-library/react-
 import * as mockReact from 'react';
 import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
 
-import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
+import LiveScreen, { createLiveStyles, visibleChipRowWidth } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
 import { layout, lightColors, spacing } from '../src/theme';
 
@@ -56,6 +56,7 @@ jest.mock('lucide-react-native', () => ({
   Mic: () => null,
   MicOff: () => null,
   Send: () => null,
+  Settings: () => null,
   Sparkles: () => null,
   Sprout: () => null,
   Trash2: () => null,
@@ -782,6 +783,14 @@ describe('live composer bottom inset', () => {
   }, 20_000);
 });
 
+describe('suggestion chip row width', () => {
+  it('keeps a short peek of the next chip inside the inset', () => {
+    expect(visibleChipRowWidth([100, 100, 100, 100], 360, layout.chipPeek, spacing.sm)).toBe(348);
+    expect(visibleChipRowWidth([80, 80], 300, layout.chipPeek, spacing.sm)).toBe(168);
+    expect(visibleChipRowWidth([0, 0, 0, 0], 300, layout.chipPeek, spacing.sm)).toBe(300);
+  });
+});
+
 describe('live theme styles', () => {
   it('paints the chat list, bubbles, and composer from the active palette', () => {
     const styles = createLiveStyles(lightColors);
@@ -805,11 +814,20 @@ describe('live theme styles', () => {
     expect('minHeight' in styles.voiceHeroCompact).toBe(false);
     expect('flexWrap' in styles.examples).toBe(false);
     expect(styles.examples.flexDirection).toBe('row');
-    expect(styles.examples.paddingRight).toBe(layout.chipEndInset);
-    expect(styles.composer.paddingHorizontal).toBe(layout.chipEndInset);
+    expect(styles.examples.paddingRight).toBe(layout.chipScrollInset);
+    expect(styles.composer.paddingHorizontal).toBe(spacing.gutter);
     expect(styles.exampleClip.overflow).toBe('hidden');
+    expect(styles.exampleClip.marginHorizontal).toBe(layout.chipScrollInset - spacing.gutter);
     expect(styles.exampleScroller.flexGrow).toBe(0);
     expect(layout.chipEndInset).toBe(spacing.gutter);
+    expect(layout.chipScrollInset).toBe(spacing.lg);
+    expect(layout.chipPeek).toBe(spacing.xl);
+    expect(styles.voiceHeroResting.paddingBottom).toBe(spacing.sm);
+    expect(styles.headerSettings.minHeight).toBe(layout.touchTarget);
+    expect(styles.clearChatButton.borderWidth).toBe(styles.lastSessionButton.borderWidth);
+    expect(styles.clearChatButton.backgroundColor).toBe('transparent');
+    expect(styles.lastSessionButton.backgroundColor).toBe('transparent');
+    expect(styles.clearChatButton.borderColor).toBe(styles.lastSessionButton.borderColor);
     expect(layout.touchTarget).toBe(44);
     expect(styles.askHeading.flexDirection).toBe('column');
     expect(styles.askTitle.alignSelf).toBe('stretch');
@@ -851,8 +869,10 @@ describe('live theme styles', () => {
       expect(chips.props.horizontal).toBe(true);
       expect(StyleSheet.flatten(chips.props.contentContainerStyle)).toMatchObject({
         flexDirection: 'row',
-        paddingRight: layout.chipEndInset,
+        paddingRight: layout.chipScrollInset,
       });
+      expect(view.getByLabelText('Settings')).toBeTruthy();
+      expect(view.queryByLabelText('Clear Asha chat history')).toBeNull();
       expect(StyleSheet.flatten(chips.props.contentContainerStyle).flexWrap).toBeUndefined();
       expect(view.getByRole('button', { name: 'Correct my Hindi' })).toBeTruthy();
       await view.unmount();

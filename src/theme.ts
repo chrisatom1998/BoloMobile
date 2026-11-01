@@ -107,8 +107,12 @@ export const spacing = {
 export const layout = {
   /** Smallest height of a tappable control. */
   touchTarget: 44,
-  /** Trailing space after the last suggestion chip. Same width as the screen gutter. */
+  /** Trailing space after the last suggestion chip once the row is scrolled to the end. Same width as the screen gutter. */
   chipEndInset: spacing.gutter,
+  /** Space between the suggestion row and the screen edge. */
+  chipScrollInset: spacing.lg,
+  /** How much of the next chip stays in view so the row shows it can scroll. */
+  chipPeek: spacing.xl,
 } as const;
 
 export const radius = {
