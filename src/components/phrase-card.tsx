@@ -6,7 +6,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { phraseCardLines, phraseCardListenLabel } from '@/lib/phrase-card-lines';
 import type { ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, radius, spacing, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 export type PhraseCardVariant = 'light' | 'night';
 export type PhraseCardSize = 'regular' | 'compact';
@@ -177,16 +177,16 @@ const useStyles = makeStyles((c) => ({
   devanagari: { ...hindiType(22), color: c.ink },
   devanagariCompact: hindiType(18),
   devanagariNight: { color: c.white },
-  romanized: { color: c.brandText, fontSize: 15, lineHeight: 20, fontWeight: '700' },
-  romanizedCompact: { fontSize: 14, lineHeight: 19 },
-  romanizedPrimary: { fontSize: 20, lineHeight: 27 },
-  romanizedPrimaryCompact: { fontSize: 17, lineHeight: 23 },
+  romanized: { ...type.label, color: c.brandText, fontWeight: '700' },
+  romanizedCompact: { fontSize: type.caption.fontSize, lineHeight: type.caption.lineHeight },
+  romanizedPrimary: { fontSize: type.headline.fontSize, lineHeight: type.headline.lineHeight },
+  romanizedPrimaryCompact: { fontSize: type.bodyLarge.fontSize, lineHeight: type.bodyLarge.lineHeight },
   romanizedNight: { color: c.gold },
-  english: { color: c.muted, fontSize: 14, lineHeight: 19 },
-  englishCompact: { fontSize: 13, lineHeight: 18 },
+  english: { ...type.caption, color: c.muted },
+  englishCompact: { fontSize: type.caption.fontSize, lineHeight: type.caption.lineHeight },
   englishNight: { color: c.heroSubtle },
-  concealed: { color: c.muted, fontSize: 15, lineHeight: 20, fontStyle: 'italic' },
-  concealedCompact: { fontSize: 14, lineHeight: 19 },
+  concealed: { ...type.body, color: c.muted, fontStyle: 'italic' },
+  concealedCompact: { fontSize: type.caption.fontSize, lineHeight: type.caption.lineHeight },
   concealedNight: { color: c.heroSubtle },
   accessory: { marginTop: spacing.xs },
   listen: {
@@ -206,6 +206,6 @@ const useStyles = makeStyles((c) => ({
   listenPlaying: { backgroundColor: c.goldSoft },
   listenPlayingNight: { backgroundColor: c.night },
   listenDisabled: { opacity: 0.4 },
-  listenText: { color: c.brandText, fontSize: 15, fontWeight: '800' },
+  listenText: { ...type.label, color: c.brandText, fontWeight: '700' },
   listenTextNight: { color: c.gold },
 }));

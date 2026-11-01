@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -24,6 +24,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { SceneAttempt } from '@/state/app-state-types';
+import { showAppAlert } from '@/lib/app-alert';
 import { observe } from '@/lib/observability';
 import { cancelPracticeReminder } from '@/lib/practice-reminder';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
@@ -32,9 +33,9 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hasOfflineSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { shuffleChoices } from '@/lib/shuffle-choices';
 import { trimTerminalPunctuation } from '@/lib/text';
-import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings } from '@/lib/storage';
+import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
@@ -223,6 +224,18 @@ function SceneScreen() {
     ? `Look for “${target.latin},” the Hindi response for “${target.en}”`
     : beat.tip;
   const saved = phrases.some((phrase) => phrase.hi === target.hi);
+  const toggleSavedPhrase = () => {
+    if (saved) {
+      hapticSelect();
+      void togglePhrase(target);
+      return;
+    }
+    hapticSuccess();
+    void togglePhrase(target).then((result) => {
+      // Nothing was evicted or saved; tell the learner where to make room.
+      if (result === 'full') showAppAlert(SAVED_PHRASES_FULL_TITLE, SAVED_PHRASES_FULL_MESSAGE);
+    });
+  };
   const correct = resolution === 'correct';
   // Asha only replies in Hindi to a right answer; a wrong one gets plain English, not a blanket "close".
   const feedbackReply = resolution === 'correct'
@@ -553,7 +566,7 @@ function SceneScreen() {
       ) : (
         <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
           <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
-          <ChevronRight color={colors.ink} size={18} />
+          <ChevronRight color={colors.white} size={18} />
         </Pressable>
       )}
     </View>
@@ -609,7 +622,7 @@ function SceneScreen() {
 
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
-      {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <Text accessibilityLiveRegion="polite" style={styles.resumeNotice}>Picking up where you left off.</Text> : null}
+      {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <FadingNotice style={styles.resumeNoticeQuiet}>Picking up where you left off.</FadingNotice> : null}
 
       {!aiConsent ? (
         <View style={styles.offlineNote}>
@@ -780,7 +793,7 @@ function SceneScreen() {
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
                 <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
-                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={() => { if (saved) hapticSelect(); else hapticSuccess(); togglePhrase(target); }} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
+                <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={toggleSavedPhrase} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
                   <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
                 </Pressable>
               </View>
@@ -821,133 +834,147 @@ function SceneScreen() {
   );
 }
 
+/** A one-line status that is read out, then fades away after 3 s so it does not linger above the turn. */
+function FadingNotice({ children, style }: { children: string; style: StyleProp<TextStyle> }) {
+  const [opacity] = useState(() => new Animated.Value(1));
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const animation = Animated.timing(opacity, { toValue: 0, duration: 400, delay: 3000, useNativeDriver: true });
+    animation.start(({ finished }) => { if (finished) setGone(true); });
+    return () => animation.stop();
+  }, [opacity]);
+  if (gone) return null;
+  return <Animated.Text accessibilityLiveRegion="polite" style={[style, { opacity }]}>{children}</Animated.Text>;
+}
+
 const useStyles = makeStyles((c) => ({
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: 14 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: spacing.lg },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: spacing.md },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   closeButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
   progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
-  beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
   beatSegmentFilled: { backgroundColor: c.brand },
-  turn: { color: c.muted, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  turn: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.xs },
-  sceneTitle: { flexShrink: 1, color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 29, fontWeight: '700', letterSpacing: -0.3 },
+  sceneTitle: { ...type.title, flexShrink: 1, color: c.ink },
   hudRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: 10 },
-  hudText: { color: c.ink, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  resumeNotice: { color: c.forestText, fontSize: 13, lineHeight: 19, fontWeight: '700', textAlign: 'center' },
+  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md },
+  hudText: { ...type.caption, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
+  resumeNotice: { ...type.caption, color: c.brandText, textAlign: 'left', fontWeight: '600' },
+  resumeNoticeQuiet: { ...type.caption, color: c.muted, textAlign: 'left' },
   // Asha's face sits at the top of her bubble; the tightened top-left corner reads as a chat tail.
-  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
   asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: 22, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
+  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: radius.xl, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
   speakerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  speakerName: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600' },
-  npc: { color: c.ink, fontFamily: displayFont, fontSize: 22, lineHeight: 30, fontWeight: '600' },
-  npcHindi: hindiType(21),
+  speakerName: { ...type.caption, color: c.muted, fontWeight: '600' },
+  npc: { ...type.headline, color: c.ink, fontWeight: '600' },
+  npcHindi: hindiType(20),
   npcLarge: {},
-  npcLatin: { color: c.brandText, fontFamily: 'System', fontSize: 15, lineHeight: 22, fontWeight: '500' },
-  translation: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
+  npcLatin: { ...type.label, fontFamily: 'System', color: c.brandText },
+  translation: { ...type.bodyLarge, color: c.muted },
+  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
-  speakerText: { color: c.brandText, fontSize: 13, fontWeight: '600' },
+  speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },
-  learnerBubble: { maxWidth: '82%', backgroundColor: c.brand, borderRadius: 22, borderBottomRightRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  learnerText: { color: c.white, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
-  learnerTextHindi: hindiType(19),
+  learnerBubble: { maxWidth: '82%', backgroundColor: c.brand, borderRadius: radius.xl, borderBottomRightRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md }, // Small radius on one corner draws the speech-bubble tail.
+  learnerText: { ...type.headline, color: c.white, fontWeight: '600' },
+  learnerTextHindi: hindiType(20),
   disabled: { opacity: 0.4 },
-  audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: spacing.lg, paddingBottom: 34, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  audioError: { ...type.caption, color: c.danger },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  answerTitle: { minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },
-  hintButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.goldSoft, paddingHorizontal: spacing.md },
-  hintButtonActive: { backgroundColor: c.gold },
-  hintButtonText: { color: c.goldText, fontSize: 13, fontWeight: '600' },
-  hintButtonTextActive: { color: c.goldDeepText },
+  answerTitle: { ...type.bodyLarge, minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontWeight: '600' },
+  hintButton: { ...buttons.secondary, minWidth: 44, minHeight: 44, borderRadius: radius.pill, paddingHorizontal: spacing.md },
+  hintButtonActive: { backgroundColor: c.ink, borderColor: c.ink },
+  hintButtonText: { ...type.caption, color: c.ink, fontWeight: '600' },
+  hintButtonTextActive: { color: c.white },
   choices: { gap: spacing.sm },
   choice: { minHeight: 64, backgroundColor: c.paperRaised, borderColor: c.lineStrong, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
   choiceCorrect: { borderColor: c.forest, backgroundColor: c.forest },
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
-  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 2 },
+  choiceCopy: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: spacing.xs },
   choiceCopyLarge: { flex: 0, width: '100%' },
   choiceHindi: { ...hindiType(20), width: '100%', color: c.ink },
   choiceHindiCorrect: { color: c.white },
   choiceHindiWrong: { color: c.danger },
-  choiceRomanized: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  choiceMeaning: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  choiceRomanized: { ...type.caption, color: c.muted },
+  choiceMeaning: { ...type.caption, color: c.muted },
   choiceMetaCorrect: { color: c.white, opacity: 0.85 },
   choiceMetaWrong: { color: c.danger, opacity: 0.85 },
   offlineNote: { gap: spacing.sm },
-  offlineNoteText: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  offlineNoteLink: { color: c.forestText, fontWeight: '700' },
-  setupEnglish: { color: c.ink, fontSize: 18, lineHeight: 25, fontWeight: '600' },
-  setupHindi: { color: c.muted, fontSize: 14, lineHeight: 20 },
-  setupHindiScript: { ...hindiType(15), color: c.muted },
+  offlineNoteText: { ...type.caption, color: c.muted },
+  offlineNoteLink: { color: c.brandText, fontWeight: '700' },
+  setupEnglish: { ...type.label, color: c.ink },
+  setupHindi: { ...type.caption, color: c.muted },
+  setupHindiScript: { ...hindiType(17), color: c.muted },
   nameStep: { flexGrow: 1 },
   nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
-  nameStepTitle: { color: c.ink, fontFamily: displayFont, fontSize: 30, lineHeight: 36, fontWeight: '700', letterSpacing: -0.3 },
-  nameStepBody2: { color: c.muted, fontSize: 16, lineHeight: 22 },
-  nameStepNote: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  nameStepTitle: { ...type.display, color: c.ink },
+  nameStepBody2: { ...type.body, color: c.muted },
+  nameStepNote: { ...type.caption, color: c.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  nameRowText: { flexShrink: 1, color: c.muted, fontSize: 13, fontWeight: '600' },
-  nameRowLink: { color: c.brandText, fontSize: 13, fontWeight: '800' },
-  nameInput: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink, fontSize: 18 },
-  hintBody: { color: c.muted, fontSize: 14, lineHeight: 20 },
+  nameRowText: { ...type.caption, flexShrink: 1, color: c.muted, fontWeight: '600' },
+  nameRowLink: { ...type.caption, color: c.brandText, fontWeight: '700' },
+  nameInput: { ...type.headline, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink },
+  hintBody: { ...type.caption, color: c.muted },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },
   resultWrongText: { color: c.danger },
   resultLarge: { alignItems: 'stretch' },
   resultCopy: { gap: spacing.xs },
-  resultTitle: { color: c.forestText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  resultBody: { color: c.ink, fontSize: 14, lineHeight: 20 },
-  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.dangerLine, borderTopWidth: 1, paddingTop: spacing.md, gap: 2 },
-  wordOrderSolutionLabel: { color: c.muted, fontSize: 10, lineHeight: 15, fontWeight: '900', letterSpacing: 1 },
-  wordOrderSolutionHindi: { ...hindiType(22), color: c.ink },
-  wordOrderSolutionLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
-  resultHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
-  resultHindiScript: hindiType(19),
+  resultTitle: { ...type.label, color: c.forestText, fontWeight: '700' },
+  resultBody: { ...type.caption, color: c.ink },
+  wordOrderSolution: { marginTop: spacing.sm, borderTopColor: c.dangerLine, borderTopWidth: 1, paddingTop: spacing.md, gap: spacing.xs },
+  wordOrderSolutionLabel: { ...type.eyebrow, color: c.muted },
+  wordOrderSolutionHindi: { ...hindiType(20), color: c.ink },
+  wordOrderSolutionLatin: { ...type.label, color: c.brandText },
+  resultHindi: { ...type.headline, color: c.ink, fontWeight: '600' },
+  resultHindiScript: hindiType(20),
   answerActions: { gap: spacing.sm },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '600' },
-  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  nextText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  tryAgainText: { ...type.label, color: c.brandText },
+  nextButton: { ...buttons.primary, width: '100%', alignSelf: 'stretch' },
+  nextText: buttons.primaryText,
   saveRow: { backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   saveRowLarge: { alignItems: 'stretch', flexDirection: 'column' },
   saveCopy: { flex: 1, gap: spacing.xs },
   saveCopyLarge: { flex: 0, width: '100%' },
-  saveTitle: { color: c.ink, fontSize: 15, fontWeight: '600' },
-  saveMeaning: { color: c.muted, fontSize: 13 },
+  saveTitle: { ...type.label, color: c.ink },
+  saveMeaning: { ...type.caption, color: c.muted },
   saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   saveButtonLarge: { alignSelf: 'flex-start' },
   saveButtonActive: { backgroundColor: c.brand, borderColor: c.brand },
   wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.brandSoft, padding: spacing.lg },
-  wordTrayTitle: { color: c.brandText, fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  wordTrayHint: { color: c.muted, fontSize: 13, lineHeight: 19 },
+  wordTrayTitle: { ...type.label, color: c.brandText, fontWeight: '700' },
+  wordTrayHint: { ...type.caption, color: c.muted },
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  wordTokenText: { color: c.brandText, fontFamily: displayFont, fontSize: 17, lineHeight: 24, fontWeight: '600' },
-  wordTokenHindi: hindiType(18),
+  wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600' },
+  wordTokenHindi: hindiType(17),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
   finishBadge: { width: 74, height: 74, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
   finishHeading: { alignItems: 'stretch', gap: spacing.xs },
-  finishHindi: { color: c.brandDark, fontFamily: displayFont, fontSize: 28, lineHeight: 36, fontWeight: '700', textAlign: 'center' },
-  finishHindiScript: hindiType(30),
-  finishGloss: { color: c.muted, fontSize: 15, lineHeight: 21, fontWeight: '400', textAlign: 'center' },
-  finishTitle: { color: c.ink, fontFamily: displayFont, fontSize: 26, lineHeight: 32, fontWeight: '700', textAlign: 'center' },
-  notFoundBody: { color: c.muted, fontSize: 16, lineHeight: 23, textAlign: 'center', maxWidth: 320 },
+  finishHindi: { ...type.display, color: c.brandDark, textAlign: 'center' },
+  finishHindiScript: hindiType(28),
+  finishGloss: { ...type.body, color: c.muted, textAlign: 'center' },
+  finishTitle: { ...type.title, color: c.ink, textAlign: 'center' },
+  notFoundBody: { ...type.body, color: c.muted, textAlign: 'center', maxWidth: 320 },
   finishStats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: 2 },
-  finishValue: { color: c.ink, fontFamily: displayFont, fontSize: 24, lineHeight: 30, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  finishLabel: { color: c.muted, fontSize: 12, textAlign: 'center' },
+  finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: spacing.xs },
+  finishValue: { ...type.title, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
+  finishLabel: { ...type.caption, color: c.muted, textAlign: 'center' },
   secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  secondaryText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  secondaryText: { ...type.label, color: c.ink },
   tertiaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  tertiaryText: { color: c.forestText, fontSize: 14, fontWeight: '700' },
+  tertiaryText: { ...type.label, color: c.brandText },
 }));
