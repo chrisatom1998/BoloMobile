@@ -122,6 +122,27 @@ export function hindiType(fontSize: number) {
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;
 
+/** Minimum finger target. Every empty, error, and loading action uses this. */
+export const control = {
+  minTarget: 44,
+} as const;
+
+/** Sizes for the shared empty, error, and loading states. */
+export const stateMetrics = {
+  title: 22,
+  titleLine: 28,
+  body: 16,
+  bodyLine: 23,
+  action: 16,
+  icon: 32,
+  iconStroke: 2,
+  portrait: 72,
+  skeletonWidth: 220,
+  skeletonShort: 128,
+  skeletonLine: 12,
+  skeletonTitle: 18,
+} as const;
+
 const fixedLightTheme: {
   colors: ThemeColors;
   isDark: false;

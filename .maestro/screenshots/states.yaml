@@ -1,0 +1,85 @@
+appId: com.bolo.hindi
+name: Empty, error, and loading states
+---
+- launchApp:
+    clearState: true
+- openLink: "bolo://state-preview?screen=today&phase=loading"
+- extendedWaitUntil:
+    visible: "Getting today ready"
+    timeout: 45000
+- takeScreenshot: today-loading
+- openLink: "bolo://state-preview?screen=today&phase=empty"
+- extendedWaitUntil:
+    visible: "A fresh start"
+    timeout: 20000
+- takeScreenshot: today-empty
+- openLink: "bolo://state-preview?screen=today&phase=error"
+- extendedWaitUntil:
+    visible: "Today didn't load"
+    timeout: 20000
+- takeScreenshot: today-error
+- openLink: "bolo://state-preview?screen=phrases&phase=empty"
+- extendedWaitUntil:
+    visible: "Nothing saved yet"
+    timeout: 20000
+- takeScreenshot: phrases-empty
+- openLink: "bolo://state-preview?screen=phrases&phase=loading"
+- extendedWaitUntil:
+    visible: "Opening your phrases"
+    timeout: 20000
+- takeScreenshot: phrases-loading
+- openLink: "bolo://state-preview?screen=phrases&phase=error"
+- extendedWaitUntil:
+    visible: "Phrases didn't load"
+    timeout: 20000
+- takeScreenshot: phrases-error
+- openLink: "bolo://state-preview?screen=asha&phase=mic-denied"
+- extendedWaitUntil:
+    visible: "The microphone is off"
+    timeout: 20000
+- takeScreenshot: asha-mic-denied
+- openLink: "bolo://state-preview?screen=asha&phase=offline"
+- extendedWaitUntil:
+    visible: "You're offline"
+    timeout: 20000
+- takeScreenshot: asha-offline
+- openLink: "bolo://state-preview?screen=asha&phase=unavailable"
+- extendedWaitUntil:
+    visible: "Asha is unavailable"
+    timeout: 20000
+- takeScreenshot: asha-unavailable
+- openLink: "bolo://state-preview?screen=asha&phase=connecting"
+- extendedWaitUntil:
+    visible: "Connecting to Asha"
+    timeout: 20000
+- takeScreenshot: asha-connecting
+- openLink: "bolo://state-preview?screen=lesson-plans&phase=loading"
+- extendedWaitUntil:
+    visible: "Opening lesson plans"
+    timeout: 20000
+- takeScreenshot: lesson-plans-loading
+- openLink: "bolo://state-preview?screen=lesson-plans&phase=error"
+- extendedWaitUntil:
+    visible: "Plans didn't load"
+    timeout: 20000
+- takeScreenshot: lesson-plans-error
+- openLink: "bolo://state-preview?screen=lesson-plans&phase=empty"
+- extendedWaitUntil:
+    visible: "No lessons here yet"
+    timeout: 20000
+- takeScreenshot: lesson-plans-empty
+- openLink: "bolo://state-preview?screen=progress&phase=empty"
+- extendedWaitUntil:
+    visible: "Your first lesson"
+    timeout: 20000
+- takeScreenshot: progress-empty
+- openLink: "bolo://state-preview?screen=progress&phase=loading"
+- extendedWaitUntil:
+    visible: "Opening your progress"
+    timeout: 20000
+- takeScreenshot: progress-loading
+- openLink: "bolo://state-preview?screen=progress&phase=error"
+- extendedWaitUntil:
+    visible: "Progress didn't load"
+    timeout: 20000
+- takeScreenshot: progress-error

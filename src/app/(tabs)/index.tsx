@@ -8,6 +8,10 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { JournalDisplay } from '@/components/journal-chrome';
 import { MotionReveal } from '@/components/motion';
+import { EmptyState } from '@/components/states/EmptyState';
+import { ErrorState } from '@/components/states/ErrorState';
+import { LoadingState } from '@/components/states/LoadingState';
+import { usePreviewPhase } from '@/components/states/preview-context';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
@@ -18,6 +22,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
+import { asContentPhase, isFreshLearner, selectTodayState, storagePhaseFromState } from '@/lib/screen-states';
 import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
@@ -45,6 +50,7 @@ function plural(count: number, word: string) {
 export default function HomeScreen() {
   const router = useRouter();
   const state = useAppState();
+  const preview = usePreviewPhase('today');
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
@@ -302,7 +308,58 @@ export default function HomeScreen() {
     </View>
   ), [colors, dateLine, dayComplete, dueCount, goal, goalPercent, hero, largeTextLayout, minutesLabel, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, visibleSteps, watermark]);
 
-  if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
+  const todayPhase = asContentPhase(preview) ?? selectTodayState({
+    fresh: isFreshLearner({
+      phrases,
+      practiceHistory,
+      practiceSeconds: practice.seconds,
+      reviewStreak: state.reviewStreak,
+      sceneProgress,
+      streak,
+    }),
+    storagePhase: storagePhaseFromState(state),
+  });
+
+  if (!preview && learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
+
+  if (todayPhase === 'loading') {
+    return (
+      <View style={sharedStyles.screen} testID="today-state">
+        <LoadingState body="One moment." testID="today-loading" title="Getting today ready" />
+      </View>
+    );
+  }
+
+  if (todayPhase === 'error') {
+    return (
+      <View style={sharedStyles.screen} testID="today-state">
+        <ErrorState
+          accessibilityLabel="Retry loading today's plan"
+          actionLabel="Retry"
+          body="Your plan is still on this phone. Give it another try."
+          onAction={state.retryStorageLoad}
+          testID="today-error"
+          title="Today didn't load"
+        />
+      </View>
+    );
+  }
+
+  if (todayPhase === 'empty') {
+    return (
+      <View style={sharedStyles.screen} testID="today-state">
+        <EmptyState
+          accessibilityLabel="Start your first lesson"
+          actionLabel="Start your first lesson"
+          body="Nothing planned yet, and no progress to look back on."
+          onAction={() => openLesson(lessonSelection.lessonId)}
+          portrait
+          testID="today-empty"
+          title="A fresh start"
+        />
+      </View>
+    );
+  }
 
   return (
     <>

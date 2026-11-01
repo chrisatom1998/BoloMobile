@@ -6,13 +6,17 @@ import { Platform, Share, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { JournalDisplay } from '@/components/journal-chrome';
+import { ErrorState } from '@/components/states/ErrorState';
+import { LoadingState } from '@/components/states/LoadingState';
+import { usePreviewPhase } from '@/components/states/preview-context';
 import { getScene } from '@/data/scenes';
 import { lessonPlans } from '@/data/lesson-plans';
 import { selectNextLesson } from '@/lib/lesson-path';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
-import { useAppStateValue } from '@/state/app-state';
+import { asContentPhase, selectProgressState, storagePhaseFromState } from '@/lib/screen-states';
+import { useAppActions, useAppStateValue } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
@@ -23,7 +27,10 @@ export default function ProgressScreen() {
   const styles = useStyles();
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
-  const { learnerProfile, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = useAppStateValue();
+  const preview = usePreviewPhase('progress');
+  const { retryStorageLoad } = useAppActions();
+  const progressState = useAppStateValue();
+  const { learnerProfile, phrases, practiceHistory, reviewStreak, sceneProgress, streak } = progressState;
   const { week, maxMinutes } = useMemo(() => {
     const days = weeklyPractice(practiceHistory);
     return { week: days, maxMinutes: Math.max(1, ...days.map((day) => Math.floor(day.seconds / 60))) };
@@ -37,10 +44,15 @@ export default function ProgressScreen() {
   const reviewedThisWeek = week.reduce((total, day) => total + day.reviews, 0);
   const minutesThisWeek = week.reduce((total, day) => total + Math.floor(day.seconds / 60), 0);
   const activeDaysThisWeek = week.filter((day) => day.seconds > 0 || day.reviews > 0).length;
-  const hasLearningActivity = practiceHistory.some((day) => day.seconds > 0 || day.reviews > 0)
+  const storedActivity = practiceHistory.some((day) => day.seconds > 0 || day.reviews > 0)
     || Object.values(sceneProgress).some((item) => item.completions > 0 || item.lastBeatIndex > 0)
     || streak > 0
     || reviewStreak > 0;
+  const progressPhase = asContentPhase(preview) ?? selectProgressState({
+    hasActivity: storedActivity,
+    storagePhase: storagePhaseFromState(progressState),
+  });
+  const hasLearningActivity = progressPhase === 'empty' ? false : storedActivity;
   const lessonFocus = useMemo(() => {
     const { lessonId, mode: pathMode, plan } = selectNextLesson(sceneProgress, learnerProfile);
     const lesson = getScene(lessonId);
@@ -95,6 +107,29 @@ export default function ProgressScreen() {
     });
   }
 
+  if (progressPhase === 'loading') {
+    return (
+      <View style={sharedStyles.screen} testID="progress-state">
+        <LoadingState body="One moment." testID="progress-loading" title="Opening your progress" />
+      </View>
+    );
+  }
+
+  if (progressPhase === 'error') {
+    return (
+      <View style={sharedStyles.screen} testID="progress-state">
+        <ErrorState
+          accessibilityLabel="Retry loading progress"
+          actionLabel="Retry"
+          body="Nothing you practiced was lost. Try reading it again."
+          onAction={retryStorageLoad}
+          testID="progress-error"
+          title="Progress didn't load"
+        />
+      </View>
+    );
+  }
+
   return (
     <>
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.content, Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl }]} style={sharedStyles.screen}>
@@ -103,9 +138,9 @@ export default function ProgressScreen() {
             <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
             <Text style={[styles.pageSubtitle, largeTextLayout && styles.pageSubtitleLarge]}>What is taking root.</Text>
           </View>
-          <PressableFeedback accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}>
+          {hasLearningActivity ? <PressableFeedback accessibilityLabel="Share progress" accessibilityRole="button" onPress={shareMilestones} style={styles.shareButton}>
             <Share2 color={colors.ink} size={18} />
-          </PressableFeedback>
+          </PressableFeedback> : null}
         </View>
 
         {hasLearningActivity ? <>
@@ -188,7 +223,7 @@ export default function ProgressScreen() {
           </PressableFeedback>
         </View>
 
-        <View style={styles.card}>
+        {hasLearningActivity ? <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Text style={styles.title}>Your plans</Text>
             <PressableFeedback accessibilityLabel={`See all ${lessonPlans.length} lesson plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.seeAll}>
@@ -212,7 +247,7 @@ export default function ProgressScreen() {
               </View>
             </View>
           ))}
-        </View>
+        </View> : null}
       </ScrollView>
       <StatusBarScrim />
     </>

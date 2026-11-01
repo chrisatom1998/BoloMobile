@@ -3,11 +3,16 @@ import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
+import { EmptyState } from '@/components/states/EmptyState';
+import { ErrorState } from '@/components/states/ErrorState';
+import { LoadingState } from '@/components/states/LoadingState';
+import { usePreviewPhase } from '@/components/states/preview-context';
 import { bundledScenes, getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
 import { PlanIcon } from '@/components/plan-icon';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
+import { asContentPhase, selectLessonPlansState, storagePhaseFromState } from '@/lib/screen-states';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
@@ -18,15 +23,60 @@ export default function LessonPlansScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
-  const { learnerProfile, sceneProgress } = useAppState();
+  const preview = usePreviewPhase('lesson-plans');
+  const appState = useAppState();
+  const { learnerProfile, retryStorageLoad, sceneProgress } = appState;
   const selectedPlanId = Array.isArray(planId) ? planId[0] : planId;
   const selectedPlan = lessonPlans.find((plan) => plan.id === selectedPlanId);
   const activeLesson = inProgressLesson(sceneProgress);
   const currentPlan = currentLessonPlan(sceneProgress, learnerProfile);
   const guidedLessonCount = lessonPlans.filter((plan) => plan.id !== 'creator').reduce((total, plan) => total + plan.lessonIds.length, 0);
 
+  const plansPhase = asContentPhase(preview) ?? selectLessonPlansState({
+    planCount: lessonPlans.length,
+    storagePhase: storagePhaseFromState(appState),
+  });
+
   if (selectedPlan) {
     return <PlanLessons plan={selectedPlan} router={router} sceneProgress={sceneProgress} />;
+  }
+
+  if (plansPhase === 'loading') {
+    return (
+      <View style={sharedStyles.screen} testID="lesson-plans-state">
+        <LoadingState body="One moment." testID="lesson-plans-loading" title="Opening lesson plans" />
+      </View>
+    );
+  }
+
+  if (plansPhase === 'error') {
+    return (
+      <View style={sharedStyles.screen} testID="lesson-plans-state">
+        <ErrorState
+          accessibilityLabel="Retry loading lesson plans"
+          actionLabel="Retry"
+          body="The lessons are saved on this phone. Try once more."
+          onAction={retryStorageLoad}
+          testID="lesson-plans-error"
+          title="Plans didn't load"
+        />
+      </View>
+    );
+  }
+
+  if (plansPhase === 'empty') {
+    return (
+      <View style={sharedStyles.screen} testID="lesson-plans-state">
+        <EmptyState
+          accessibilityLabel="Retry loading lesson plans"
+          actionLabel="Retry"
+          body="The plans usually live on this phone. Try loading them again."
+          onAction={retryStorageLoad}
+          testID="lesson-plans-empty"
+          title="No lessons here yet"
+        />
+      </View>
+    );
   }
 
   return (
