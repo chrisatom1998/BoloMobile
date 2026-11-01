@@ -25,6 +25,7 @@ import {
   defaultSceneProgress,
   emptyPractice,
   MAX_DAILY_PRACTICE_SECONDS,
+  MAX_SAVED_PHRASES,
   sanitizeClientId,
   sanitizeAiConsent,
   sanitizeChatHistory,
@@ -65,10 +66,15 @@ type AppStateSlices = Omit<PersistedState, 'aiConsent'> & {
 
 type AppActions = {
   setGoal: (goal: 5 | 10 | 15) => void;
-  completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => void;
+  /** Resolves true once the completed profile is stored, false if the write failed and was rolled back. */
+  completeOnboarding: (profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => Promise<boolean>;
   updateLearnerProfile: (profile: Partial<Omit<LearnerProfile, 'completed'>>) => void;
-  /** Resolves true once the change is stored, false if the write failed and was rolled back. */
-  togglePhrase: (phrase: SavedPhrase) => Promise<boolean>;
+  /**
+   * Resolves 'saved' or 'removed' once the change is stored, 'full' when a new
+   * phrase was refused because MAX_SAVED_PHRASES are already saved (nothing
+   * changes), or 'failed' if the write failed and was rolled back.
+   */
+  togglePhrase: (phrase: SavedPhrase) => Promise<TogglePhraseResult>;
   removePhrase: (hi: string) => void;
   checkpointScene: (sceneId: string, nextBeatIndex: number, attempt?: SceneAttempt) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
@@ -85,6 +91,10 @@ type AppActions = {
   restoreProgress: (progress: RestorableProgress) => Promise<boolean>;
   clearAllData: () => Promise<void>;
 };
+
+export type TogglePhraseResult = 'saved' | 'removed' | 'full' | 'failed';
+
+export const REVIEW_PRACTICE_SECONDS = 15;
 
 type AppStateValue = AppStateSlices & AppActions;
 
@@ -362,31 +372,30 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [commit]);
 
   const completeOnboarding = useCallback((profile: Omit<LearnerProfile, 'completed'>, goal: 5 | 10 | 15) => {
-    commit((current) => ({ ...current, goal, learnerProfile: { ...profile, completed: true } }), ['goal', 'learnerProfile']);
+    return commit((current) => ({ ...current, goal, learnerProfile: { ...profile, completed: true } }), ['goal', 'learnerProfile']);
   }, [commit]);
 
   const updateLearnerProfile = useCallback((profile: Partial<Omit<LearnerProfile, 'completed'>>) => {
     commit((current) => ({ ...current, learnerProfile: { ...current.learnerProfile, ...profile } }), ['learnerProfile']);
   }, [commit]);
 
-  const togglePhrase = useCallback((phrase: SavedPhrase) => {
-    return commit((current) => {
-      const exists = current.phrases.some((saved) => saved.hi === phrase.hi);
+  const togglePhrase = useCallback(async (phrase: SavedPhrase): Promise<TogglePhraseResult> => {
+    const exists = stateRef.current.phrases.some((saved) => saved.hi === phrase.hi);
+    // At the cap a new phrase is refused outright. Evicting the oldest phrase
+    // would silently delete it along with its review history.
+    if (!exists && stateRef.current.phrases.length >= MAX_SAVED_PHRASES) return 'full';
+    const stored = await commit((current) => {
       const phrases = exists
         ? current.phrases.filter((saved) => saved.hi !== phrase.hi)
-        : [...current.phrases, phrase].slice(-100);
+        : [...current.phrases, phrase];
       const phraseReviews = { ...current.phraseReviews };
       if (exists) delete phraseReviews[phrase.hi];
       // A phrase saved during a lesson was just practiced, so its first recall is tomorrow, not "Due now".
       else phraseReviews[phrase.hi] = phraseReviews[phrase.hi] ?? defaultPhraseReview(nextDate(dateKey()));
-      // The 100-phrase cap can drop the oldest phrase; drop its review entry too
-      // so orphans never accumulate in storage.
-      const kept = new Set(phrases.map((saved) => saved.hi));
-      for (const hi of Object.keys(phraseReviews)) {
-        if (!kept.has(hi)) delete phraseReviews[hi];
-      }
       return { ...current, phrases, phraseReviews };
     }, ['phrases', 'phraseReviews']);
+    if (!stored) return 'failed';
+    return exists ? 'removed' : 'saved';
   }, [commit]);
 
   const removePhrase = useCallback((hi: string) => {
@@ -451,6 +460,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const mastery = remembered ? Math.min(5, previous.mastery + 1) : Math.max(0, previous.mastery - 1);
       const intervalDays = remembered ? reviewIntervals[mastery] ?? 0 : 0;
       const today = dateKey();
+      const elapsed = cappedPracticeSeconds(current.practice.seconds, REVIEW_PRACTICE_SECONDS);
+      const practice = { ...current.practice, seconds: elapsed.total };
       const reviewStreakDays = [...new Set([...current.reviewStreakDays, today])].sort().slice(-400);
       return {
         ...current,
@@ -465,10 +476,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             totalReviews: previous.totalReviews + 1,
           },
         },
-        practiceHistory: updatePracticeHistory(current.practiceHistory, { correct: Number(remembered), answers: 1, reviews: 1 }),
+        practice,
+        practiceHistory: updatePracticeHistory(current.practiceHistory, { seconds: elapsed.added, correct: Number(remembered), answers: 1, reviews: 1 }),
+        streakDays: withRecordedDay(current.streakDays, practice),
         reviewStreakDays,
       };
-    }, ['phraseReviews', 'practiceHistory', 'reviewStreakDays']);
+    }, ['phraseReviews', 'practice', 'practiceHistory', 'streakDays', 'reviewStreakDays']);
   }, [commit]);
 
   const markLiveTurn = useCallback((seconds = 0) => {
@@ -601,8 +614,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const entries = storageEntries(next, Object.keys(storageKeys) as PersistedKey[]);
     try {
       // Cancel the scheduled daily reminder before wiping its notificationId,
-      // otherwise the OS notification keeps firing with no way to turn it off.
-      if (state.reminder.notificationId) await cancelPracticeReminder(state.reminder);
+      // but keep the local wipe independent from native notification failures.
+      // Chat history is sealed the same way as a normal save.
+      if (state.reminder.notificationId) {
+        try {
+          await cancelPracticeReminder(state.reminder);
+        } catch (error) {
+          console.warn('Bolo could not cancel the practice reminder during data deletion.', error);
+        }
+      }
       await enqueuePersistence(async () => {
         await AsyncStorage.multiSet(await secureStoredEntries(entries));
       });

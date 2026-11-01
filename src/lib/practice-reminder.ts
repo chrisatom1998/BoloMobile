@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import type { ReminderSettings } from '@/state/app-state-types';
 
 const CHANNEL_ID = 'practice-reminders';
+const PRACTICE_REMINDER_KIND = 'bolo-practice-reminder';
 
 /** Thrown when a reminder cannot be scheduled because notification permission is off. */
 export class NotificationPermissionError extends Error {
@@ -33,12 +34,13 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
   if (!permission.granted && permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
     throw new NotificationPermissionError();
   }
-  if (current.notificationId) await Notifications.cancelScheduledNotificationAsync(current.notificationId);
+  // Schedule the replacement first so a scheduling failure leaves the existing
+  // reminder in place instead of leaving none while settings still show one.
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       title: 'A little Hindi goes a long way',
       body: 'Your next Bolo scene and phrase review are ready.',
-      data: { url: '/review' },
+      data: { kind: PRACTICE_REMINDER_KIND, url: '/review' },
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -47,7 +49,42 @@ export async function schedulePracticeReminder(current: ReminderSettings, hour: 
       ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
   });
+  if (current.notificationId && current.notificationId !== notificationId) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(current.notificationId);
+    } catch (error) {
+      try {
+        await cancelOtherPracticeReminders(notificationId, [current.notificationId]);
+      } catch {
+        // Keep the device at the old reminder rather than two: drop the new one and report.
+        try {
+          await Notifications.cancelScheduledNotificationAsync(notificationId);
+        } catch {
+          // The original failure is the one worth reporting.
+        }
+        throw error;
+      }
+    }
+  }
   return { ...current, enabled: true, hour, minute, notificationId };
+}
+
+/** Cancel only Bolo practice reminders, retaining keepId when provided. */
+export async function cancelOtherPracticeReminders(keepId: string | null, knownReminderIds: string[] = []) {
+  const Notifications = loadNotifications();
+  const knownIds = new Set(knownReminderIds);
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const cancellations = scheduled
+    .filter((request) => {
+      const data = request.content.data;
+      const isLegacyPracticeReminder = data?.kind == null && data?.url === '/review';
+      return request.identifier !== keepId
+        && (data?.kind === PRACTICE_REMINDER_KIND || isLegacyPracticeReminder || knownIds.has(request.identifier));
+    })
+    .map((request) => Notifications.cancelScheduledNotificationAsync(request.identifier));
+  const results = await Promise.allSettled(cancellations);
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (failure) throw failure.reason;
 }
 
 export async function cancelPracticeReminder(current: ReminderSettings): Promise<ReminderSettings> {

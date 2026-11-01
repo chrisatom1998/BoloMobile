@@ -4,7 +4,7 @@ import { Dimensions, StyleSheet } from 'react-native';
 
 const mockRouter = { back: jest.fn(), push: jest.fn(), replace: jest.fn() };
 let mockOnboardingMode: string | undefined;
-const mockCompleteOnboarding = jest.fn();
+const mockCompleteOnboarding = jest.fn(async (..._args: unknown[]) => true);
 const mockReviewPhrase = jest.fn();
 const mockDiagnosticsSnapshot = {
   days: {
