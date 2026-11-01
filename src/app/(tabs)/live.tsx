@@ -4,7 +4,7 @@ import { setStatusBarStyle } from 'expo-status-bar';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
 import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -40,7 +40,7 @@ import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/ser
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useTheme, type } from '@/theme';
+import { displayFont, hindiType, layout, makeStyles, maxContentWidth, radius, spacing, useTheme, type } from '@/theme';
 
 const welcome: ChatMessage = {
   id: 'welcome',
@@ -1047,26 +1047,29 @@ export default function LiveScreen() {
             </View>
 
             {aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, restingVoiceLayout && styles.askSectionResting]} testID="ask-asha-sheet">
-                <View style={[styles.askHeadingRow, largeTextLayout && styles.askHeadingRowLarge]}>
+                {/* Title on its own row, then the controls. A shared row let the title paint over Last session. */}
+                <View style={styles.askHeading} testID="ask-asha-heading-block">
                   <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
                     <Text style={styles.askEyebrow}>Ask Asha</Text>
                     <Text style={styles.askTitle}>How do I say…?</Text>
                   </View>
-                  {lastSessionButton}
-                  {chatHistory.length > 0 ? (
-                    <Pressable
-                      accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
-                      accessibilityLabel="Clear Asha chat history"
-                      accessibilityRole="button"
-                      accessibilityState={{ disabled: clearChatDisabled }}
-                      disabled={clearChatDisabled}
-                      onPress={confirmClearChat}
-                      style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
-                    >
-                      <Trash2 color={colors.dangerSoft} size={17} />
-                      <Text style={styles.clearChatText}>Clear chat</Text>
-                    </Pressable>
-                  ) : null}
+                  <View style={styles.askHeadingActions} testID="ask-asha-actions">
+                    {chatHistory.length > 0 ? (
+                      <Pressable
+                        accessibilityHint="Removes typed and voice chat saved on this device, without deleting saved phrases, lesson progress, or reports waiting to be sent."
+                        accessibilityLabel="Clear Asha chat history"
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: clearChatDisabled }}
+                        disabled={clearChatDisabled}
+                        onPress={confirmClearChat}
+                        style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
+                      >
+                        <Trash2 color={colors.dangerSoft} size={17} />
+                        <Text style={styles.clearChatText}>Clear chat</Text>
+                      </Pressable>
+                    ) : null}
+                    {lastSessionButton}
+                  </View>
                 </View>
                 {unassociatedReports.length ? (
                   <View style={styles.queuedReports} testID="queued-reports">
@@ -1179,7 +1182,7 @@ export default function LiveScreen() {
             </Pressable>
           </View>
         ) : null}
-        <ScrollView horizontal keyboardShouldPersistTaps="handled" showsHorizontalScrollIndicator={false} contentContainerStyle={styles.examples}>
+        <View style={styles.examples} testID="live-example-chips">
           {['Order tea', 'Ask the price', 'Be polite', 'Correct my Hindi'].map((example) => (
             <PressableFeedback
               accessibilityRole="button"
@@ -1192,7 +1195,7 @@ export default function LiveScreen() {
               <Text style={styles.exampleText}>{example}</Text>
             </PressableFeedback>
           ))}
-        </ScrollView>
+        </View>
         <View style={styles.composerEntry}>
           {conversationStarted && composerMicActionBound ? (
             <Pressable
@@ -1295,15 +1298,15 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, paddingBottom: spacing.md },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   askSectionResting: { gap: spacing.xs, paddingTop: spacing.xs, paddingBottom: 0 },
-  askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
-  askHeadingRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: spacing.xs },
+  askHeading: { width: '100%', alignSelf: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
+  askHeadingCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.xs },
   askHeadingCopyCompact: { gap: 0 },
-  askEyebrow: { ...type.eyebrow, color: c.gold, textAlign: 'center' },
-  askTitle: { ...type.headline, color: c.white, textAlign: 'center', fontWeight: '600' },
-  clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
+  askHeadingActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm },
+  askEyebrow: { ...type.eyebrow, alignSelf: 'stretch', color: c.gold, textAlign: 'center' },
+  askTitle: { ...type.headline, alignSelf: 'stretch', color: c.white, textAlign: 'center', fontWeight: '600' },
+  clearChatButton: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
   clearChatText: { ...type.caption, flexShrink: 1, color: c.dangerSoft, textAlign: 'center', fontWeight: '600' },
-  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  lastSessionButton: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
   lastSessionText: { ...type.caption, flexShrink: 1, color: c.gold, textAlign: 'center', fontWeight: '600' },
   failedReportText: { color: c.dangerSoft },
@@ -1355,9 +1358,9 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   correctionEnglish: { ...type.caption, width: '100%', color: c.muted },
   correctionNote: { ...type.caption, color: c.muted, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
   composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, gap: spacing.sm },
-  examples: { justifyContent: 'flex-start', gap: spacing.sm, paddingRight: spacing.xl },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
-  exampleText: { ...type.caption, color: c.white, textAlign: 'center' },
+  examples: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingRight: layout.chipEndInset },
+  example: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.lg },
+  exampleText: { ...type.caption, flexShrink: 1, color: c.white, textAlign: 'center' },
   composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },

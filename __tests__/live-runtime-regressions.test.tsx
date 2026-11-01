@@ -4,7 +4,7 @@ import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pre
 
 import LiveScreen, { createLiveStyles } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
-import { lightColors, spacing } from '../src/theme';
+import { layout, lightColors, spacing } from '../src/theme';
 
 function expectDefined<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected the value to be defined.');
@@ -803,7 +803,56 @@ describe('live theme styles', () => {
     expect('textTransform' in styles.captionLabel).toBe(false);
     expect('minHeight' in styles.voiceHero).toBe(false);
     expect('minHeight' in styles.voiceHeroCompact).toBe(false);
-    expect(styles.examples.paddingRight).toBe(spacing.xl);
+    expect(styles.examples.flexWrap).toBe('wrap');
+    expect(styles.examples.paddingRight).toBe(layout.chipEndInset);
+    expect(layout.chipEndInset).toBe(spacing.gutter);
+    expect(layout.touchTarget).toBe(44);
+    expect(styles.askHeading.flexDirection).toBe('column');
+    expect(styles.askTitle.alignSelf).toBe('stretch');
+    expect(styles.askHeadingActions.flexDirection).toBe('row');
+    expect(styles.askHeadingActions.flexWrap).toBe('wrap');
+    expect(styles.askHeadingActions.justifyContent).toBe('flex-start');
+    expect(styles.clearChatButton.minHeight).toBe(layout.touchTarget);
+    expect(styles.clearChatButton.flexShrink).toBe(0);
+    expect(styles.lastSessionButton.minHeight).toBe(layout.touchTarget);
+    expect(styles.lastSessionButton.flexShrink).toBe(0);
+    expect(styles.example.minHeight).toBe(layout.touchTarget);
+    expect(styles.example.maxWidth).toBe('100%');
+    expect(styles.example.flexShrink).toBe(0);
+  });
+
+  it.each([1, 1.12, 2])('keeps the chat title off the Last session row at font scale %s', async (fontScale) => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const size = { fontScale, height: 852, scale: 3, width: 393 };
+    await act(async () => {
+      Dimensions.set({ screen: size, window: size });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      const heading = view.getByTestId('ask-asha-heading');
+      const actions = view.getByTestId('ask-asha-actions');
+      const chips = view.getByTestId('live-example-chips');
+
+      expect(StyleSheet.flatten(view.getByTestId('ask-asha-heading-block').props.style).flexDirection).toBe('column');
+      expect(within(heading).getByText('How do I say…?')).toBeTruthy();
+      expect(within(heading).queryByText('Last session')).toBeNull();
+      expect(within(actions).getByText('Last session')).toBeTruthy();
+      expect(StyleSheet.flatten(actions.props.style).flexWrap).toBe('wrap');
+      expect(StyleSheet.flatten(chips.props.style)).toMatchObject({
+        flexWrap: 'wrap',
+        paddingRight: layout.chipEndInset,
+      });
+      expect(view.getByRole('button', { name: 'Correct my Hindi' })).toBeTruthy();
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
   });
 });
 

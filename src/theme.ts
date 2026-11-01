@@ -103,6 +103,14 @@ export const spacing = {
   gutter: 20,
 } as const;
 
+/** Shared layout measures. */
+export const layout = {
+  /** Smallest height of a tappable control. */
+  touchTarget: 44,
+  /** Trailing space after the last suggestion chip. Same width as the screen gutter. */
+  chipEndInset: spacing.gutter,
+} as const;
+
 export const radius = {
   sm: 10,
   md: 14,
