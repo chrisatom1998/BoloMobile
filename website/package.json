@@ -19,6 +19,34 @@
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
+  "overrides": {
+    "minimatch@^10.0.0": {
+      ".": "11.0.3",
+      "brace-expansion": "5.0.12"
+    },
+    "minimatch@^3.0.0": {
+      ".": "11.0.3",
+      "brace-expansion": "5.0.12"
+    },
+    "eslint-plugin-import": {
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
+    },
+    "eslint-plugin-react": {
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
+    },
+    "eslint-plugin-jsx-a11y": {
+      "minimatch": {
+        ".": "3.1.5",
+        "brace-expansion": "1.1.21"
+      }
+    }
+  },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@tailwindcss/postcss": "4.2.1",
