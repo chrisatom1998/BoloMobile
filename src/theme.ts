@@ -62,6 +62,17 @@ export const lightColors = {
   heroGlyph: 'rgba(255, 255, 255, 0.18)',
   /** Faint decorative Devanagari watermark on brand (rust) surfaces. */
   onBrandWatermark: 'rgba(255, 255, 255, 0.08)',
+  /** Body text on brand (rust) surfaces. */
+  onBrandText: '#FBEFE8',
+  /** Frosted chips and callouts on brand surfaces. */
+  onBrandChip: 'rgba(255, 255, 255, 0.14)',
+  onBrandCallout: 'rgba(255, 255, 255, 0.10)',
+  /** Hairlines and empty ring tracks on brand surfaces. */
+  onBrandLine: 'rgba(255, 255, 255, 0.18)',
+  onBrandTrack: 'rgba(255, 255, 255, 0.22)',
+  onBrandOutline: 'rgba(255, 255, 255, 0.5)',
+  /** The current step's dot fill on brand surfaces. */
+  onBrandGoldTint: 'rgba(231, 172, 61, 0.25)',
 
   orb: '#E76B48',
   orbActive: '#D85F3D',
