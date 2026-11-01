@@ -3,6 +3,8 @@
 import { randomBytes } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 
+import { assertEnglishReplyScript, assertHindiReplyScript, assertStructuredReplyShape, STRUCTURED_REPLY_FORMAT } from './lib/mobile-chat-checks.mjs';
+
 const DEFAULT_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const DEFAULT_PUBLIC_SITE_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai';
 const API_URL = (process.env.BOLO_API_URL || DEFAULT_API_URL).trim().replace(/\/+$/u, '');
@@ -41,6 +43,13 @@ function textValue(value, label, maximum) {
 
 function containsDevanagari(value) {
   return /[\u0900-\u097F]/u.test(value);
+}
+
+/** The structured block is optional; when present its shape must match the structured-v1 contract. */
+function checkOptionalStructured(payload, label) {
+  if (payload.structured === undefined || payload.structured === null) return 'no structured block';
+  const shape = assertStructuredReplyShape(payload.structured, `${label} structured`);
+  return `structured-v1 with ${shape.phrases} phrase(s), ${shape.corrections} correction(s)`;
 }
 
 function safeError(error) {
@@ -158,14 +167,18 @@ async function runServicePass(pass) {
         clientId,
         languageMode: 'english-unless-hindi-requested',
         responseLanguage: 'en',
+        // The current app asks for the structured block; a server that predates it must ignore the field.
+        replyFormat: STRUCTURED_REPLY_FORMAT,
       });
       const transcript = textValue(result.payload.transcript, `mobile-chat English #${pass} transcript`, 1_200);
       const reply = textValue(result.payload.reply, `mobile-chat English #${pass} reply`, 2_400);
       assert(result.payload.language === 'en', `mobile-chat English #${pass}`, 'language was not en');
-      assert(!containsDevanagari(reply), `mobile-chat English #${pass}`, 'default English reply contained Devanagari');
+      // The client asks Asha to write Hindi words in Devanagari, so a Hindi phrase inside an English reply is valid; the reply must still be mostly English.
+      assertEnglishReplyScript(reply, `mobile-chat English #${pass}`);
       assert(transcript.includes('I needs water'), `mobile-chat English #${pass}`, 'transcript did not preserve the learner turn');
-      return { elapsedMs: result.elapsedMs, replyLength: reply.length };
-    }, (result) => `${result.elapsedMs} ms; ${result.replyLength}-character English reply`);
+      const structured = checkOptionalStructured(result.payload, `mobile-chat English #${pass}`);
+      return { elapsedMs: result.elapsedMs, replyLength: reply.length, structured };
+    }, (result) => `${result.elapsedMs} ms; ${result.replyLength}-character English reply; ${result.structured}`);
 
     await check(`mobile-chat Hindi #${pass}`, async () => {
       const result = await postJson(`mobile-chat Hindi #${pass}`, '/api/mobile-chat', {
@@ -174,14 +187,16 @@ async function runServicePass(pass) {
         clientId,
         languageMode: 'english-unless-hindi-requested',
         responseLanguage: 'hi',
+        replyFormat: STRUCTURED_REPLY_FORMAT,
       });
       textValue(result.payload.transcript, `mobile-chat Hindi #${pass} transcript`, 1_200);
       const reply = textValue(result.payload.reply, `mobile-chat Hindi #${pass} reply`, 2_400);
       assert(result.payload.language === 'hi', `mobile-chat Hindi #${pass}`, 'explicit Hindi request was not tagged hi');
-      assert(!containsDevanagari(reply), `mobile-chat Hindi #${pass}`, 'deployed typed-chat contract unexpectedly changed scripts');
-      assert(/[A-Za-z]/u.test(reply), `mobile-chat Hindi #${pass}`, 'Romanized Hindi reply did not contain Latin text');
-      return { elapsedMs: result.elapsedMs, replyLength: reply.length };
-    }, (result) => `${result.elapsedMs} ms; ${result.replyLength}-character Romanized Hindi reply`);
+      // The client asks for Devanagari and renders it per the learner's script preference; an older Romanized deployment is still accepted.
+      const script = assertHindiReplyScript(reply, `mobile-chat Hindi #${pass}`);
+      const structured = checkOptionalStructured(result.payload, `mobile-chat Hindi #${pass}`);
+      return { elapsedMs: result.elapsedMs, replyLength: reply.length, script, structured };
+    }, (result) => `${result.elapsedMs} ms; ${result.replyLength}-character ${result.script} Hindi reply; ${result.structured}`);
 
     const phrase = await check(`phrase-audio #${pass}`, async () => {
       const result = await postJson(`phrase-audio #${pass}`, '/api/phrase-audio', { text: 'मुझे पानी चाहिए।' });

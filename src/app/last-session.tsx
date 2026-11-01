@@ -13,7 +13,7 @@ import { syncOutbox, useSyncOutbox } from '@/lib/sync-outbox';
 import type { LiveMode } from '@/services/bolo-api';
 import { useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type } from '@/theme';
 
 /** Same explicit deletion and copy as the Asha screen's Clear chat. */
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
@@ -230,26 +230,26 @@ const useStyles = makeStyles((c) => ({
   badges: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   badge: { minHeight: 28, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm },
   badgeInterrupted: { backgroundColor: c.goldSoft },
-  badgeText: { color: c.brandText, fontSize: 12, fontWeight: '800' },
+  badgeText: { ...type.caption, color: c.brandText, fontWeight: '700' },
   badgeTextInterrupted: { color: c.goldText },
   facts: { gap: spacing.xs },
-  detail: { color: c.ink, fontSize: 15, lineHeight: 22 },
-  hindiDetail: { ...hindiType(15), color: c.ink },
+  detail: { ...type.body, color: c.ink },
+  hindiDetail: { ...hindiType(17), color: c.ink },
   transcript: { gap: spacing.sm },
   clearedCard: { gap: spacing.xs },
-  transcriptTitle: { color: c.ink, fontSize: 17, fontWeight: '900' },
-  row: { maxWidth: '92%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: 2 },
+  transcriptTitle: { ...type.label, color: c.ink, fontWeight: '700' },
+  row: { maxWidth: '92%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
   rowAsha: { alignSelf: 'flex-start', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
   rowYou: { alignSelf: 'flex-end', backgroundColor: c.night },
-  speaker: { color: c.brandText, fontSize: 12, fontWeight: '700' },
+  speaker: { ...type.caption, color: c.brandText, fontWeight: '700' },
   speakerYou: { color: c.gold },
-  rowText: { color: c.ink, fontSize: 16, lineHeight: 23 },
+  rowText: { ...type.body, color: c.ink },
   rowTextYou: { color: c.white },
-  rowTextHindi: { ...hindiType(18) },
+  rowTextHindi: { ...hindiType(17) },
   reports: { gap: spacing.sm },
-  footnote: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  footnote: { ...type.caption, color: c.muted },
   clearButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
-  clearText: { color: c.danger, fontSize: 15, fontWeight: '700' },
-  clearError: { color: c.danger, fontSize: 14, lineHeight: 20 },
+  clearText: { ...type.label, color: c.danger, fontWeight: '700' },
+  clearError: { ...type.caption, color: c.danger },
   disabled: { opacity: 0.5 },
 }));

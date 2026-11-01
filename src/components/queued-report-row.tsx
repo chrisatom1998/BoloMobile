@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import type { OutboxEntry } from '@/lib/sync-outbox';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 const EXCERPT_CHARACTERS = 80;
 
@@ -65,13 +65,13 @@ export function QueuedReportRow({ entry, onDiscard, onRetry, tone = 'light' }: {
 const useStyles = makeStyles((c) => ({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   rowDark: { borderColor: c.nightLine, backgroundColor: c.nightSurface },
-  copy: { flex: 1, gap: 2 },
-  excerpt: { color: c.ink, fontSize: 14, lineHeight: 20 },
+  copy: { flex: 1, gap: spacing.xs },
+  excerpt: { ...type.caption, color: c.ink },
   textDark: { color: c.white },
-  status: { color: c.muted, fontSize: 13, lineHeight: 18 },
+  status: { ...type.caption, color: c.muted },
   mutedDark: { color: c.heroSubtle },
   statusFailed: { color: c.dangerSoft },
-  actions: { flexDirection: 'row', gap: spacing.md, marginTop: 2 },
+  actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
   action: { minHeight: 44, justifyContent: 'center' },
-  actionText: { color: c.ink, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+  actionText: { ...type.label, color: c.ink, textDecorationLine: 'underline', fontWeight: '700' },
 }));

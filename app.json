@@ -105,6 +105,13 @@
       ],
       "expo-asset",
       [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
+      [
         "expo-font",
         {
           "ios": {

@@ -16,6 +16,11 @@ const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
 const mockMarkSceneComplete = jest.fn();
+const mockSetReminder = jest.fn(async () => true);
+const mockCancelNotification = jest.fn(async (..._args: unknown[]) => undefined);
+const mockGetNotificationPermissions = jest.fn();
+const mockRequestNotificationPermissions = jest.fn();
+const mockScheduleNotification = jest.fn();
 const mockTogglePhrase = jest.fn();
 const mockWordDefinitionSheet = jest.fn((_props: unknown) => null);
 const mockAppState = {
@@ -27,9 +32,22 @@ const mockAppState = {
   markSceneComplete: mockMarkSceneComplete,
   motionPreference: 'gentle' as 'gentle' | 'lively' | 'reduced',
   phrases: [] as { en: string; hi: string; latin: string }[],
-  sceneProgress: {} as Record<string, { lastBeatIndex: number; attempt?: SceneAttempt }>,
+  reminder: { enabled: false, hour: 19, minute: 0, notificationId: null as string | null, offerAnswered: undefined as boolean | undefined },
+  sceneProgress: {} as Record<string, { attempt?: SceneAttempt; completions?: number; lastBeatIndex: number }>,
+  setReminder: mockSetReminder,
   togglePhrase: mockTogglePhrase,
 };
+
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: { DEFAULT: 3 },
+  IosAuthorizationStatus: { PROVISIONAL: 3 },
+  SchedulableTriggerInputTypes: { DAILY: 'daily' },
+  cancelScheduledNotificationAsync: (...args: unknown[]) => mockCancelNotification(...args),
+  getPermissionsAsync: (...args: unknown[]) => mockGetNotificationPermissions(...args),
+  requestPermissionsAsync: (...args: unknown[]) => mockRequestNotificationPermissions(...args),
+  scheduleNotificationAsync: (...args: unknown[]) => mockScheduleNotification(...args),
+  setNotificationChannelAsync: jest.fn(async () => undefined),
+}));
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
@@ -72,7 +90,7 @@ jest.mock('@/components/word-definition-sheet', () => ({
 }));
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer , touch: jest.fn() }),
 }));
 
 jest.mock('@/lib/speech', () => ({
@@ -148,7 +166,11 @@ describe('SceneScreen primary journey', () => {
     mockAppState.learnerProfile = { scriptPreference: 'both', displayName: '' };
     mockAppState.motionPreference = 'gentle';
     mockAppState.phrases = [];
+    mockAppState.reminder = { enabled: false, hour: 19, minute: 0, notificationId: null, offerAnswered: undefined };
     mockAppState.sceneProgress = {};
+    mockGetNotificationPermissions.mockResolvedValue({ granted: false, ios: { status: 1 } });
+    mockRequestNotificationPermissions.mockResolvedValue({ granted: true, ios: { status: 2 } });
+    mockScheduleNotification.mockResolvedValue('reminder-1');
     mockElapsedSeconds.mockReturnValue(42);
     speakTextMock.mockResolvedValue(true);
   });
@@ -201,6 +223,94 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  async function finishChaiLesson() {
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    return view;
+  }
+
+  it('offers a practice reminder once on the first finished lesson and asks permission only after yes', async () => {
+    const view = await finishChaiLesson();
+
+    expect(view.getByText('Remind me tomorrow at this time?')).toBeTruthy();
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Not now' }));
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
+    expect(mockScheduleNotification).not.toHaveBeenCalled();
+    expect(mockSetReminder).toHaveBeenCalledWith(expect.objectContaining({ enabled: false, offerAnswered: true }));
+    expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+    expect(mockRequestNotificationPermissions).not.toHaveBeenCalled();
+  });
+
+  it('requests notification permission only when the first-lesson reminder is accepted', async () => {
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockRequestNotificationPermissions).toHaveBeenCalledTimes(1));
+    expect(mockScheduleNotification).toHaveBeenCalledTimes(1);
+    expect(mockSetReminder).toHaveBeenCalledWith(expect.objectContaining({
+      enabled: true,
+      notificationId: 'reminder-1',
+      offerAnswered: true,
+    }));
+    expect(view.queryByText('Remind me tomorrow at this time?')).toBeNull();
+  });
+
+  it('cancels the newly scheduled reminder when saving it fails', async () => {
+    mockSetReminder.mockResolvedValueOnce(false);
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockCancelNotification).toHaveBeenCalledWith('reminder-1'));
+    expect(mockScheduleNotification).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the scheduled reminder when saving it succeeds', async () => {
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockSetReminder).toHaveBeenCalled());
+    await act(async () => {
+      await mockSetReminder.mock.results[0]?.value;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mockCancelNotification).not.toHaveBeenCalled();
+  });
+
+  it('cancels the newly scheduled reminder when saving it throws', async () => {
+    mockSetReminder.mockRejectedValueOnce(new Error('storage full'));
+    const view = await finishChaiLesson();
+    await fireEvent.press(view.getByRole('button', { name: /Yes, remind me at/ }));
+
+    await waitFor(() => expect(mockCancelNotification).toHaveBeenCalledWith('reminder-1'));
+  });
+
+  it('does not offer a reminder after a lesson was already finished or the offer was answered', async () => {
+    mockAppState.sceneProgress = { friend: { completions: 1, lastBeatIndex: 0 } };
+    const finished = await finishChaiLesson();
+    expect(finished.queryByText('Remind me tomorrow at this time?')).toBeNull();
+
+    mockAppState.sceneProgress = {};
+    mockAppState.reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'reminder-1', offerAnswered: undefined };
+    const enabled = await finishChaiLesson();
+    expect(enabled.queryByText('Remind me tomorrow at this time?')).toBeNull();
+
+    mockAppState.reminder = { enabled: false, hour: 19, minute: 0, notificationId: null, offerAnswered: true };
+    const answered = await finishChaiLesson();
+    expect(answered.queryByText('Remind me tomorrow at this time?')).toBeNull();
   });
 
   it('closes the lesson from its own header button', async () => {

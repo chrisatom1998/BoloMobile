@@ -17,7 +17,7 @@ import { observe } from '@/lib/observability';
 import { releaseSplashScreen } from '@/lib/splash-screen';
 import { AshaVoiceSessionProvider } from '@/state/asha-voice-session';
 import { AppStateProvider, useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, spacing, useTheme } from '@/theme';
+import { displayFont, hindiType, makeStyles, spacing, useTheme, type } from '@/theme';
 
 // Keep the native splash up until persisted app state has hydrated; AppNavigator releases it.
 // Module scope, per the expo-splash-screen docs: inside a component it can run after the splash is already gone.
@@ -64,7 +64,7 @@ function AppNavigator() {
             headerShadowVisible: false,
             headerStyle: { backgroundColor: colors.background },
             headerTintColor: colors.ink,
-            headerTitleStyle: { color: colors.ink, fontSize: 17, fontWeight: '600' },
+            headerTitleStyle: { ...type.label, color: colors.ink },
             // Large titles use the same serif as the tab screens' own headings.
             headerLargeTitleShadowVisible: false,
             headerLargeStyle: { backgroundColor: colors.background },
@@ -111,7 +111,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
 
 const useStyles = makeStyles((c) => ({
   sheetDone: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
-  sheetDoneText: { color: c.brandText, fontSize: 17, fontWeight: '600' },
+  sheetDoneText: { ...type.label, color: c.brandText },
   loading: {
     flex: 1,
     alignItems: 'center',

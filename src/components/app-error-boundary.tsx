@@ -5,7 +5,7 @@ import { Text, View } from 'react-native';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { observe } from '@/lib/observability';
 import { releaseSplashScreen } from '@/lib/splash-screen';
-import { hindiType, makeStyles, radius, spacing } from '@/theme';
+import { hindiType, makeStyles, radius, spacing, type, buttons } from '@/theme';
 
 type State = { failed: boolean };
 
@@ -67,12 +67,12 @@ function ErrorFallback({ onRetry, onHome }: { onRetry: () => void; onHome?: () =
 
 const useStyles = makeStyles((c) => ({
   screen: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
-  mark: { width: 64, height: 64, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
-  markText: { ...hindiType(32), color: c.white },
-  title: { color: c.ink, fontSize: 25, lineHeight: 31, fontWeight: '900', textAlign: 'center' },
-  body: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  button: { minHeight: 50, minWidth: 160, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.night, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  buttonText: { color: c.white, fontSize: 16, fontWeight: '800' },
-  secondaryButton: { minHeight: 44, minWidth: 160, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  secondaryButtonText: { color: c.forestText, fontSize: 16, fontWeight: '700' },
+  mark: { width: 64, height: 64, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
+  markText: { ...hindiType(28), color: c.white },
+  title: { ...type.title, color: c.ink, textAlign: 'center' },
+  body: { ...type.body, color: c.muted, textAlign: 'center' },
+  button: { ...buttons.primary, minWidth: 160 },
+  buttonText: buttons.primaryText,
+  secondaryButton: { ...buttons.quiet, minWidth: 160 },
+  secondaryButtonText: buttons.quietText,
 }));
