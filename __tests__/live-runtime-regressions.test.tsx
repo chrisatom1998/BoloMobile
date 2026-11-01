@@ -1558,6 +1558,43 @@ describe('immersive live conversation design', () => {
     }
   });
 
+  it('keeps only the title in the fixed header while typing at the largest text size', async () => {
+    const originalWindow = Dimensions.get('window');
+    const originalScreen = Dimensions.get('screen');
+    const largest = { fontScale: 3.12, height: 852, scale: 3, width: 393 };
+    const listeners = new Map<string, (event?: unknown) => void>();
+    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: (event?: unknown) => void) => {
+      listeners.set(event, listener);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+    await act(async () => {
+      Dimensions.set({ screen: largest, window: largest });
+      await Promise.resolve();
+    });
+    try {
+      const view = await render(<LiveScreen />);
+      await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      expect(view.getByLabelText('Settings')).toBeTruthy();
+      expect(view.getByText('English')).toBeTruthy();
+
+      await act(async () => { expectDefined(listeners.get('keyboardWillShow'))(keyboardEvent(336)); });
+      expect(view.getByText('Speak with Asha')).toBeTruthy();
+      expect(view.queryByLabelText('Settings')).toBeNull();
+      expect(view.queryByText('English')).toBeNull();
+
+      await act(async () => { expectDefined(listeners.get('keyboardWillHide'))(); });
+      expect(view.getByLabelText('Settings')).toBeTruthy();
+      expect(view.getByText('English')).toBeTruthy();
+      await view.unmount();
+      await flushMicrotasks();
+    } finally {
+      await act(async () => {
+        Dimensions.set({ screen: originalScreen, window: originalWindow });
+        await Promise.resolve();
+      });
+    }
+  });
+
   it('wraps header labels at the largest text size and collapses after a message', async () => {
     const originalWindow = Dimensions.get('window');
     const originalScreen = Dimensions.get('screen');

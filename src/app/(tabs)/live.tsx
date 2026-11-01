@@ -232,6 +232,10 @@ export default function LiveScreen() {
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
   const headerCollapsed = hasTranscriptMessages || scrolledCompact || accessibilityCompact;
+  // At large text the fixed header (stacked title, actions, two-row language switch) can fill most of
+  // the space left above the keyboard. While typing there, keep only the title so the transcript and
+  // composer still fit. Everything comes back when the keyboard closes.
+  const composingAtLargeText = largeTextLayout && keyboardOverlap > 0;
   const youCaption = romanizeDevanagari(liveUserTranscript).trim();
   const ashaCaption = romanizeDevanagari(liveAshaTranscript).trim();
   const speechCaption = latestCaptionSpeaker === 'asha' && ashaCaption
@@ -931,18 +935,20 @@ export default function LiveScreen() {
           <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked, headerCollapsed && styles.headerTitleCollapsed]}>Speak with Asha</JournalDisplay>
         </View>
       </View>
-      <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
-        {floatingAsha.available && aiConsent ? (
-          <AshaMinimizeButton onPress={floatingAsha.minimize} />
-        ) : null}
-        <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-          <Lock color={colors.heroSubtle} size={14} strokeWidth={2} />
-          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.privateText}>Private</Text>
+      {composingAtLargeText ? null : (
+        <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
+          {floatingAsha.available && aiConsent ? (
+            <AshaMinimizeButton onPress={floatingAsha.minimize} />
+          ) : null}
+          <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
+            <Lock color={colors.heroSubtle} size={14} strokeWidth={2} />
+            <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.privateText}>Private</Text>
+          </View>
+          <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.headerSettings} testID="asha-settings">
+            <Settings accessibilityLabel="Settings" accessible={false} color={colors.white} size={20} strokeWidth={2} />
+          </Pressable>
         </View>
-        <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.headerSettings} testID="asha-settings">
-          <Settings accessibilityLabel="Settings" accessible={false} color={colors.white} size={20} strokeWidth={2} />
-        </Pressable>
-      </View>
+      )}
     </View>
   );
 
@@ -955,7 +961,7 @@ export default function LiveScreen() {
         {accessibilityCompact ? (
           <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.headerSubtitle}>Your Hindi coach</Text>
         ) : null}
-        {headerCollapsed && aiConsent ? languageControl : null}
+        {headerCollapsed && aiConsent && !composingAtLargeText ? languageControl : null}
       </View>
       <FlatList
         ref={listRef}
