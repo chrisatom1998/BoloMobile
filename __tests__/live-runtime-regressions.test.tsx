@@ -395,7 +395,7 @@ jest.mock('@/state/app-state', () => ({
   __addPracticeSecondsMock: jest.fn(),
   __clearChatHistoryMock: jest.fn(),
   __markLiveTurnMock: jest.fn(),
-  __togglePhraseMock: jest.fn(),
+  __togglePhraseMock: jest.fn(async () => 'saved'),
   useAppState: () => {
     const appState = jest.requireMock('@/state/app-state') as {
       __appendChatMessagesMock: jest.Mock;
@@ -1941,6 +1941,25 @@ describe('live coaching state', () => {
     expect(alert).not.toHaveBeenCalled();
     await waitFor(() => expect(alert).toHaveBeenCalledWith('Phrase saved', 'Aap kaise hain? — How are you?'));
     expect(view.queryByLabelText('Selected transcript text')).toBeNull();
+    alert.mockRestore();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('tells the learner the collection is full instead of confirming a transcript save', async () => {
+    appState.__togglePhraseMock.mockResolvedValueOnce('full');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Save phrase: Hello there.'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+
+    expect(appState.__togglePhraseMock).toHaveBeenCalledWith({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' });
+    await waitFor(() => expect(alert).toHaveBeenCalledWith('Saved phrases full', 'You have 100 saved phrases. Remove one in Phrases to save another.'));
+    expect(alert).not.toHaveBeenCalledWith('Phrase saved', expect.anything());
     alert.mockRestore();
     await view.unmount();
     await flushMicrotasks();

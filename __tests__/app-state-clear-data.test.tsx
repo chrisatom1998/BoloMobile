@@ -161,6 +161,7 @@ function readSnapshot(view: Awaited<ReturnType<typeof render>>) {
 describe('AppStateProvider clearAllData', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    jest.mocked(cancelPracticeReminder).mockImplementation(async (current) => ({ ...current, enabled: false, notificationId: null }));
     asyncStorage.__store.clear();
     reportMock.mockResolvedValue({ reported: true });
     // The outbox is module-level: start every test with an empty, unblocked queue.
@@ -220,6 +221,25 @@ describe('AppStateProvider clearAllData', () => {
     expect(cancelPracticeReminder).toHaveBeenCalledWith(reminder);
     expect(JSON.parse(asyncStorage.__store.get(storageKeys.reminder) ?? 'null')).toMatchObject({ enabled: false, notificationId: null });
     await view.unmount();
+  });
+
+  it('still clears local data when native reminder cancellation fails', async () => {
+    seedEveryStorageKey();
+    const reminder = { enabled: true, hour: 19, minute: 0, notificationId: 'notif-123' };
+    asyncStorage.__store.set(storageKeys.reminder, JSON.stringify(reminder));
+    const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    jest.mocked(cancelPracticeReminder).mockRejectedValueOnce(new Error('native cancel failed'));
+    const view = await render(<AppStateProvider><StateHarness /></AppStateProvider>);
+    await waitFor(() => expect(readSnapshot(view).clientId).toBe('client-old-12345'));
+
+    await fireEvent.press(view.getByLabelText('Clear all provider data'));
+    await waitFor(() => expect(readSnapshot(view).clientId).not.toBe('client-old-12345'));
+
+    expect(view.getByTestId('clear-error').props.children).toBe('');
+    expect(JSON.parse(asyncStorage.__store.get(storageKeys.reminder) ?? 'null')).toMatchObject({ enabled: false, notificationId: null });
+    expect(warning).toHaveBeenCalledWith('Bolo could not cancel the practice reminder during data deletion.', expect.any(Error));
+    await view.unmount();
+    warning.mockRestore();
   });
 
   it('rejects a consent change made while a full data clear is in flight', async () => {
