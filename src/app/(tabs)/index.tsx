@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 
 import { JournalDisplay } from '@/components/journal-chrome';
-import { OfflineNote } from '@/components/screen-state';
 import { MotionReveal } from '@/components/motion';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
@@ -21,14 +20,14 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
-import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
+import { buildTodayPlan, todayStepOrder, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
 import { headerlessContentInset } from '@/lib/screen-insets';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
+import { displayFont, hindiType, layout, makeStyles, maxContentWidth, radius, safeArea, spacing, useSharedStyles, useTheme } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
-const goalRingRadius = 27;
+const goalRingRadius = layout.goalDial / 2 - 6;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
 /** Due phrases previewed on the review step; the last one fades to hint at the rest. */
 const reviewPreviewLimit = 3;
@@ -53,7 +52,7 @@ export default function HomeScreen() {
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
   const insets = useSafeAreaInsets();
-  const contentInset = headerlessContentInset(insets, spacing.xxl);
+  const contentInset = headerlessContentInset(insets, safeArea.tabBar + layout.primaryButtonHeight + spacing.lg);
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
@@ -106,9 +105,9 @@ export default function HomeScreen() {
   // A review step with nothing due is not shown, so a new learner never sees a struck-out "Skipped" row.
   const visibleSteps = useMemo(() => todayPlan.steps.filter((step) => !step.skipped), [todayPlan.steps]);
   const stepKicker = useCallback((key: TodayStep['key'], label: string) => {
-    const position = visibleSteps.findIndex((step) => step.key === key) + 1;
-    return position > 0 ? `STEP ${position} OF ${visibleSteps.length} · ${label}` : label;
-  }, [visibleSteps]);
+    const position = todayStepOrder.indexOf(key) + 1;
+    return position > 0 ? `STEP ${position} OF ${todayStepOrder.length} · ${label}` : label;
+  }, []);
   const lessonNumber = lessonSelection.plan.lessonIds.indexOf(lessonSelection.lessonId) + 1;
   const hero = useMemo(() => {
     const lessonStep = {
@@ -189,7 +188,6 @@ export default function HomeScreen() {
           </Pressable>
         </View>
       </View>
-      <OfflineNote />
 
       <MotionReveal mode={motionMode} motionKey={currentStep ?? 'done'} style={[styles.hero, dayComplete && styles.heroDone]} testID="today-primary-motion">
         {watermark ? <Text accessibilityElementsHidden accessible={false} aria-hidden ellipsizeMode="clip" importantForAccessibility="no-hide-descendants" numberOfLines={1} style={styles.heroWatermark}>{watermark}</Text> : null}
@@ -210,12 +208,12 @@ export default function HomeScreen() {
             style={styles.goalDial}
             testID="today-goal-dial"
           >
-            <Svg aria-hidden height={64} pointerEvents="none" style={styles.goalRing} viewBox="0 0 64 64" width={64}>
-              <Circle cx={32} cy={32} fill="none" r={goalRingRadius} stroke="rgba(255, 255, 255, 0.22)" strokeWidth={6} />
+            <Svg aria-hidden height={layout.goalDial} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${layout.goalDial} ${layout.goalDial}`} width={layout.goalDial}>
+              <Circle cx={layout.goalDial / 2} cy={layout.goalDial / 2} fill="none" r={goalRingRadius} stroke="rgba(255, 255, 255, 0.22)" strokeWidth={6} />
               {goalPercent > 0 ? (
                 <Circle
-                  cx={32}
-                  cy={32}
+                  cx={layout.goalDial / 2}
+                  cy={layout.goalDial / 2}
                   fill="none"
                   r={goalRingRadius}
                   stroke={colors.gold}
@@ -251,7 +249,7 @@ export default function HomeScreen() {
         ) : null}
 
         <View accessibilityLabel="Today’s practice steps" accessibilityRole="list" style={styles.steps} testID="today-steps">
-          {visibleSteps.map((step, index) => {
+          {visibleSteps.map((step) => {
             const copy = stepCopy(step);
             const done = step.status === 'done';
             const current = step.status === 'current';
@@ -259,7 +257,7 @@ export default function HomeScreen() {
               <View
                 key={step.key}
                 accessible
-                accessibilityLabel={`Step ${index + 1} of ${visibleSteps.length}, ${copy.label}, ${done ? 'done' : current ? 'up next' : 'later'}`}
+                accessibilityLabel={`Step ${todayStepOrder.indexOf(step.key) + 1} of ${todayStepOrder.length}, ${copy.label}, ${done ? 'done' : current ? 'up next' : 'later'}`}
                 style={styles.stepRow}
                 testID={`today-step-${step.key}`}
               >
@@ -273,12 +271,6 @@ export default function HomeScreen() {
           })}
         </View>
 
-        <View style={[styles.heroFooter, largeTextLayout && styles.heroFooterLarge]} testID="today-hero-footer">
-          <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.heroButton} testID="today-next-step">
-            <Text style={styles.heroButtonText}>{hero.action}</Text>
-            <ArrowRight color={colors.ink} size={18} strokeWidth={2.2} />
-          </PressableFeedback>
-        </View>
       </MotionReveal>
 
       <View style={styles.jumpSection}>
@@ -298,9 +290,9 @@ export default function HomeScreen() {
             <BookOpenText color={colors.brand} size={20} strokeWidth={2.1} />
             <Text style={styles.jumpTitle}>Phrases</Text>
           </PressableFeedback>
-          <PressableFeedback accessibilityLabel={`Browse all ${lessonPlans.length} plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.jumpTile} testID="today-plan-catalog">
+          <PressableFeedback accessibilityLabel="Lesson plans" accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.jumpTile} testID="today-plan-catalog">
             <ListOrdered color={colors.brand} size={20} strokeWidth={2.1} />
-            <Text style={styles.jumpTitle}>All plans</Text>
+            <Text style={styles.jumpTitle}>Lesson plans</Text>
           </PressableFeedback>
         </View>
       </View>
@@ -310,7 +302,7 @@ export default function HomeScreen() {
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
   return (
-    <>
+    <View style={sharedStyles.screen}>
       <FlatList
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[styles.list, contentInset]}
@@ -329,8 +321,7 @@ export default function HomeScreen() {
           return (
             <MotionReveal mode={motionMode} motionKey={plan.id} style={styles.planCell} testID="today-current-plan">
               <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
-                <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
-                <Text style={styles.pathMeta}>Plan {String(plan.order).padStart(2, '0')}</Text>
+                <JournalDisplay style={styles.pathTitle}>Lesson plans</JournalDisplay>
               </View>
               <PressableFeedback
                 accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
@@ -354,15 +345,22 @@ export default function HomeScreen() {
           );
         }}
         ListHeaderComponent={header}
-        style={sharedStyles.screen}
+        style={styles.listFill}
         testID="today-guided-plan-list"
       />
+      <View style={[styles.pinnedAction, { paddingBottom: Math.max(insets.bottom, spacing.sm) + safeArea.tabBar }]}>
+        <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={sharedStyles.primaryButton} testID="today-next-step">
+          <Text style={sharedStyles.primaryButtonText}>{hero.action}</Text>
+          <ArrowRight color={colors.white} size={18} strokeWidth={2.2} />
+        </PressableFeedback>
+      </View>
       <StatusBarScrim />
-    </>
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
+  listFill: { flex: 1 },
   list: { width: '100%', alignItems: 'stretch', paddingHorizontal: 20, paddingTop: 18, paddingBottom: spacing.xxl },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'stretch', gap: spacing.md, marginBottom: spacing.lg },
   planCell: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', gap: 10 },
@@ -389,13 +387,13 @@ const useStyles = makeStyles((c) => ({
   heroMeta: { color: c.brandSoft, fontSize: 13, lineHeight: 18 },
   heroTitle: { color: c.white, fontFamily: displayFont, fontSize: 30, lineHeight: 34, fontWeight: '700', letterSpacing: -0.3 },
   heroSubtitle: { color: '#FBEFE8', fontSize: 15, lineHeight: 21 },
-  goalDial: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
+  goalDial: { width: layout.goalDial, height: layout.goalDial, alignItems: 'center', justifyContent: 'center' },
   // Rotating the whole ring starts the arc at 12 o'clock without SVG transform props, which web rejects.
   goalRing: { transform: [{ rotate: '-90deg' }] },
   goalValue: { position: 'absolute', alignItems: 'center' },
   goalMinutes: { color: c.white, fontFamily: displayFont, fontSize: 17, lineHeight: 19, fontWeight: '700', fontVariant: ['tabular-nums'] },
   goalMinutesLong: { fontSize: 13, lineHeight: 16 },
-  goalUnit: { color: '#FBEFE8', fontSize: 9, lineHeight: 11, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  goalUnit: { color: c.white, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   heroWord: { maxWidth: '100%', borderRadius: 12, backgroundColor: 'rgba(255, 255, 255, 0.14)', paddingHorizontal: spacing.md, paddingVertical: 6 },
   heroWordFaded: { opacity: 0.5 },
@@ -415,8 +413,7 @@ const useStyles = makeStyles((c) => ({
   stepMeta: { color: c.brandSoft, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
   heroFooter: { flexDirection: 'row' },
   heroFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  heroButton: { minHeight: 52, flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, paddingHorizontal: 20 },
-  heroButtonText: { color: c.ink, fontSize: 17, fontWeight: '700' },
+  pinnedAction: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, backgroundColor: c.background },
   jumpSection: { gap: 10 },
   jumpLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   jumpRow: { flexDirection: 'row', gap: spacing.sm },

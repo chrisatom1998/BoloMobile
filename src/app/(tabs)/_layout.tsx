@@ -22,7 +22,7 @@ export default function PrimaryTabsLayout() {
       indicatorColor={colors.brandSoft}
       labelStyle={{ fontSize: 11, fontWeight: '600' }}
       labelVisibilityMode="labeled"
-      minimizeBehavior="onScrollDown"
+      minimizeBehavior="never"
       shadowColor={colors.line}
       tintColor={colors.brand}
     >
@@ -34,7 +34,7 @@ export default function PrimaryTabsLayout() {
         <NativeTabs.Trigger.Icon md="graphic_eq" sf="waveform" />
         <NativeTabs.Trigger.Label>Asha</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="phrases">
+      <NativeTabs.Trigger accessibilityLabel={dueCount > 0 ? `Phrases, ${dueCount > 9 ? '9 or more' : String(dueCount)} due` : 'Phrases'} name="phrases">
         <NativeTabs.Trigger.Icon md="menu_book" sf={{ default: 'book.closed', selected: 'book.closed.fill' }} />
         <NativeTabs.Trigger.Label>Phrases</NativeTabs.Trigger.Label>
         {dueCount > 0 ? <NativeTabs.Trigger.Badge>{dueCount > 9 ? '9+' : String(dueCount)}</NativeTabs.Trigger.Badge> : null}

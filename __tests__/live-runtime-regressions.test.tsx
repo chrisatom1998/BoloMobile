@@ -590,7 +590,7 @@ describe('live consent layout', () => {
 
     expect(view.getByTestId('asha-header-portrait')).toBeTruthy();
     expect(view.getByText('Greet me like a neighbor and tell me your name')).toBeTruthy();
-    expect(view.getByText('Your voice and a few lesson details are shared with Asha so she can answer.')).toBeTruthy();
+    expect(view.getByText('Your voice, this lesson, and the last few messages are sent so Asha can answer. They are not saved as a recording.')).toBeTruthy();
     expect(view.getByRole('button', { name: 'Talk with Asha' })).toBeTruthy();
     expect(view.queryByTestId('mock-ai-consent-gate')).toBeNull();
     expect(view.queryByText('WebRTC')).toBeNull();
@@ -736,12 +736,12 @@ describe('live theme styles', () => {
   it('paints the chat list, bubbles, and composer from the active palette', () => {
     const styles = createLiveStyles(lightColors);
 
-    expect(styles.list.backgroundColor).toBe(lightColors.night);
+    expect(styles.list.backgroundColor).toBe(lightColors.background);
     expect(styles.ashaMessage.backgroundColor).toBe(lightColors.paperRaised);
     expect(styles.messageText.color).toBe(lightColors.ink);
-    expect(styles.userMessage.backgroundColor).toBe(lightColors.nightSurface);
-    expect(styles.composer.backgroundColor).toBe(lightColors.nightSurface);
-    expect(styles.input.backgroundColor).toBe(lightColors.night);
+    expect(styles.userMessage.backgroundColor).toBe(lightColors.brand);
+    expect(styles.composer.backgroundColor).toBe(lightColors.paperRaised);
+    expect(styles.input.backgroundColor).toBe(lightColors.paper);
     expect(styles.liveVoiceText.lineHeight).toBeGreaterThan(styles.liveVoiceText.fontSize);
     expect(styles.captionLabelBadge.minHeight).toBeGreaterThanOrEqual(30);
     expect(styles.captionLabelBadge.paddingVertical).toBeGreaterThanOrEqual(5);
@@ -836,9 +836,9 @@ describe('immersive live conversation design', () => {
     const view = await render(<LiveScreen />);
     const hero = view.getByTestId('voice-conversation-hero');
 
-    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#10201E');
+    expect(StyleSheet.flatten(hero.props.style).backgroundColor).toBe('#F6F3ED');
     expect(StyleSheet.flatten(hero.props.style).minHeight).toBeUndefined();
-    expect(view.getByText('Private Hindi coach · English replies')).toBeTruthy();
+    expect(view.getByText('Hindi coach · English replies')).toBeTruthy();
     expect(view.getAllByText('Speak with Asha')).toHaveLength(1);
     expect(view.getByText('Ready when you are')).toBeTruthy();
     expect(view.getByText('Tap Asha to start talking with her.')).toBeTruthy();
@@ -1108,7 +1108,7 @@ describe('immersive live conversation design', () => {
       expect(topbarStyle.flexDirection).toBe('column');
       expect(topbarStyle.paddingRight).toBe(0);
       expect(header.getByText('Speak with Asha').props.numberOfLines).toBeUndefined();
-      expect(header.getByText('Private Hindi coach · English replies').props.numberOfLines).toBeUndefined();
+      expect(header.getByText('Hindi coach · English replies').props.numberOfLines).toBeUndefined();
       await view.unmount();
       await flushMicrotasks();
     } finally {
@@ -1208,7 +1208,7 @@ describe('offline capture and queued reports', () => {
 
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
     await fireEvent.press(view.getByLabelText('Mock realtime offline'));
-    const notice = view.getByText("Lessons and saved phrases still work. Asha will be here when you are back online.");
+    const notice = view.getByText('Live voice needs an internet connection. Lessons and saved phrases work offline.');
     expect(notice.props.accessibilityRole).toBe('alert');
     const link = view.getByLabelText('Go to today’s lesson');
     expect(link.props.accessibilityRole).toBe('link');
@@ -1216,7 +1216,7 @@ describe('offline capture and queued reports', () => {
     expect(mockRouterPush).toHaveBeenCalledWith('/');
 
     await fireEvent.press(view.getByLabelText('Mock realtime timeout'));
-    expect(view.getByText("Lessons and saved phrases still work. Asha will be here when you are back online.")).toBeTruthy();
+    expect(view.getByText('Live voice needs an internet connection. Lessons and saved phrases work offline.')).toBeTruthy();
 
     // A missing Live URL, a rejected payload, and offline-sounding wording with another kind keep their own copy.
     await fireEvent.press(view.getByLabelText('Mock realtime unconfigured'));
@@ -1789,7 +1789,7 @@ describe('live coaching state', () => {
     expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState)
       .toEqual({ selected: true, disabled: false });
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
-    expect(view.getByText('Private Hindi coach · Hindi replies')).toBeTruthy();
+    expect(view.getByText('Hindi coach · Hindi replies')).toBeTruthy();
 
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'How do I say thank you?');
     await fireEvent.press(view.getByLabelText('Send message'));

@@ -73,7 +73,7 @@ describe('creator lesson integration', () => {
     const view = await render(<LessonPlansScreen />);
     expect(view.getByText('My created lessons')).toBeTruthy();
     expect(view.getByText('0/1 lessons complete')).toBeTruthy();
-    await fireEvent.press(view.getByLabelText('Creator test lesson, lesson 1 of 1, Next lesson'));
+    await fireEvent.press(view.getByLabelText('Creator test lesson, lesson 1 of 1, Next'));
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-creator-test-fixture-01' } });
   });
 });

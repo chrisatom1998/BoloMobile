@@ -54,6 +54,7 @@ const BOLO_WORD_SPELLINGS: Record<string, string> = {
   आशा: 'Asha',
   पानी: 'paani',
   कृपया: 'kripya',
+  चीनी: 'cheeni',
 };
 
 function isWordBoundary(character: string | undefined) {

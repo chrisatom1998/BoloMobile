@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - iOS screens without a navigation header now pad for the notch, Dynamic Island, and home indicator, and the app stays locked upright. Review, privacy, last session, and diagnostics open as form sheets with a grabber and swipe-to-dismiss. Card screens keep the edge-swipe back gesture.
 - Correct and Again, a finished lesson, a new streak, and the start and end of an Asha call use a light haptic. Reduce Motion, including the in-app Reduced setting, turns those taps off.
-- Today, Phrases, Progress, lesson plans, and Asha show short empty, offline, microphone, and connection lines. Private diagnostics stay out of release builds.
+- Private diagnostics stay out of release builds. Empty, offline, and loading copy is left for a separate change.
+- Lesson scenes pin “Next turn” above the home indicator. Primary actions share one rust button. Today, Phrases, Progress, and Asha use the cream page behind the status bar, and the tab bar stays full size. Asha drops the contradictory Private pill for one line about what is actually sent. Headings use Georgia. Today’s step total stays 3, phrase delete is a swipe with Undo, and practice minutes are recorded only while the Asha screen is focused.
 
 ### Added
 

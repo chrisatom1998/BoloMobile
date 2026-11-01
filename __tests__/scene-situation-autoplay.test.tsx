@@ -88,7 +88,7 @@ describe('scene situation auto-play', () => {
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledWith('नमस्ते! क्या लेंगे?\nHello! What will you have?'));
 
     await fireEvent.press(view.getByLabelText('एक चाय दीजिए। Ek chai dijiye.'));
-    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Next turn' }));
 
     await waitFor(() => expect(speakTextMock).toHaveBeenCalledWith('चीनी कम या ज़्यादा?\nLess sugar or more?'));
   });

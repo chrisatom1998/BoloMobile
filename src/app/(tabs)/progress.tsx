@@ -12,11 +12,9 @@ import { selectNextLesson } from '@/lib/lesson-path';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
-import { screenCopy } from '@/lib/screen-copy';
 import { headerlessContentInset } from '@/lib/screen-insets';
 import { useAppStateValue } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, safeArea, spacing, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
-import { OfflineNote } from '@/components/screen-state';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
@@ -81,7 +79,7 @@ export default function ProgressScreen() {
   const stats = [
     { accessibilityLabel: `${streak} day practice streak`, key: 'streak', label: 'day streak', value: String(streak) },
     { accessibilityLabel: `${phrases.length} phrase${phrases.length === 1 ? '' : 's'} saved`, key: 'phrases', label: 'phrases', value: String(phrases.length) },
-    { accessibilityLabel: `${completedScenes} lesson${completedScenes === 1 ? '' : 's'} finished`, key: 'scenes', label: 'lessons', value: String(completedScenes) },
+    { accessibilityLabel: `${completedScenes} lesson${completedScenes === 1 ? '' : 's'} finished`, key: 'scenes', label: completedScenes === 1 ? 'lesson' : 'lessons', value: String(completedScenes) },
     // No answered turns yet: a dash, not a misleading 0%.
     answeredTurns > 0
       ? { accessibilityLabel: `${accuracy} percent answer accuracy`, key: 'accuracy', label: 'accuracy', value: `${accuracy}%` }
@@ -100,7 +98,7 @@ export default function ProgressScreen() {
 
   return (
     <>
-      <ScrollView contentInsetAdjustmentBehavior="never" contentContainerStyle={[styles.content, headerlessContentInset(insets, safeArea.progressScrollTail)]} style={sharedStyles.screen}>
+      <ScrollView contentInsetAdjustmentBehavior="never" contentContainerStyle={[styles.content, headerlessContentInset(insets, safeArea.tabBar + spacing.lg)]} style={sharedStyles.screen}>
         <View style={[styles.pageHeading, largeTextLayout && styles.pageHeadingLarge]} testID="progress-page-heading">
           <View style={[styles.pageHeadingCopy, largeTextLayout && styles.pageHeadingCopyLarge]}>
             <JournalDisplay style={styles.pageTitle}>Progress</JournalDisplay>
@@ -110,7 +108,6 @@ export default function ProgressScreen() {
             <Share2 color={colors.ink} size={18} />
           </PressableFeedback>
         </View>
-        <OfflineNote />
 
         {hasLearningActivity ? <>
         <View style={styles.weekCard}>
@@ -142,7 +139,7 @@ export default function ProgressScreen() {
               const barPercent = minutes <= 0 ? 0 : Math.min(100, Math.max(6, minutes / maxMinutes * 100));
               return (
                 <View key={day.date} style={styles.barColumn}>
-                  <Text style={[styles.barValue, today && styles.barValueToday]}>{minutes > 0 ? minutes : ' '}</Text>
+                  <Text style={[styles.barValue, today && styles.barValueToday]}>{today ? 'Today' : minutes > 0 ? minutes : ' '}</Text>
                   <View style={styles.barTrack}>
                     <View
                       style={[styles.bar, minutes > 0 && today && styles.barToday, minutes > 0 ? { height: `${barPercent}%` } : styles.barEmpty]}
@@ -180,21 +177,21 @@ export default function ProgressScreen() {
           <Text style={styles.heroTitle}>{lessonFocus.title}</Text>
           <Text style={styles.heroBody}>{lessonFocus.metric}</Text>
           <View style={styles.heroFootnotes}>
-            {hasLearningActivity ? <Text style={styles.heroFootnoteText}>{completedScenes} lesson{completedScenes === 1 ? '' : 's'} finished · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text> : <Text style={styles.heroFootnoteText}>{screenCopy.progressEmptyBody}</Text>}
+            {hasLearningActivity ? <Text style={styles.heroFootnoteText}>{completedScenes} lesson{completedScenes === 1 ? '' : 's'} finished · {reviewedThisWeek} review{reviewedThisWeek === 1 ? '' : 's'} this week</Text> : <Text style={styles.heroFootnoteText}>Your week, streak and saved phrases will show up here after your first lesson.</Text>}
           </View>
           <PressableFeedback
             accessibilityLabel={`${lessonFocus.action}: ${lessonFocus.title}`}
             accessibilityRole="button"
             onPress={() => router.push({ pathname: '/scene/[id]', params: { id: lessonFocus.lessonId } })}
-            style={styles.heroAction}
+            style={sharedStyles.primaryButton}
           >
-            <Text style={styles.heroActionText}>{lessonFocus.action}</Text>
+            <Text style={sharedStyles.primaryButtonText}>{lessonFocus.action}</Text>
           </PressableFeedback>
         </View>
 
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
-            <Text style={styles.title}>Your plans</Text>
+            <Text style={styles.title}>Lesson plans</Text>
             <PressableFeedback accessibilityLabel={`See all ${lessonPlans.length} lesson plans`} accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.seeAll}>
               <Text style={styles.seeAllText}>See all</Text>
             </PressableFeedback>

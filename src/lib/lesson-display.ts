@@ -5,5 +5,6 @@ import type { ScriptPreference } from '@/state/app-state-types';
 export function lessonHindiLabel(hi: string, preference: ScriptPreference, latin = romanizeDevanagari(hi)) {
   if (preference === 'latin') return latin;
   if (preference === 'devanagari') return hi;
+  if (hi.trim() === latin.trim()) return hi;
   return `${hi}\n${latin}`;
 }

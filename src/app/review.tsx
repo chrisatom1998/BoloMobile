@@ -10,7 +10,6 @@ import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { reviewCardMode } from '@/lib/learning';
 import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { screenCopy } from '@/lib/screen-copy';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
 import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme } from '@/theme';
@@ -121,8 +120,8 @@ export default function ReviewScreen() {
   if (session.length === 0) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.center}>
-        <Text accessibilityRole="header" style={styles.title}>{screenCopy.reviewEmptyTitle}</Text>
-        <Text style={styles.body}>{screenCopy.reviewEmptyBody}</Text>
+        <Text accessibilityRole="header" style={styles.title}>Save a phrase to start reviewing</Text>
+        <Text style={styles.body}>Tap the bookmark on an answer during a lesson, and it becomes a quick recall card here.</Text>
         <Pressable accessibilityLabel="Back to Today" accessibilityRole="button" onPress={() => router.replace('/')} style={sharedStyles.primaryButton}><Text style={sharedStyles.primaryButtonText}>Back to Today</Text></Pressable>
       </ScrollView>
     );

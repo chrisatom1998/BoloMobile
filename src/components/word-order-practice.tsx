@@ -183,7 +183,7 @@ const useStyles = makeStyles((c) => ({
   trayTokenText: { color: c.white, fontSize: 17, fontWeight: '800' },
   trayTokenHindi: hindiType(17),
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' },
+  tile: { minHeight: 48, alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' },
   tileText: { color: c.brandText, fontSize: 18, lineHeight: 24, fontWeight: '900' },
   tileHindi: hindiType(18),
   tileUsed: { backgroundColor: c.background, borderStyle: 'dashed', opacity: 0.5 },

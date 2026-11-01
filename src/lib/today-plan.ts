@@ -24,7 +24,7 @@ type TodayPlanInput = {
   now?: Date;
 };
 
-const stepOrder: TodayStepKey[] = ['review', 'lesson', 'asha'];
+export const todayStepOrder: readonly TodayStepKey[] = ['review', 'lesson', 'asha'];
 
 function lessonFinishedToday({ practiceHistory = [] }: TodayPlanInput, today: string) {
   // Review answers also count toward `answers`, so only the remainder came from lessons.
@@ -47,10 +47,10 @@ export function buildTodayPlan(input: TodayPlanInput): TodayPlan {
     lesson: lessonFinishedToday(input, today),
     asha: input.practice.date === today && input.practice.liveDone,
   };
-  const nextStep = stepOrder.find((key) => !done[key]) ?? null;
+  const nextStep = todayStepOrder.find((key) => !done[key]) ?? null;
   return {
     nextStep,
-    steps: stepOrder.map((key) => ({
+    steps: todayStepOrder.map((key) => ({
       key,
       skipped: key === 'review' && !reviewedToday && input.dueCount === 0,
       status: done[key] ? 'done' : key === nextStep ? 'current' : 'upcoming',

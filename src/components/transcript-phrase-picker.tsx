@@ -1,3 +1,4 @@
+import { StatusBar } from 'expo-status-bar';
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Keyboard, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
@@ -8,7 +9,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase } from '@/state/app-state-types';
 import { displayHindiTranscript } from '@/lib/learner-phrase-display';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { displayFont, makeStyles, radius, spacing, useTheme } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
   aiConsent: boolean;
@@ -125,6 +126,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
 
   return (
     <Modal animationType={reducedMotion ? 'fade' : 'slide'} onDismiss={finishDismiss} onRequestClose={close} presentationStyle="pageSheet" visible={visible}>
+      <StatusBar style="dark" />
       <View style={[styles.screen, Platform.OS === 'android' && { paddingTop: insets.top }]}>
         <ScrollView ref={scrollRef} automaticallyAdjustKeyboardInsets contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} keyboardDismissMode="interactive" keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
@@ -199,7 +201,7 @@ const useStyles = makeStyles((c) => ({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   headerCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   eyebrow: { color: c.brandDark, fontSize: 12, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
-  title: { color: c.ink, fontSize: 28, lineHeight: 34, fontWeight: '900' },
+  title: { color: c.ink, fontFamily: displayFont, fontSize: 28, lineHeight: 34, fontWeight: '700' },
   closeButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   instructions: { color: c.muted, fontSize: 15, lineHeight: 22 },
   fieldGroup: { gap: spacing.sm },

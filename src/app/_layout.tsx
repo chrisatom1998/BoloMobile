@@ -15,7 +15,6 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { usePracticeReminderRouting } from '@/hooks/use-practice-reminder-routing';
 import { setHapticsReducedMotion } from '@/lib/haptics';
 import { readingSheetOptions, reviewSheetOptions, rootStackScreenOptions } from '@/lib/navigation-chrome';
-import { screenCopy } from '@/lib/screen-copy';
 import { observe } from '@/lib/observability';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
 import { AshaVoiceSessionProvider } from '@/state/asha-voice-session';
@@ -83,7 +82,6 @@ function AppNavigator() {
         <View accessibilityLabel="Loading Bolo" accessibilityLiveRegion="polite" accessibilityRole="progressbar" style={styles.loading} testID="app-hydration-loading">
           <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" maxFontSizeMultiplier={1.2} style={styles.loadingMark}>ब</Text>
           <ActivityIndicator color={colors.brand} />
-          <Text style={styles.loadingCaption}>{screenCopy.loadingCaption}</Text>
         </View>
       )}
     </>
@@ -112,10 +110,5 @@ const useStyles = makeStyles((c) => ({
   loadingMark: {
     ...hindiType(48),
     color: c.brand,
-  },
-  loadingCaption: {
-    color: c.muted,
-    fontSize: 16,
-    lineHeight: 22,
   },
 }));

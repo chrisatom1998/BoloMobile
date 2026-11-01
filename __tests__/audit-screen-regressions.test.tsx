@@ -265,9 +265,8 @@ describe('previously uncovered audit screens', () => {
 
     await fireEvent.press(view.getByRole('radio', { name: 'Beginner, I know greetings and a few phrases.' }));
     await fireEvent.press(view.getByRole('radio', { name: 'Transliteration first' }));
-    await fireEvent.press(view.getByTestId('onboarding-continue'));
     await fireEvent.press(view.getByRole('radio', { name: 'Travel' }));
-    await fireEvent.press(view.getByRole('button', { name: 'Start practicing' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Build my plan' }));
 
     expect(mockCompleteOnboarding).toHaveBeenCalledWith({
       level: 'beginner',
@@ -297,13 +296,11 @@ describe('previously uncovered audit screens', () => {
     expect(view.queryByRole('header', { name: 'Hear this' })).toBeNull();
     expect(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }).props.accessibilityState).toEqual({ checked: true });
     expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
-    await fireEvent.press(view.getByTestId('onboarding-continue'));
     expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
     await fireEvent.press(view.getByRole('button', { name: 'Cancel recalibration' }));
     expect(mockRouter.back).toHaveBeenCalledTimes(1);
 
     const saving = await render(<OnboardingScreen />);
-    await fireEvent.press(saving.getByTestId('onboarding-continue'));
     await fireEvent.press(saving.getByRole('button', { name: 'Save my practice plan' }));
     expect(mockCompleteOnboarding).toHaveBeenCalledWith({
       displayName: 'Chris',
@@ -331,7 +328,7 @@ describe('previously uncovered audit screens', () => {
     expect(view.getByText('Your first lesson')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
     expect(view.getByText('Plan 01 · Lesson 1 of 10 · 10 turns')).toBeTruthy();
-    expect(view.getByText('Finish one short lesson. Your week, streak, and saved phrases will show up here.')).toBeTruthy();
+    expect(view.getByText('Your week, streak and saved phrases will show up here after your first lesson.')).toBeTruthy();
     // A brand-new learner sees one clear next step, not a wall of zeros.
     expect(view.queryByText('No practice streak yet')).toBeNull();
     expect(view.queryByText('Last 7 days')).toBeNull();

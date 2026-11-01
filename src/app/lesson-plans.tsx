@@ -3,13 +3,11 @@ import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
 import { ScrollView, Text, View } from 'react-native';
 
 import { JournalDisplay, JournalKicker } from '@/components/journal-chrome';
-import { OfflineNote } from '@/components/screen-state';
 import { bundledScenes, getScene } from '@/data/scenes';
 import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
 import { PlanIcon } from '@/components/plan-icon';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
-import { screenCopy } from '@/lib/screen-copy';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
 import { makeStyles, radius, spacing, useSharedStyles } from '@/theme';
@@ -34,7 +32,6 @@ export default function LessonPlansScreen() {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} style={sharedStyles.screen}>
       <Stack.Screen options={{ headerLargeTitle: false, title: 'Lesson plans' }} />
-      <OfflineNote body={screenCopy.lessonPlansOfflineBody} />
       <View style={[styles.heading, largeTextLayout && styles.headingLarge]} testID="lesson-plans-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>Guided curriculum</JournalKicker>
@@ -57,7 +54,7 @@ export default function LessonPlansScreen() {
                 ? 'Ready to review'
                 : completed > 0
                   ? `Continue · Lesson ${nextIndex + 1}`
-                  : 'Up next'
+                  : 'Next'
             : completed === plan.lessonIds.length
               ? 'Complete'
               : completed > 0
@@ -168,17 +165,6 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.detailContent} style={sharedStyles.screen}>
       <Stack.Screen options={{ headerLargeTitle: false, title: plan.title }} />
-      <PressableFeedback
-        accessibilityLabel="Back to all lesson plans"
-        accessibilityRole="button"
-        onPress={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/lesson-plans');
-        }}
-        style={styles.backButton}
-      >
-        <Text style={styles.backButtonText}>← All lesson plans</Text>
-      </PressableFeedback>
       <View style={[styles.detailHeading, largeTextLayout && styles.headingLarge]} testID="lesson-plan-detail-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
           <JournalKicker>{`Plan ${String(plan.order).padStart(2, '0')} · Guided curriculum`}</JournalKicker>
@@ -189,7 +175,6 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
       <View style={styles.detailSummary}>
         <View style={styles.detailSummaryTopline}>
           <Text style={styles.detailSummaryLabel}>{completed}/{plan.lessonIds.length} lessons complete</Text>
-          <Text style={styles.detailSummaryPercent}>{percent}%</Text>
         </View>
         <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.track}>
           <View style={[styles.fill, { backgroundColor: plan.color, width: `${percent}%` }]} />
@@ -208,8 +193,8 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
           if (!lesson) return null;
           const isComplete = (sceneProgress[lesson.id]?.completions ?? 0) > 0;
           const isCurrent = index === currentIndex;
-          const isInProgress = lesson.id === inProgressLessonId;
-          const status = isComplete ? (isCurrent ? 'Ready to review' : 'Complete') : isInProgress ? 'In progress' : isCurrent ? 'Next lesson' : 'Up next';
+          const focusIndex = inProgressLessonId ? plan.lessonIds.indexOf(inProgressLessonId) : nextLessonIndex;
+          const status = isComplete ? 'Done' : index === focusIndex ? 'Next' : 'Later';
           return (
             <PressableFeedback
               accessibilityLabel={`${lesson.title}, lesson ${index + 1} of ${plan.lessonIds.length}, ${status}`}
@@ -267,7 +252,7 @@ const useStyles = makeStyles((c) => ({
   lessonStatus: { color: c.brandText, fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
   lessonTitle: { color: c.ink, fontFamily: 'Georgia', fontSize: 18, lineHeight: 23, fontWeight: '700' },
   lessonSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
-  lessonArrow: { color: c.forestText, fontSize: 22, fontWeight: '900' },
+  lessonArrow: { color: c.brand, fontSize: 22, fontWeight: '900' },
   planCard: { width: '100%', position: 'relative', overflow: 'hidden', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md, gap: spacing.sm },
   planCardCurrent: { borderColor: c.gold, backgroundColor: c.goldSoft },
   planCardCompact: { gap: spacing.xs, paddingVertical: spacing.sm },
@@ -284,7 +269,7 @@ const useStyles = makeStyles((c) => ({
   planSubtitle: { color: c.muted, fontSize: 13, lineHeight: 18 },
   track: { width: '100%', height: 7, overflow: 'hidden', borderRadius: radius.pill, backgroundColor: c.backgroundWarm },
   fill: { height: '100%', borderRadius: radius.pill },
-  planAction: { color: c.forestText, fontSize: 13, fontWeight: '900' },
+  planAction: { color: c.brand, fontSize: 13, fontWeight: '900' },
   sceneShelfHeading: { width: '100%', gap: spacing.xs, marginTop: spacing.lg },
   sceneShelfTitle: { maxWidth: 320, fontSize: 26, lineHeight: 32, textAlign: 'left' },
   sceneCard: { width: '100%', minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },

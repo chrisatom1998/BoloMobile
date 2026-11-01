@@ -48,10 +48,6 @@ jest.mock('@/components/ai-consent-gate', () => ({
   AiConsentGate: ({ children }: PropsWithChildren) => children,
 }));
 
-jest.mock('@/lib/app-alert', () => ({
-  showAppAlert: jest.fn(),
-}));
-
 jest.mock('@/lib/speech', () => ({
   hasOfflineSpeech: jest.fn(() => false),
   speakText: jest.fn(async () => undefined),
@@ -64,17 +60,10 @@ jest.mock('@/state/app-state', () => ({
 
 import { learnerPhraseLatin } from '../src/lib/learner-phrase-display';
 import PhrasesScreen from '../src/app/(tabs)/phrases';
-import { showAppAlert } from '../src/lib/app-alert';
 import { speakText, stopSpeaking } from '../src/lib/speech';
 
-const showAppAlertMock = showAppAlert as jest.MockedFunction<typeof showAppAlert>;
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
-
-function expectDefined<T>(value: T | undefined): T {
-  if (value === undefined) throw new Error('Expected the value to be defined.');
-  return value;
-}
 
 describe('PhrasesScreen primary journey', () => {
   beforeEach(() => {
@@ -89,8 +78,7 @@ describe('PhrasesScreen primary journey', () => {
   it('replaces empty review tools with one next-lesson action', async () => {
     const view = await render(<PhrasesScreen />);
 
-    expect(view.getByText('Finish a lesson, then save a line you want to keep. It will wait here.')).toBeTruthy();
-    expect(view.getByText('Nothing saved yet')).toBeTruthy();
+    expect(view.getByText('Practice a lesson, then save any useful phrase you want to keep.')).toBeTruthy();
     expect(view.queryByLabelText('Search saved phrases')).toBeNull();
     expect(view.queryByLabelText('Phrase category')).toBeNull();
     expect(view.queryByText('Ready for review')).toBeNull();
@@ -157,24 +145,14 @@ describe('PhrasesScreen primary journey', () => {
     expect(view.queryByLabelText('Playback speed: 0.1×')).toBeNull();
   });
 
-  it('removes a phrase only after destructive confirmation', async () => {
+  it('removes a phrase from the trash button and can undo it', async () => {
     mockAppState.phrases = [mockPhrase];
     const view = await render(<PhrasesScreen />);
 
-    await fireEvent.press(view.getByLabelText('Remove नमस्ते'));
-    expect(showAppAlertMock).toHaveBeenCalledWith(
-      'Remove saved phrase?',
-      'नमस्ते',
-      expect.arrayContaining([
-        expect.objectContaining({ text: 'Cancel', style: 'cancel' }),
-        expect.objectContaining({ text: 'Remove', style: 'destructive' }),
-      ]),
-    );
-    expect(mockRemovePhrase).not.toHaveBeenCalled();
-
-    const actions = expectDefined(showAppAlertMock.mock.calls[0])[2] as { onPress?: () => void; text: string }[];
-    actions.find(({ text }) => text === 'Remove')?.onPress?.();
+    const removes = view.getAllByLabelText('Remove नमस्ते');
+    await fireEvent.press(removes[removes.length - 1]!);
     expect(mockRemovePhrase).toHaveBeenCalledWith('नमस्ते');
+    expect(view.getByLabelText('Undo remove नमस्ते')).toBeTruthy();
   });
 
   it('renders playback failures as accessible alerts', async () => {

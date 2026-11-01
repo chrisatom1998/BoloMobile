@@ -119,7 +119,7 @@ describe('ReviewScreen spaced-repetition journey', () => {
   it('invites the learner to save a phrase before any review exists', async () => {
     const view = await renderReview();
 
-    expect(view.getByText('Nothing to review yet')).toBeTruthy();
+    expect(view.getByText('Save a phrase to start reviewing')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Back to Today' }));
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
   });

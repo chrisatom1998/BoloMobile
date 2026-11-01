@@ -48,13 +48,12 @@ describe('lesson plan navigation', () => {
 
     expect(view.getByText('Start speaking')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
-    expect(view.getByLabelText('A warm hello, lesson 1 of 10, Next lesson')).toBeTruthy();
+    expect(view.getByLabelText('A warm hello, lesson 1 of 10, Next')).toBeTruthy();
 
-    await fireEvent.press(view.getByLabelText('A warm hello, lesson 1 of 10, Next lesson'));
+    await fireEvent.press(view.getByLabelText('A warm hello, lesson 1 of 10, Next'));
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
 
-    await fireEvent.press(view.getByLabelText('Back to all lesson plans'));
-    expect(mockRouterReplace).toHaveBeenCalledWith('/lesson-plans');
+    expect(view.queryByLabelText('Back to all lesson plans')).toBeNull();
   });
 
   it('shows plans on the index and routes plan selection to its detail screen', async () => {
@@ -62,12 +61,12 @@ describe('lesson plan navigation', () => {
     const view = await render(<LessonPlansScreen />);
 
     expect(view.getByLabelText('10 ordered lesson plans')).toBeTruthy();
-    expect(view.getByText('Plan 01 · Up next')).toBeTruthy();
+    expect(view.getByText('Plan 01 · Next')).toBeTruthy();
     expect(view.getByText('Start plan →')).toBeTruthy();
     expect(view.getByTestId('lesson-plan-essentials').props.accessibilityState).toMatchObject({ selected: true });
     expect(view.getByTestId('lesson-plan-connection').props.accessibilityState).toMatchObject({ selected: false });
     expect(view.queryByText(/Open lessons · next is/u)).toBeNull();
-    await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, Up next, 0 of 10 lessons complete'));
+    await fireEvent.press(view.getByLabelText('Start speaking, plan 1 of 10, Next, 0 of 10 lessons complete'));
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/lesson-plans', params: { planId: 'essentials' } });
   });
 
@@ -101,7 +100,7 @@ describe('lesson plan navigation', () => {
     const view = await render(<LessonPlansScreen />);
 
     expect(view.getByText('Continue: lesson 2 · Say your name')).toBeTruthy();
-    expect(view.getByLabelText('Say your name, lesson 2 of 10, In progress')).toBeTruthy();
+    expect(view.getByLabelText('Say your name, lesson 2 of 10, Next')).toBeTruthy();
   });
 
   it('stacks list and detail headings at accessibility text sizes', async () => {

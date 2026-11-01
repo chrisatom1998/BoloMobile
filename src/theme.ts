@@ -101,8 +101,19 @@ export const radius = {
 export const safeArea = {
   /** iPhone home-indicator height, used when the inset has not arrived yet. */
   homeIndicator: 34,
+  /** Standard tab bar, not counting the home indicator. */
+  tabBar: 49,
   /** Extra scroll room on Progress so the last card clears the tab bar. */
   progressScrollTail: 120,
+} as const;
+
+/** Fixed chrome sizes that are not a spacing step. */
+export const layout = {
+  /** Soft fade under the status-bar scrim so content does not clip. */
+  statusBarFadeHeight: 12,
+  goalDial: 80,
+  primaryButtonHeight: 52,
+  touchTarget: 44,
 } as const;
 
 /** Pressed feedback. Opacity only, so a tap feels like a UIKit highlight. */
@@ -211,9 +222,10 @@ export function createSharedStyles(c: ThemeColors) {
     },
     heading: {
       color: c.ink,
+      fontFamily: displayFont,
       fontSize: 28,
       lineHeight: 32,
-      fontWeight: '800',
+      fontWeight: '700',
     },
     body: {
       color: c.muted,
@@ -221,10 +233,10 @@ export function createSharedStyles(c: ThemeColors) {
       lineHeight: 23,
     },
     primaryButton: {
-      minHeight: 52,
+      minHeight: layout.primaryButtonHeight,
       borderRadius: radius.md,
       borderCurve: 'continuous',
-      backgroundColor: c.neutralSurface,
+      backgroundColor: c.brand,
       alignItems: 'center',
       justifyContent: 'center',
       flexDirection: 'row',
@@ -232,9 +244,40 @@ export function createSharedStyles(c: ThemeColors) {
       paddingHorizontal: spacing.lg,
     },
     primaryButtonText: {
-      color: c.neutralSurfaceText,
+      color: c.white,
       fontSize: 16,
       fontWeight: '800',
+    },
+    secondaryButton: {
+      minHeight: layout.primaryButtonHeight,
+      borderRadius: radius.md,
+      borderCurve: 'continuous',
+      backgroundColor: c.paperRaised,
+      borderWidth: 1,
+      borderColor: c.line,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: spacing.sm,
+      paddingHorizontal: spacing.lg,
+    },
+    secondaryButtonText: {
+      color: c.ink,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    quietButton: {
+      minHeight: layout.touchTarget,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: spacing.xs,
+      paddingHorizontal: spacing.md,
+    },
+    quietButtonText: {
+      color: c.brandText,
+      fontSize: 16,
+      fontWeight: '700',
     },
   } as const satisfies NamedStyles;
 }

@@ -1,8 +1,7 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
-import { setStatusBarStyle } from 'expo-status-bar';
 import { IosPressable as PressableFeedback } from '@/components/ios-pressable';
-import { AlertCircle, History, Lock, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
+import { AlertCircle, History, MessageCircle, Mic, MicOff, Sprout, Trash2, Volume2, X } from 'lucide-react-native';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, AppState, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Platform, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,8 +31,6 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hapticTap } from '@/lib/haptics';
 import { LIVE_MIC_EXPLAINER, type LiveMicrophonePhase } from '@/lib/live-microphone';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
-import { signalNetworkAvailable, signalNetworkLost } from '@/lib/network-signal';
-import { screenCopy, voiceStatusTitle } from '@/lib/screen-copy';
 import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
@@ -53,7 +50,7 @@ const welcome: ChatMessage = {
 const ashaPortrait = require('../../../assets/images/asha-portrait.png');
 const tailFollowThreshold = 48;
 /** Shown instead of the generic network error when a live call cannot even start. */
-export const LIVE_OFFLINE_MESSAGE = screenCopy.offlineBody;
+export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Lessons and saved phrases work offline.';
 /** The learner's explicit Clear removes saved transcripts but keeps queued reports and their retries. */
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
 type InterruptedReason = Extract<AshaSessionEndReason, 'connection_lost' | 'backgrounded'>;
@@ -271,24 +268,28 @@ export default function LiveScreen() {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
   }, []);
 
-  // Only the dark Asha screen uses light status-bar text; every other screen
-  // relies on the root layout's dark style, so restore it on blur.
-  useFocusEffect(useCallback(() => {
-    setStatusBarStyle('light', true);
-    return () => setStatusBarStyle('dark', true);
-  }, []));
+  const screenFocusedRef = useRef(true);
 
   useFocusEffect(useCallback(() => {
+    screenFocusedRef.current = true;
     setScreenFocused(true);
     practiced.current = false;
     backgroundCheckpointedRef.current = false;
     resetPracticeTimer();
     return () => {
+      screenFocusedRef.current = false;
       setScreenFocused(false);
       const floating = floatingAshaRef.current;
       // Minimizing sets a ref before the next paint, so this still sees it.
       if (floating.available && floating.voice && !isFloatingAshaMinimized()) floating.voice.disconnect();
-      if (practiced.current) addPracticeSeconds(elapsedSeconds());
+      // Count only the focused visit. Leaving the tab used to keep the timer
+      // running, so later backgrounding also stored time spent on other screens.
+      if (practiced.current && !backgroundCheckpointedRef.current) {
+        addPracticeSeconds(elapsedSeconds());
+        resetPracticeTimer();
+      }
+      practiced.current = false;
+      backgroundCheckpointedRef.current = true;
       void stopSpeaking();
     };
   }, [addPracticeSeconds, elapsedSeconds, resetPracticeTimer]));
@@ -302,7 +303,7 @@ export default function LiveScreen() {
         backgroundCheckpointedRef.current = false;
         return;
       }
-      if (nextState !== 'background' || !practiced.current || backgroundCheckpointedRef.current) return;
+      if (nextState !== 'background' || !screenFocusedRef.current || !practiced.current || backgroundCheckpointedRef.current) return;
       backgroundCheckpointedRef.current = true;
       addPracticeSeconds(elapsedSeconds());
       resetPracticeTimer();
@@ -579,7 +580,6 @@ export default function LiveScreen() {
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
-      signalNetworkAvailable();
     }
   }, []);
   const startNewConversation = useCallback(async (signal: AbortSignal) => {
@@ -604,7 +604,6 @@ export default function LiveScreen() {
     // Only a transport failure or timeout before the call started proves there is no
     // connection. Configuration, rejected payloads, microphone, and peer errors keep their copy.
     const offline = connecting && (details?.kind === 'network' || details?.kind === 'timeout');
-    if (offline) signalNetworkLost();
     setError(offline ? LIVE_OFFLINE_MESSAGE : message);
   }, []);
   // Interrupted sessions keep their transcript on screen with a note that it is saved.
@@ -819,17 +818,13 @@ export default function LiveScreen() {
                     <View style={[styles.headerIdentity, reflowHeaderLayout && styles.headerIdentityLarge]}>
                       <View style={[styles.headerCopy, reflowHeaderLayout && styles.headerCopyStacked]}>
                         <JournalDisplay numberOfLines={reflowHeaderLayout ? undefined : 2} style={[styles.headerTitle, reflowHeaderLayout && styles.headerTitleStacked]}>Speak with Asha</JournalDisplay>
-                        <Text numberOfLines={reflowHeaderLayout ? undefined : 1} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Private Hindi coach · {responseLanguageName} replies</Text>
+                        <Text numberOfLines={reflowHeaderLayout ? undefined : 1} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Hindi coach · {responseLanguageName} replies</Text>
                       </View>
                     </View>
                     <View style={[styles.headerActions, reflowHeaderLayout && styles.headerActionsStacked]}>
                       {floatingAsha.available && aiConsent ? (
                         <AshaMinimizeButton onPress={floatingAsha.minimize} />
                       ) : null}
-                      <View accessibilityLabel="Private conversation" style={styles.privateBadge}>
-                        <Lock color={colors.brandSoft} size={14} strokeWidth={2} />
-                        <Text style={styles.privateText}>Private</Text>
-                      </View>
                     </View>
                   </View>
                 );
@@ -854,7 +849,7 @@ export default function LiveScreen() {
                     <Text accessibilityLabel={`Asha says: ${ashaInviteLine}`} style={styles.heroTitle}>{ashaInviteLine}</Text>
                     <Text style={styles.heroBody}>{ashaInviteSharing}</Text>
                   </View>
-                  <Pressable accessibilityRole="button" onPress={() => setConsentSheetOpen(true)} style={styles.talkButton} testID="talk-with-asha">
+                  <Pressable accessibilityLabel={ashaInviteAction} accessibilityRole="button" onPress={() => setConsentSheetOpen(true)} style={styles.talkButton} testID="talk-with-asha">
                     <Text style={styles.talkButtonText}>{ashaInviteAction}</Text>
                   </Pressable>
                   {lastSessionButton}
@@ -872,7 +867,7 @@ export default function LiveScreen() {
                   ]}
                   stackedAtLargeText
                   style={[styles.languageSelector, { width: heroContentWidth }]}
-                  tone="dark"
+                  tone="light"
                   value={responseLanguage}
                 />
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
@@ -889,7 +884,7 @@ export default function LiveScreen() {
                         transition={0}
                       />
                     ) : (
-                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="dark" voice={floatingAsha.voice ?? undefined}>
+                    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactVoiceLayout} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size="portrait" tone="light" voice={floatingAsha.voice ?? undefined}>
                       <Image
                         accessible={false}
                         cachePolicy="memory-disk"
@@ -1051,10 +1046,7 @@ export default function LiveScreen() {
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <AlertCircle color={colors.dangerSoft} size={16} />
             </View>
-            <View style={styles.errorCopy}>
-              <Text accessibilityRole="header" style={styles.errorTitle}>{voiceStatusTitle(error)}</Text>
-              <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
-            </View>
+            <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
             {/* The banner takes room from Asha's portrait above; let the learner clear it. */}
             <Pressable accessibilityLabel="Dismiss error" accessibilityRole="button" hitSlop={10} onPress={() => setError('')} testID="live-error-dismiss">
               <X color={colors.heroSubtle} size={16} />
@@ -1124,15 +1116,15 @@ export default function LiveScreen() {
 }
 
 export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
-  screen: { flex: 1, backgroundColor: c.night },
-  list: { flex: 1, backgroundColor: c.night },
-  listContent: { backgroundColor: c.night, paddingBottom: spacing.xxl },
+  screen: { flex: 1, backgroundColor: c.background },
+  list: { flex: 1, backgroundColor: c.background },
+  listContent: { backgroundColor: c.background, paddingBottom: spacing.xxl },
   voiceHero: {
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
-    backgroundColor: c.night,
+    backgroundColor: c.background,
     overflow: 'hidden',
   },
   voiceHeroCompact: { gap: spacing.xs, paddingBottom: spacing.xs },
@@ -1144,15 +1136,15 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerIdentityLarge: { flex: 0 },
   headerCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2, overflow: 'hidden' },
   headerCopyStacked: { overflow: 'visible' },
-  headerTitle: { alignSelf: 'stretch', color: c.white, maxWidth: 260, fontSize: 28, lineHeight: 34, textAlign: 'left' },
+  headerTitle: { alignSelf: 'stretch', color: c.ink, maxWidth: 260, fontSize: 28, lineHeight: 34, textAlign: 'left' },
   headerTitleStacked: { maxWidth: '100%' },
-  headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.heroSubtle, fontSize: 13, lineHeight: 18, textAlign: 'left' },
+  headerSubtitle: { minWidth: 0, alignSelf: 'stretch', flexShrink: 1, color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
   headerSubtitleStacked: { flexShrink: 0 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
-  privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.nightLine, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
+  privateBadge: { minHeight: 36, borderRadius: radius.pill, borderColor: c.line, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.md },
   privateText: { color: c.brandSoft, fontSize: 13, fontWeight: '600' },
-  chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { alignSelf: 'center' },
   inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
   inviteRingCompact: { width: 124, height: 124 },
@@ -1165,38 +1157,38 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   voiceStageResting: { gap: spacing.xs },
   voiceStageCompact: { gap: spacing.sm },
   portraitControl: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface },
+  ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.paperRaised },
   ashaPortraitCompact: { width: 96, height: 96 },
   heroCopy: { minWidth: 0, alignSelf: 'stretch', alignItems: 'center', gap: 4 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   statusDot: { width: 8, height: 8, borderRadius: radius.pill, backgroundColor: c.gold, opacity: 0.6 },
   statusDotLive: { opacity: 1 },
-  liveVoiceText: { color: c.gold, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1 },
-  heroTitle: { minWidth: 0, maxWidth: 300, flexShrink: 1, color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
-  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.heroSubtle, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  liveVoiceText: { color: c.brandText, fontSize: 12, lineHeight: 16, fontWeight: '600', letterSpacing: 1 },
+  heroTitle: { minWidth: 0, maxWidth: 300, flexShrink: 1, color: c.ink, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
+  heroBody: { minWidth: 0, maxWidth: 310, flexShrink: 1, color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   captionBlock: { alignSelf: 'center', gap: 10, marginBottom: spacing.sm },
   captionCard: { alignSelf: 'stretch', gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md },
-  captionCardYou: { backgroundColor: c.nightSurface },
+  captionCardYou: { backgroundColor: c.paperRaised },
   captionCardAsha: { backgroundColor: c.paperRaised },
   captionLabelBadge: { minHeight: 30, alignSelf: 'flex-start', justifyContent: 'center', overflow: 'visible', paddingVertical: 5 },
   captionLabel: { color: c.heroSubtle, fontSize: 12, lineHeight: 18, fontWeight: '800', letterSpacing: 0.25 },
   captionLabelAsha: { color: c.brand },
-  captionText: { minWidth: 0, alignSelf: 'stretch', color: c.white, fontSize: 16, lineHeight: 23 },
+  captionText: { minWidth: 0, alignSelf: 'stretch', color: c.ink, fontSize: 16, lineHeight: 23 },
   captionTextAsha: { color: c.ink },
-  studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.nightSurface, padding: spacing.lg },
+  studioPhrase: { alignSelf: 'center', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg },
   studioPhraseHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   studioPhraseCopy: { minWidth: 0, flex: 1, gap: 2 },
   studioPhraseEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 0.9, textTransform: 'uppercase' },
-  studioPhraseEnglish: { color: c.white, fontFamily: displayFont, fontSize: 19, lineHeight: 25, fontWeight: '600' },
+  studioPhraseEnglish: { color: c.ink, fontFamily: displayFont, fontSize: 19, lineHeight: 25, fontWeight: '600' },
   studioListenIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
-  studioPhraseHindi: { ...hindiType(24), color: c.white },
+  studioPhraseHindi: { ...hindiType(24), color: c.ink },
   studioPhraseLatin: { color: c.gold, fontSize: 14, fontWeight: '600' },
   studioPhraseFooter: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  studioPhraseCue: { minWidth: 0, flex: 1, color: c.heroSubtle, fontSize: 12, lineHeight: 17 },
+  studioPhraseCue: { minWidth: 0, flex: 1, color: c.muted, fontSize: 12, lineHeight: 17 },
   studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm },
   studioMasteryText: { color: c.goldText, fontSize: 11, fontWeight: '700' },
-  featuredPhraseSection: { alignItems: 'center', backgroundColor: c.night, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.md },
+  featuredPhraseSection: { alignItems: 'center', backgroundColor: c.background, paddingHorizontal: 20, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.background, borderTopColor: c.line, borderTopWidth: 1, paddingHorizontal: 20, paddingTop: 10, paddingBottom: spacing.md },
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   askSectionResting: { gap: spacing.xs, paddingTop: spacing.xs, paddingBottom: 0 },
   askHeadingRow: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
@@ -1204,22 +1196,22 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askHeadingCopy: { minWidth: 0, flexGrow: 1, alignItems: 'center', gap: 3 },
   askHeadingCopyCompact: { gap: 0 },
   askEyebrow: { color: c.gold, fontSize: 11, fontWeight: '600', letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
-  askTitle: { color: c.white, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
-  clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center' },
-  clearChatText: { flexShrink: 1, color: c.dangerSoft, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
-  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  askTitle: { color: c.ink, fontFamily: displayFont, fontSize: 20, lineHeight: 26, fontWeight: '600', textAlign: 'center' },
+  clearChatButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center' },
+  clearChatText: { flexShrink: 1, color: c.danger, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
+  lastSessionButton: { minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   lastSessionButtonConsent: { alignSelf: 'center', marginTop: spacing.sm },
-  lastSessionText: { flexShrink: 1, color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
+  lastSessionText: { flexShrink: 1, color: c.brandText, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
   failedReportText: { color: c.dangerSoft },
   queuedReports: { gap: spacing.sm, marginTop: spacing.md },
   queuedReportsTitle: { color: c.heroSubtle, fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
-  messageRow: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'flex-start', backgroundColor: c.night, paddingHorizontal: 20, marginBottom: spacing.md },
+  messageRow: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'flex-start', backgroundColor: c.background, paddingHorizontal: 20, marginBottom: spacing.md },
   messageRowStacked: { marginBottom: spacing.xs },
   messageRowYou: { alignItems: 'flex-end' },
   welcomeRow: { alignItems: 'center', paddingTop: spacing.xs },
   message: { maxWidth: '88%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: 14, paddingVertical: spacing.md, gap: spacing.xs },
   ashaMessage: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: StyleSheet.hairlineWidth },
-  userMessage: { backgroundColor: c.nightSurface, borderColor: c.nightLine, borderWidth: 1 },
+  userMessage: { backgroundColor: c.brand, borderColor: c.brand, borderWidth: 1 },
   welcomeMessage: { alignSelf: 'center', width: '100%', maxWidth: 420, borderRadius: radius.xl, borderBottomLeftRadius: radius.xl, borderBottomRightRadius: radius.xl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl },
   ashaTail: { borderBottomLeftRadius: radius.sm },
   userTail: { borderBottomRightRadius: radius.sm },
@@ -1231,38 +1223,38 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   userText: { color: c.white },
   messageStatus: { color: c.gold, fontSize: 12, lineHeight: 16, fontWeight: '600' },
   messageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
-  messageActionsYou: { borderTopColor: c.nightLine },
+  messageActionsYou: { borderTopColor: c.line },
   typingBubble: { minWidth: 84, paddingVertical: spacing.md },
   typingDots: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 10, paddingVertical: spacing.xs },
   typingDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: c.brand },
   smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { color: c.muted, fontSize: 12, fontWeight: '700' },
   reportedText: { color: c.success },
-  composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.nightSurface, borderTopColor: c.nightLine, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
+  composer: { width: '100%', alignSelf: 'stretch', backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: StyleSheet.hairlineWidth, paddingHorizontal: 20, paddingTop: spacing.md, gap: spacing.sm },
   examples: { justifyContent: 'flex-start', gap: spacing.sm, paddingRight: spacing.xl },
-  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },
-  exampleText: { color: c.white, fontSize: 14, lineHeight: 18, textAlign: 'center' },
+  example: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.line, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14 },
+  exampleText: { color: c.ink, fontSize: 14, lineHeight: 18, textAlign: 'center' },
   composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },
-  composerMic: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  composerMic: { width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.brand, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   charCount: { color: c.heroSubtle, fontSize: 12, lineHeight: 16, fontWeight: '600', textAlign: 'right' },
   charCountLimit: { color: c.gold },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  input: { flex: 1, minHeight: 52, maxHeight: 120, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 14, fontSize: 16, lineHeight: 22 },
+  input: { flex: 1, minHeight: 52, maxHeight: 120, borderRadius: 22, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.inputBorder, borderWidth: 1, color: c.ink, paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 14, fontSize: 16, lineHeight: 22 },
   inputDisabled: { opacity: 0.72 },
-  sendButton: { width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  sendButton: { width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
   thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   requestStatus: { color: c.gold, fontSize: 13, lineHeight: 18, fontWeight: '600', textAlign: 'center' },
-  errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.danger, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  noticeBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.nightLine, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  noticeText: { flex: 1, color: c.white, fontSize: 13, lineHeight: 18 },
+  errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.danger, backgroundColor: c.background, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  noticeBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.background, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  noticeText: { flex: 1, color: c.ink, fontSize: 13, lineHeight: 18 },
   errorCopy: { flex: 1, gap: spacing.xs },
-  errorTitle: { color: c.white, fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  error: { color: c.dangerSoft, fontSize: 13, lineHeight: 18 },
+  errorTitle: { color: c.ink, fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  error: { flex: 1, color: c.danger, fontSize: 13, lineHeight: 18 },
   settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
-  settingsLinkText: { color: c.white, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
+  settingsLinkText: { color: c.brandText, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
 } as const);
 
 const useStyles = makeStyles(createLiveStyles);

@@ -4,6 +4,7 @@ import { SearchField } from 'heroui-native/search-field';
 import { Trash2, Volume2 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Text, View } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SegmentedControl } from '@/components/segmented-control';
@@ -13,17 +14,14 @@ import { selectNextLesson } from '@/lib/lesson-path';
 import { scenes, type SceneCategory } from '@/data/scenes';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useSpeakText } from '@/hooks/use-speak-text';
-import { showAppAlert } from '@/lib/app-alert';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
-import { screenCopy } from '@/lib/screen-copy';
 import { headerlessContentInset } from '@/lib/screen-insets';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme } from '@/theme';
-import { OfflineNote, ScreenState } from '@/components/screen-state';
+import { displayFont, hindiType, layout, makeStyles, maxContentWidth, radius, safeArea, spacing, useSharedStyles, useTheme } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Filter = 'All' | SceneCategory;
@@ -60,9 +58,10 @@ export default function PhrasesScreen() {
   const sharedStyles = useSharedStyles();
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
-  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, updateLearnerProfile, sceneProgress: savedSceneProgress } = useAppState();
+  const { aiConsent, learnerProfile, phraseReviews, phrases, removePhrase, togglePhrase, updateLearnerProfile, sceneProgress: savedSceneProgress } = useAppState();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const [audioPhrase, setAudioPhrase] = useState('');
+  const [undoPhrase, setUndoPhrase] = useState<SavedPhrase | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   // List all due phrases here, not the 5-phrase review-session cap from duePhrases.
@@ -108,11 +107,15 @@ export default function PhrasesScreen() {
     void speak(text, undefined, playbackRate);
   }
 
-  function confirmRemove(phrase: SavedPhrase) {
-    showAppAlert('Remove saved phrase?', phrase.hi, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removePhrase(phrase.hi) },
-    ]);
+  function removeNow(phrase: SavedPhrase) {
+    removePhrase(phrase.hi);
+    setUndoPhrase(phrase);
+  }
+
+  function undoRemove() {
+    if (!undoPhrase) return;
+    void togglePhrase(undoPhrase);
+    setUndoPhrase(null);
   }
 
   const savedCount = visible.length === phrases.length
@@ -128,7 +131,14 @@ export default function PhrasesScreen() {
         </View>
         <Text style={[styles.headerSubtitle, largeTextLayout && styles.headerSubtitleLarge]}>Words you want to keep.</Text>
       </View>
-      <OfflineNote />
+      {undoPhrase ? (
+        <View style={styles.undoBanner}>
+          <Text style={styles.undoText}>Removed {undoPhrase.hi}</Text>
+          <Pressable accessibilityLabel={`Undo remove ${undoPhrase.hi}`} accessibilityRole="button" onPress={undoRemove} style={styles.undoButton}>
+            <Text style={styles.undoButtonText}>Undo</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {phrases.length > 0 ? (
         <>
           <PressableFeedback accessibilityLabel={due.length ? `Review ${due.length} phrase${due.length === 1 ? '' : 's'} due today` : 'All phrases reviewed for today. Practice them again'} accessibilityRole="button" onPress={() => router.push('/review' as Href)} style={[styles.dueCard, largeTextLayout && styles.dueCardLarge]}>
@@ -184,7 +194,7 @@ export default function PhrasesScreen() {
   return (
     <>
       <FlatList
-        contentContainerStyle={[styles.content, headerlessContentInset(insets, spacing.xxl)]}
+        contentContainerStyle={[styles.content, headerlessContentInset(insets, safeArea.tabBar + spacing.lg)]}
         contentInsetAdjustmentBehavior="never"
         data={visible}
         keyboardDismissMode="on-drag"
@@ -193,21 +203,31 @@ export default function PhrasesScreen() {
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListHeaderComponent={Header}
         ListEmptyComponent={phrases.length === 0 ? (
-          <ScreenState
-            actionLabel={nextLesson.action}
-            body={screenCopy.phrasesEmptyBody}
-            onAction={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
-            testID="phrases-empty-lesson-action"
-            title={screenCopy.phrasesEmptyTitle}
-          />
+          <View style={styles.empty}>
+            <Text style={styles.emptyBody}>Practice a lesson, then save any useful phrase you want to keep.</Text>
+            <PressableFeedback
+              accessibilityLabel={nextLesson.action}
+              accessibilityRole="button"
+              onPress={() => router.push({ pathname: '/scene/[id]', params: { id: nextLesson.lessonId } })}
+              style={sharedStyles.primaryButton}
+              testID="phrases-empty-lesson-action"
+            >
+              <Text style={sharedStyles.primaryButtonText}>{nextLesson.action}</Text>
+            </PressableFeedback>
+          </View>
         ) : (
-          <ScreenState
-            actionLabel="Show all phrases"
-            body={screenCopy.phrasesNoMatchBody}
-            onAction={() => { setQuery(''); setFilter('All'); }}
-            testID="phrases-clear-filters"
-            title={screenCopy.phrasesNoMatchTitle}
-          />
+          <View style={styles.noResultsBlock}>
+            <Text style={styles.noResults}>No phrases match this search and filter.</Text>
+            <PressableFeedback
+              accessibilityLabel="Show all phrases"
+              accessibilityRole="button"
+              onPress={() => { setQuery(''); setFilter('All'); }}
+              style={styles.clearFilters}
+              testID="phrases-clear-filters"
+            >
+              <Text style={styles.clearFiltersText}>Show all phrases</Text>
+            </PressableFeedback>
+          </View>
         )}
         renderItem={({ item }) => {
           const offline = hasOfflineSpeech(item.hi);
@@ -216,26 +236,35 @@ export default function PhrasesScreen() {
           const mastery = review?.mastery ?? 0;
           const isDue = dueSet.has(item.hi);
           return (
-            <View style={[styles.card, largeTextLayout && styles.cardLarge]}>
-              <View style={[styles.cardMain, largeTextLayout && styles.cardMainLarge]}>
-                <View style={styles.copy}>
-                  {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{item.hi}</Text> : null}
-                  <Text style={styles.latin}>{learnerPhraseLatin(item.hi, item.latin)}</Text>
-                  <Text style={styles.english}>{item.en}</Text>
-                  <View style={styles.masteryRow}>
-                    <MasteryMeter mastery={mastery} />
-                    <Text style={[styles.mastery, isDue && styles.masteryDue]}>{isDue ? 'Due now' : `${mastery}/5`}</Text>
+            <Swipeable
+              overshootRight={false}
+              renderRightActions={() => (
+                <Pressable accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => removeNow(item)} style={styles.swipeRemove}>
+                  <Text style={styles.swipeRemoveText}>Remove</Text>
+                </Pressable>
+              )}
+            >
+              <View style={[styles.card, largeTextLayout && styles.cardLarge]}>
+                <View style={[styles.cardMain, largeTextLayout && styles.cardMainLarge]}>
+                  <View style={styles.copy}>
+                    {profile.scriptPreference !== 'latin' && item.hi.trim().toLocaleLowerCase() !== item.latin.trim().toLocaleLowerCase() ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{item.hi}</Text> : null}
+                    <Text style={styles.latin}>{learnerPhraseLatin(item.hi, item.latin)}</Text>
+                    <Text style={styles.english}>{item.en}</Text>
+                    <View style={styles.masteryRow}>
+                      <MasteryMeter mastery={mastery} />
+                      <Text style={[styles.mastery, isDue && styles.masteryDue]}>{isDue ? `Due now · ${mastery} of 5` : `${mastery} of 5`}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
+                    <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: `${replaySpeeds.find((speed) => speed.rate === playbackRate)?.label ?? 'Normal'} speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
+                      <Volume2 color={colors.brandText} size={18} />
+                    </PressableFeedback>
+                    <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => removeNow(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
                   </View>
                 </View>
-                <View style={[styles.cardActions, largeTextLayout && styles.cardActionsLarge]}>
-                  <PressableFeedback accessibilityHint={canListen ? 'Bundled lesson audio works offline.' : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${item.hi}`} accessibilityValue={{ text: `${replaySpeeds.find((speed) => speed.rate === playbackRate)?.label ?? 'Normal'} speed` }} accessibilityRole="button" accessibilityState={{ disabled: !canListen }} isDisabled={!canListen} onPress={() => playPhrase(item.hi)} style={[styles.listenButton, !canListen && styles.disabled]} testID="saved-phrase-listen">
-                    <Volume2 color={colors.brandText} size={18} />
-                  </PressableFeedback>
-                  <PressableFeedback accessibilityLabel={`Remove ${item.hi}`} accessibilityRole="button" onPress={() => confirmRemove(item)} style={styles.removeButton}><Trash2 color={colors.muted} size={17} /></PressableFeedback>
-                </View>
+                {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
               </View>
-              {audioError && audioPhrase === item.hi ? <Text accessibilityRole="alert" style={styles.error}>{audioError}</Text> : null}
-            </View>
+            </Swipeable>
           );
         }}
         style={sharedStyles.screen}
@@ -264,7 +293,7 @@ const useStyles = makeStyles((c) => ({
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2 },
   dueTitle: { color: c.ink, fontSize: 16, lineHeight: 21, fontWeight: '600', textAlign: 'left' },
   dueBody: { color: c.goldDeepText, fontSize: 13, lineHeight: 18, textAlign: 'left' },
-  dueAction: { minHeight: 44, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.ink, paddingHorizontal: spacing.lg },
+  dueAction: { minHeight: layout.touchTarget, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brand, paddingHorizontal: spacing.lg },
   dueActionText: { color: c.white, fontSize: 14, fontWeight: '600' },
   searchField: { width: '100%', alignSelf: 'stretch' },
   searchRow: { width: '100%', minHeight: 48 },
@@ -277,22 +306,34 @@ const useStyles = makeStyles((c) => ({
   cardMainLarge: { flexDirection: 'column', alignItems: 'stretch' },
   cardActions: { alignItems: 'center', gap: spacing.xs },
   cardActionsLarge: { flexDirection: 'row', justifyContent: 'flex-end' },
-  listenButton: { width: 44, height: 44, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
-  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  listenButton: { width: layout.touchTarget, height: layout.touchTarget, minHeight: layout.touchTarget, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
+  removeButton: { width: layout.touchTarget, height: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
+  swipeRemove: { width: 96, minHeight: layout.touchTarget, marginLeft: spacing.sm, borderRadius: radius.md, backgroundColor: c.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  swipeRemoveText: { color: c.white, fontSize: 15, fontWeight: '700' },
+  undoBanner: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  undoText: { flex: 1, color: c.ink, fontSize: 14, lineHeight: 20 },
+  undoButton: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  undoButtonText: { color: c.brandText, fontSize: 15, fontWeight: '700' },
   copy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: 2 },
   hindi: { ...hindiType(21), color: c.ink, textAlign: 'left' },
   latin: { color: c.brand, fontSize: 14, lineHeight: 20, fontWeight: '500', textAlign: 'left' },
   english: { color: c.muted, fontSize: 13, lineHeight: 18, textAlign: 'left' },
   masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: 6 },
   masteryMeter: { flexDirection: 'row', gap: 4 },
-  masterySegment: { width: 18, height: 4, borderRadius: radius.pill, backgroundColor: c.track },
-  masterySegmentFilled: { backgroundColor: c.forest },
+  masterySegment: { width: 22, height: 8, borderRadius: radius.pill, backgroundColor: c.track },
+  masterySegmentFilled: { backgroundColor: c.brand },
   mastery: { color: c.muted, fontSize: 12, lineHeight: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
   masteryDue: { color: c.brandText },
   speedSetting: { width: '100%', gap: spacing.sm },
   speedLabel: { color: c.muted, fontSize: 13, lineHeight: 18, fontWeight: '600' },
   disabled: { opacity: 0.4 },
+  empty: { alignItems: 'center', gap: spacing.md, padding: spacing.xl, paddingTop: spacing.xxl },
+  emptyBody: { color: c.muted, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   consentNote: { minHeight: 44, justifyContent: 'center' },
   consentNoteText: { color: c.muted, fontSize: 14, lineHeight: 20 },
   consentNoteLink: { color: c.forestText, fontWeight: '700', textDecorationLine: 'underline' },
+  noResultsBlock: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl },
+  noResults: { color: c.muted, fontSize: 15, textAlign: 'center' },
+  clearFilters: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  clearFiltersText: { color: c.brandText, fontSize: 15, fontWeight: '700' },
 }));

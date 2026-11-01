@@ -96,7 +96,7 @@ describe('home accessibility', () => {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
       expect(StyleSheet.flatten(view.getByTestId('today-jump-row').props.style)).toMatchObject({ flexDirection: 'column' });
-      expect(StyleSheet.flatten(view.getByTestId('today-hero-footer').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
+      expect(view.getByTestId('today-next-step')).toBeTruthy();
     }
     finally {
       await act(async () => Dimensions.set({ screen, window }));

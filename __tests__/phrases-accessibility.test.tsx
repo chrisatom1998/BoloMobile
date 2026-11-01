@@ -35,15 +35,18 @@ describe('saved phrase accessibility', () => {
   it('exposes 44 point buttons and the disabled playback state', async () => {
     const view = await render(<PhrasesScreen />);
     const listen = view.getByTestId('saved-phrase-listen');
-    const remove = view.getByLabelText('Remove नमस्ते');
+    const removeButtons = view.getAllByLabelText('Remove नमस्ते');
+    const remove = removeButtons.find((button) => StyleSheet.flatten(button.props.style).width === 44);
 
     expect(listen.props.testID).toBe('saved-phrase-listen');
     expect(listen.props.accessibilityLabel).toBe('Hear नमस्ते');
     expect(listen.props.accessibilityRole).toBe('button');
     expect(listen.props.accessibilityState).toEqual({ disabled: true });
     expect(StyleSheet.flatten(listen.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    expect(remove.props.accessibilityRole).toBe('button');
-    expect(StyleSheet.flatten(remove.props.style)).toMatchObject({ height: 44, width: 44 });
+    expect(remove).toBeTruthy();
+    expect(remove?.props.accessibilityRole).toBe('button');
+    expect(StyleSheet.flatten(remove?.props.style)).toMatchObject({ height: 44, width: 44 });
+    expect(removeButtons.some((button) => StyleSheet.flatten(button.props.style).minHeight >= 44)).toBe(true);
 
     const list = view.getByTestId('saved-phrase-list');
     expect(StyleSheet.flatten(list.props.contentContainerStyle)).toMatchObject({ alignItems: 'stretch', width: '100%' });

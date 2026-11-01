@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
@@ -10,13 +9,12 @@ import { playOfflineSpeech } from '@/lib/offline-voice-player';
 import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles } from '@/theme';
+import { displayFont, hindiType, makeStyles, maxContentWidth, radius, safeArea, spacing, useSharedStyles } from '@/theme';
 
-const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
 const SELECTED_ORANGE = '#D8663C';
 
-type OnboardingStep = 'listen' | 'level' | 'goal';
+type OnboardingStep = 'listen' | 'plan';
 type ReplyId = 'namaste' | 'thanks' | 'bye';
 
 const replies: { id: ReplyId; hi: string; latin: string; en: string; correct: boolean }[] = [
@@ -31,10 +29,10 @@ const levels: { value: LearnerLevel; label: string; detail: string }[] = [
   { value: 'intermediate', label: 'Intermediate', detail: 'Give me richer real-life situations.' },
 ];
 
-const scripts: { value: ScriptPreference; label: string }[] = [
-  { value: 'both', label: 'Hindi + transliteration' },
-  { value: 'devanagari', label: 'Hindi script only' },
-  { value: 'latin', label: 'Transliteration first' },
+const scripts: { accessibleName: string; detail: string; label: string; value: ScriptPreference }[] = [
+  { accessibleName: 'Hindi + transliteration', detail: 'नमस्ते · namaste', label: 'Hindi + transliteration', value: 'both' },
+  { accessibleName: 'Hindi script only', detail: 'नमस्ते', label: 'Hindi script only', value: 'devanagari' },
+  { accessibleName: 'Transliteration first', detail: 'namaste', label: 'Transliteration first', value: 'latin' },
 ];
 
 const goals: { value: LearningGoal; label: string }[] = [
@@ -44,7 +42,7 @@ const goals: { value: LearningGoal; label: string }[] = [
   { value: 'work', label: 'Work' },
 ];
 
-type Choice<T extends string> = { detail?: string; hindi?: boolean; label: string; value: T };
+type Choice<T extends string> = { accessibleName?: string; detail?: string; hindi?: boolean; label: string; value: T };
 
 function ChoiceRow<T extends string>({ choices, label, onChange, testIDFor, value }: {
   choices: Choice<T>[];
@@ -61,7 +59,7 @@ function ChoiceRow<T extends string>({ choices, label, onChange, testIDFor, valu
         return (
           <Pressable
             key={choice.value}
-            accessibilityLabel={choice.detail ? `${choice.label}, ${choice.detail}` : choice.label}
+            accessibilityLabel={choice.accessibleName ?? (choice.detail ? `${choice.label}, ${choice.detail}` : choice.label)}
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
             onPress={() => onChange(choice.value)}
@@ -88,9 +86,9 @@ export default function OnboardingScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const recalibrating = mode === 'recalibrate' && learnerProfile.completed;
-  const steps: OnboardingStep[] = recalibrating ? ['level', 'goal'] : ['listen', 'level', 'goal'];
+  const steps: OnboardingStep[] = recalibrating ? ['plan'] : ['listen', 'plan'];
   const [stepIndex, setStepIndex] = useState(0);
-  const step = steps[stepIndex] ?? 'goal';
+  const step = steps[stepIndex] ?? 'plan';
   const [replayToken, setReplayToken] = useState(0);
   const [reply, setReply] = useState<ReplyId | null>(null);
   const [level, setLevel] = useState<LearnerLevel>(recalibrating ? learnerProfile.level : 'new');
@@ -139,10 +137,11 @@ export default function OnboardingScreen() {
   const stepNumber = stepIndex + 1;
   const onLastStep = stepIndex >= steps.length - 1;
   const continueDisabled = step === 'listen' && !heardNamaste;
-  const continueLabel = onLastStep ? (recalibrating ? 'Save my practice plan' : 'Start practicing') : 'Continue';
+  const continueLabel = onLastStep ? (recalibrating ? 'Save my practice plan' : 'Build my plan') : 'Continue';
 
   return (
-    <ScrollView contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]} style={sharedStyles.screen}>
+    <View style={sharedStyles.screen}>
+    <ScrollView contentContainerStyle={[styles.screen, { paddingTop: insets.top + spacing.lg, paddingBottom: spacing.lg }]} style={styles.scroll}>
       <View style={styles.column}>
         <View style={styles.header}>
           <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.brandMark}>ब</Text>
@@ -176,49 +175,42 @@ export default function OnboardingScreen() {
             </View>
           ) : null}
 
-          {step === 'level' ? (
+          {step === 'plan' ? (
             <View style={styles.stack}>
               <Text accessibilityRole="header" style={styles.heading}>Where are you starting?</Text>
               <Text style={sharedStyles.body}>This tunes the first lessons. You can change it later.</Text>
               <ChoiceRow choices={levels} label="Hindi level" onChange={setLevel} value={level} />
               <Text accessibilityRole="header" style={styles.subheading}>How should Hindi appear?</Text>
               <ChoiceRow choices={scripts} label="Hindi script preference" onChange={setScriptPreference} value={scriptPreference} />
-            </View>
-          ) : null}
-
-          {step === 'goal' ? (
-            <View style={styles.stack}>
-              <View style={styles.ashaRow}>
-                <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
-                <View style={styles.ashaCopy}>
-                  <Text accessibilityRole="header" style={styles.heading}>Meet Asha</Text>
-                  <Text style={sharedStyles.body}>Asha is your voice tutor. When you are ready, she practices these lines out loud with you.</Text>
-                </View>
-              </View>
               <Text accessibilityRole="header" style={styles.subheading}>What matters most?</Text>
               <ChoiceRow choices={goals} label="Learning goal" onChange={setPrimaryGoal} value={primaryGoal} />
             </View>
           ) : null}
         </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: continueDisabled }}
-          disabled={continueDisabled}
-          onPress={continueForward}
-          style={[styles.continueButton, continueDisabled && styles.continueDisabled]}
-          testID={onLastStep ? 'onboarding-start' : 'onboarding-continue'}
-        >
-          <Text style={styles.continueText}>{continueLabel}</Text>
-        </Pressable>
       </View>
       <StatusBarScrim />
     </ScrollView>
+    <View style={[styles.footer, { paddingBottom: Math.max(safeArea.homeIndicator, insets.bottom) + spacing.sm }]}>
+      <Pressable
+        accessibilityLabel={continueLabel}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: continueDisabled }}
+        disabled={continueDisabled}
+        onPress={continueForward}
+        style={[sharedStyles.primaryButton, continueDisabled && styles.continueDisabled]}
+        testID={onLastStep ? 'onboarding-start' : 'onboarding-continue'}
+      >
+        <Text style={sharedStyles.primaryButtonText}>{continueLabel}</Text>
+      </Pressable>
+    </View>
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
+  scroll: { flex: 1 },
   screen: { flexGrow: 1 },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, backgroundColor: c.background },
   column: {
     alignSelf: 'center',
     flexGrow: 1,
@@ -271,7 +263,7 @@ const useStyles = makeStyles((c) => ({
   mark: { borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 18, width: 18 },
   markSelected: { backgroundColor: SELECTED_ORANGE, borderColor: SELECTED_ORANGE },
   choiceCopy: { flex: 1, gap: 2, minWidth: 0 },
-  choiceLabel: { color: c.ink, fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  choiceLabel: { color: c.ink, fontFamily: displayFont, fontSize: 16, lineHeight: 22, fontWeight: '700' },
   choiceHindi: { ...hindiType(20) },
   choiceDetail: { color: c.muted, fontSize: 13, lineHeight: 18 },
   ashaRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },

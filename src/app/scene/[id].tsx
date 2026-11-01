@@ -1,9 +1,9 @@
 import { randomUUID } from 'expo-crypto';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
+import { Bookmark, Check, ChevronLeft, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, AppState, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { AccessibilityInfo, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -66,7 +66,10 @@ function SceneScreen() {
   const scene = useMemo(() => {
     if (!sourceScene || !usesName || !practiceName.trim()) return sourceScene;
     // Proper names are kept exactly as entered, never guessed by transliteration.
-    const personalize = (text: string) => text.replace(/\.\.\.|…/gu, practiceName.trim());
+    const name = practiceName.trim();
+    const personalize = (text: string) => text
+      .replace(/\.\.\.|…/gu, name)
+      .replace(/My name is(?!\s+\S)/gu, `My name is ${name}`);
     return { ...sourceScene, beats: sourceScene.beats.map((beat) => ({ ...beat,
       prompt: personalize(beat.prompt), tip: personalize(beat.tip),
       choices: beat.choices.map((choice) => /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi)
@@ -467,18 +470,26 @@ function SceneScreen() {
       updateLearnerProfile?.({ displayName: draft });
       setNameStepOpen(false);
     };
+    const leaveNameStep = () => {
+      if (nameStepOpen && !needsName) {
+        setNameStepOpen(false);
+        return;
+      }
+      closeLesson();
+    };
     return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={sharedStyles.screen}>
       <ScrollView
         key="scene-name-step"
         contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.xl }]}
+        contentContainerStyle={[styles.content, styles.nameStep, { paddingTop: insets.top + spacing.sm, paddingBottom: spacing.lg }]}
         keyboardShouldPersistTaps="handled"
-        style={sharedStyles.screen}
+        style={styles.sceneScroll}
         testID="scene-name-step"
       >
         <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
-        <Pressable accessibilityLabel="Close lesson" accessibilityRole="button" onPress={closeLesson} style={styles.closeButton} testID="scene-close">
-          <X color={colors.ink} size={18} strokeWidth={2.2} />
+        <Pressable accessibilityLabel={nameStepOpen && !needsName ? 'Back' : 'Close lesson'} accessibilityRole="button" onPress={leaveNameStep} style={styles.closeButton} testID="scene-close">
+          <ChevronLeft color={colors.ink} size={18} strokeWidth={2.2} />
         </Pressable>
         <View style={styles.nameStepBody}>
           <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.nameStepAsha} transition={0} />
@@ -503,7 +514,10 @@ function SceneScreen() {
           />
           <Text style={styles.nameStepNote}>Stays on this device.</Text>
         </View>
+      </ScrollView>
+      <View style={[styles.answerFooter, { paddingBottom: Math.max(safeArea.homeIndicator, insets.bottom) + spacing.sm }]}>
         <Pressable
+          accessibilityLabel="Continue"
           accessibilityRole="button"
           accessibilityState={{ disabled: !draft }}
           disabled={!draft}
@@ -514,12 +528,11 @@ function SceneScreen() {
           <Text style={sharedStyles.primaryButtonText}>Continue</Text>
           <ChevronRight color={colors.white} size={18} />
         </Pressable>
-      </ScrollView>
+      </View>
+      </KeyboardAvoidingView>
     );
   }
 
-  const recoveryActionsFirst = resolution === 'incorrect'
-    && (effectiveMode === 'choice' || effectiveMode === 'wordOrder');
   const answerActions = resolution !== null ? (
     <View
       onLayout={(event) => {
@@ -555,19 +568,22 @@ function SceneScreen() {
         </Pressable>
       ) : (
         <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
-          <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
-          <ChevronRight color={colors.ink} size={18} />
+          <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Next turn'}</Text>
+          <ChevronRight color={colors.white} size={18} />
         </Pressable>
       )}
     </View>
   ) : null;
 
+  const sheetBottom = resolution !== null ? spacing.lg : Math.max(safeArea.homeIndicator, insets.bottom + spacing.md);
+
   return (
+    <View style={sharedStyles.screen}>
     <ScrollView
       key="scene-run"
       ref={sceneScrollRef}
       contentInsetAdjustmentBehavior="never"
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm, paddingBottom: spacing.lg }]}
       keyboardShouldPersistTaps="handled"
       onLayout={(event) => {
         sceneViewportHeightRef.current = event.nativeEvent.layout.height;
@@ -576,7 +592,7 @@ function SceneScreen() {
         sceneScrollYRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
       }}
       scrollEventThrottle={16}
-      style={sharedStyles.screen}
+      style={styles.sceneScroll}
       testID="scene-scroll"
     >
       {/* The serif heading below names the scene, so the lesson draws its own close button instead of a nav bar. */}
@@ -618,7 +634,7 @@ function SceneScreen() {
         <View style={styles.offlineNote}>
           {/* Lessons never needed a choice here: they always run offline. One quiet line, details on request. */}
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAiDetails }} hitSlop={8} onPress={() => setShowAiDetails((shown) => !shown)} testID="scene-ai-details">
-            <Text style={styles.offlineNoteText}>Works offline · <Text style={styles.offlineNoteLink}>{showAiDetails ? 'Hide Asha coaching details' : 'Add Asha coaching'}</Text></Text>
+            <Text style={styles.offlineNoteText}>Works offline · <Text style={styles.offlineNoteLink}>{showAiDetails ? 'Hide what Asha adds' : 'See what Asha adds'}</Text></Text>
           </Pressable>
           {showAiDetails ? <AiConsentGate /> : null}
         </View>
@@ -678,7 +694,7 @@ function SceneScreen() {
       ) : null}
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
-      <View style={[styles.sheet, { paddingBottom: Math.max(safeArea.homeIndicator, insets.bottom + spacing.md) }]}>
+      <View style={[styles.sheet, { paddingBottom: sheetBottom }]}>
         {currentUsesName && resolution === null && practiceName.trim() ? (
           <View style={styles.nameRow}>
             <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
@@ -776,8 +792,6 @@ function SceneScreen() {
           </View>
         ) : null}
 
-        {recoveryActionsFirst ? answerActions : null}
-
         {answerVisible ? (
           <>
             <View testID="scene-save">
@@ -817,15 +831,21 @@ function SceneScreen() {
             <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
           </View>
         ) : null}
-        {!recoveryActionsFirst ? answerActions : null}
       </View>
       <WordDefinitionSheet clientId={clientId} initialWord={wordSheet?.word ?? null} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordSheet?.phrase ?? target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && wordSheet !== null} />
     </ScrollView>
+    {answerActions ? (
+      <View style={[styles.answerFooter, { paddingBottom: Math.max(safeArea.homeIndicator, insets.bottom) + spacing.sm }]}>
+        {answerActions}
+      </View>
+    ) : null}
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => ({
   content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: 14 },
+  sceneScroll: { flex: 1 },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: spacing.md },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -863,7 +883,7 @@ const useStyles = makeStyles((c) => ({
   learnerTextHindi: hindiType(19),
   disabled: { opacity: 0.4 },
   audioError: { color: c.danger, fontSize: 13, lineHeight: 18 },
-  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: 20, paddingTop: spacing.lg, paddingBottom: safeArea.homeIndicator, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingTop: spacing.lg, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
   answerTitle: { minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontSize: 17, lineHeight: 23, fontWeight: '600' },
@@ -915,11 +935,12 @@ const useStyles = makeStyles((c) => ({
   wordOrderSolutionLatin: { color: c.brandText, fontSize: 15, lineHeight: 21, fontWeight: '600' },
   resultHindi: { color: c.ink, fontFamily: displayFont, fontSize: 18, lineHeight: 26, fontWeight: '600' },
   resultHindiScript: hindiType(19),
+  answerFooter: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, backgroundColor: c.paperRaised, borderTopColor: c.line, borderTopWidth: 1 },
   answerActions: { gap: spacing.sm },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   tryAgainText: { color: c.brandText, fontSize: 16, fontWeight: '600' },
-  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
-  nextText: { color: c.ink, fontSize: 16, fontWeight: '600' },
+  nextButton: { width: '100%', minHeight: 52, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  nextText: { color: c.white, fontSize: 16, fontWeight: '600' },
   saveRow: { backgroundColor: c.background, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
   saveRowLarge: { alignItems: 'stretch', flexDirection: 'column' },
   saveCopy: { flex: 1, gap: spacing.xs },
