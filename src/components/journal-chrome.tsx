@@ -11,8 +11,7 @@ type DisplayProps = {
 
 /**
  * Shared visual language for the editorial Bolo surfaces. These are deliberately
- * simple native primitives so the learning UI remains fast, accessible, and
- * independent of the web-only HeroUI packages.
+ * simple native primitives so the learning UI remains fast and accessible.
  */
 export function JournalDisplay({ children, maxFontSizeMultiplier, numberOfLines, style }: DisplayProps) {
   const styles = useStyles();
