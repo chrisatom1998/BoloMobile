@@ -146,9 +146,14 @@ export default function SettingsScreen() {
         }
       } catch (error) {
         if (mountedRef.current) {
+          const localMessage = error instanceof Error ? error.message : 'Bolo could not delete all data from this device. Check available storage and try again.';
+          // clearAllData can rotate the id before it throws, so a retry would use the new id.
+          // When the server copy was not deleted, keep the old id in front of the learner for support.
           showAppAlert(
             'Could not delete data',
-            error instanceof Error ? error.message : 'Bolo could not delete all data from this device. Check available storage and try again.',
+            serverError
+              ? `${localMessage} Bolo also couldn’t reach the server, so your reports may still be stored there. To have them deleted, contact support with this old app ID: ${oldClientId}.`
+              : localMessage,
           );
         }
       }
@@ -201,31 +206,17 @@ export default function SettingsScreen() {
         await cancelPracticeReminder(next).catch(() => undefined);
         return;
       }
-      let previousCancellationFailed = false;
       if (reminder.notificationId && reminder.notificationId !== next.notificationId) {
-        try {
-          await cancelPracticeReminder(reminder);
-        } catch {
-          previousCancellationFailed = true;
-        }
+        // A failure here is retried by the sweep below, which also knows the previous id.
+        await cancelPracticeReminder(reminder).catch(() => undefined);
       }
       try {
         // Also removes marked reminders left behind by an earlier interrupted update.
         await cancelOtherPracticeReminders(next.notificationId, reminder.notificationId ? [reminder.notificationId] : []);
       } catch {
-        if (previousCancellationFailed) {
-          const replacementCancelled = await cancelPracticeReminder(next).then(() => true, () => false);
-          const previousRestored = replacementCancelled
-            ? await setReminder(reminder).catch(() => false)
-            : false;
-          if (replacementCancelled && previousRestored) {
-            throw new Error('Bolo could not replace the old reminder. The previous reminder was kept. Try again.');
-          }
-          if (replacementCancelled) {
-            throw new Error('The replacement reminder was canceled, but Bolo could not restore the previous reminder setting. The old reminder may still be scheduled. Check your reminder and try again.');
-          }
-          throw new Error('A second reminder may still be scheduled. Check your reminders and try again.');
-        }
+        // The new reminder is scheduled and saved, so keep it. Rolling back to the previous id is
+        // unsafe: the sweep settles each cancellation separately, so it may already have removed
+        // that reminder even though it reported a failure.
         throw new Error('A second reminder may still be scheduled. Check your reminders and try again.');
       }
     } catch (error) {
