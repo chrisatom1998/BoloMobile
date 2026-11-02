@@ -86,7 +86,7 @@ describe('GPT-Live conversation lifecycle', () => {
     let connection!: Promise<void>;
     await act(async () => { connection = result.current.connect(); await flush(); });
     expect(onConnectionStart).toHaveBeenCalledTimes(1);
-    expect(onConnectionStart).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(onConnectionStart).toHaveBeenCalledWith(expect.any(AbortSignal), { resume: false });
     expect(requestRecordingPermissionsAsync).not.toHaveBeenCalled();
     expect(createPeerMock).not.toHaveBeenCalled();
     expect(onTranscriptSnapshot).not.toHaveBeenCalled();
@@ -184,7 +184,8 @@ describe('GPT-Live conversation lifecycle', () => {
     await act(async () => { peerOptions.onPlaybackChange?.(true); });
     expect(result.current.isPlaying).toBe(true);
     expect(result.current.microphoneEnabled).toBe(true);
-    expect(result.current.status).toBe('recording');
+    // Asha's audio shows as Speaking even with the mic open; the learner can still talk over her.
+    expect(result.current.status).toBe('responding');
     let finish!: Promise<void>;
     await act(async () => { finish = result.current.finishTurn(); });
     expect(peer.setMicrophoneEnabled).toHaveBeenLastCalledWith(false);

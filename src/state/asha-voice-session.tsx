@@ -6,7 +6,8 @@ import { FullWindowOverlay } from 'react-native-screens';
 
 import type { FloatingAshaBubble } from '@/components/floating-asha-bubble';
 import type { RealtimeErrorDetails } from '@/components/realtime-voice-button';
-import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import type { ConnectionStartInfo, LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus, StartTurnOptions } from '@/hooks/use-realtime-conversation';
+import { liveRowText } from '@/lib/live-transcripts';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
 import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { floatingAshaEnabled } from '@/lib/floating-asha';
@@ -16,7 +17,7 @@ import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types'
 export type AshaVoiceControls = {
   disconnect: (reason?: AshaSessionEndReason) => void;
   finishTurn: () => void | Promise<void>;
-  startTurn: () => Promise<void>;
+  startTurn: (options?: StartTurnOptions) => Promise<void>;
   status: RealtimeVoiceStatus;
   microphoneEnabled: boolean;
   isPlaying: boolean;
@@ -24,7 +25,7 @@ export type AshaVoiceControls = {
 
 export type AshaVoiceListeners = {
   onError?: (message: string, details?: RealtimeErrorDetails) => void;
-  onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
+  onConnectionStart?: (signal: AbortSignal, info: ConnectionStartInfo) => void | Promise<void>;
   onSessionEvent?: (event: AshaSessionEvent) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
@@ -80,7 +81,7 @@ function messagesFromRows(rows: LiveTranscriptRow[], responseLanguage: AshaRespo
   return rows.filter((row) => row.text.trim()).map((row) => ({
     id: row.id,
     role: row.speaker,
-    text: row.text,
+    text: liveRowText(row),
     ...(row.speaker === 'asha' ? { language: responseLanguage } : {}),
   }));
 }
@@ -136,6 +137,8 @@ function AshaVoiceSessionHost({
   const app = useAppState();
   const liveSession = useAshaLiveSession();
   const previousStatusRef = useRef<RealtimeVoiceStatus>('disconnected');
+  // True while the current connection resumes a dropped call, so the chat is kept.
+  const resumingRef = useRef(false);
   // The provider owns this ref for the life of the session. Keep a local Ref so
   // transcript updates can write it without treating the prop as immutable.
   const snapshotIdsRef = useRef(snapshotIds);
@@ -158,13 +161,16 @@ function AshaVoiceSessionHost({
     enabled: app.aiConsent,
     responseLanguage: app.learnerProfile.responseLanguage,
     liveSession,
-    onConnectionStart: async (signal) => {
+    onConnectionStart: async (signal, info) => {
+      resumingRef.current = info.resume;
       // A record left active by a killed app must be recovered and saved before
       // this connection can create a new active record.
       await ensureAshaSessionLogLoaded();
       if (signal.aborted) return;
-      await listenersRef.current?.onConnectionStart?.(signal);
+      await listenersRef.current?.onConnectionStart?.(signal, info);
     },
+    // A resumed call hands Asha the recent turns from the saved chat.
+    resumeHistory: () => appRef.current.chatHistory.map(({ role, text }) => ({ role, text })),
     onError: (message: string, details?: RealtimeErrorDetails) => listenersRef.current?.onError?.(message, details),
     // This host owns the hook, so it alone writes the session log; the screen only listens.
     onSessionEvent: (event) => {
@@ -205,7 +211,8 @@ function AshaVoiceSessionHost({
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
       void stopSpeaking();
-      appRef.current.clearChatHistory();
+      if (!resumingRef.current) appRef.current.clearChatHistory();
+      resumingRef.current = false;
       ids.current = [];
     }
   }, [listenersRef, observe, stopSpeaking, voice.status]);

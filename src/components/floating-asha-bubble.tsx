@@ -85,6 +85,7 @@ type Props = {
 function bubbleLabel(status: RealtimeVoiceStatus, isPlaying: boolean) {
   if (status === 'responding' || isPlaying) return 'Asha is speaking. Tap to return to the conversation.';
   if (status === 'recording') return 'Asha is listening. Tap to return to the conversation.';
+  if (status === 'thinking') return 'Asha is thinking. Tap to return to the conversation.';
   if (status === 'connecting') return 'Connecting to Asha. Tap to return to the conversation.';
   return 'Asha. Tap to return to the conversation.';
 }

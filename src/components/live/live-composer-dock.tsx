@@ -25,12 +25,18 @@ export function LiveComposerDock({
   composerMicDisabled,
   composerMicLabel,
   composerRef,
+  dismissInterruption,
   error,
+  errorAction,
+  resumeConversation,
+  toggleTranscript,
+  transcriptOpen,
   hasTranscriptMessages,
   insets,
   interruptedReason,
   keyboardCoversTabBar,
   liveConfigError,
+  micOn,
   pendingUserMessage,
   pressComposerMic,
   realtimeLocked,
@@ -62,12 +68,22 @@ export function LiveComposerDock({
             <Text accessibilityLiveRegion="polite" style={styles.requestStatus}>Asha is thinking…</Text>
           </View>
         ) : null}
-        {interruptedReason && hasTranscriptMessages ? (
+        {interruptedReason && hasTranscriptMessages && !realtimeLocked ? (
           <View accessibilityLiveRegion="polite" style={styles.noticeBanner} testID="live-interrupted-banner">
             <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <AlertCircle color={colors.gold} size={16} />
             </View>
-            <Text style={styles.noticeText}>{interruptedCopy[interruptedReason]}</Text>
+            <View style={styles.noticeBody}>
+              <Text style={styles.noticeText}>{interruptedCopy[interruptedReason]}</Text>
+              <View style={styles.noticeActions}>
+                <Pressable accessibilityRole="button" accessibilityState={{ disabled: composerMicDisabled }} disabled={composerMicDisabled} onPress={resumeConversation} style={[styles.noticeButton, composerMicDisabled && styles.disabled]} testID="live-resume">
+                  <Text style={styles.noticeButtonText}>Pick up where we left off</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" hitSlop={8} onPress={dismissInterruption} style={styles.settingsLink} testID="live-start-fresh">
+                  <Text style={styles.settingsLinkText}>Start fresh</Text>
+                </Pressable>
+              </View>
+            </View>
           </View>
         ) : null}
         {error ? (
@@ -81,6 +97,16 @@ export function LiveComposerDock({
               <X color={colors.heroSubtle} size={16} />
             </Pressable>
           </View>
+        ) : null}
+        {error && errorAction === 'resume' && hasTranscriptMessages && !realtimeLocked ? (
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: composerMicDisabled }} disabled={composerMicDisabled} hitSlop={8} onPress={resumeConversation} style={styles.settingsLink} testID="live-error-resume">
+            <Text style={styles.settingsLinkText}>Pick up where we left off</Text>
+          </Pressable>
+        ) : null}
+        {error && (errorAction === 'retry' || (errorAction === 'resume' && !hasTranscriptMessages)) && !realtimeLocked ? (
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: composerMicDisabled }} disabled={composerMicDisabled} hitSlop={8} onPress={pressComposerMic} style={styles.settingsLink} testID="live-error-retry">
+            <Text style={styles.settingsLinkText}>Try again</Text>
+          </Pressable>
         ) : null}
         {error === LIVE_OFFLINE_MESSAGE ? (
           <Pressable accessibilityRole="link" accessibilityLabel="Go to today’s lesson" hitSlop={8} onPress={() => router.push('/' as Href)} style={styles.settingsLink}>
@@ -103,7 +129,28 @@ export function LiveComposerDock({
             </Pressable>
           </View>
         ) : null}
-        {accessibilityCompact && !suggestionsOpen ? (
+        {realtimeLocked ? (
+          // During a call, typing and suggestions wait; the transcript is one tap away.
+          <View style={styles.callDock} testID="live-call-dock">
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={toggleTranscript} style={styles.settingsLink} testID="live-call-transcript-toggle">
+              <Text style={styles.settingsLinkText}>{transcriptOpen ? 'Hide transcript' : 'Show transcript'}</Text>
+            </Pressable>
+            {composerMicActionBound ? (
+              <Pressable
+                accessibilityHint="Mutes or unmutes your microphone."
+                accessibilityLabel={composerMicLabel}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: composerMicDisabled }}
+                disabled={composerMicDisabled}
+                onPress={pressComposerMic}
+                style={[styles.composerMic, composerMicDisabled && styles.disabled]}
+                testID="composer-mic-toggle"
+              >
+                {micOn ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
+              </Pressable>
+            ) : null}
+          </View>
+        ) : accessibilityCompact && !suggestionsOpen ? (
           <Pressable accessibilityLabel="Suggestions" accessibilityRole="button" onPress={() => setSuggestionsOpen(true)} style={styles.example} testID="asha-suggestions">
             <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.exampleText}>Suggestions</Text>
           </Pressable>
@@ -160,7 +207,7 @@ export function LiveComposerDock({
           </View>
         </View>
         )}
-        <View style={styles.composerEntry}>
+        {realtimeLocked ? null : <View style={styles.composerEntry}>
           {composerMicActionBound ? (
             <Pressable
               accessibilityHint="Mutes or unmutes your microphone."
@@ -172,10 +219,10 @@ export function LiveComposerDock({
               style={[styles.composerMic, composerMicDisabled && (liveConfigError ? styles.voiceUnavailable : styles.disabled)]}
               testID="composer-mic-toggle"
             >
-              {realtimeStatus === 'recording' ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
+              {micOn ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
             </Pressable>
           ) : null}
           <LiveComposer ref={composerRef} disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
-        </View>
+        </View>}
       </SafeAreaView> : null;
 }

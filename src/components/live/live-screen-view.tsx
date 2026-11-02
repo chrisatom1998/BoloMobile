@@ -48,6 +48,8 @@ export function LiveScreenView(props: LiveScreenViewProps) {
   recordOwnedSnapshot,
   reducedMotion,
   responseLanguage,
+  resumeHistory,
+  setOwnedMicOn,
   saveTranscriptPhrase,
   screenFocused,
   setMicrophonePhase,
@@ -61,7 +63,7 @@ export function LiveScreenView(props: LiveScreenViewProps) {
   } = props;
 
   const statusKicker = aiConsent
-    ? { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', responding: 'SPEAKING' }[realtimeStatus]
+    ? { disconnected: 'READY', connecting: 'CONNECTING', ready: 'MUTED', recording: 'LISTENING', thinking: 'THINKING', responding: 'SPEAKING' }[realtimeStatus]
     : 'LIVE VOICE';
 
   // The portrait and the rings around it shrink together. A collapsed header uses the
@@ -108,7 +110,7 @@ export function LiveScreenView(props: LiveScreenViewProps) {
     />
     </View>
   ) : (
-    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || liveConfigError !== null || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" unavailable={liveConfigError !== null} voice={floatingAsha.voice ?? undefined}>
+    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || liveConfigError !== null || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onMicrophoneChange={floatingAsha.available ? undefined : setOwnedMicOn} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} resumeHistory={floatingAsha.available ? undefined : resumeHistory} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" unavailable={liveConfigError !== null} voice={floatingAsha.voice ?? undefined}>
       <Image
         accessible={false}
         cachePolicy="memory-disk"

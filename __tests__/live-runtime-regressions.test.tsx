@@ -119,6 +119,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       history,
       onConnectionStart,
       onError,
+      onMicrophoneChange,
       onMicrophonePhase,
       onSessionEvent,
       onStatusChange,
@@ -134,6 +135,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       history?: unknown;
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
       onError: (message: string, details?: { kind?: string }) => void;
+      onMicrophoneChange?: (enabled: boolean) => void;
       onMicrophonePhase?: (phase: 'idle' | 'explaining' | 'denied') => void;
       onSessionEvent?: (event: { type: 'starting' | 'ready' | 'ended'; reason?: string }) => void;
       onStatusChange?: (status: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding') => void;
@@ -150,7 +152,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         { id: 'live-asha', speaker: 'asha', text: turn.reply, startMs: 500, endMs: 1500, fragments: [] },
       ]);
       mockReact.useEffect(() => {
-        onTurnActionReady?.(() => onStatusChange?.('recording'));
+        onTurnActionReady?.(() => (onStatusChange?.('recording'), onMicrophoneChange?.(true)));
         return () => onTurnActionReady?.(null);
       }, [onStatusChange, onTurnActionReady]);
       return mockReact.createElement(
@@ -198,7 +200,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         {
           accessibilityLabel: 'Mock realtime connecting',
           onPress: async () => {
-            onStatusChange?.('connecting');
+            (onStatusChange?.('connecting'), onMicrophoneChange?.(false));
             await onConnectionStart?.(new AbortController().signal);
           },
         },
@@ -208,7 +210,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock realtime ready',
-          onPress: () => onStatusChange?.('ready'),
+          onPress: () => (onStatusChange?.('ready'), onMicrophoneChange?.(false)),
         },
         mockReact.createElement(MockText, null, 'Mock ready'),
       ),
@@ -216,7 +218,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock realtime recording',
-          onPress: () => onStatusChange?.('recording'),
+          onPress: () => (onStatusChange?.('recording'), onMicrophoneChange?.(true)),
         },
         mockReact.createElement(MockText, null, 'Mock recording'),
       ),
@@ -224,7 +226,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock realtime responding',
-          onPress: () => onStatusChange?.('responding'),
+          onPress: () => (onStatusChange?.('responding'), onMicrophoneChange?.(false)),
         },
         mockReact.createElement(MockText, null, 'Mock responding'),
       ),
@@ -234,7 +236,7 @@ jest.mock('@/components/realtime-voice-button', () => {
           accessibilityLabel: 'Mock completed realtime reply',
           onPress: () => {
             onTurnComplete({ transcript: 'Namaste', reply: 'A completed voice reply.', language: 'en' });
-            onStatusChange?.('ready');
+            (onStatusChange?.('ready'), onMicrophoneChange?.(false));
           },
         },
         mockReact.createElement(MockText, null, 'Mock completed reply'),
@@ -276,7 +278,7 @@ jest.mock('@/components/realtime-voice-button', () => {
         MockPressable,
         {
           accessibilityLabel: 'Mock realtime disconnected',
-          onPress: () => onStatusChange?.('disconnected'),
+          onPress: () => (onStatusChange?.('disconnected'), onMicrophoneChange?.(false)),
         },
         mockReact.createElement(MockText, null, 'Mock disconnected'),
       ),
@@ -334,7 +336,7 @@ jest.mock('@/components/realtime-voice-button', () => {
           accessibilityLabel: 'Mock session interrupted',
           onPress: () => {
             onSessionEvent?.({ type: 'ended', reason: 'connection_lost' });
-            onStatusChange?.('disconnected');
+            (onStatusChange?.('disconnected'), onMicrophoneChange?.(false));
           },
         },
         mockReact.createElement(MockText, null, 'Mock interrupted'),
@@ -1267,8 +1269,9 @@ describe('immersive live conversation design', () => {
       await fireEvent.press(view.getByLabelText('Mock realtime ready'));
       scrollLiveChat(view, 0);
       scrollToEnd.mockClear();
+      // During a call the suggestion chips leave the screen, so nothing can be sent.
+      expect(view.queryByRole('button', { name: 'Order tea' })).toBeNull();
       await act(async () => {
-        getOnPress(view.getByRole('button', { name: 'Order tea' }))();
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
 
@@ -1331,7 +1334,7 @@ describe('immersive live conversation design', () => {
     await fireEvent.press(view.getByLabelText('Mock realtime connecting'));
     expect(view.getByText('Connecting to Asha')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
-    expect(view.getByText('Your microphone is on')).toBeTruthy();
+    expect(view.getByText('Asha is listening')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     expect(view.getByText('Asha is speaking')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
@@ -1442,7 +1445,8 @@ describe('immersive live conversation design', () => {
 
     expect(view.queryByLabelText('Connect with Asha')).toBeNull();
     expect(view.queryByText('Live microphone')).toBeNull();
-    expect(view.queryByText('Your microphone is muted')).toBeNull();
+    // With the transcript tucked away for the call, the hero keeps its title.
+    expect(view.getByText('Your microphone is muted')).toBeTruthy();
     expect(view.getByText('Tap Asha to unmute and join the conversation.')).toBeTruthy();
     expect(within(view.getByTestId('asha-voice-status')).getByText('MUTED')).toBeTruthy();
     const unmute = view.getByLabelText('Unmute microphone');
@@ -1450,7 +1454,7 @@ describe('immersive live conversation design', () => {
     expect(within(view.getByTestId('live-chat-list')).queryByLabelText('Unmute microphone')).toBeNull();
     await fireEvent.press(unmute);
     expect(view.getByLabelText('Mute microphone')).toBeTruthy();
-    expect(view.getByText('Speak naturally, even while Asha talks. Tap to mute.')).toBeTruthy();
+    expect(view.getByText('Go ahead, speak naturally. Tap Asha to mute.')).toBeTruthy();
 
     await view.unmount();
     await flushMicrotasks();
@@ -2019,7 +2023,9 @@ describe('offline capture and queued reports', () => {
 
     await fireEvent.press(view.getByLabelText('Mock session interrupted'));
     const banner = view.getByTestId('live-interrupted-banner');
-    expect(within(banner).getByText('Connection lost. This conversation is saved on your device.')).toBeTruthy();
+    expect(within(banner).getByText('Lost connection. Want to pick up where we left off?')).toBeTruthy();
+    expect(within(banner).getByTestId('live-resume')).toBeTruthy();
+    expect(within(banner).getByTestId('live-start-fresh')).toBeTruthy();
     expect(banner.props.accessibilityLiveRegion).toBe('polite');
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
 
@@ -2581,10 +2587,12 @@ describe('live coaching state', () => {
     ]);
 
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByRole('tab', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(true);
-    expect(view.getByRole('tab', { name: 'Asha voice language: Hindi' }).props.accessibilityState.disabled).toBe(true);
-    await fireEvent.press(view.getByRole('tab', { name: 'Asha voice language: English' }));
+    // The language is fixed for the call, so the switch leaves the screen until it ends.
+    expect(view.queryByRole('tab', { name: 'Asha voice language: English' })).toBeNull();
+    expect(view.queryByRole('tab', { name: 'Asha voice language: Hindi' })).toBeNull();
     expect(view.getByTestId('mock-realtime-language').props.children).toBe('hi');
+    await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
+    expect(view.getByRole('tab', { name: 'Asha voice language: English' }).props.accessibilityState.disabled).toBe(false);
 
     await view.unmount();
     await flushMicrotasks();
@@ -2617,6 +2625,9 @@ describe('live coaching state', () => {
     // A greeting arriving before the connected-status effect is not cleared.
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
+    // The call keeps its transcript one tap away.
+    expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
+    await fireEvent.press(view.getByTestId('live-call-transcript-toggle'));
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('Mock realtime disconnected'));
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
@@ -2698,6 +2709,7 @@ describe('live coaching state', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await act(async () => { clearAction?.onPress?.(); await Promise.resolve(); });
     expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    await fireEvent.press(view.getByTestId('live-call-transcript-toggle'));
     expect(view.getByLabelText('Asha: Hello there.')).toBeTruthy();
     await view.unmount();
     alert.mockRestore();
@@ -2845,14 +2857,16 @@ describe('live audio control exclusion', () => {
     await fireEvent.press(view.getByLabelText('Create Asha reply'));
     await fireEvent.press(view.getByLabelText('Mock realtime recording'));
 
-    expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
+    // Typing waits for the call to end; the transcript opens on request.
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
+    expect(view.queryByText('Correct my Hindi')).toBeNull();
+    await fireEvent.press(view.getByTestId('live-call-transcript-toggle'));
     await openMoreMenu(view);
     for (const listen of view.getAllByLabelText(/Read reply aloud:/u)) {
       expect(listen.props.accessibilityState?.disabled ?? listen.props.disabled).toBe(true);
       await fireEvent.press(listen);
     }
     await fireEvent.press(view.getByLabelText('Close menu'));
-    await fireEvent.press(view.getByText('Correct my Hindi'));
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
 
@@ -2870,8 +2884,8 @@ describe('live audio control exclusion', () => {
   it('blocks typed chat and replay while the connected microphone is muted', async () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime ready'));
-    expect(view.getByLabelText('Message Asha').props.editable).toBe(false);
-    await fireEvent.press(view.getByLabelText('Send message'));
+    expect(view.queryByLabelText('Message Asha')).toBeNull();
+    expect(view.queryByLabelText('Send message')).toBeNull();
     expect(boloApi.sendMobileChat).not.toHaveBeenCalled();
     expect(speech.speakText).not.toHaveBeenCalled();
     await view.unmount();
@@ -2881,6 +2895,7 @@ describe('live audio control exclusion', () => {
     const view = await render(<LiveScreen />);
     await fireEvent.press(view.getByLabelText('Mock realtime responding'));
     await fireEvent.press(view.getByLabelText('Mock completed realtime reply'));
+    await fireEvent.press(view.getByTestId('live-call-transcript-toggle'));
     // The menu stays open across status changes, so the Listen item reflects each state.
     await openMoreMenu(view);
     const read = () => view.getByLabelText('Read reply aloud: A completed voice reply.');

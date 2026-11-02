@@ -21,6 +21,8 @@ export function LiveChatList(props: LiveScreenViewProps & {
   aiConsent,
   animatedFollowRef,
   busy,
+  callFocus,
+  realtimeLocked,
   discardReport,
   focusAshaComposer,
   followTail,
@@ -75,7 +77,7 @@ export function LiveChatList(props: LiveScreenViewProps & {
         onScrollBeginDrag={releaseAnimatedFollow}
         onScrollEndDrag={releaseAnimatedFollow}
         scrollEventThrottle={16}
-        data={aiConsent ? visibleMessages : []}
+        data={aiConsent && !callFocus ? visibleMessages : []}
         keyExtractor={(message) => message.id}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
@@ -96,7 +98,7 @@ export function LiveChatList(props: LiveScreenViewProps & {
               </View>
             ) : null}
 
-            <AskAshaSection {...props} />
+            {realtimeLocked ? null : <AskAshaSection {...props} />}
           </View>
         )}
         onContentSizeChange={() => {
@@ -132,7 +134,7 @@ export function LiveChatList(props: LiveScreenViewProps & {
             styles={styles}
           />
         )}
-        ListFooterComponent={aiConsent ? (
+        ListFooterComponent={aiConsent && !realtimeLocked ? (
           <>
             {busy && pendingUserMessage ? <AshaTypingRow reducedMotion={reducedMotion} styles={styles} /> : null}
             <FeaturedPhrase {...props} />

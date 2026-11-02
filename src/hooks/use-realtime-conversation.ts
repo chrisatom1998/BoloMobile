@@ -17,8 +17,17 @@ import type { AshaResponseLanguage } from '@/state/app-state-types';
 
 
 export type { LiveTranscriptRow } from '@/lib/live-transcripts';
-export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding';
+/**
+ * `recording` is Listening (mic open, nobody talking), `thinking` is the gap after the learner
+ * spoke and before Asha's audio starts, `responding` is Asha speaking, `ready` is muted.
+ */
+export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'recording' | 'thinking' | 'responding';
 export type RealtimeTranscriptUpdate = { speaker: 'you' | 'asha'; text: string };
+export type StartTurnOptions = {
+  /** Reconnect with the recent conversation instead of starting a fresh one. */
+  resume?: boolean;
+};
+export type ConnectionStartInfo = { resume: boolean };
 /** Startup-only session setup, read once when a live session connects. */
 export type LiveSessionSetup = {
   mode?: LiveMode;
@@ -32,8 +41,10 @@ type Options = {
   responseLanguage?: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
   liveSession?: () => LiveSessionSetup | null;
+  /** Recent turns handed to Asha when a dropped call is resumed. Read once per resume. */
+  resumeHistory?: () => { role: 'you' | 'asha'; text: string }[];
   /** Runs once per new connection, before any transport or transcript can arrive. */
-  onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
+  onConnectionStart?: (signal: AbortSignal, info: ConnectionStartInfo) => void | Promise<void>;
   onError: (message: string) => void;
   /** Session lifecycle for the on-device session log: once per start, ready, and end. */
   onSessionEvent?: (event: AshaSessionEvent) => void;
@@ -59,6 +70,12 @@ type PendingCommand = {
 const START_TIMEOUT_MS = 15_000;
 const COMMAND_TIMEOUT_MS = 10_000;
 const DIAGNOSTICS_POLL_MS = 1_000;
+/** After the learner's last transcribed word, how long the screen keeps showing Listening before Thinking. */
+const USER_SPEAKING_HOLD_MS = 900;
+/** Thinking never sticks: if no reply starts, go back to Listening. */
+const THINKING_TIMEOUT_MS = 8_000;
+/** The most recent turns sent back to Asha on resume. The server trims further. */
+const RESUME_HISTORY_TURNS = 10;
 
 /** Applies the realtime audio mode and, in preview builds, records whether iOS accepted it. */
 async function applyRealtimeAudioMode() {
@@ -98,12 +115,51 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
   const toolExecutorRef = useRef<LiveToolExecutor | null>(null);
   // True from a connection attempt's start until its end has been reported.
   const sessionOpenRef = useRef(false);
+  // Conversation phase inputs: when the learner's words last arrived, and whether a reply is awaited.
+  const userSpeakingUntilRef = useRef(0);
+  const thinkingRef = useRef(false);
+  const phaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resumeRef = useRef(false);
+  // The mic was muted by a brief interruption (Control Center, Siri, an incoming call) and should reopen.
+  const pausedByInterruptionRef = useRef(false);
+
+  const clearPhaseTimer = () => {
+    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    phaseTimerRef.current = null;
+  };
 
   const updateStatus = useCallback((next?: RealtimeVoiceStatus) => {
-    const value = next ?? (microphoneRef.current ? 'recording' : playingRef.current ? 'responding' : 'ready');
+    const now = Date.now();
+    const userSpeaking = userSpeakingUntilRef.current > now;
+    // Priority: the learner talking (even over Asha) > Asha's audio > waiting for a reply > mic open > muted.
+    const value = next ?? (
+      !microphoneRef.current ? (playingRef.current ? 'responding' : 'ready')
+        : userSpeaking ? 'recording'
+          : playingRef.current ? 'responding'
+            : thinkingRef.current ? 'thinking'
+              : 'recording');
     statusRef.current = value;
     setStatus(value);
   }, []);
+
+  /**
+   * After the learner's speaking hold, show Thinking if no reply has started, and drop
+   * back to Listening if nothing arrives within the thinking budget.
+   */
+  const schedulePhaseCheck = useCallback(() => {
+    clearPhaseTimer();
+    phaseTimerRef.current = setTimeout(() => {
+      phaseTimerRef.current = null;
+      if (statusRef.current === 'disconnected' || statusRef.current === 'connecting') return;
+      updateStatus();
+      if (!thinkingRef.current) return;
+      phaseTimerRef.current = setTimeout(() => {
+        phaseTimerRef.current = null;
+        thinkingRef.current = false;
+        if (statusRef.current !== 'disconnected' && statusRef.current !== 'connecting') updateStatus();
+      }, THINKING_TIMEOUT_MS);
+    }, USER_SPEAKING_HOLD_MS);
+  }, [updateStatus]);
 
   const disconnect = useCallback((reason?: AshaSessionEndReason) => {
     lifecycleRef.current += 1;
@@ -135,6 +191,10 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     peer?.close();
     microphoneRef.current = false;
     playingRef.current = false;
+    clearPhaseTimer();
+    userSpeakingUntilRef.current = 0;
+    thinkingRef.current = false;
+    pausedByInterruptionRef.current = false;
     setMicrophoneEnabled(false);
     setIsPlaying(false);
     updateStatus('disconnected');
@@ -159,7 +219,21 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     }
     if (event.type === 'session.input_transcript.delta' || event.type === 'session.output_transcript.delta') {
       if (typeof event.delta !== 'string' || typeof event.start_ms !== 'number' || typeof event.end_ms !== 'number') return;
-      const update = transcriptsRef.current.append(event.type === 'session.input_transcript.delta' ? 'you' : 'asha', {
+      const fromLearner = event.type === 'session.input_transcript.delta';
+      if (fromLearner) {
+        // The learner is talking: show Listening at once, even over Asha, and expect a reply after.
+        // Words arriving while Asha's audio plays mean she was cut off mid-sentence.
+        if (playingRef.current) transcriptsRef.current.markInterrupted('asha');
+        userSpeakingUntilRef.current = Date.now() + USER_SPEAKING_HOLD_MS;
+        thinkingRef.current = true;
+        updateStatus();
+        schedulePhaseCheck();
+      } else if (thinkingRef.current) {
+        // Asha's reply has started arriving, so the wait is over.
+        thinkingRef.current = false;
+        updateStatus();
+      }
+      const update = transcriptsRef.current.append(fromLearner ? 'you' : 'asha', {
         delta: event.delta, start_ms: event.start_ms, end_ms: event.end_ms, event_id: event.event_id,
       });
       if (!update) return;
@@ -187,7 +261,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     } else if (event.type === 'session.closed') {
       disconnect('connection_lost');
     }
-  }, [disconnect, updateStatus]);
+  }, [disconnect, schedulePhaseCheck, updateStatus]);
 
   const connect = useCallback((): Promise<void> => {
     if (connectRef.current) return connectRef.current;
@@ -212,10 +286,16 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     const executor = setup?.toolEnvironment ? createLiveToolExecutor(setup.toolEnvironment) : null;
     toolExecutorRef.current = executor;
     let serverSessionId: string | undefined;
+    const resume = resumeRef.current;
+    resumeRef.current = false;
+    // A resumed call hands Asha the recent turns so she picks up where the learner left off.
+    const history = resume
+      ? (callbacksRef.current.resumeHistory?.() ?? callbacksRef.current.history ?? []).slice(-RESUME_HISTORY_TURNS)
+      : callbacksRef.current.history;
     sessionOpenRef.current = true;
     callbacksRef.current.onSessionEvent?.({ type: 'starting', mode: setup?.mode, lessonId: setup?.context?.lessonId });
     const promise = (async () => {
-      await callbacksRef.current.onConnectionStart?.(controller.signal);
+      await callbacksRef.current.onConnectionStart?.(controller.signal, { resume });
       if (!current()) return;
       if (Platform.OS === 'ios' && !Device.isDevice) {
         throw new Error('Live voice requires a physical iPhone because iOS Simulator cannot safely initialize microphone audio.');
@@ -236,7 +316,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
             clientId,
             offerSdp,
             responseLanguage,
-            history: callbacksRef.current.history,
+            history,
             ...(setup?.mode ? { mode: setup.mode } : {}),
             ...(setup?.context ? { context: setup.context } : {}),
             ...(executor ? { clientTools: true } : {}),
@@ -266,6 +346,8 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
         onPlaybackChange: (playing) => {
           if (!current()) return;
           playingRef.current = playing;
+          // Asha's voice is the reply: the wait is over as soon as it starts.
+          if (playing) { thinkingRef.current = false; clearPhaseTimer(); }
           setIsPlaying(playing);
           if (live) updateStatus();
         },
@@ -356,10 +438,12 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     });
   }, [disconnect, updateStatus]);
 
-  const startTurn = useCallback((): Promise<void> => {
+  const startTurn = useCallback((options?: StartTurnOptions): Promise<void> => {
     if (startRef.current) return startRef.current;
     if (microphoneRef.current) return Promise.resolve();
     const lifecycle = lifecycleRef.current;
+    // Only a fresh connection can resume; an open call ignores the flag.
+    if (options?.resume && !peerRef.current && !connectRef.current) resumeRef.current = true;
     const promise = (async () => {
       await connect();
       if (lifecycleRef.current !== lifecycle || !peerRef.current) return;
@@ -403,17 +487,34 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     appStateRef.current = AppState.currentState;
     const subscription = AppState.addEventListener('change', (next) => {
       appStateRef.current = next;
-      // A scene that became active after the call started may not have had audio allowed yet.
-      if (next === 'active' && peerRef.current) void reactivateRealtimeAudio().catch(() => undefined);
-      // Permission dialogs can transiently make iOS inactive during connection.
-      if (next === 'active' || (next === 'inactive' && statusRef.current === 'connecting')) return;
+      if (next === 'active') {
+        // A scene that became active after the call started may not have had audio allowed yet.
+        if (peerRef.current) void reactivateRealtimeAudio().catch(() => undefined);
+        // Back from a brief interruption: reopen the mic the pause closed.
+        if (pausedByInterruptionRef.current && peerRef.current) {
+          pausedByInterruptionRef.current = false;
+          void setInputEnabled(true).catch(() => undefined);
+        }
+        return;
+      }
+      if (next === 'inactive') {
+        // iOS goes inactive for Control Center, Siri, an incoming call banner, or a permission
+        // dialog. Keep the call open and only mute, so coming back is seamless. Leaving the app
+        // for real arrives as 'background' next and ends the call below.
+        if (statusRef.current === 'connecting' || !peerRef.current) return;
+        if (microphoneRef.current) {
+          pausedByInterruptionRef.current = true;
+          void setInputEnabled(false).catch(() => undefined);
+        }
+        return;
+      }
       // An idle hook (the floating session stays mounted between calls) must not
       // reset the shared audio route while another screen is playing.
       if (statusRef.current === 'disconnected' && !peerRef.current) return;
       disconnect('backgrounded');
     });
     return () => subscription.remove();
-  }, [disconnect]);
+  }, [disconnect, setInputEnabled]);
   // Startup-only language and identity fields require a fresh Live session.
   useEffect(() => () => disconnect('config_changed'), [clientId, responseLanguage, disconnect]);
   // Withdrawn consent must end a session that is still mounted.
