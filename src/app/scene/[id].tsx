@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View, type ScrollViewInstance, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -125,7 +125,7 @@ function SceneScreen() {
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const wordSheetSessionRef = useRef(0);
   const closingWordSessionRef = useRef(0);
-  const sceneScrollRef = useRef<ScrollView>(null);
+  const sceneScrollRef = useRef<ScrollViewInstance>(null);
   const sceneViewportHeightRef = useRef(0);
   const sceneScrollYRef = useRef(0);
   const pendingResolutionScrollRef = useRef(false);

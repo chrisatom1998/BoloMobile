@@ -80,7 +80,7 @@ async function createPreparedAudio(
   const file = new File(Paths.cache, `bolo-ai-voice-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`);
   const files = [file];
   try {
-    file.write(audio.audioBase64, { encoding: 'base64' });
+    await file.write(audio.audioBase64, { encoding: 'base64' });
     let playbackFile = file;
     // Generated Asha chat replies and canonical live replies are boosted.
     // AVAudioFile processes the downloaded MP3 without touching AVAudioSession.

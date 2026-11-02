@@ -1,6 +1,6 @@
 # Expo HAS CHANGED
 
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
+Read the exact versioned docs at https://docs.expo.dev/versions/v58.0.0/ before writing any code.
 
 # Model roles
 
@@ -22,7 +22,7 @@ On boot, the marketing site listens on port 3000 and the Expo app listens on por
 
 # Expo version pins (iPhone live-voice microphone)
 
-`expo` is pinned to 57.0.27, `expo-modules-core` / `expo-constants` to 57.0.21, and `package.json` → `expo.install.exclude` lists the packages held at their Oct 21 2026 versions. The Oct 29 Expo patch releases made the iPhone microphone send silence in Asha live voice (bisected on a device 2026-10-30, PR #82). `expo-doctor` would otherwise ask to upgrade them back. Remove the pins and the exclude list together, and only after live voice has been checked on a real iPhone: two Asha calls in a row, with the phone unplugged from the Mac and Continuity Camera off, since a cabled Mac can claim the iPhone microphone and make every app on the phone record silence.
+`expo` is pinned to 58.0.22 and `expo-constants` to 58.0.14. `expo-modules-core` stays at 58.0.29 through Expo's own dependency (the override was removed: Expo Doctor rejects a direct dependency, and the override nested the package where Jest could not load it). `package.json` → `expo.install.exclude` lists the same packages as before. Those version pins moved with the SDK 58 upgrade, because SDK 58 cannot run on the SDK 57 modules. The Oct 29 2026 Expo patch releases made the iPhone microphone send silence in Asha live voice (bisected on a device 2026-10-30, PR #82). `expo-doctor` would otherwise ask to upgrade the excluded packages. Remove the pins and the exclude list together, and only after live voice has been checked on a real iPhone: two Asha calls in a row, with the phone unplugged from the Mac and Continuity Camera off, since a cabled Mac can claim the iPhone microphone and make every app on the phone record silence.
 
 # Design system
 

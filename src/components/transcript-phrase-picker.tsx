@@ -1,6 +1,6 @@
 import { X } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Modal, Platform, ScrollView, Text, TextInput, View } from 'react-native';
+import { Keyboard, Modal, Platform, ScrollView, Text, TextInput, View, type ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSheetDismiss } from '@/components/sheet-exit';
@@ -42,7 +42,7 @@ export function TranscriptPhrasePicker({ aiConsent, clientId, message, onClose, 
   const mountedRef = useRef(true);
   const requestRef = useRef<AbortController | null>(null);
   const savedSessionRef = useRef(-1);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const [saving, setSaving] = useState(false);
   const finishDismiss = useSheetDismiss(visible, onDismissed);
   const openKey = `${message.id}\0${initialText}\0${initialSource}\0${prefill ? JSON.stringify(prefill) : ''}`;

@@ -138,11 +138,12 @@ describe('Expo app configuration', () => {
     expect(appJson.expo.splash).toBeUndefined();
   });
 
-  it('opts iOS into the UIKit scene lifecycle required by the iOS 27 SDK', () => {
+  it('leaves the iOS scene lifecycle to Expo SDK 58', () => {
     const appJson = require('../app.json') as { expo: { plugins: unknown[] } };
     const plugin = appJson.expo.plugins.find((entry) => Array.isArray(entry) && entry[0] === 'expo-build-properties');
 
-    expect(plugin).toEqual(['expo-build-properties', { ios: { enableSceneSupport: true } }]);
+    // SDK 58 generates the scene delegate itself. The SDK 57 enableSceneSupport flag must stay off.
+    expect(plugin).toBeUndefined();
   });
 
   it('declares the app-owned iOS data collection without tracking', () => {

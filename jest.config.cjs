@@ -2,7 +2,7 @@ const expoPreset = require('jest-expo/jest-preset');
 
 module.exports = {
   "preset": "jest-expo",
-  "resolver": "react-native-worklets/jest/resolver.js",
+  "resolver": "react-native-reanimated/jest/resolver.js",
   "moduleNameMapper": {
     "^@/(.*)$": "<rootDir>/src/$1",
     "^heroui-native(?:/.*)?$": "<rootDir>/__mocks__/heroui-native.js",
@@ -11,7 +11,8 @@ module.exports = {
   },
   "testPathIgnorePatterns": [
     "/node_modules/",
-    "/src/app/"
+    "/src/app/",
+    "/website/"
   ],
   "restoreMocks": true,
   "clearMocks": true,

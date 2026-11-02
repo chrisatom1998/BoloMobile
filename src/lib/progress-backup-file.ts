@@ -27,7 +27,7 @@ export async function shareProgressBackup(contents: string, fileName: string): P
   const file = new File(Paths.cache, fileName);
   try {
     file.create({ overwrite: true });
-    file.write(contents);
+    await file.write(contents);
   } catch {
     deleteQuietly(file);
     throw new ProgressBackupFileError('Bolo could not prepare the backup file. Check available storage and try again.');

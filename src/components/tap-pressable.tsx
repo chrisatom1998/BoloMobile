@@ -1,12 +1,12 @@
 import { forwardRef } from 'react';
-import { Pressable, StyleSheet, type PressableProps, type PressableStateCallbackType, type View } from 'react-native';
+import { Pressable, StyleSheet, type PressableInstance, type PressableProps, type PressableStateCallbackType } from 'react-native';
 
 /**
  * Drop-in `Pressable` with the quick dim-and-settle highlight iOS controls
  * give on touch. Screens import it in place of React Native's `Pressable`, so
  * every tappable surface answers a press the same way without restyling.
  */
-export const TapPressable = forwardRef<View, PressableProps>(function TapPressable({ disabled, style, ...rest }, ref) {
+export const TapPressable = forwardRef<PressableInstance, PressableProps>(function TapPressable({ disabled, style, ...rest }, ref) {
   return (
     <Pressable
       ref={ref}

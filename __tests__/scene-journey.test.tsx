@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
-import { Alert, Dimensions, ScrollView, StyleSheet } from 'react-native';
+import { Alert, Dimensions, ScrollView, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { lessonHindiLabel } from '../src/lib/lesson-display';
 import type { SceneAttempt, ScriptPreference } from '../src/state/app-state-types';
@@ -147,10 +147,10 @@ function resumeAt(lastBeatIndex: number, overrides: Partial<SceneAttempt> = {}) 
 function tapTargetHeight(pressable: { props: { hitSlop?: number | { top?: number; bottom?: number }; style?: unknown } }, label: { props: { style?: unknown } }) {
   const hitSlop = pressable.props.hitSlop;
   const slop = typeof hitSlop === 'number' ? hitSlop * 2 : (hitSlop?.top ?? 0) + (hitSlop?.bottom ?? 0);
-  const text = StyleSheet.flatten(label.props.style) as { lineHeight?: number; fontSize?: number } | undefined;
+  const text = StyleSheet.flatten(label.props.style as StyleProp<TextStyle>) as { lineHeight?: number; fontSize?: number } | undefined;
   // Without an explicit lineHeight, iOS lays a 13pt label out at roughly 1.2x its font size.
   const lineHeight = text?.lineHeight ?? Math.round((text?.fontSize ?? 14) * 1.2);
-  const minHeight = (StyleSheet.flatten(pressable.props.style) as { minHeight?: number } | undefined)?.minHeight ?? 0;
+  const minHeight = (StyleSheet.flatten(pressable.props.style as StyleProp<ViewStyle>) as { minHeight?: number } | undefined)?.minHeight ?? 0;
   return Math.max(minHeight, lineHeight + slop);
 }
 
