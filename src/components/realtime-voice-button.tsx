@@ -318,7 +318,7 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
       <Pressable
         accessibilityHint={unavailable ? undefined : accessibilityHint}
         accessibilityLabel={controlLabel('talk')}
-        accessibilityRole="button"
+        accessibilityRole={unavailable ? undefined : 'button'}
         accessibilityState={{ disabled: blocked }}
         disabled={blocked}
         onPress={press}
@@ -355,7 +355,7 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
           <Pressable
             accessibilityLabel={controlLabel('talk')}
             accessibilityHint={unavailable ? undefined : accessibilityHint}
-            accessibilityRole="button"
+            accessibilityRole={unavailable ? undefined : 'button'}
             accessibilityState={{ disabled: blocked }}
             disabled={blocked}
             onPress={press}
@@ -471,5 +471,5 @@ const useStyles = makeStyles((c) => ({
   portraitBadgeRecording: { backgroundColor: c.orbRecording },
   portraitBadgeConnecting: { backgroundColor: c.heroSubtle },
   endButtonPortrait: { right: 0 },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: layout.voiceUnavailableOpacity },
 }));

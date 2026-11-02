@@ -115,8 +115,10 @@ export const layout = {
    * The Asha header starts as a compact bar with a small avatar so a chat bubble fits.
    */
   accessibilityFontScale: 1.6,
-  /** Caps the Asha title, Private label, subtitle, and READY status. */
+  /** Caps the Asha title, Private label, subtitle, READY status, and the voice-off card. */
   headerFontScaleCap: 1.3,
+  /** Portrait and mic when live voice is off. Same dim as a disabled control, with no new color. */
+  voiceUnavailableOpacity: 0.5,
   /**
    * Caps the composer so three lines can hold "Ask in English or Hindi…".
    * Still well above the body size, so the field grows at accessibility sizes.

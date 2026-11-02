@@ -1173,11 +1173,11 @@ export default function LiveScreen() {
 
             {liveConfigError ? (
               <View accessibilityRole="alert" style={[styles.liveConfigCard, { width: heroContentWidth }]} testID="live-voice-config-error">
-                <Text style={styles.liveConfigTitle}>Voice isn’t set up</Text>
+                <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveConfigTitle}>Voice isn’t set up</Text>
                 <Text accessibilityLanguage="hi-IN" maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveConfigHindi}>आवाज़ तैयार नहीं</Text>
-                <Text style={styles.liveConfigBody}>{liveConfigError}</Text>
+                <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveConfigBody}>{liveConfigError}</Text>
                 <Pressable accessibilityRole="button" onPress={focusAshaComposer} style={styles.talkButton} testID="type-to-asha">
-                  <Text style={styles.talkButtonText}>Type to Asha</Text>
+                  <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.talkButtonText}>Type to Asha</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -1423,7 +1423,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   liveConfigTitle: { ...type.title, color: c.ink },
   liveConfigHindi: { ...hindiType(type.body.fontSize), color: c.brand },
   liveConfigBody: { ...type.body, color: c.ink },
-  voiceUnavailable: { opacity: 0.5 },
+  voiceUnavailable: { opacity: layout.voiceUnavailableOpacity },
   voiceOffCaption: { ...type.caption, flexShrink: 0, color: c.heroSubtle, textAlign: 'center' },
   screenHeader: { alignItems: 'center', backgroundColor: c.night, paddingBottom: spacing.xs },
   headerSettings: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
