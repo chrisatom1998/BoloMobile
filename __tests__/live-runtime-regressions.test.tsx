@@ -1012,10 +1012,14 @@ describe('immersive live conversation design', () => {
     };
     try {
       await fireEvent.press(view.getByLabelText('Create Asha reply'));
+      // The tail follow retries once on the next frame (16ms, then two frames).
+      // A 20ms wait can clear the spy before that second call, which then looks
+      // like the header growth scrolled.
       await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 80));
       });
-      expect(scrollToEnd.mock.calls.length).toBeGreaterThan(0);
+      expect(scrollToEnd).toHaveBeenNthCalledWith(1, { animated: false });
+      expect(scrollToEnd).toHaveBeenNthCalledWith(2, { animated: false });
       scrollToEnd.mockClear();
 
       await fireEvent.press(view.getByLabelText('Mock realtime ready'));
