@@ -36,18 +36,30 @@ export function getBoloApiUrl() {
   return configuredApiUrl();
 }
 
-export function getBoloLiveApiUrl() {
+/** Shown on the Asha screen, in every build, when this copy has no trusted live server. */
+export const LIVE_VOICE_CONFIG_MESSAGE = 'Live voice isn’t available right now. You can still type to Asha.';
+
+function configuredLiveApiUrl(): string | null {
   const value = Constants.expoConfig?.extra?.boloLiveApiUrl;
-  if (typeof value === 'string' && value.trim()) {
-    try {
-      const url = new URL(value.trim());
-      if (url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash) {
-        return value.trim().replace(/\/+$/u, '');
-      }
-    } catch { /* Surface the same actionable configuration message. */ }
-  }
-  if (__DEV__) console.warn('Live voice is not configured in this build. Set BOLO_LIVE_API_URL to a trusted HTTPS GPT-Live server.');
-  throw new BoloApiError('Live voice isn’t available right now. You can still type to Asha.', { kind: 'config' });
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash) {
+      return value.trim().replace(/\/+$/u, '');
+    }
+  } catch { /* Invalid URLs use the same configuration message. */ }
+  return null;
+}
+
+/** Null when live voice can start. A string is the user-facing setup error for every build. */
+export function liveVoiceConfigError(): string | null {
+  return configuredLiveApiUrl() ? null : LIVE_VOICE_CONFIG_MESSAGE;
+}
+
+export function getBoloLiveApiUrl() {
+  const url = configuredLiveApiUrl();
+  if (!url) throw new BoloApiError(LIVE_VOICE_CONFIG_MESSAGE, { kind: 'config' });
+  return url;
 }
 
 export type AiVoiceAudio = {

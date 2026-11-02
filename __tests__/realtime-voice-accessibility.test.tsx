@@ -36,7 +36,7 @@ jest.mock('@/hooks/use-realtime-conversation', () => ({
 }));
 
 import { RealtimeVoiceButton, reducedMotionRipple } from '../src/components/realtime-voice-button';
-import { lightColors } from '../src/theme';
+import { layout, lightColors } from '../src/theme';
 
 const haptics = jest.requireMock('@/lib/haptics') as {
   hapticStartRecording: jest.Mock;
@@ -170,7 +170,7 @@ describe('realtime voice accessibility', () => {
     expect(end).toMatchObject({ backgroundColor: lightColors.dangerSoft, borderColor: lightColors.dangerLine, right: 0, top: 28 });
   });
   describe('portrait variant', () => {
-    const renderPortrait = (props: { compact?: boolean; disabled?: boolean } = {}) => render(
+    const renderPortrait = (props: { compact?: boolean; disabled?: boolean; unavailable?: boolean } = {}) => render(
       <RealtimeVoiceButton clientId="client-12345678" onError={jest.fn()} size="portrait" tone="dark" {...props}>
         <Text testID="portrait-face">Asha</Text>
       </RealtimeVoiceButton>,
@@ -206,6 +206,16 @@ describe('realtime voice accessibility', () => {
       expect(StyleSheet.flatten(recording.getByTestId('realtime-voice-portrait-badge').props.style).backgroundColor).toBe(lightColors.orbRecording);
       await fireEvent.press(recording.getByLabelText('Mute microphone'));
       expect(mockFinishTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it('dims an unavailable portrait and does not call it a button', async () => {
+      mockVoiceStatus = 'disconnected';
+      const view = await renderPortrait({ unavailable: true });
+      const portrait = view.getByLabelText('Asha voice, unavailable');
+
+      expect(portrait.props.accessibilityState).toEqual({ disabled: true });
+      expect(portrait.props.accessibilityRole).toBeUndefined();
+      expect(StyleSheet.flatten(portrait.props.style).opacity).toBe(layout.voiceUnavailableOpacity);
     });
 
     it('shrinks with the compact layout and exposes disabled state', async () => {

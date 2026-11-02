@@ -280,7 +280,7 @@ export default function HomeScreen() {
         </View>
       </MotionReveal>
     </View>
-  ), [colors, dateLine, dayComplete, dueCount, goal, goalPercent, hero, largeTextLayout, minutesLabel, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, visibleSteps, watermark]);
+  ), [colors, dateLine, dayComplete, dueCount, goal, goalMet, goalPercent, hero, largeTextLayout, minutesLabel, motionMode, router, currentStep, stackedTopbarLayout, stepCopy, streak, styles, visibleSteps, watermark]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 

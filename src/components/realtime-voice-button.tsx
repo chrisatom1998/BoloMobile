@@ -31,6 +31,8 @@ type Props = {
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
+  /** Missing live URL. The portrait and mic stay on screen, but they cannot start a call. */
+  unavailable?: boolean;
   enabled?: boolean;
   motionMode?: EffectiveMotion;
   /**
@@ -194,14 +196,19 @@ export function RealtimeVoiceButton(props: Props) {
   return <OwnedRealtimeVoiceButton {...props} />;
 }
 
-function RealtimeVoiceButtonView({ active = true, children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
+function RealtimeVoiceButtonView({ active = true, children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', unavailable = false, voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
   const onMicrophonePhaseRef = useRef(onMicrophonePhase);
   const ensuringRef = useRef(false);
   // Bumped whenever a pending start must not go ahead: the screen leaves view,
   // the control is disabled, or it unmounts.
   const startAttemptRef = useRef(0);
-  const blocked = disabled || voice.status === 'connecting';
+  const blocked = disabled || unavailable || voice.status === 'connecting';
+  const controlLabel = (surface: 'talk' | 'start') => {
+    if (unavailable) return 'Asha voice, unavailable';
+    if (voice.status === 'disconnected' && surface === 'talk') return 'Talk to Asha';
+    return labels[voice.status];
+  };
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
   const { colors } = useTheme();
@@ -309,9 +316,9 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
   if (avatar) {
     const avatarButton = (
       <Pressable
-        accessibilityHint={accessibilityHint}
-        accessibilityLabel={voice.status === 'disconnected' ? 'Talk to Asha' : labels[voice.status]}
-        accessibilityRole="button"
+        accessibilityHint={unavailable ? undefined : accessibilityHint}
+        accessibilityLabel={controlLabel('talk')}
+        accessibilityRole={unavailable ? undefined : 'button'}
         accessibilityState={{ disabled: blocked }}
         disabled={blocked}
         onPress={press}
@@ -346,9 +353,9 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
         />
         <Animated.View style={orbStyle}>
           <Pressable
-            accessibilityLabel={voice.status === 'disconnected' ? 'Talk to Asha' : labels[voice.status]}
-            accessibilityHint={accessibilityHint}
-            accessibilityRole="button"
+            accessibilityLabel={controlLabel('talk')}
+            accessibilityHint={unavailable ? undefined : accessibilityHint}
+            accessibilityRole={unavailable ? undefined : 'button'}
             accessibilityState={{ disabled: blocked }}
             disabled={blocked}
             onPress={press}
@@ -384,8 +391,8 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
       />
       <Animated.View style={orbStyle}>
         <Pressable
-          accessibilityLabel={labels[voice.status]}
-          accessibilityHint={accessibilityHint}
+          accessibilityLabel={controlLabel('start')}
+          accessibilityHint={unavailable ? undefined : accessibilityHint}
           accessibilityRole="button"
           accessibilityState={{ disabled: blocked }}
           disabled={blocked}
@@ -464,5 +471,5 @@ const useStyles = makeStyles((c) => ({
   portraitBadgeRecording: { backgroundColor: c.orbRecording },
   portraitBadgeConnecting: { backgroundColor: c.heroSubtle },
   endButtonPortrait: { right: 0 },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: layout.voiceUnavailableOpacity },
 }));

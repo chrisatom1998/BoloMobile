@@ -96,7 +96,7 @@
     "production:validate": "node ./scripts/validate-production-config.mjs",
     "native:validate": "node ./scripts/validate-native-project.mjs",
     "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs",
-    "postinstall": "node ./scripts/patch-query-string-decoder.mjs"
+    "postinstall": "node ./scripts/patch-query-string-decoder.mjs && node ./scripts/patch-minimatch-callable.mjs"
   },
   "expo": {
     "doctor": {
@@ -129,9 +129,6 @@
   "overrides": {
     "uuid": "^11.1.1",
     "brace-expansion": "^5.0.12",
-    "minimatch@^3.0.0": {
-      "brace-expansion": "1.1.21"
-    },
     "node-forge": "1.4.2",
     "zod": "4.6.7",
     "decode-uri-component": "0.5.1",
@@ -145,7 +142,9 @@
     "expo-dev-launcher": "57.0.20",
     "expo-dev-menu": "57.0.18",
     "@expo/inline-modules": "0.1.7",
-    "expo-constants": "57.0.21"
+    "expo-constants": "57.0.21",
+    "minimatch": "11.0.4",
+    "glob@>=9.0.0 <=14.0.1": "14.0.3"
   },
   "private": true
 }
