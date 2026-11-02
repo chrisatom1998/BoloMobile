@@ -482,6 +482,7 @@ const sessionLog = jest.requireMock('@/lib/asha-session-log-store') as {
 
 jest.mock('@/services/bolo-api', () => ({
   getContextualWordDefinition: jest.fn(),
+  liveVoiceConfigError: jest.fn(() => null),
   prepareSavedPhraseFromText: jest.fn(),
   reportGeneratedMessage: jest.fn(),
   sendMobileChat: jest.fn(),
@@ -524,6 +525,7 @@ const outbox = jest.requireMock('@/lib/sync-outbox') as {
 
 const boloApi = jest.requireMock('@/services/bolo-api') as {
   getContextualWordDefinition: jest.Mock;
+  liveVoiceConfigError: jest.Mock;
   prepareSavedPhraseFromText: jest.Mock;
   reportGeneratedMessage: jest.Mock;
   sendMobileChat: jest.Mock;
@@ -623,6 +625,7 @@ function getOnPress(instance: unknown) {
 }
 
 beforeEach(async () => {
+  boloApi.liveVoiceConfigError.mockReturnValue(null);
   const window = Dimensions.get('window');
   const screen = Dimensions.get('screen');
   await act(async () => {
@@ -1879,6 +1882,26 @@ describe('offline capture and queued reports', () => {
     jest.clearAllMocks();
     mockOutboxEntries = [];
     mockOutboxClassification = 'permanent';
+  });
+
+  it('shows a setup error on the Asha screen when the live URL is missing, and keeps typing available', async () => {
+    boloApi.liveVoiceConfigError.mockReturnValue('Live voice isn’t available right now. You can still type to Asha.');
+    const view = await render(<LiveScreen />);
+    const card = view.getByTestId('live-voice-config-error');
+    expect(card.props.accessibilityRole).toBe('alert');
+    const cardStyle = StyleSheet.flatten(card.props.style);
+    expect(cardStyle.backgroundColor).toBe(lightColors.paper);
+    expect(cardStyle.borderColor).toBe(lightColors.brand);
+    const title = view.getByText('Voice isn’t set up');
+    expect(StyleSheet.flatten(title.props.style).fontFamily).toBe(displayFont);
+    const hindi = view.getByText('आवाज़ तैयार नहीं');
+    expect(hindi.props.accessibilityLanguage).toBe('hi-IN');
+    expect(StyleSheet.flatten(hindi.props.style).fontFamily).toBe('Tiro Devanagari Hindi');
+    expect(view.getByText('Live voice isn’t available right now. You can still type to Asha.')).toBeTruthy();
+    expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
+    expect(view.getByTestId('composer-mic-toggle').props.accessibilityState).toEqual({ disabled: true });
+    expect(view.getByLabelText('Message Asha')).toBeTruthy();
+    await view.unmount();
   });
 
   it('explains that live voice needs a connection only when a transport failure or timeout stops a call from starting', async () => {

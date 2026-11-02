@@ -36,11 +36,11 @@ import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { classifyOutboxError, outboxRetryAfterMs, syncOutbox, useSyncOutbox, type OutboxEntry } from '@/lib/sync-outbox';
-import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
+import { liveVoiceConfigError, reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { ChatMessage, AshaResponseLanguage, SavedPhrase, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
-import { displayFont, hindiType, layout, makeStyles, maxContentWidth, radius, spacing, useTheme, type } from '@/theme';
+import { hindiType, layout, makeStyles, maxContentWidth, radius, spacing, useTheme, type } from '@/theme';
 
 /** Width of the chip scroller so the next chip peeks by `peek` points inside `available`. */
 export function visibleChipRowWidth(widths: readonly number[], available: number, peek: number, gap: number): number {
@@ -277,9 +277,11 @@ export default function LiveScreen() {
     recording: 'Mute microphone',
     responding: 'Unmute microphone',
   }[realtimeStatus];
+  // Missing live URL is a build setup problem, so voice stays off in every build. Typing still works.
+  const liveConfigError = liveVoiceConfigError();
   // Same gate as the portrait control, plus connecting (the button blocks that itself)
   // and a missing turn action, which happens when the floating session has no voice yet.
-  const composerMicDisabled = !aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused) || realtimeStatus === 'connecting' || !composerMicActionBound;
+  const composerMicDisabled = !aiConsent || busy || clearingChat || liveConfigError !== null || (!floatingAsha.available && !screenFocused) || realtimeStatus === 'connecting' || !composerMicActionBound;
   const restingVoiceLayout = !compactVoiceLayout && realtimeStatus === 'disconnected';
 
   const messageCount = chatHistory.length + (pendingUserMessage ? 1 : 0);
@@ -469,7 +471,7 @@ export default function LiveScreen() {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [appendChatMessages, markLiveTurn]);
+  }, [appendChatMessages, markLiveTurn, touchPracticeTimer]);
 
   const recordLiveSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     if (!mountedRef.current) return;
@@ -493,7 +495,7 @@ export default function LiveScreen() {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
+  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage, touchPracticeTimer]);
 
   const playReply = useCallback((message: ChatMessage) => {
     if (!aiConsent || replyPlaybackLocked) return;
@@ -948,7 +950,7 @@ export default function LiveScreen() {
       transition={0}
     />
   ) : (
-    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" voice={floatingAsha.voice ?? undefined}>
+    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || liveConfigError !== null || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" voice={floatingAsha.voice ?? undefined}>
       <Image
         accessible={false}
         cachePolicy="memory-disk"
@@ -1071,6 +1073,13 @@ export default function LiveScreen() {
         testID="live-chat-list"
         ListHeaderComponent={(
           <View>
+            {liveConfigError ? (
+              <View accessibilityRole="alert" style={[styles.liveConfigCard, { width: heroContentWidth }]} testID="live-voice-config-error">
+                <Text style={styles.liveConfigTitle}>Voice isn’t set up</Text>
+                <Text accessibilityLanguage="hi-IN" style={styles.liveConfigHindi}>आवाज़ तैयार नहीं</Text>
+                <Text style={styles.liveConfigBody}>{liveConfigError}</Text>
+              </View>
+            ) : null}
             <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, headerCollapsed && styles.voiceHeroCollapsed, { paddingTop: accessibilityCompact || restingVoiceLayout ? spacing.xs : spacing.md }, accessibilityCompact && aiConsent && !speechCaption && microphonePhase === 'idle' && styles.voiceHeroHidden]} testID="voice-conversation-hero">
               {headerCollapsed ? null : <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Your Hindi coach</Text>}
               {!aiConsent ? (
@@ -1382,6 +1391,10 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   voiceHeroResting: { gap: 0, paddingBottom: spacing.sm },
   voiceHeroCollapsed: { gap: spacing.xs, paddingBottom: 0 },
   voiceHeroHidden: { height: 0, minHeight: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' },
+  liveConfigCard: { alignSelf: 'center', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.brand, backgroundColor: c.paper, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  liveConfigTitle: { ...type.title, color: c.ink },
+  liveConfigHindi: { ...hindiType(20), color: c.brand },
+  liveConfigBody: { ...type.body, color: c.ink },
   screenHeader: { alignItems: 'center', backgroundColor: c.night, paddingBottom: spacing.xs },
   headerSettings: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
   voiceHeroLarge: { overflow: 'visible' },

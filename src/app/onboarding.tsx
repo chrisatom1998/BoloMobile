@@ -10,7 +10,7 @@ import { playOfflineSpeech } from '@/lib/offline-voice-player';
 import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
+import { hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';

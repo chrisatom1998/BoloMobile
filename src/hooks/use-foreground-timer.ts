@@ -31,7 +31,6 @@ export function useForegroundTimer(enabled = true) {
       activeSince.current = now;
     }
     lastTouch.current = now;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -58,12 +57,10 @@ export function useForegroundTimer(enabled = true) {
       end();
       subscription.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
   const elapsedSeconds = useCallback(() => {
     return Math.max(1, Math.round((accumulatedMs.current + runMs(Date.now())) / 1000));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reset = useCallback(() => {
