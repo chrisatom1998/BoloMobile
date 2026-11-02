@@ -11,8 +11,18 @@ const patchScript = join(root, 'scripts/patch-query-string-decoder.mjs');
 const patchScriptUrl = pathToFileURL(patchScript).href;
 const appRequire = createRequire(join(root, 'package.json'));
 const routerRequire = createRequire(appRequire.resolve('expo-router/package.json'));
-const queryStringPath = routerRequire.resolve('query-string');
-const queryStringUrl = pathToFileURL(queryStringPath).href;
+
+function resolveInstalledQueryString() {
+  try {
+    return routerRequire.resolve('query-string');
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'MODULE_NOT_FOUND') return null;
+    throw error;
+  }
+}
+
+const queryStringPath = resolveInstalledQueryString();
+const queryStringUrl = queryStringPath ? pathToFileURL(queryStringPath).href : '';
 
 function runNode(program: string, timeout = 5000) {
   return spawnSync(process.execPath, ['--input-type=module', '--eval', program], {
@@ -34,7 +44,7 @@ function evaluate(program: string) {
   return JSON.parse(result.stdout);
 }
 
-describe('Expo Router query-string decoder compatibility', () => {
+(queryStringPath ? describe : describe.skip)('Expo Router query-string decoder compatibility', () => {
   test('loads the actual ESM decoder through the Jest Expo transform', () => {
     const queryString = require(queryStringPath);
     expect(queryString.parse('greeting=' + encodeURIComponent('नमस्ते'))).toEqual({ greeting: 'नमस्ते' });
@@ -138,17 +148,45 @@ describe('Expo Router query-string decoder compatibility', () => {
 
 describe('decoder install patch guardrails', () => {
   test('can run repeatedly after a clean install without changing the patched parser', () => {
+    const result = runNode(`
+      import { patchQueryStringDecoder } from ${JSON.stringify(patchScriptUrl)};
+      process.stdout.write(patchQueryStringDecoder());
+    `);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe('');
+    if (!queryStringPath) {
+      expect(result.stdout).toBe('not required');
+      return;
+    }
     const before = readFileSync(queryStringPath, 'utf8');
-    for (let attempt = 0; attempt < 2; attempt++) {
+    expect(result.stdout).toBe('already patched');
+    const second = runNode(`
+      import { patchQueryStringDecoder } from ${JSON.stringify(patchScriptUrl)};
+      process.stdout.write(patchQueryStringDecoder());
+    `);
+    expect(second.status).toBe(0);
+    expect(second.stdout).toBe('already patched');
+    expect(readFileSync(queryStringPath, 'utf8')).toBe(before);
+  });
+
+  test('does nothing when Expo Router no longer depends on query-string', () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), 'bolo-query-string-patch-'));
+    try {
+      writeFileSync(join(fixtureRoot, 'package.json'), '{}');
+      const directory = join(fixtureRoot, 'node_modules', 'expo-router');
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, 'package.json'), JSON.stringify({ name: 'expo-router', version: '58.0.29', main: 'index.js' }));
+      writeFileSync(join(directory, 'index.js'), '');
       const result = runNode(`
         import { patchQueryStringDecoder } from ${JSON.stringify(patchScriptUrl)};
-        process.stdout.write(patchQueryStringDecoder());
+        process.stdout.write(patchQueryStringDecoder({ appRoot: ${JSON.stringify(fixtureRoot)} }));
       `);
       expect(result.status).toBe(0);
       expect(result.stderr).toBe('');
-      expect(result.stdout).toBe('already patched');
+      expect(result.stdout).toBe('not required');
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
     }
-    expect(readFileSync(queryStringPath, 'utf8')).toBe(before);
   });
 
   test.each([
@@ -160,7 +198,7 @@ describe('decoder install patch guardrails', () => {
     try {
       writeFileSync(join(fixtureRoot, 'package.json'), '{}');
       for (const [name, version] of [
-        ['expo-router', '57.0.29'],
+        ['expo-router', '58.0.29'],
         ['query-string', queryVersion],
         ['decode-uri-component', decoderVersion],
       ]) {

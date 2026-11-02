@@ -1221,7 +1221,7 @@ export default function LiveScreen() {
             {busy && pendingUserMessage ? <AshaTypingRow reducedMotion={reducedMotion} styles={styles} /> : null}
             {featuredPhrase}
           </>
-        ) : null}
+        ) : undefined}
       />
 
       {/* On iOS the screen runs under the native tab bar. Native tabs wrap each tab in

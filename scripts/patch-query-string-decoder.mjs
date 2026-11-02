@@ -16,12 +16,22 @@ const compatibleImport = [
 ].join('\n');
 const upstreamSha256 = 'caa3f2c8b45dfe1e91db22ae10743af68de8d96f26515132bb52485ec0f037fa';
 
-// Remove this bridge when Expo Router uses a query-string release compatible with ESM decoders.
-// Verify the entire upstream file so a dependency change requires an explicit review.
+// SDK 58 Expo Router parses search params with URLSearchParams and no longer depends on
+// query-string. Keep this bridge for any install that still resolves query-string 7.1.3,
+// including the decoder tests. Verify the entire upstream file so a dependency change
+// requires an explicit review.
 export function patchQueryStringDecoder({ appRoot = defaultAppRoot } = {}) {
   const appRequire = createRequire(resolve(appRoot, 'package.json'));
   const routerRequire = createRequire(appRequire.resolve('expo-router/package.json'));
-  const manifestPath = routerRequire.resolve('query-string/package.json');
+  let manifestPath;
+  try {
+    manifestPath = routerRequire.resolve('query-string/package.json');
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'MODULE_NOT_FOUND') {
+      return 'not required';
+    }
+    throw error;
+  }
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   if (manifest.name !== 'query-string' || manifest.version !== '7.1.3') {
     throw new Error('Expected query-string 7.1.3. Review the decoder compatibility patch before updating dependencies.');

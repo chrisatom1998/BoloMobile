@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 
-jest.mock('expo-router/unstable-native-tabs', () => {
+jest.mock('expo-router/native-tabs', () => {
   const React = jest.requireActual('react');
   const { Text, View } = jest.requireActual('react-native');
   const Trigger = ({ children, name }: PropsWithChildren<{ name: string }>) => React.createElement(View, { testID: `tab-${name}` }, children);

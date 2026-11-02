@@ -1,6 +1,6 @@
 import { BookmarkPlus, Ellipsis, Flag } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { Animated, Platform, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputSelectionChangeEventData, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputSelectionChangeEvent, type TextStyle, type ViewStyle } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
 import { ChatMessageMenu, type ChatMessageMenuItem } from '@/components/chat-message-menu';
@@ -67,7 +67,7 @@ function SelectableChatText({
   const text = display.displayText;
   const useSpans = Platform.OS !== 'web' && display.hasDevanagari;
 
-  const selectionChanged = useCallback((event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+  const selectionChanged = useCallback((event: TextInputSelectionChangeEvent) => {
     const { end, start } = event.nativeEvent.selection;
     if (end <= start) {
       onSelectionCollapsed();
