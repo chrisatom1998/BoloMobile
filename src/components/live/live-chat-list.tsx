@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { FlatList, View, type ImageStyle, type StyleProp } from 'react-native';
+import { FlatList, Text, View, type ImageStyle, type StyleProp } from 'react-native';
 
 import { AshaTypingRow, ChatMessageRow } from '@/components/chat-message-row';
 import { AskAshaSection } from '@/components/live/ask-asha-section';
@@ -7,6 +7,7 @@ import { FeaturedPhrase } from '@/components/live/featured-phrase';
 import { sharesSpeaker, tailFollowThreshold, welcome } from '@/components/live/live-helpers';
 import type { LiveScreenViewProps } from '@/components/live/live-screen-types';
 import { VoiceHero } from '@/components/live/voice-hero';
+import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { layout, spacing } from '@/theme';
 
 export function LiveChatList(props: LiveScreenViewProps & {
@@ -21,11 +22,14 @@ export function LiveChatList(props: LiveScreenViewProps & {
   animatedFollowRef,
   busy,
   discardReport,
+  focusAshaComposer,
   followTail,
   forgetSelectedChatText,
   hasSelectedChatText,
+  heroContentWidth,
   learnerProfile,
   listRef,
+  liveConfigError,
   nearBottomRef,
   openPhrasePicker,
   pendingReports,
@@ -80,6 +84,17 @@ export function LiveChatList(props: LiveScreenViewProps & {
         ListHeaderComponent={(
           <View>
             <VoiceHero {...props} />
+
+            {liveConfigError ? (
+              <View accessibilityRole="alert" style={[styles.liveConfigCard, { width: heroContentWidth }]} testID="live-voice-config-error">
+                <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveConfigTitle}>Voice isn’t set up</Text>
+                <Text accessibilityLanguage="hi-IN" maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveConfigHindi}>आवाज़ तैयार नहीं</Text>
+                <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveConfigBody}>{liveConfigError}</Text>
+                <Pressable accessibilityRole="button" onPress={focusAshaComposer} style={styles.talkButton} testID="type-to-asha">
+                  <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.talkButtonText}>Type to Asha</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <AskAshaSection {...props} />
           </View>

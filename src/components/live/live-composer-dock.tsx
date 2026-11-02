@@ -24,11 +24,13 @@ export function LiveComposerDock({
   composerMicActionBound,
   composerMicDisabled,
   composerMicLabel,
+  composerRef,
   error,
   hasTranscriptMessages,
   insets,
   interruptedReason,
   keyboardCoversTabBar,
+  liveConfigError,
   pendingUserMessage,
   pressComposerMic,
   realtimeLocked,
@@ -167,13 +169,13 @@ export function LiveComposerDock({
               accessibilityState={{ disabled: composerMicDisabled }}
               disabled={composerMicDisabled}
               onPress={pressComposerMic}
-              style={[styles.composerMic, composerMicDisabled && styles.disabled]}
+              style={[styles.composerMic, composerMicDisabled && (liveConfigError ? styles.voiceUnavailable : styles.disabled)]}
               testID="composer-mic-toggle"
             >
               {realtimeStatus === 'recording' ? <MicOff color={colors.gold} size={20} /> : <Mic color={colors.gold} size={20} />}
             </Pressable>
           ) : null}
-          <LiveComposer disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
+          <LiveComposer ref={composerRef} disabled={busy || clearingChat || realtimeLocked} onSend={sendText} styles={styles} />
         </View>
       </SafeAreaView> : null;
 }

@@ -19,6 +19,7 @@ export function VoiceHero({
   headerCollapsed,
   heroContentWidth,
   largeTextLayout,
+  liveConfigError,
   lastSessionButton,
   microphonePhase,
   motionMode,
@@ -49,6 +50,12 @@ export function VoiceHero({
               {!aiConsent ? (
                 <View style={[styles.liveControls, { width: heroContentWidth }]} testID="live-voice-controls">
                   <View style={[styles.inviteRing, compactVoiceLayout && styles.inviteRingCompact]}>
+                    <View
+                      accessibilityLabel={liveConfigError ? 'Asha voice, unavailable' : undefined}
+                      accessibilityState={liveConfigError ? { disabled: true } : undefined}
+                      accessible={Boolean(liveConfigError)}
+                      style={liveConfigError ? styles.voiceUnavailable : undefined}
+                    >
                     <Image
                       accessible={false}
                       cachePolicy="memory-disk"
@@ -58,14 +65,18 @@ export function VoiceHero({
                       testID="asha-header-portrait"
                       transition={0}
                     />
+                    </View>
                   </View>
                   <View style={styles.heroCopy}>
                     <Text accessibilityLabel={`Asha says: ${ashaInviteLine}`} style={styles.heroTitle}>{ashaInviteLine}</Text>
                     <Text style={styles.heroBody}>{ashaInviteSharing}</Text>
+                    {liveConfigError ? <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.voiceOffCaption}>Voice off</Text> : null}
                   </View>
+                  {liveConfigError ? null : (
                   <Pressable accessibilityRole="button" onPress={() => setConsentSheetOpen(true)} style={styles.talkButton} testID="talk-with-asha">
                     <Text style={styles.talkButtonText}>{ashaInviteAction}</Text>
                   </Pressable>
+                  )}
                   {lastSessionButton}
                 </View>
               ) : null}
@@ -83,9 +94,9 @@ export function VoiceHero({
                   <View style={styles.heroCopy}>
                     <View style={styles.statusRow} testID="asha-voice-status">
                       <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
-                      <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveVoiceText}>{statusKicker}</Text>
+                      <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={liveConfigError ? styles.voiceOffCaption : styles.liveVoiceText}>{liveConfigError ? 'Voice off' : statusKicker}</Text>
                     </View>
-                    {microphoneGuidance ?? (conversationStarted ? (
+                    {liveConfigError ? null : microphoneGuidance ?? (conversationStarted ? (
                       <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                     ) : (
                       <>

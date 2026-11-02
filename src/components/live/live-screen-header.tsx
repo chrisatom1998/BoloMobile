@@ -19,6 +19,7 @@ export function LiveScreenHeader({
   heroContentWidth,
   insets,
   languageMenuOpen,
+  liveConfigError,
   realtimeStatus,
   reflowHeaderLayout,
   router,
@@ -40,7 +41,7 @@ export function LiveScreenHeader({
           {talkControl}
           <View style={styles.headerStatus} testID="asha-voice-status">
             <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
-            <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.liveVoiceText}>{statusKicker}</Text>
+            <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={liveConfigError ? styles.voiceOffCaption : styles.liveVoiceText}>{liveConfigError ? 'Voice off' : statusKicker}</Text>
           </View>
         </View>
       ) : null}

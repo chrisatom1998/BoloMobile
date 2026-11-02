@@ -18,6 +18,7 @@ import {
 } from '@/components/live/live-helpers';
 import { createLiveStyles } from '@/components/live/live-styles';
 import { LiveScreenView } from '@/components/live/live-screen-view';
+import type { LiveComposerHandle } from '@/components/live-composer';
 import { type RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useAshaLiveSession } from '@/hooks/use-asha-live-session';
@@ -36,7 +37,7 @@ import { observe } from '@/lib/observability';
 import { preloadSpeech, speakText, stopSpeaking } from '@/lib/speech';
 import { DEFAULT_MOTION_PREFERENCE, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { classifyOutboxError, outboxRetryAfterMs, syncOutbox, useSyncOutbox, type OutboxEntry } from '@/lib/sync-outbox';
-import { reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
+import { liveVoiceConfigError, reportGeneratedMessage, sendMobileChat, type ReportReason } from '@/services/bolo-api';
 import { isFloatingAshaMinimized, useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import type { AshaResponseLanguage, ChatMessage, SavedPhrase, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
@@ -129,6 +130,7 @@ export default function LiveScreen() {
   const selectionClearTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const backgroundCheckpointedRef = useRef(false);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const composerRef = useRef<LiveComposerHandle>(null);
   const nearBottomRef = useRef(true);
   const followedMessageCountRef = useRef(0);
   // Pending learner row that should be brought into view. Honored only while
@@ -212,9 +214,18 @@ export default function LiveScreen() {
     recording: 'Mute microphone',
     responding: 'Unmute microphone',
   }[realtimeStatus];
+  // Missing live URL is a build setup problem, so voice stays off in every build. Typing still works.
+  const liveConfigError = liveVoiceConfigError();
+  const focusAshaComposer = useCallback(() => {
+    if (!aiConsent) {
+      setConsentSheetOpen(true);
+      return;
+    }
+    composerRef.current?.focus();
+  }, [aiConsent]);
   // Same gate as the portrait control, plus connecting (the button blocks that itself)
   // and a missing turn action, which happens when the floating session has no voice yet.
-  const composerMicDisabled = !aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused) || realtimeStatus === 'connecting' || !composerMicActionBound;
+  const composerMicDisabled = !aiConsent || busy || clearingChat || liveConfigError !== null || (!floatingAsha.available && !screenFocused) || realtimeStatus === 'connecting' || !composerMicActionBound;
   const restingVoiceLayout = !compactVoiceLayout && realtimeStatus === 'disconnected';
 
   const messageCount = chatHistory.length + (pendingUserMessage ? 1 : 0);
@@ -404,7 +415,7 @@ export default function LiveScreen() {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [appendChatMessages, markLiveTurn]);
+  }, [appendChatMessages, markLiveTurn, touchPracticeTimer]);
 
   const recordLiveSnapshot = useCallback((rows: LiveTranscriptRow[]) => {
     if (!mountedRef.current) return;
@@ -428,7 +439,7 @@ export default function LiveScreen() {
       practiced.current = true;
       markLiveTurn();
     }
-  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage]);
+  }, [markLiveTurn, replaceLiveChatSnapshot, responseLanguage, touchPracticeTimer]);
 
   const playReply = useCallback((message: ChatMessage) => {
     if (!aiConsent || replyPlaybackLocked) return;
@@ -811,6 +822,9 @@ export default function LiveScreen() {
 
   return (
     <LiveScreenView
+      liveConfigError={liveConfigError}
+      composerRef={composerRef}
+      focusAshaComposer={focusAshaComposer}
       accessibilityCompact={accessibilityCompact}
       aiConsent={aiConsent}
       animatedFollowRef={animatedFollowRef}

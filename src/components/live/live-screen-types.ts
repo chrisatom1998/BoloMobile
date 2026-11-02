@@ -4,6 +4,7 @@ import type { FlatList } from 'react-native';
 import type { EdgeInsets } from 'react-native-safe-area-context';
 
 import type { InterruptedReason } from '@/components/live/live-helpers';
+import type { LiveComposerHandle } from '@/components/live-composer';
 import type { LiveStyles } from '@/components/live/live-styles';
 import type { RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import { useAshaLiveSession } from '@/hooks/use-asha-live-session';
@@ -40,6 +41,10 @@ export type LiveScreenViewProps = {
   compactVoiceLayout: boolean;
   composerMicActionBound: boolean;
   composerMicDisabled: boolean;
+  /** Set when the build has no usable live URL; voice stays off and a setup card shows. */
+  liveConfigError: string | null;
+  composerRef: RefObject<LiveComposerHandle | null>;
+  focusAshaComposer: () => void;
   composerMicLabel: string;
   composingAtLargeText: boolean;
   confirmClearChat: () => void;

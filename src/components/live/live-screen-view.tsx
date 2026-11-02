@@ -27,6 +27,7 @@ export function LiveScreenView(props: LiveScreenViewProps) {
   chatHistory,
   clearingChat,
   clientId,
+  liveConfigError,
   closePhraseSheet,
   closeWordSheet,
   compactVoiceLayout,
@@ -90,9 +91,14 @@ export function LiveScreenView(props: LiveScreenViewProps) {
   );
 
   const talkControl = floatingAsha.available && !floatingAsha.voice ? (
-    <Image
-      accessibilityLabel="Talk to Asha"
+    <View
+      accessibilityLabel={liveConfigError ? 'Asha voice, unavailable' : 'Talk to Asha'}
+      accessibilityState={liveConfigError ? { disabled: true } : undefined}
       accessible
+      style={liveConfigError ? styles.voiceUnavailable : undefined}
+    >
+    <Image
+      accessible={false}
       cachePolicy="memory-disk"
       contentFit="cover"
       source={ashaPortrait}
@@ -100,8 +106,9 @@ export function LiveScreenView(props: LiveScreenViewProps) {
       testID="asha-header-portrait"
       transition={0}
     />
+    </View>
   ) : (
-    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" voice={floatingAsha.voice ?? undefined}>
+    <RealtimeVoiceButton key={floatingAsha.available ? `shared-${clientId}` : `${screenFocused && aiConsent ? 'enabled' : 'disabled'}-${clientId}`} active={screenFocused} clientId={clientId} compact={compactPortrait} disabled={!aiConsent || busy || clearingChat || liveConfigError !== null || (!floatingAsha.available && !screenFocused)} motionMode={motionMode} onError={showRealtimeError} onMicrophonePhase={setMicrophonePhase} liveSession={floatingAsha.available ? undefined : liveSession} onConnectionStart={floatingAsha.available ? undefined : startNewConversation} onDisconnectReady={floatingAsha.available ? undefined : bindOwnedDisconnect} onSessionEvent={floatingAsha.available ? undefined : recordOwnedSessionEvent} onTranscriptSnapshot={floatingAsha.available ? undefined : recordOwnedSnapshot} onStatusChange={updateRealtimeStatus} onTranscriptChange={floatingAsha.available ? undefined : updateLiveTranscript} onTurnActionReady={bindComposerMicAction} responseLanguage={responseLanguage} size={accessibilityCompact ? 'avatar' : 'portrait'} tone="dark" unavailable={liveConfigError !== null} voice={floatingAsha.voice ?? undefined}>
       <Image
         accessible={false}
         cachePolicy="memory-disk"
