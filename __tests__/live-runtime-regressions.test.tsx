@@ -1,6 +1,6 @@
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
-import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, type StyleProp, type TextStyle } from 'react-native';
+import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, TextInput, type StyleProp, type TextStyle } from 'react-native';
 
 import LiveScreen, { createLiveStyles, visibleChipRowWidth } from '../src/app/(tabs)/live';
 import { romanizeDevanagari } from '../src/lib/devanagari-romanization';
@@ -40,7 +40,19 @@ let mockBlurScreen = () => {};
 jest.mock('expo-status-bar', () => ({ StatusBar: () => null, setStatusBarStyle: jest.fn() }));
 
 jest.mock('expo-image', () => ({
-  Image: ({ style, testID }: { style?: StyleProp<TextStyle>; testID?: string }) => mockReact.createElement(MockText, { style, testID }, 'Asha portrait'),
+  Image: ({
+    accessibilityLabel,
+    accessibilityState,
+    accessible,
+    style,
+    testID,
+  }: {
+    accessibilityLabel?: string;
+    accessibilityState?: { disabled?: boolean };
+    accessible?: boolean;
+    style?: StyleProp<TextStyle>;
+    testID?: string;
+  }) => mockReact.createElement(MockText, { accessibilityLabel, accessibilityState, accessible, style, testID }, 'Asha portrait'),
 }));
 
 jest.mock('lucide-react-native', () => ({
@@ -103,6 +115,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       children,
       compact,
       disabled,
+      unavailable,
       history,
       onConnectionStart,
       onError,
@@ -117,6 +130,7 @@ jest.mock('@/components/realtime-voice-button', () => {
       children?: import('react').ReactNode;
       compact?: boolean;
       disabled?: boolean;
+      unavailable?: boolean;
       history?: unknown;
       onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
       onError: (message: string, details?: { kind?: string }) => void;
@@ -147,9 +161,10 @@ jest.mock('@/components/realtime-voice-button', () => {
       mockReact.createElement(
         MockPressable,
         {
-          accessibilityLabel: 'Create Asha reply',
-          accessibilityState: { disabled: Boolean(disabled) },
-          disabled,
+          accessibilityLabel: unavailable ? 'Asha voice, unavailable' : 'Create Asha reply',
+          accessibilityState: { disabled: Boolean(disabled || unavailable) },
+          disabled: Boolean(disabled || unavailable),
+          style: disabled || unavailable ? { opacity: 0.5 } : undefined,
           onPress: () => {
             onTurnComplete({ transcript: 'Namaste', reply: 'Hello there.', language: 'en' });
           },
@@ -1898,9 +1913,40 @@ describe('offline capture and queued reports', () => {
     expect(hindi.props.accessibilityLanguage).toBe('hi-IN');
     expect(StyleSheet.flatten(hindi.props.style).fontFamily).toBe('Tiro Devanagari Hindi');
     expect(view.getByText('Live voice isn’t available right now. You can still type to Asha.')).toBeTruthy();
-    expect(view.getByLabelText('Create Asha reply').props.accessibilityState).toEqual({ disabled: true });
-    expect(view.getByTestId('composer-mic-toggle').props.accessibilityState).toEqual({ disabled: true });
+    expect(hindi.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    expect(StyleSheet.flatten(hindi.props.style).fontSize).toBe(typeScale.body.fontSize);
+    const voice = view.getByLabelText('Asha voice, unavailable');
+    expect(voice.props.accessibilityState).toEqual({ disabled: true });
+    expect(StyleSheet.flatten(voice.props.style).opacity).toBe(0.5);
+    expect(view.getByText('Voice off')).toBeTruthy();
+    expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
+    expect(view.queryByRole('button', { name: 'Talk with Asha' })).toBeNull();
+    const composerMic = view.getByTestId('composer-mic-toggle');
+    expect(composerMic.props.accessibilityState).toEqual({ disabled: true });
+    expect(StyleSheet.flatten(composerMic.props.style).opacity).toBe(0.5);
+    const headerIds = collectTestIds(view.toJSON());
+    expect(headerIds.indexOf('voice-conversation-hero')).toBeGreaterThanOrEqual(0);
+    expect(headerIds.indexOf('voice-conversation-hero')).toBeLessThan(headerIds.indexOf('live-voice-config-error'));
+    const focus = jest.spyOn(TextInput.prototype, 'focus').mockImplementation(() => undefined);
+    await fireEvent.press(view.getByTestId('type-to-asha'));
+    expect(focus).toHaveBeenCalled();
     expect(view.getByLabelText('Message Asha')).toBeTruthy();
+    focus.mockRestore();
+    await view.unmount();
+  });
+
+  it('hides Talk with Asha when voice is off and opens consent from Type to Asha', async () => {
+    mockAiConsent = false;
+    boloApi.liveVoiceConfigError.mockReturnValue('Live voice isn’t available right now. You can still type to Asha.');
+    const view = await render(<LiveScreen />);
+    expect(view.queryByRole('button', { name: 'Talk with Asha' })).toBeNull();
+    const portrait = view.getByLabelText('Asha voice, unavailable');
+    expect(portrait.props.accessibilityState).toEqual({ disabled: true });
+    expect(StyleSheet.flatten(portrait.props.style).opacity).toBe(0.5);
+    expect(view.queryByTestId('mock-ai-consent-gate')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Type to Asha' }));
+    expect(view.getByTestId('mock-ai-consent-gate')).toBeTruthy();
+    mockAiConsent = true;
     await view.unmount();
   });
 
