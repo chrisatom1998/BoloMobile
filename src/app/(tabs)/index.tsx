@@ -116,6 +116,8 @@ export default function HomeScreen() {
 
     return {
       action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
+      // One word for the row's minutes caption ("Start · 4 of 10 min today"); the full action stays in the VoiceOver label.
+      actionWord: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start' : 'Review',
       hint: mode === 'continue' ? 'Continues the lesson' : mode === 'next' ? 'Starts the lesson' : 'Opens the lesson again',
       kicker: mode === 'continue' ? 'CONTINUE LESSON' : mode === 'next' ? 'NEXT LESSON' : 'REVIEW LESSON',
       lessonId,
@@ -138,6 +140,7 @@ export default function HomeScreen() {
   const hero = useMemo(() => {
     const lessonStep = {
       action: lessonSelection.action,
+      actionWord: lessonSelection.actionWord,
       chips: (heroScene?.words ?? []).map((word) => ({ key: word, latin: false, text: word })),
       hint: lessonSelection.hint,
       kicker: stepKicker('lesson', lessonSelection.kicker),
@@ -150,6 +153,7 @@ export default function HomeScreen() {
       case 'review':
         return {
           action: 'Start review',
+          actionWord: 'Review',
           chips: reviewPreview.map((item) => ({ ...item, latin: showLatinPreview })),
           hint: 'Starts the review',
           kicker: stepKicker('review', 'REVIEW'),
@@ -161,8 +165,10 @@ export default function HomeScreen() {
       case 'lesson':
         return lessonStep;
       case 'asha':
+        // "Practice", not "Talk": the hero's filled Talk with Asha button already owns that verb, and this step is practising the lesson lines.
         return {
-          action: 'Talk with Asha',
+          action: 'Practice with Asha',
+          actionWord: 'Practice',
           chips: [],
           hint: 'Opens the Asha screen',
           kicker: stepKicker('asha', 'SPEAK'),
@@ -175,6 +181,7 @@ export default function HomeScreen() {
         return {
           ...lessonStep,
           action: 'Keep going',
+          actionWord: 'Keep going',
           chips: [],
           hint: 'Starts the next lesson',
           kicker: 'DONE FOR TODAY',
@@ -189,6 +196,8 @@ export default function HomeScreen() {
   // moves up into the row so the panel does not repeat it.
   const rowCaption = hero.meta ?? hero.subtitle;
   const detailsSubtitle = hero.meta ? hero.subtitle : undefined;
+  // The Play circle carries no text, so the minutes caption leads with the step's one-word action.
+  const goalCaption = `${hero.actionWord} · ${minutesLine}`;
 
   const stepCopy = useCallback((step: TodayStep) => {
     if (step.key === 'review') {
@@ -228,7 +237,7 @@ export default function HomeScreen() {
         </View>
         <View style={styles.topbarActions}>
           <Pressable accessibilityLabel={`${streak} day practice streak`} accessibilityRole="button" hitSlop={4} onPress={() => router.push('/progress' as Href)} style={styles.streakPill} testID="today-streak">
-            <Flame color={colors.goldIcon} size={18} strokeWidth={2.2} />
+            <Flame color={colors.goldIcon} size={layout.streakIconSize} strokeWidth={2.2} />
             <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
           </Pressable>
           <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton} testID="today-settings">
@@ -291,7 +300,7 @@ export default function HomeScreen() {
               <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
               <Text style={styles.nextTitle}>{hero.title}</Text>
               {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
-              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalLine} testID="today-goal-value">{minutesLine}</Text>
+              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalLine} testID="today-goal-value">{goalCaption}</Text>
             </View>
             {/* Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. At accessibility sizes the column row puts it under the text. */}
             <View accessible={false} importantForAccessibility="no" style={[styles.nextAffordance, largeTextLayout && styles.nextAffordanceLarge]} testID="today-next-start">
@@ -389,7 +398,7 @@ export default function HomeScreen() {
               <View style={[styles.detailsFooter, largeTextLayout && styles.detailsFooterLarge]} testID="today-hero-footer">
                 <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.nextStepButton} testID="today-next-step">
                   <Text style={styles.nextStepButtonText}>{hero.action}</Text>
-                  <ArrowRight color={colors.brand} size={18} strokeWidth={2.2} />
+                  <ArrowRight color={colors.brand} size={layout.arrowIconSize} strokeWidth={2.2} />
                 </PressableFeedback>
               </View>
             </MotionReveal>
@@ -484,8 +493,8 @@ const useStyles = makeStyles((c) => {
   stepMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   detailsFooter: { flexDirection: 'row' },
   detailsFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  // Rust outline: Talk with Asha keeps the screen's one filled button, so the panel's closing action reads as secondary.
-  nextStepButton: { ...button.secondary, flex: 1, backgroundColor: 'transparent', borderColor: c.brand, borderWidth: 2 },
+  // Rust outline on the shared secondary 1pt border: Talk with Asha keeps the screen's one filled button, so the panel's closing action reads as secondary.
+  nextStepButton: { ...button.secondary, flex: 1, backgroundColor: 'transparent', borderColor: c.brand },
   nextStepButtonText: { ...button.secondaryText, color: c.brandText },
   planCell: { width: '100%', gap: spacing.md },
   pathHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },

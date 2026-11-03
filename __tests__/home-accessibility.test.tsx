@@ -77,7 +77,8 @@ describe('home accessibility', () => {
     // The 44pt goal ring cannot grow with Dynamic Type, so its numeral is capped too; the row's minutes line carries the value.
     expect(view.getByText('0', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
     expect(view.queryByText('0')).toBeNull();
-    expect(view.getByTestId('today-goal-value').props.children).toBe('0 of 5 min today');
+    // The caption leads with the one-word action; the row label above keeps the full "Start lesson".
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Start · 0 of 5 min today');
     expect(view.getByTestId('today-goal-value').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
     // The minutes caption never drops below 12pt; it uses a type role, not an ad-hoc size.
     expect(StyleSheet.flatten(view.getByTestId('today-goal-value').props.style).fontSize).toBeGreaterThanOrEqual(12);
@@ -128,9 +129,9 @@ describe('home accessibility', () => {
     expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, A warm hello, expanded');
     const firstPlan = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
     const nextStep = view.getByTestId('today-next-step');
-    expect(StyleSheet.flatten(nextStep.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    // An outline button: the rust fill stays with Talk with Asha, so the panel's action still reads as secondary.
-    expect(StyleSheet.flatten(nextStep.props.style)).toMatchObject({ backgroundColor: 'transparent', borderColor: colors.brand });
+    expect(StyleSheet.flatten(nextStep.props.style).minHeight).toBeGreaterThanOrEqual(layout.touchTarget);
+    // An outline button on the shared 1pt secondary border: the rust fill stays with Talk with Asha, so the panel's action still reads as secondary.
+    expect(StyleSheet.flatten(nextStep.props.style)).toMatchObject({ backgroundColor: 'transparent', borderColor: colors.brand, borderWidth: 1 });
     expect(nextStep.props.accessibilityLabel).toBe('Start lesson');
     for (const tile of ['today-plan-catalog']) {
       expect(StyleSheet.flatten(view.getByTestId(tile).props.style).minHeight).toBeGreaterThanOrEqual(44);

@@ -150,6 +150,10 @@ export const layout = {
   playCircleSize: 28,
   /** Play glyph inside `playCircleSize`. */
   playIconSize: 14,
+  /** Arrow glyph beside the label on the Next lesson panel's outline button. */
+  arrowIconSize: 18,
+  /** Flame glyph inside the streak pill on the Today top bar. */
+  streakIconSize: 18,
 } as const;
 
 export const radius = {

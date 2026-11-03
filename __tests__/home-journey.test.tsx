@@ -4,9 +4,10 @@ jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 import { fireEvent, render, within } from '@testing-library/react-native';
 import { FlatList, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
+import { lessonPlans } from '../src/data/lesson-plans';
 import { getScene } from '../src/data/scenes';
 import { dateKey } from '../src/lib/storage';
-import { colors, layout, spacing } from '../src/theme';
+import { buttons, colors, layout, spacing } from '../src/theme';
 
 const mockRouterPush = jest.fn();
 const mockSetGoal = jest.fn();
@@ -239,6 +240,7 @@ describe('HomeScreen primary journey', () => {
     expect(row.props.accessibilityState?.expanded).toBeUndefined();
     expect(row.props.accessibilityLabel).toBe('Start lesson, A warm hello, 5 of 10 min today');
     expect(row.props.accessibilityHint).toBe('Starts the lesson');
+    expect(within(row).getByTestId('today-goal-value').props.children).toBe('Start · 5 of 10 min today');
     expect(view.getByText('STEP 2 OF 3 · NEXT LESSON')).toBeTruthy();
     expect(within(row).getByTestId('today-goal-dial', { includeHiddenElements: true })).toBeTruthy();
     expect(within(row).getByText('A warm hello')).toBeTruthy();
@@ -328,9 +330,10 @@ describe('HomeScreen primary journey', () => {
     expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha']);
     const nextStep = view.getByTestId('today-next-step');
     const nextStepStyle = StyleSheet.flatten(nextStep.props.style);
-    expect(nextStepStyle).toMatchObject({ backgroundColor: 'transparent', borderColor: colors.brand, flex: 1 });
-    expect(nextStepStyle.borderWidth).toBeGreaterThanOrEqual(1.5);
-    expect(nextStepStyle.borderWidth).toBeLessThanOrEqual(2);
+    // The shared secondary button's 1pt border, recoloured rust; no thicker override.
+    expect(nextStepStyle).toMatchObject({ backgroundColor: 'transparent', borderColor: colors.brand, borderWidth: 1, flex: 1 });
+    expect(nextStepStyle.borderWidth).toBe(buttons.secondary.borderWidth);
+    expect(nextStepStyle.minHeight).toBe(buttons.secondary.minHeight);
     expect(nextStepStyle.minHeight).toBeGreaterThanOrEqual(layout.touchTarget);
     // A phrase is due in this fixture, so the step action is the review.
     expect(nextStep.props.accessibilityLabel).toBe('Start review');
@@ -418,9 +421,35 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 1 of 2, Finished a lesson, done');
     // The hero's portrait and the step's own action both lead to Asha.
     expect(view.getByTestId('today-asha-portrait')).toBeTruthy();
+    // The step says "Practice": "Talk with Asha" stays with the hero's filled button, so the panel's action and the row's label do not repeat it.
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Practice · 5 of 10 min today');
+    expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Practice with Asha, Say it out loud, 5 of 10 min today');
+    expect(view.getByTestId('today-next-row').props.accessibilityHint).toBe('Opens the Asha screen');
+    const nextStep = view.getByTestId('today-next-step');
+    expect(nextStep.props.accessibilityLabel).toBe('Practice with Asha');
+    expect(within(nextStep).getByText('Practice with Asha')).toBeTruthy();
+    expect(view.getAllByText('Talk with Asha')).toHaveLength(1);
+    expect(within(view.getByTestId('today-talk-with-asha')).getByText('Talk with Asha')).toBeTruthy();
 
-    await fireEvent.press(view.getByTestId('today-next-step'));
+    await fireEvent.press(nextStep);
     expect(mockRouterPush).toHaveBeenCalledWith('/live');
+  });
+
+  it('prefixes the minutes caption with Continue on a resumed lesson and Review once every plan is done', async () => {
+    mockAppState.phrases = [];
+    mockAppState.sceneProgress = { 'plan-essentials-03': { completions: 0, lastBeatIndex: 2, lastPracticedAt: '2026-07-20T12:00:00.000Z' } };
+    const view = await render(<HomeScreen />);
+
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Continue · 5 of 10 min today');
+    expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Continue, Ask how someone is, 5 of 10 min today');
+
+    // Every lesson on every plan complete: the step reopens a lesson for review.
+    mockAppState.sceneProgress = Object.fromEntries(lessonPlans.flatMap((plan) => plan.lessonIds.map((id) => [id, { completions: 1 }])));
+    await view.rerender(<HomeScreen />);
+    expect(view.getByText('STEP 1 OF 2 · REVIEW LESSON')).toBeTruthy();
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Review · 5 of 10 min today');
+    expect(view.getByTestId('today-next-row').props.accessibilityLabel).toMatch(/^Review lesson, .+, 5 of 10 min today$/u);
+    expect(view.getByTestId('today-next-row').props.accessibilityHint).toBe('Opens the lesson again');
   });
 
   it('celebrates a finished day and still offers the next lesson', async () => {
@@ -436,6 +465,7 @@ describe('HomeScreen primary journey', () => {
     // Success reads forest, as the old finished-day card did.
     expect(StyleSheet.flatten(view.getByText('DONE FOR TODAY').props.style).color).toBe(colors.forestText);
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Keep going, Shabaash!, 10 of 10 min today');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Keep going · 10 of 10 min today');
     expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, Shabaash!, collapsed');
 
     await fireEvent.press(view.getByTestId('today-next-toggle'));
@@ -531,18 +561,20 @@ describe('HomeScreen primary journey', () => {
     const row = view.getByTestId('today-next-row');
     expect(within(row).getByTestId('today-goal-dial', hidden)).toBeTruthy();
     const minutes = within(view.getByTestId('today-next-practice')).getByTestId('today-goal-value');
-    expect(minutes.props.children).toBe('5 of 10 min today');
+    // The caption leads with the step's one-word action; the row label keeps the full action and the bare minutes.
+    expect(minutes.props.children).toBe('Review · 5 of 10 min today');
+    expect(StyleSheet.flatten(minutes.props.style).fontSize).toBeGreaterThanOrEqual(12);
     expect(row.props.accessibilityLabel).toBe('Start review, Review your phrases, 5 of 10 min today');
 
     mockAppState.goal = 15;
     await view.rerender(<HomeScreen />);
-    expect(view.getByTestId('today-goal-value').props.children).toBe('5 of 15 min today');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Review · 5 of 15 min today');
     expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('33 percent of daily goal complete');
 
     mockAppState.practice = { chaiDone: true, date: dateKey(), liveDone: true, seconds: 1200 };
     await view.rerender(<HomeScreen />);
     expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('100 percent of daily goal complete');
-    expect(view.getByTestId('today-goal-value').props.children).toBe('15+ min today');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Review · 15+ min today');
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Start review, Review your phrases, 15+ min today');
     expect(view.getByText('15+', hidden)).toBeTruthy();
     expect(view.queryByText('min', hidden)).toBeNull();
