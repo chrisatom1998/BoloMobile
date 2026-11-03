@@ -27,7 +27,7 @@ type Props = {
   /** Startup-only mode, lesson context, and client tools for each new session. */
   liveSession?: () => LiveSessionSetup | null;
   /** Awaited once before a new connection; not called when muting or unmuting. */
-  onConnectionStart?: (signal: AbortSignal, info: ConnectionStartInfo) => void | Promise<void>;
+  onConnectionStart?: (signal: AbortSignal, info?: ConnectionStartInfo) => void | Promise<void>;
   /** Recent turns handed to Asha when a dropped call is resumed. */
   resumeHistory?: () => { role: 'you' | 'asha'; text: string }[];
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;

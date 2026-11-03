@@ -25,7 +25,7 @@ export type AshaVoiceControls = {
 
 export type AshaVoiceListeners = {
   onError?: (message: string, details?: RealtimeErrorDetails) => void;
-  onConnectionStart?: (signal: AbortSignal, info: ConnectionStartInfo) => void | Promise<void>;
+  onConnectionStart?: (signal: AbortSignal, info?: ConnectionStartInfo) => void | Promise<void>;
   onSessionEvent?: (event: AshaSessionEvent) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
@@ -162,12 +162,12 @@ function AshaVoiceSessionHost({
     responseLanguage: app.learnerProfile.responseLanguage,
     liveSession,
     onConnectionStart: async (signal, info) => {
-      resumingRef.current = info.resume;
+      resumingRef.current = info?.resume ?? false;
       // A record left active by a killed app must be recovered and saved before
       // this connection can create a new active record.
       await ensureAshaSessionLogLoaded();
       if (signal.aborted) return;
-      await listenersRef.current?.onConnectionStart?.(signal, info);
+      await listenersRef.current?.onConnectionStart?.(signal, info ?? { resume: false });
     },
     // A resumed call hands Asha the recent turns from the saved chat.
     resumeHistory: () => appRef.current.chatHistory.map(({ role, text }) => ({ role, text })),

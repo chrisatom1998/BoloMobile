@@ -44,7 +44,7 @@ type Options = {
   /** Recent turns handed to Asha when a dropped call is resumed. Read once per resume. */
   resumeHistory?: () => { role: 'you' | 'asha'; text: string }[];
   /** Runs once per new connection, before any transport or transcript can arrive. */
-  onConnectionStart?: (signal: AbortSignal, info: ConnectionStartInfo) => void | Promise<void>;
+  onConnectionStart?: (signal: AbortSignal, info?: ConnectionStartInfo) => void | Promise<void>;
   onError: (message: string) => void;
   /** Session lifecycle for the on-device session log: once per start, ready, and end. */
   onSessionEvent?: (event: AshaSessionEvent) => void;

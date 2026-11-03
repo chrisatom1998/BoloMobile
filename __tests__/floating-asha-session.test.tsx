@@ -277,7 +277,7 @@ describe('Asha voice session above the navigator', () => {
     await renderSession(<ListeningScreen />);
     const signal = new AbortController().signal;
     await mockConnectionStart?.(signal);
-    expect(resetConversation).toHaveBeenCalledWith(signal);
+    expect(resetConversation).toHaveBeenCalledWith(signal, { resume: false });
   });
 
   it('keeps snapshot ids from the conversation screen so a later snapshot drops stale rows', async () => {
