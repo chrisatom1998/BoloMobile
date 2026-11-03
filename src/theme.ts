@@ -136,13 +136,13 @@ export const layout = {
   todayRingGap: 20,
   /** Next lesson row body: the 44pt goal ring plus the row's own padding. */
   nextRowMinHeight: 72,
-  /** Status pill on the Today hero: a readout, not a control, so it sits below the touch target. */
+  /** Status pill on the Today hero (live sessions only): a readout, not a control, so it sits below the touch target. */
   statusPillMinHeight: 32,
   /** Step marker on the Today steps list. */
   stepDotSize: 22,
   /** Asha's small portrait on the SPEAK step invite. */
   ashaInvitePortraitSize: 48,
-  /** Status dot inside the READY/LISTENING pill, same as the Asha screen's. */
+  /** Status dot inside the LISTENING/SPEAKING pill, same as the Asha screen's. */
   statusDotSize: 8,
   /** Chevron glyph inside the 44pt expand toggle on the Next lesson row. */
   chevronIconSize: 22,
@@ -150,6 +150,8 @@ export const layout = {
   playCircleSize: 28,
   /** Play glyph inside `playCircleSize`. */
   playIconSize: 14,
+  /** Check glyph centred in the 44pt goal ring once the daily goal is met. */
+  goalCheckIconSize: 18,
   /** Arrow glyph beside the label on the Next lesson panel's outline button. */
   arrowIconSize: 18,
   /** Flame glyph inside the streak pill on the Today top bar. */

@@ -22,8 +22,9 @@ type Props = {
 };
 
 /**
- * Asha's portrait as the Today tab's main invitation. Status rings, the pill
- * and the title reflect the shared live session; tapping opens the Asha screen.
+ * Asha's portrait as the Today tab's main invitation. Status rings and the title
+ * reflect the shared live session; the pill appears only while a session is live,
+ * so an idle Today shows no READY badge. Tapping opens the Asha screen.
  */
 export function TodayAshaHero({ compact, onPress, status }: Props) {
   const styles = useStyles();
@@ -41,10 +42,12 @@ export function TodayAshaHero({ compact, onPress, status }: Props) {
         </Pressable>
       </View>
       <View style={styles.copy}>
-        <View style={[styles.pill, live && styles.pillLive]} testID="today-asha-status">
-          <View style={[styles.dot, live && styles.dotLive]} />
-          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.kicker, live && styles.kickerLive]}>{copy.kicker}</Text>
-        </View>
+        {live ? (
+          <View style={styles.pill} testID="today-asha-status">
+            <View style={styles.dot} />
+            <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.kicker}>{copy.kicker}</Text>
+          </View>
+        ) : null}
         <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.title}>{copy.title}</Text>
       </View>
     </View>
@@ -70,11 +73,9 @@ const useStyles = makeStyles((c) => ({
   portrait: { width: portraitSize, height: portraitSize, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.brandSoft },
   portraitCompact: { width: portraitSizeCompact, height: portraitSizeCompact },
   copy: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm },
-  pill: { minHeight: layout.statusPillMinHeight, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingHorizontal: spacing.md },
-  pillLive: { backgroundColor: c.brandSoft, borderColor: c.brandSoft },
-  dot: { width: statusDotSize, height: statusDotSize, borderRadius: radius.pill, backgroundColor: c.lineStrong },
-  dotLive: { backgroundColor: c.brand },
-  kicker: { ...type.eyebrow, color: c.muted },
-  kickerLive: { color: c.brandText },
+  // Only rendered while live, so the pill is always the brand-soft variant.
+  pill: { minHeight: layout.statusPillMinHeight, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.brandSoft, borderColor: c.brandSoft, borderWidth: 1, paddingHorizontal: spacing.md },
+  dot: { width: statusDotSize, height: statusDotSize, borderRadius: radius.pill, backgroundColor: c.brand },
+  kicker: { ...type.eyebrow, color: c.brandText },
   title: { ...type.title, color: c.ink, textAlign: 'center' },
 } satisfies NamedStyles));

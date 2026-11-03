@@ -122,21 +122,21 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).toHaveBeenCalledWith('/settings');
   });
 
-  it('leads with Asha: portrait, READY pill, heading and one Talk with Asha button', async () => {
+  it('leads with Asha: portrait, heading and one Talk with Asha button, with no READY pill while idle', async () => {
     const view = await render(<HomeScreen />);
 
     const hero = view.getByTestId('today-asha-hero');
     const portrait = within(hero).getByTestId('today-asha-portrait');
     expect(portrait.props.accessibilityRole).toBe('button');
     expect(portrait.props.accessibilityLabel).toBe('Talk to Asha');
-    expect(within(view.getByTestId('today-asha-status')).getByText('READY')).toBeTruthy();
-    const statusDot = view.getByTestId('today-asha-status').children[0] as unknown as { props: { style: StyleProp<ViewStyle> } };
-    expect(StyleSheet.flatten(statusDot.props.style)).toMatchObject({ width: layout.statusDotSize, height: layout.statusDotSize });
+    // No session is live, so the status pill stays off Today; the title alone says Asha is ready.
+    expect(view.queryByTestId('today-asha-status')).toBeNull();
+    expect(view.queryByText('READY')).toBeNull();
     expect(within(hero).getByText('Ready when you are').props.accessibilityLiveRegion).toBe('polite');
     // No body line: on Today a tap only opens the Asha screen, so "Tap Asha to unmute…" would be wrong here.
     expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
     expect(within(hero).queryByText(/Tap Asha/u)).toBeNull();
-    expect(within(hero).getAllByRole('text').map((node) => node.props.children)).toEqual(['READY', 'Ready when you are']);
+    expect(within(hero).getAllByRole('text').map((node) => node.props.children)).toEqual(['Ready when you are']);
     const talk = view.getByTestId('today-talk-with-asha');
     expect(talk.props.accessibilityRole).toBe('button');
     expect(within(talk).getByText('Talk with Asha')).toBeTruthy();
@@ -212,7 +212,12 @@ describe('HomeScreen primary journey', () => {
     mockAshaSession.status = 'responding';
     const view = await render(<HomeScreen />);
 
+    // A live session brings the pill back, in its brand-soft colours.
     expect(within(view.getByTestId('today-asha-status')).getByText('SPEAKING')).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByTestId('today-asha-status').props.style)).toMatchObject({ backgroundColor: colors.brandSoft, minHeight: layout.statusPillMinHeight });
+    const statusDot = view.getByTestId('today-asha-status').children[0] as unknown as { props: { style: StyleProp<ViewStyle> } };
+    expect(StyleSheet.flatten(statusDot.props.style)).toMatchObject({ width: layout.statusDotSize, height: layout.statusDotSize, backgroundColor: colors.brand });
+    expect(view.getByText('SPEAKING').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
     expect(view.getByText('Asha is speaking')).toBeTruthy();
     expect(view.queryByText('Your mic is muted. Tap Asha to speak at any time.')).toBeNull();
     expect(StyleSheet.flatten(view.getByTestId('today-asha-ring-outer').props.style).borderColor).toBe(colors.orb);
@@ -226,7 +231,10 @@ describe('HomeScreen primary journey', () => {
 
     mockAshaSession.status = 'disconnected';
     await view.rerender(<HomeScreen />);
-    expect(within(view.getByTestId('today-asha-status')).getByText('READY')).toBeTruthy();
+    // Back to idle: the pill goes, the title keeps working.
+    expect(view.queryByTestId('today-asha-status')).toBeNull();
+    expect(view.queryByText('READY')).toBeNull();
+    expect(view.getByText('Ready when you are')).toBeTruthy();
     expect(StyleSheet.flatten(view.getByTestId('today-asha-ring-outer').props.style).borderColor).toBe(colors.portraitRingFaint);
     expect(StyleSheet.flatten(view.getByTestId('today-asha-ring-inner').props.style).borderColor).toBe(colors.portraitRing);
   });
@@ -240,7 +248,7 @@ describe('HomeScreen primary journey', () => {
     expect(row.props.accessibilityState?.expanded).toBeUndefined();
     expect(row.props.accessibilityLabel).toBe('Start lesson, A warm hello, 5 of 10 min today');
     expect(row.props.accessibilityHint).toBe('Starts the lesson');
-    expect(within(row).getByTestId('today-goal-value').props.children).toBe('Start · 5 of 10 min today');
+    expect(within(row).getByTestId('today-goal-value').props.children).toBe('Lesson 1 of 10 · 5 of 10 min today');
     expect(view.getByText('STEP 2 OF 3 · NEXT LESSON')).toBeTruthy();
     expect(within(row).getByTestId('today-goal-dial', { includeHiddenElements: true })).toBeTruthy();
     expect(within(row).getByText('A warm hello')).toBeTruthy();
@@ -310,6 +318,8 @@ describe('HomeScreen primary journey', () => {
     // Icon only: no text label, so the text column keeps its width at 393pt.
     expect(within(affordance).queryByText(/./u)).toBeNull();
     expect(view.queryByText('Start')).toBeNull();
+    // The wrapper is a full 44pt box with the play circle centred, so the glyph has a touch-size footprint inside the row.
+    expect(StyleSheet.flatten(affordance.props.style)).toMatchObject({ width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' });
     const circle = within(affordance).getByTestId('today-next-start-circle');
     expect(StyleSheet.flatten(circle.props.style)).toMatchObject({ width: layout.playCircleSize, height: layout.playCircleSize, backgroundColor: colors.brandSoft });
     // The row label and hint are unchanged; the affordance is decorative.
@@ -355,7 +365,10 @@ describe('HomeScreen primary journey', () => {
 
     expect(view.getByText('STEP 1 OF 3 · REVIEW')).toBeTruthy();
     expect(view.getByText('Review your phrases')).toBeTruthy();
-    expect(view.getByText('4 phrases due. A quick recall keeps them fresh.')).toBeTruthy();
+    // The row's caption counts the due phrases; the fuller line opens the panel.
+    expect(view.getByTestId('today-goal-value').props.children).toBe('4 phrases due · 5 of 10 min today');
+    expect(within(view.getByTestId('today-next-details')).getByText('4 phrases due. A quick recall keeps them fresh.')).toBeTruthy();
+    expect(within(view.getByTestId('today-next-practice')).queryByText(/quick recall/u)).toBeNull();
     const preview = view.getByTestId('today-review-preview');
     expect(preview.children).toHaveLength(3);
     expect(within(preview).queryByText('पानी, कृपया')).toBeNull();
@@ -390,7 +403,11 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('A warm hello')).toBeTruthy();
     // The subtitle names the phrase being taught instead of repeating the title.
     expect(view.getByText(`New phrase: “${scene.subtitle.replace(/[.!?]$/u, '')}”`)).toBeTruthy();
-    expect(view.getByText('Start speaking · Lesson 1 of 10')).toBeTruthy();
+    // The row caption keeps the lesson position; the plan title shows once, in the panel's Your path section.
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Lesson 1 of 10 · 5 of 10 min today');
+    expect(view.queryByText('Start speaking · Lesson 1 of 10')).toBeNull();
+    expect(within(view.getByTestId('today-current-plan')).getByText('Start speaking')).toBeTruthy();
+    expect(view.getAllByText('Start speaking')).toHaveLength(1);
     for (const word of scene.words) expect(within(view.getByTestId('today-lesson-words')).getAllByText(word).length).toBeGreaterThanOrEqual(1);
     expect(view.getByTestId('today-step-review').props.accessibilityLabel).toBe('Step 1 of 3, Reviewed phrases, done');
 
@@ -421,8 +438,10 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 1 of 2, Finished a lesson, done');
     // The hero's portrait and the step's own action both lead to Asha.
     expect(view.getByTestId('today-asha-portrait')).toBeTruthy();
-    // The step says "Practice": "Talk with Asha" stays with the hero's filled button, so the panel's action and the row's label do not repeat it.
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Practice · 5 of 10 min today');
+    // The row caption says "Short chat"; the step's "Practice with Asha" stays in the VoiceOver label and the panel's button, so "Talk with Asha" stays with the hero's filled button.
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Short chat · 5 of 10 min today');
+    expect(within(view.getByTestId('today-next-practice')).queryByText(/Practice/u)).toBeNull();
+    expect(within(view.getByTestId('today-next-details')).getByText('Try today’s lesson lines out loud in a short chat with Asha.')).toBeTruthy();
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Practice with Asha, Say it out loud, 5 of 10 min today');
     expect(view.getByTestId('today-next-row').props.accessibilityHint).toBe('Opens the Asha screen');
     const nextStep = view.getByTestId('today-next-step');
@@ -435,19 +454,21 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).toHaveBeenCalledWith('/live');
   });
 
-  it('prefixes the minutes caption with Continue on a resumed lesson and Review once every plan is done', async () => {
+  it('keeps the lesson position in the caption on a resumed lesson and once every plan is done', async () => {
     mockAppState.phrases = [];
     mockAppState.sceneProgress = { 'plan-essentials-03': { completions: 0, lastBeatIndex: 2, lastPracticedAt: '2026-07-20T12:00:00.000Z' } };
     const view = await render(<HomeScreen />);
 
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Continue · 5 of 10 min today');
+    // No action word in the caption: "Continue" is only in the VoiceOver label and the panel's button.
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Lesson 3 of 10 · 5 of 10 min today');
+    expect(view.queryByText(/^Continue/u)).toBeNull();
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Continue, Ask how someone is, 5 of 10 min today');
 
     // Every lesson on every plan complete: the step reopens a lesson for review.
     mockAppState.sceneProgress = Object.fromEntries(lessonPlans.flatMap((plan) => plan.lessonIds.map((id) => [id, { completions: 1 }])));
     await view.rerender(<HomeScreen />);
     expect(view.getByText('STEP 1 OF 2 · REVIEW LESSON')).toBeTruthy();
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Review · 5 of 10 min today');
+    expect(view.getByTestId('today-goal-value').props.children).toMatch(/^Lesson \d+ of \d+ · 5 of 10 min today$/u);
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toMatch(/^Review lesson, .+, 5 of 10 min today$/u);
     expect(view.getByTestId('today-next-row').props.accessibilityHint).toBe('Opens the lesson again');
   });
@@ -461,15 +482,30 @@ describe('HomeScreen primary journey', () => {
 
     expect(view.getByText('DONE FOR TODAY')).toBeTruthy();
     expect(view.getByText('Shabaash!')).toBeTruthy();
-    expect(view.getByText('Today’s practice is complete. 7 days in a row. More is optional.')).toBeTruthy();
-    // Success reads forest, as the old finished-day card did.
-    expect(StyleSheet.flatten(view.getByText('DONE FOR TODAY').props.style).color).toBe(colors.forestText);
+    // The kicker reads rust, not forest: no green on Today.
+    expect(StyleSheet.flatten(view.getByText('DONE FOR TODAY').props.style).color).toBe(colors.brandText);
+    expect(StyleSheet.flatten(view.getByText('DONE FOR TODAY').props.style).color).not.toBe(colors.forestText);
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Keep going, Shabaash!, 10 of 10 min today');
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Keep going · 10 of 10 min today');
+    // Only the minutes in the caption; the celebration line waits in the panel.
+    expect(view.getByTestId('today-goal-value').props.children).toBe('10 of 10 min today');
+    expect(view.queryByText('Keep going')).toBeNull();
+    expect(view.queryByText('Today’s practice is complete. 7 days in a row. More is optional.')).toBeNull();
     expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, Shabaash!, collapsed');
+    // The goal is met, so the ring closes around a check and shows no numeral.
+    const hidden = { includeHiddenElements: true };
+    const dial = view.getByTestId('today-goal-dial', hidden);
+    expect(dial.props.accessibilityValue).toEqual({ min: 0, max: 100, now: 100 });
+    expect(within(dial).getByTestId('today-goal-check', hidden)).toBeTruthy();
+    expect(within(dial).queryAllByRole('text', hidden)).toEqual([]);
 
     await fireEvent.press(view.getByTestId('today-next-toggle'));
+    expect(within(view.getByTestId('today-next-details')).getByText('Today’s practice is complete. 7 days in a row. More is optional.')).toBeTruthy();
+    // "Keep going" shows once, on the panel's button.
+    expect(view.getAllByText('Keep going')).toHaveLength(1);
+    expect(within(view.getByTestId('today-next-step')).getByText('Keep going')).toBeTruthy();
     expect(view.getByTestId('today-step-asha').props.accessibilityLabel).toBe('Step 2 of 2, Spoke with Asha, done');
+    // Finished steps are struck through in ink, not faded.
+    expect(StyleSheet.flatten(within(view.getByTestId('today-step-asha')).getByText('Spoke with Asha').props.style)).toMatchObject({ color: colors.ink, textDecorationLine: 'line-through' });
     await fireEvent.press(view.getByLabelText('Keep going'));
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
   });
@@ -547,7 +583,7 @@ describe('HomeScreen primary journey', () => {
   it('shows daily goal progress inside the next lesson row', async () => {
     const view = await render(<HomeScreen />);
 
-    // The ring is a silent numeral inside the row, hidden from assistive tech; the row's label and the minutes line carry the value.
+    // The ring shows progress only, hidden from assistive tech; the row's label and the caption carry the minutes.
     const hidden = { includeHiddenElements: true };
     expect(view.queryByTestId('today-goal-dial')).toBeNull();
     const dial = view.getByTestId('today-goal-dial', hidden);
@@ -556,27 +592,38 @@ describe('HomeScreen primary journey', () => {
     expect(dial.props.accessibilityLabel).toBe('50 percent of daily goal complete');
     expect(dial.props.accessible).toBe(false);
     expect(dial.props.importantForAccessibility).toBe('no-hide-descendants');
-    expect(within(dial).getAllByRole('text', hidden).map((node) => node.props.children)).toEqual(['5']);
+    expect(within(dial).queryAllByRole('text', hidden)).toEqual([]);
+    expect(view.queryByText('5', hidden)).toBeNull();
+    expect(within(dial).queryByTestId('today-goal-check', hidden)).toBeNull();
     expect(view.queryByText('of 10 min', hidden)).toBeNull();
     const row = view.getByTestId('today-next-row');
     expect(within(row).getByTestId('today-goal-dial', hidden)).toBeTruthy();
     const minutes = within(view.getByTestId('today-next-practice')).getByTestId('today-goal-value');
-    // The caption leads with the step's one-word action; the row label keeps the full action and the bare minutes.
-    expect(minutes.props.children).toBe('Review · 5 of 10 min today');
+    // The caption leads with the step's context (the due count here); the row label keeps the full action and the bare minutes.
+    expect(minutes.props.children).toBe('1 phrase due · 5 of 10 min today');
     expect(StyleSheet.flatten(minutes.props.style).fontSize).toBeGreaterThanOrEqual(12);
     expect(row.props.accessibilityLabel).toBe('Start review, Review your phrases, 5 of 10 min today');
 
     mockAppState.goal = 15;
     await view.rerender(<HomeScreen />);
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Review · 5 of 15 min today');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('1 phrase due · 5 of 15 min today');
     expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('33 percent of daily goal complete');
+    expect(view.queryByTestId('today-goal-check', hidden)).toBeNull();
+
+    // Exactly at the goal: the ring closes and the check appears while the caption still counts "15 of 15".
+    mockAppState.practice = { chaiDone: true, date: dateKey(), liveDone: false, seconds: 900 };
+    await view.rerender(<HomeScreen />);
+    expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('100 percent of daily goal complete');
+    expect(view.getByTestId('today-goal-check', hidden)).toBeTruthy();
+    expect(view.getByTestId('today-goal-value').props.children).toBe('1 phrase due · 15 of 15 min today');
 
     mockAppState.practice = { chaiDone: true, date: dateKey(), liveDone: true, seconds: 1200 };
     await view.rerender(<HomeScreen />);
     expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('100 percent of daily goal complete');
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Review · 15+ min today');
+    expect(view.getByTestId('today-goal-check', hidden)).toBeTruthy();
+    expect(view.getByTestId('today-goal-value').props.children).toBe('1 phrase due · 15+ min today');
     expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Start review, Review your phrases, 15+ min today');
-    expect(view.getByText('15+', hidden)).toBeTruthy();
-    expect(view.queryByText('min', hidden)).toBeNull();
+    expect(within(view.getByTestId('today-goal-dial', hidden)).queryAllByRole('text', hidden)).toEqual([]);
+    expect(view.queryByText('15+', hidden)).toBeNull();
   });
 });

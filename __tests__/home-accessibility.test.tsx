@@ -69,16 +69,20 @@ describe('home accessibility', () => {
     expect(dial.props.accessibilityValue).toEqual({ min: 0, max: 100, now: 0 });
     expect(dial.props.accessibilityLabel).toBe('0 percent of daily goal complete');
     // Dynamic Type stays capped on the hero copy, as it is on the Asha screen header.
-    for (const text of ['READY', 'Ready when you are']) {
-      expect(view.getByText(text).props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-    }
+    expect(view.getByText('Ready when you are').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    // No READY pill while no session is live; the title alone says Asha is ready.
+    expect(view.queryByTestId('today-asha-status')).toBeNull();
+    expect(view.queryByText('READY')).toBeNull();
     expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
     expect(view.getByText('Ready when you are').props.accessibilityLiveRegion).toBe('polite');
-    // The 44pt goal ring cannot grow with Dynamic Type, so its numeral is capped too; the row's minutes line carries the value.
-    expect(view.getByText('0', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-    expect(view.queryByText('0')).toBeNull();
-    // The caption leads with the one-word action; the row label above keeps the full "Start lesson".
-    expect(view.getByTestId('today-goal-value').props.children).toBe('Start · 0 of 5 min today');
+    // The 44pt goal ring carries no text at all: it only shows progress, and the row's caption carries the minutes.
+    expect(within(dial).queryAllByRole('text', { includeHiddenElements: true })).toEqual([]);
+    expect(view.queryByText('0', { includeHiddenElements: true })).toBeNull();
+    expect(view.queryByTestId('today-goal-check', { includeHiddenElements: true })).toBeNull();
+    // Three lines in the row: kicker, title, and one caption of step context plus minutes. No action word, so "Start" is not repeated.
+    const practice = view.getByTestId('today-next-practice');
+    expect(within(practice).getAllByRole('text').map((node) => node.props.children)).toEqual(['STEP 1 OF 2 · NEXT LESSON', 'A warm hello', 'Lesson 1 of 10 · 0 of 5 min today']);
+    expect(view.getByTestId('today-goal-value').props.children).toBe('Lesson 1 of 10 · 0 of 5 min today');
     // The caption wraps and scales like the row's title, so it never truncates at large Dynamic Type.
     expect(view.getByTestId('today-goal-value').props.numberOfLines).toBeUndefined();
     expect(view.getByTestId('today-goal-value').props.maxFontSizeMultiplier).toBeUndefined();
@@ -89,6 +93,8 @@ describe('home accessibility', () => {
     const affordance = view.getByTestId('today-next-start');
     expect(affordance.props.accessible).toBe(false);
     expect(affordance.props.importantForAccessibility).toBe('no');
+    // A 44pt box around the play circle, still inside the row's single tap target.
+    expect(StyleSheet.flatten(affordance.props.style)).toMatchObject({ width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' });
     expect(within(affordance).getByTestId('today-next-start-circle')).toBeTruthy();
     expect(within(affordance).queryByText(/./u)).toBeNull();
     expect(view.queryByLabelText('Start')).toBeNull();

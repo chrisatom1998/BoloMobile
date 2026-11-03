@@ -89,10 +89,11 @@ export default function HomeScreen() {
   // Whole minutes drive both the label and the ring so they never disagree.
   const minutesToday = Math.floor(practice.seconds / 60);
   const goalPercent = Math.min(100, Math.round(minutesToday / goal * 100));
-  // Past the goal the ring shows "15+" rather than a lopsided "911 of 15 min".
-  const goalMet = minutesToday > goal;
-  const minutesLabel = goalMet ? `${goal}+` : String(minutesToday);
-  const minutesLine = goalMet ? `${goal}+ min today` : `${minutesToday} of ${goal} min today`;
+  // Past the goal the caption shows "15+" rather than a lopsided "911 of 15 min".
+  const goalExceeded = minutesToday > goal;
+  // At the goal the ring closes and shows a check instead of an arc.
+  const goalReached = minutesToday >= goal;
+  const minutesLine = goalExceeded ? `${goal}+ min today` : `${minutesToday} of ${goal} min today`;
   // Every due phrase counts here, not the 5-phrase review-session cap from duePhrases.
   // `calendarDay` re-runs these after midnight: this tab stays mounted, and
   // phrases can fall due overnight without their references changing.
@@ -118,8 +119,6 @@ export default function HomeScreen() {
 
     return {
       action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
-      // One word for the row's minutes caption ("Start · 4 of 10 min today"); the full action stays in the VoiceOver label.
-      actionWord: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start' : 'Review',
       hint: mode === 'continue' ? 'Continues the lesson' : mode === 'next' ? 'Starts the lesson' : 'Opens the lesson again',
       kicker: mode === 'continue' ? 'CONTINUE LESSON' : mode === 'next' ? 'NEXT LESSON' : 'REVIEW LESSON',
       lessonId,
@@ -140,13 +139,13 @@ export default function HomeScreen() {
   }, [visibleSteps]);
   const lessonNumber = lessonSelection.plan.lessonIds.indexOf(lessonSelection.lessonId) + 1;
   const hero = useMemo(() => {
+    // `context` leads the row's one caption ("Lesson 1 of 10 · 4 of 10 min today"); the plan title waits in the panel's Your path section.
     const lessonStep = {
       action: lessonSelection.action,
-      actionWord: lessonSelection.actionWord,
       chips: (heroScene?.words ?? []).map((word) => ({ key: word, latin: false, text: word })),
+      context: lessonNumber > 0 ? `Lesson ${lessonNumber} of ${lessonSelection.plan.lessonIds.length}` : undefined,
       hint: lessonSelection.hint,
       kicker: stepKicker('lesson', lessonSelection.kicker),
-      meta: lessonNumber > 0 ? `${lessonSelection.plan.title} · Lesson ${lessonNumber} of ${lessonSelection.plan.lessonIds.length}` : undefined,
       onPress: () => openLesson(lessonSelection.lessonId),
       subtitle: heroScene?.subtitle ? `New phrase: “${heroScene.subtitle.replace(/[.!?]$/u, '')}”` : undefined,
       title: lessonSelection.title,
@@ -155,11 +154,10 @@ export default function HomeScreen() {
       case 'review':
         return {
           action: 'Start review',
-          actionWord: 'Review',
           chips: reviewPreview.map((item) => ({ ...item, latin: showLatinPreview })),
+          context: `${plural(dueCount, 'phrase')} due`,
           hint: 'Starts the review',
           kicker: stepKicker('review', 'REVIEW'),
-          meta: undefined,
           onPress: () => router.push('/review' as Href),
           subtitle: `${plural(dueCount, 'phrase')} due. A quick recall keeps them fresh.`,
           title: 'Review your phrases',
@@ -170,11 +168,10 @@ export default function HomeScreen() {
         // "Practice", not "Talk": the hero's filled Talk with Asha button already owns that verb, and this step is practising the lesson lines.
         return {
           action: 'Practice with Asha',
-          actionWord: 'Practice',
           chips: [],
+          context: 'Short chat',
           hint: 'Opens the Asha screen',
           kicker: stepKicker('asha', 'SPEAK'),
-          meta: undefined,
           onPress: openAsha,
           subtitle: 'Try today’s lesson lines out loud in a short chat with Asha.',
           title: 'Say it out loud',
@@ -183,23 +180,21 @@ export default function HomeScreen() {
         return {
           ...lessonStep,
           action: 'Keep going',
-          actionWord: 'Keep going',
           chips: [],
+          // Only the minutes on a finished day; "Keep going" shows once, on the panel's button.
+          context: undefined,
           hint: 'Starts the next lesson',
           kicker: 'DONE FOR TODAY',
-          meta: undefined,
           subtitle: `Today’s practice is complete. ${streak > 0 ? `${plural(streak, 'day')} in a row. ` : ''}More is optional.`,
           title: 'Shabaash!',
         };
     }
   }, [dueCount, heroScene, lessonNumber, lessonSelection, openAsha, openLesson, reviewPreview, router, showLatinPreview, stepKicker, streak, currentStep]);
   const dayComplete = currentStep === null;
-  // The row's caption is the lesson meta when there is one; otherwise the subtitle
-  // moves up into the row so the panel does not repeat it.
-  const rowCaption = hero.meta ?? hero.subtitle;
-  const detailsSubtitle = hero.meta ? hero.subtitle : undefined;
-  // The Play circle carries no text, so the minutes caption leads with the step's one-word action.
-  const goalCaption = `${hero.actionWord} · ${minutesLine}`;
+  // The row keeps to three lines (kicker, title, caption); every step's subtitle opens the panel instead.
+  const detailsSubtitle = hero.subtitle;
+  // One caption carries the step's context and the minutes; the row's VoiceOver label reads the action and the bare minutes.
+  const goalCaption = hero.context ? `${hero.context} · ${minutesLine}` : minutesLine;
 
   const stepCopy = useCallback((step: TodayStep) => {
     if (step.key === 'review') {
@@ -280,7 +275,9 @@ export default function HomeScreen() {
             >
               <Svg aria-hidden height={goalRingSize} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${goalRingSize} ${goalRingSize}`} width={goalRingSize}>
                 <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={goalRingStroke} />
-                {goalPercent > 0 ? (
+                {goalReached ? (
+                  <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.brand} strokeWidth={goalRingStroke} />
+                ) : goalPercent > 0 ? (
                   <Circle
                     cx={goalRingSize / 2}
                     cy={goalRingSize / 2}
@@ -293,18 +290,20 @@ export default function HomeScreen() {
                   />
                 ) : null}
               </Svg>
-              <View pointerEvents="none" style={styles.goalValue}>
-                {/* The 44pt ring cannot grow with Dynamic Type, so its numeral is capped; the row's minutes line carries the value. */}
-                <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={[styles.goalMinutes, minutesLabel.length >= 3 && styles.goalMinutesLong]}>{minutesLabel}</Text>
-              </View>
+              {/* No numeral: the ring only shows progress, and the caption beside it carries the minutes. A check marks a met goal. */}
+              {goalReached ? (
+                <View pointerEvents="none" style={styles.goalCheck} testID="today-goal-check">
+                  <Check color={colors.brand} size={layout.goalCheckIconSize} strokeWidth={3} />
+                </View>
+              ) : null}
             </View>
+            {/* Three lines: kicker, title, one caption. Subtitles live in the panel. */}
             <View style={styles.nextCopy} testID="today-next-practice">
               <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
               <Text style={styles.nextTitle}>{hero.title}</Text>
-              {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
               <Text style={styles.goalLine} testID="today-goal-value">{goalCaption}</Text>
             </View>
-            {/* Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. At accessibility sizes the column row puts it under the text. */}
+            {/* Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. The 44pt wrapper gives the glyph a full-size footprint inside the row's single tap target. At accessibility sizes the column row puts it under the text. */}
             <View accessible={false} importantForAccessibility="no" style={[styles.nextAffordance, largeTextLayout && styles.nextAffordanceLarge]} testID="today-next-start">
               <View style={styles.playCircle} testID="today-next-start-circle">
                 <Play color={colors.brand} fill={colors.brand} size={layout.playIconSize} strokeWidth={2} />
@@ -458,20 +457,18 @@ const useStyles = makeStyles((c) => {
   goalDial: { width: goalRingSize, height: goalRingSize, alignItems: 'center', justifyContent: 'center' },
   // Rotating the whole ring starts the arc at 12 o'clock without SVG transform props, which web rejects.
   goalRing: { transform: [{ rotate: '-90deg' }] },
-  goalValue: { position: 'absolute', alignItems: 'center' },
-  goalMinutes: { ...type.label, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
-  goalMinutesLong: { ...type.caption, fontWeight: '700' },
+  goalCheck: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   goalLine: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   nextCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
-  // Play glyph in a brand-soft circle: says the row itself starts the step without taking width from the text column.
-  nextAffordance: { flexShrink: 0 },
+  // Play glyph in a brand-soft circle, centred in a 44pt box: says the row itself starts the step without taking width from the text column.
+  nextAffordance: { width: layout.touchTarget, height: layout.touchTarget, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
   // In the column layout the affordance sits under the text, flush with its leading edge.
   nextAffordanceLarge: { alignSelf: 'flex-start' },
   playCircle: { width: layout.playCircleSize, height: layout.playCircleSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft },
   nextKicker: { ...type.eyebrow, color: c.muted },
-  nextKickerDone: { color: c.forestText },
+  // Rust, not forest: Today keeps to the brand palette, and a finished day is a celebration rather than a graded answer.
+  nextKickerDone: { color: c.brandText },
   nextTitle: { ...type.label, color: c.ink },
-  nextMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   // A hairline separates the panel from the row inside the same card.
   nextDetails: { borderTopColor: c.line, borderTopWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   details: { width: '100%', gap: spacing.lg },
@@ -490,7 +487,8 @@ const useStyles = makeStyles((c) => {
   stepDotDone: { backgroundColor: c.gold, borderColor: c.gold },
   stepDotCurrent: { backgroundColor: c.goldSoft, borderColor: c.goldIcon },
   stepLabel: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
-  stepLabelDone: { color: c.muted, textDecorationLine: 'line-through' },
+  // Struck through but still ink: the line already says it is done, and muted ink on top read too faint.
+  stepLabelDone: { color: c.ink, textDecorationLine: 'line-through' },
   stepLabelCurrent: { fontWeight: '600' },
   stepMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   detailsFooter: { flexDirection: 'row' },
