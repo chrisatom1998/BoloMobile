@@ -1,0 +1,12 @@
+appId: com.bolo.hindi
+name: Phrases
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: phrases
+- tapOn: "Phrases"
+- extendedWaitUntil:
+    visible: "One tea, please."
+    timeout: 30000
+- takeScreenshot: phrases

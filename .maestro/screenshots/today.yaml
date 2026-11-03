@@ -1,0 +1,31 @@
+appId: com.bolo.hindi
+name: Today
+---
+- runFlow:
+    file: subflows/seed-and-relaunch.yaml
+    env:
+      FIXTURE: today
+- assertVisible: "Namaste"
+- takeScreenshot: today-1
+- scrollUntilVisible:
+    element:
+      text: "Due today|Your path"
+    direction: DOWN
+    timeout: 45000
+    speed: 40
+    visibilityPercentage: 60
+    centerElement: true
+- takeScreenshot: today-2
+- runFlow:
+    when:
+      visible: "Due today"
+    commands:
+      - scrollUntilVisible:
+          element:
+            text: "Your path"
+          direction: DOWN
+          timeout: 45000
+          speed: 40
+          visibilityPercentage: 60
+          centerElement: true
+      - takeScreenshot: today-3
