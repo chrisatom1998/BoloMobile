@@ -23,6 +23,8 @@ jest.mock('@/state/app-state', () => ({
     hydrated: true,
     phrases: [],
     practice: { chaiDone: false, date: '2026-07-14', liveDone: false, seconds: 0 },
+    // A past practice day keeps this fixture out of the first-run state, so the streak pill and ring render at 0.
+    practiceHistory: [{ answers: 0, correct: 0, date: '2026-07-13', reviews: 0, seconds: 120 }],
     setGoal: jest.fn(),
     streak: 0,
   }),

@@ -174,6 +174,7 @@ describe('HomeScreen primary journey', () => {
   it('sends the SPEAK step’s own action back to a minimized session too', async () => {
     mockAppState.phrases = [];
     mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
+    mockAppState.sceneProgress = { 'plan-essentials-01': { completions: 1 } };
     mockAshaSession.available = true;
     mockAshaSession.minimized = true;
     mockAshaSession.status = 'ready';
@@ -431,6 +432,7 @@ describe('HomeScreen primary journey', () => {
   it('invites the learner to speak with Asha after the lesson', async () => {
     mockAppState.phrases = [];
     mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
+    mockAppState.sceneProgress = { 'plan-essentials-01': { completions: 1 } };
     const view = await renderExpanded();
 
     expect(view.getByText('STEP 2 OF 2 · SPEAK')).toBeTruthy();
@@ -480,6 +482,7 @@ describe('HomeScreen primary journey', () => {
     mockAppState.streak = 7;
     mockAppState.practice = { chaiDone: false, date: dateKey(), liveDone: true, seconds: 600 };
     mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 600 }];
+    mockAppState.sceneProgress = { 'plan-essentials-01': { completions: 1 } };
     const view = await render(<HomeScreen />);
 
     expect(view.getByText('DONE FOR TODAY')).toBeTruthy();
@@ -508,8 +511,174 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByTestId('today-step-asha').props.accessibilityLabel).toBe('Step 2 of 2, Spoke with Asha, done');
     // Finished steps are struck through in ink, not faded.
     expect(StyleSheet.flatten(within(view.getByTestId('today-step-asha')).getByText('Spoke with Asha').props.style)).toMatchObject({ color: colors.ink, textDecorationLine: 'line-through' });
+    // Lesson 1 is complete, so "Keep going" opens the next one.
     await fireEvent.press(view.getByLabelText('Keep going'));
-    expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
+    expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-02' } });
+  });
+
+  it('reads the lesson step and the path count from one source once a lesson is finished', async () => {
+    const plan = lessonPlans[0]!;
+    const lessonCount = plan.lessonIds.length;
+    mockAppState.phrases = [];
+    mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
+    mockAppState.sceneProgress = { [plan.lessonIds[0]!]: { completions: 1 } };
+    const view = await renderExpanded();
+
+    expect(view.getByText('STEP 2 OF 2 · SPEAK')).toBeTruthy();
+    expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 1 of 2, Finished a lesson, done');
+    expect(view.getByText(`1 of ${lessonCount} lessons`)).toBeTruthy();
+    expect(view.getByLabelText(`${plan.title}, plan 1 of ${lessonPlans.length}, 1 of ${lessonCount} lessons complete`)).toBeTruthy();
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-0').props.style).backgroundColor).toBe(colors.brand);
+    expect(StyleSheet.flatten(view.getByTestId('today-plan-segment-1').props.style).backgroundColor).toBe(colors.goldIcon);
+  });
+
+  it('never shows a finished lesson step beside a path with no completed lessons', async () => {
+    // Seeded data: today's history records lesson answers, but no scene has a completion.
+    mockAppState.phrases = [];
+    mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
+    mockAppState.sceneProgress = {};
+    const view = await renderExpanded();
+
+    expect(view.getByText('STEP 1 OF 2 · NEXT LESSON')).toBeTruthy();
+    expect(view.getByTestId('today-step-lesson').props.accessibilityLabel).toBe('Step 1 of 2, Lesson: A warm hello, up next');
+    expect(view.queryByText('Finished a lesson')).toBeNull();
+    expect(view.getByText(`0 of ${lessonPlans[0]!.lessonIds.length} lessons`)).toBeTruthy();
+  });
+
+  describe('first run', () => {
+    const lessonCount = lessonPlans[0]!.lessonIds.length;
+
+    beforeEach(() => {
+      mockAppState.phrases = [];
+      mockAppState.practice = { chaiDone: false, date: dateKey(), liveDone: false, seconds: 0 };
+      mockAppState.practiceHistory = [];
+      mockAppState.sceneProgress = {};
+      mockAppState.streak = 0;
+    });
+
+    it('welcomes the learner with one first step and no streak pill or ring', async () => {
+      const view = await render(<HomeScreen />);
+
+      expect(view.queryByTestId('today-streak')).toBeNull();
+      expect(view.queryByText('0 days')).toBeNull();
+      expect(view.getByTestId('today-settings')).toBeTruthy();
+      expect(view.queryByTestId('today-goal-dial', { includeHiddenElements: true })).toBeNull();
+      expect(view.getByTestId('today-next-start')).toBeTruthy();
+      expect(view.getByText('YOUR FIRST STEP')).toBeTruthy();
+      expect(view.queryByText(/^STEP \d OF \d/u)).toBeNull();
+      expect(within(view.getByTestId('today-next-practice')).getByText('A warm hello')).toBeTruthy();
+      expect(view.getByTestId('today-goal-value').props.children).toBe(`Lesson 1 of ${lessonCount} · about 4 min`);
+      expect(view.queryByText(/min today/u)).toBeNull();
+      const row = view.getByTestId('today-next-row');
+      expect(row.props.accessibilityLabel).toBe('Start lesson, A warm hello, about 4 min');
+      expect(row.props.accessibilityHint).toBe('Starts the lesson');
+      expect(view.queryByTestId('today-next-up-row')).toBeNull();
+      // The hero greets instead of "Ready when you are", still as a capped live region.
+      const title = within(view.getByTestId('today-asha-hero')).getByText('Welcome to Bolo');
+      expect(title.props.accessibilityLiveRegion).toBe('polite');
+      expect(title.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+      expect(view.queryByText('Ready when you are')).toBeNull();
+
+      await fireEvent.press(row);
+      expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
+    });
+
+    it('keeps a live status title over the welcome', async () => {
+      mockAshaSession.available = true;
+      mockAshaSession.status = 'responding';
+      const view = await render(<HomeScreen />);
+
+      expect(view.getByText('Asha is speaking')).toBeTruthy();
+      expect(view.queryByText('Welcome to Bolo')).toBeNull();
+      expect(view.getByText('YOUR FIRST STEP')).toBeTruthy();
+    });
+
+    it('ends as soon as a lesson is started, and a 0-day streak then shows the pill', async () => {
+      mockAppState.sceneProgress = { 'plan-essentials-01': { completions: 0, lastBeatIndex: 1, lastPracticedAt: '2026-07-20T12:00:00.000Z' } };
+      const view = await render(<HomeScreen />);
+
+      expect(view.getByText('0 days')).toBeTruthy();
+      expect(view.getByTestId('today-streak').props.accessibilityLabel).toBe('0 day practice streak');
+      expect(view.getByTestId('today-goal-dial', { includeHiddenElements: true })).toBeTruthy();
+      expect(view.getByText('STEP 1 OF 2 · CONTINUE LESSON')).toBeTruthy();
+      expect(view.getByText('Ready when you are')).toBeTruthy();
+      expect(view.getByTestId('today-goal-value').props.children).toBe(`Lesson 1 of ${lessonCount} · 0 of 10 min today`);
+      expect(view.getByTestId('today-next-up-row')).toBeTruthy();
+    });
+
+    it('ends after minutes on a past day even with no streak', async () => {
+      mockAppState.practiceHistory = [{ answers: 0, correct: 0, date: '2026-07-01', reviews: 0, seconds: 90 }];
+      const view = await render(<HomeScreen />);
+
+      expect(view.getByText('0 days')).toBeTruthy();
+      expect(view.queryByText('YOUR FIRST STEP')).toBeNull();
+      expect(view.queryByText('Welcome to Bolo')).toBeNull();
+    });
+  });
+
+  describe('next-up row', () => {
+    it('shows the step after the current one under the row, as an informational line', async () => {
+      mockAppState.phrases = [];
+      const view = await render(<HomeScreen />);
+
+      // Lesson is current and Asha follows.
+      expect(view.getByText('STEP 1 OF 2 · NEXT LESSON')).toBeTruthy();
+      const card = view.getByTestId('today-next-card');
+      const row = within(card).getByTestId('today-next-up-row');
+      expect(row.props.accessible).toBe(true);
+      expect(row.props.accessibilityRole).toBeUndefined();
+      expect(row.props.onPress).toBeUndefined();
+      expect(row.props.accessibilityLabel).toBe('Then: Step 2 of 2, Chat with Asha, 3 min');
+      expect(within(row).getByText('Chat with Asha')).toBeTruthy();
+      expect(within(row).getByText('3 min')).toBeTruthy();
+      expect(within(row).queryByText(/^Then/u)).toBeNull();
+      expect(within(row).queryByText(/^STEP/u)).toBeNull();
+      const style = StyleSheet.flatten(row.props.style);
+      expect(style).toMatchObject({ borderTopColor: colors.line, borderTopWidth: 1, minHeight: layout.nextUpRowMinHeight });
+      expect(style.height).toBeUndefined();
+      expect(style.minHeight).toBeLessThanOrEqual(52);
+      expect(StyleSheet.flatten(within(row).getByText('Chat with Asha').props.style).color).toBe(colors.muted);
+      // An upcoming step dot, like the panel's list.
+      const dot = row.children[0] as unknown as { props: { style: StyleProp<ViewStyle> } };
+      expect(StyleSheet.flatten(dot.props.style)).toMatchObject({ width: layout.stepDotSize, borderColor: colors.lineStrong });
+      // It sits below the main row inside the same card, before any panel.
+      const ids = collectTestIds(card);
+      expect(ids.indexOf('today-next-toggle')).toBeLessThan(ids.indexOf('today-next-up-row'));
+    });
+
+    it('names the lesson when review is current', async () => {
+      const view = await render(<HomeScreen />);
+      expect(view.getByTestId('today-next-up-row').props.accessibilityLabel).toBe('Then: Step 2 of 3, Lesson: A warm hello, 4 min');
+    });
+
+    it('hides while the panel is open and on a done day', async () => {
+      mockAppState.phrases = [];
+      const view = await render(<HomeScreen />);
+      expect(view.getByTestId('today-next-up-row')).toBeTruthy();
+
+      await fireEvent.press(view.getByTestId('today-next-toggle'));
+      expect(view.queryByTestId('today-next-up-row')).toBeNull();
+      expect(view.getByTestId('today-step-asha')).toBeTruthy();
+      await fireEvent.press(view.getByTestId('today-next-toggle'));
+      expect(view.getByTestId('today-next-up-row')).toBeTruthy();
+
+      mockAppState.practice = { chaiDone: false, date: dateKey(), liveDone: true, seconds: 600 };
+      mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 600 }];
+      mockAppState.sceneProgress = { 'plan-essentials-01': { completions: 1 } };
+      await view.rerender(<HomeScreen />);
+      expect(view.getByText('DONE FOR TODAY')).toBeTruthy();
+      expect(view.queryByTestId('today-next-up-row')).toBeNull();
+    });
+
+    it('is absent on the last step', async () => {
+      mockAppState.phrases = [];
+      mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
+      mockAppState.sceneProgress = { 'plan-essentials-01': { completions: 1 } };
+      const view = await render(<HomeScreen />);
+
+      expect(view.getByText('STEP 2 OF 2 · SPEAK')).toBeTruthy();
+      expect(view.queryByTestId('today-next-up-row')).toBeNull();
+    });
   });
 
   it('routes the streak, the current plan, and the full catalog', async () => {

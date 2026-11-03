@@ -19,7 +19,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import { learnerPhraseLatin } from '@/lib/learner-phrase-display';
 import { dueSavedPhrases } from '@/lib/learning';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
-import { buildTodayPlan, type TodayStep } from '@/lib/today-plan';
+import { buildTodayPlan, completedLessonIds, isFirstRun, type TodayStep } from '@/lib/today-plan';
 import { useAppState } from '@/state/app-state';
 import { useAshaVoiceSession } from '@/state/asha-voice-session';
 import { createButtonStyles, hindiType, layout, makeStyles, maxContentWidth, radius, spacing, type NamedStyles, type, useSharedStyles, useTheme } from '@/theme';
@@ -32,6 +32,9 @@ const goalRingRadius = (goalRingSize - goalRingStroke) / 2;
 const goalRingLength = 2 * Math.PI * goalRingRadius;
 /** Due phrases previewed on the review step; the last one fades to hint at the rest. */
 const reviewPreviewLimit = 3;
+/** The lesson step's estimate in the steps list; the first-run row reads it as "about 4 min". */
+const lessonMinutes = '4 min';
+const lessonEstimate = `about ${lessonMinutes}`;
 
 function plural(count: number, word: string) {
   return `${count} ${word}${count === 1 ? '' : 's'}`;
@@ -112,9 +115,15 @@ export default function HomeScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay is the only input to today's date line.
   const dateLine = useMemo(() => new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }), [calendarDay]);
   const todayPlan = useMemo(
-    () => buildTodayPlan({ dueCount, practice, practiceHistory, reviewStreakDays }),
+    () => buildTodayPlan({ dueCount, practice, practiceHistory, reviewStreakDays, sceneProgress }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay rolls the plan over at midnight.
-    [calendarDay, dueCount, practice, practiceHistory, reviewStreakDays],
+    [calendarDay, dueCount, practice, practiceHistory, reviewStreakDays, sceneProgress],
+  );
+  // Nothing practised yet: no streak pill or goal ring, one first step, and a welcome under the portrait.
+  const firstRun = useMemo(
+    () => isFirstRun({ practice, practiceHistory, sceneProgress, streak }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay re-checks whether today's minutes are today's.
+    [calendarDay, practice, practiceHistory, sceneProgress, streak],
   );
   const lessonSelection = useMemo(() => {
     const { lessonId, mode, plan } = selectNextLesson(sceneProgress, learnerProfile);
@@ -153,6 +162,14 @@ export default function HomeScreen() {
       subtitle: heroScene?.subtitle ? `New phrase: “${heroScene.subtitle.replace(/[.!?]$/u, '')}”` : undefined,
       title: lessonSelection.title,
     };
+    // First run: one first step, the lesson, with its own estimate instead of today's minutes.
+    if (firstRun) {
+      return {
+        ...lessonStep,
+        context: lessonStep.context ? `${lessonStep.context} · ${lessonEstimate}` : lessonEstimate,
+        kicker: 'YOUR FIRST STEP',
+      };
+    }
     switch (currentStep) {
       case 'review':
         return {
@@ -192,12 +209,14 @@ export default function HomeScreen() {
           title: 'Shabaash!',
         };
     }
-  }, [dueCount, heroScene, lessonNumber, lessonSelection, openAsha, openLesson, reviewPreview, router, showLatinPreview, stepKicker, streak, currentStep]);
+  }, [dueCount, firstRun, heroScene, lessonNumber, lessonSelection, openAsha, openLesson, reviewPreview, router, showLatinPreview, stepKicker, streak, currentStep]);
   const dayComplete = currentStep === null;
   // The row keeps to three lines (kicker, title, caption); every step's subtitle opens the panel instead.
   const detailsSubtitle = hero.subtitle;
   // One caption carries the step's context and the minutes; the row's VoiceOver label reads the action and the bare minutes.
-  const goalCaption = hero.context ? `${hero.context} · ${minutesLine}` : minutesLine;
+  // On first run the context already ends with the lesson estimate, and the label reads that instead of "0 of 10 min today".
+  const rowMinutes = firstRun ? lessonEstimate : minutesLine;
+  const goalCaption = firstRun ? hero.context ?? lessonEstimate : hero.context ? `${hero.context} · ${minutesLine}` : minutesLine;
 
   const stepCopy = useCallback((step: TodayStep) => {
     if (step.key === 'review') {
@@ -205,13 +224,21 @@ export default function HomeScreen() {
       return step.status === 'done' ? { label: 'Reviewed phrases', meta: 'Done' } : { label: 'Review saved phrases', meta: '2 min' };
     }
     if (step.key === 'lesson') {
-      return step.status === 'done' ? { label: 'Finished a lesson', meta: 'Done' } : { label: `Lesson: ${lessonSelection.title}`, meta: '4 min' };
+      return step.status === 'done' ? { label: 'Finished a lesson', meta: 'Done' } : { label: `Lesson: ${lessonSelection.title}`, meta: lessonMinutes };
     }
     return step.status === 'done' ? { label: 'Spoke with Asha', meta: 'Done' } : { label: 'Chat with Asha', meta: '3 min' };
   }, [lessonSelection.title]);
+  // The step after the current one, shown as a compact "Then:" row while the card is collapsed. None on first run or a done day.
+  const nextUpStep = useMemo(() => {
+    if (firstRun || dayComplete) return null;
+    const currentIndex = visibleSteps.findIndex((step) => step.status === 'current');
+    const following = currentIndex >= 0 ? visibleSteps[currentIndex + 1] : undefined;
+    return following?.status === 'upcoming' ? { index: currentIndex + 1, ...stepCopy(following) } : null;
+  }, [dayComplete, firstRun, stepCopy, visibleSteps]);
 
   const planDetails = useMemo(() => {
-    const completed = currentPlan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+    const completedIds = completedLessonIds(currentPlan.lessonIds, sceneProgress);
+    const completed = completedIds.length;
     const selectedLessonIndex = currentPlan.lessonIds.indexOf(lessonSelection.lessonId);
     const selectedProgress = sceneProgress[lessonSelection.lessonId];
     const selectedLessonIsInProgress = selectedLessonIndex >= 0
@@ -220,13 +247,13 @@ export default function HomeScreen() {
     const planMeta = selectedLessonIsInProgress
       ? `Lesson ${selectedLessonIndex + 1} in progress`
       : `${completed} of ${currentPlan.lessonIds.length} lessons`;
-    return { completed, planMeta, selectedLessonIsInProgress };
+    return { completed, completedIds, planMeta, selectedLessonIsInProgress };
   }, [currentPlan, lessonSelection.lessonId, sceneProgress]);
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
-  // Hidden from VoiceOver inside the row: the row's own label already reads the minutes.
-  const goalDial = (
+  // Hidden from VoiceOver inside the row: the row's own label already reads the minutes. No ring on first run: there is no progress to show yet.
+  const goalDial = firstRun ? null : (
     <View
       accessible={false}
       accessibilityElementsHidden
@@ -292,10 +319,13 @@ export default function HomeScreen() {
         </View>
         {/* Stacked: the streak pill and gear share their own left-aligned row under the greeting. */}
         <View style={[styles.topbarActions, stackedTopbarLayout && styles.topbarActionsLarge]} testID="today-topbar-actions">
-          <Pressable accessibilityLabel={`${streak} day practice streak`} accessibilityRole="button" hitSlop={4} onPress={() => router.push('/progress' as Href)} style={styles.streakPill} testID="today-streak">
-            <Flame color={colors.goldIcon} size={layout.streakIconSize} strokeWidth={2.2} />
-            <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
-          </Pressable>
+          {/* No "0 days" before the first practice; a streak that later drops to 0 still shows. */}
+          {firstRun ? null : (
+            <Pressable accessibilityLabel={`${streak} day practice streak`} accessibilityRole="button" hitSlop={4} onPress={() => router.push('/progress' as Href)} style={styles.streakPill} testID="today-streak">
+              <Flame color={colors.goldIcon} size={layout.streakIconSize} strokeWidth={2.2} />
+              <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
+            </Pressable>
+          )}
           <Pressable accessibilityLabel="Settings" accessibilityRole="button" onPress={() => router.push('/settings')} style={styles.settingsButton} testID="today-settings">
             <Settings color={colors.ink} size={20} strokeWidth={2} />
           </Pressable>
@@ -303,7 +333,7 @@ export default function HomeScreen() {
       </View>
 
       <MotionReveal mode={motionMode} style={styles.heroBlock} testID="today-primary-motion">
-        <TodayAshaHero compact={compactHero} onPress={openAsha} status={floatingAsha.status} />
+        <TodayAshaHero compact={compactHero} onPress={openAsha} status={floatingAsha.status} welcome={firstRun} />
         <Pressable accessibilityRole="button" onPress={openAsha} style={styles.talkButton} testID="today-talk-with-asha">
           <Mic color={colors.white} size={20} strokeWidth={2.2} />
           <Text style={styles.talkButtonText}>Talk with Asha</Text>
@@ -315,7 +345,7 @@ export default function HomeScreen() {
           {/* The row body is the step action itself; the chevron beside it is the only expand control. */}
           <Pressable
             accessibilityHint={hero.hint}
-            accessibilityLabel={`${hero.action}, ${hero.title}, ${minutesLine}`}
+            accessibilityLabel={`${hero.action}, ${hero.title}, ${rowMinutes}`}
             accessibilityRole="button"
             onPress={hero.onPress}
             style={[styles.nextRow, largeTextLayout && styles.nextRowLarge]}
@@ -324,7 +354,7 @@ export default function HomeScreen() {
             {largeTextLayout ? (
               <>
                 {/* Accessibility sizes: ring left and play right on one line, with the chevron at that line's trailing end, so the text column below gets the full card width. */}
-                <View style={styles.nextTopLine} testID="today-next-top-line">
+                <View style={[styles.nextTopLine, firstRun && styles.nextTopLineNoRing]} testID="today-next-top-line">
                   {goalDial}
                   {nextAffordance}
                 </View>
@@ -351,6 +381,20 @@ export default function HomeScreen() {
               : <ChevronDown color={colors.muted} size={layout.chevronIconSize} strokeWidth={2.2} />}
           </Pressable>
         </View>
+
+        {/* The step after this one, in the room under the row; the open panel lists every step, so it hides then. Informational, not a button. */}
+        {nextUpStep && !nextExpanded ? (
+          <View
+            accessible
+            accessibilityLabel={`Then: Step ${nextUpStep.index + 1} of ${visibleSteps.length}, ${nextUpStep.label}, ${nextUpStep.meta}`}
+            style={styles.nextUpRow}
+            testID="today-next-up-row"
+          >
+            <View style={styles.stepDot} />
+            <Text style={styles.nextUpLabel}>{nextUpStep.label}</Text>
+            <Text style={styles.stepMeta}>{nextUpStep.meta}</Text>
+          </View>
+        ) : null}
 
         {nextExpanded ? (
           <View onLayout={revealDetails} style={styles.nextDetails} testID="today-next-details">
@@ -416,7 +460,7 @@ export default function HomeScreen() {
                   </View>
                   <View style={styles.planSegments} testID="today-plan-segments">
                     {currentPlan.lessonIds.map((lessonId, index) => {
-                      const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
+                      const done = planDetails.completedIds.includes(lessonId);
                       const current = !done && lessonId === lessonSelection.lessonId;
                       return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
                     })}
@@ -488,6 +532,8 @@ const useStyles = makeStyles((c) => {
   nextRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
   // Ring left, play right; the trailing padding keeps the play circle clear of the chevron sitting over this line's end.
   nextTopLine: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: layout.touchTarget },
+  // First run has no ring, so the play affordance alone keeps to the trailing end.
+  nextTopLineNoRing: { justifyContent: 'flex-end' },
   nextToggle: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   // Sits on the top line's trailing end, level with the ring (the row's own vertical padding), still a separate 44pt button.
   nextToggleLarge: { position: 'absolute', top: spacing.md, right: spacing.sm },
@@ -506,6 +552,9 @@ const useStyles = makeStyles((c) => {
   // Rust, not forest: Today keeps to the brand palette, and a finished day is a celebration rather than a graded answer.
   nextKickerDone: { color: c.brandText },
   nextTitle: { ...type.label, color: c.ink },
+  // The "Then:" row under the main row: the card's hairline above it, muted copy, no fixed height so large text wraps.
+  nextUpRow: { minHeight: layout.nextUpRowMinHeight, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  nextUpLabel: { ...type.caption, minWidth: 0, flex: 1, color: c.muted },
   // A hairline separates the panel from the row inside the same card.
   nextDetails: { borderTopColor: c.line, borderTopWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   details: { width: '100%', gap: spacing.lg },

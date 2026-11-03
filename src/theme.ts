@@ -136,6 +136,8 @@ export const layout = {
   todayRingGap: 20,
   /** Next lesson row body: the 44pt goal ring plus the row's own padding. */
   nextRowMinHeight: 72,
+  /** The compact "Then: …" row under the next-step row in the collapsed card. Informational, so it only needs the touch-target height. */
+  nextUpRowMinHeight: 44,
   /**
    * Expo web draws the tab bar as a fixed pill at the top of the page (24px down, 40px tall) instead of a bottom bar.
    * Today's content starts below its bottom edge on web only; native tabs sit at the bottom and need no inset.

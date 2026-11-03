@@ -19,6 +19,8 @@ type Props = {
   onPress: () => void;
   /** Read from the shared voice session; this hero never starts or stops it. */
   status: RealtimeVoiceStatus;
+  /** First run: the idle title greets the learner instead of "Ready when you are". A live status keeps its own title. */
+  welcome?: boolean;
 };
 
 /**
@@ -26,11 +28,12 @@ type Props = {
  * reflect the shared live session; the pill appears only while a session is live,
  * so an idle Today shows no READY badge. Tapping opens the Asha screen.
  */
-export function TodayAshaHero({ compact, onPress, status }: Props) {
+export function TodayAshaHero({ compact, onPress, status, welcome = false }: Props) {
   const styles = useStyles();
   const copy = ashaStatusCopy(status);
   const live = status !== 'disconnected';
   const recording = status === 'recording';
+  const title = welcome && !live ? 'Welcome to Bolo' : copy.title;
 
   return (
     <View style={styles.hero} testID="today-asha-hero">
@@ -48,7 +51,7 @@ export function TodayAshaHero({ compact, onPress, status }: Props) {
             <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.kicker}>{copy.kicker}</Text>
           </View>
         ) : null}
-        <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.title}>{copy.title}</Text>
+        <Text accessibilityLiveRegion="polite" maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.title}>{title}</Text>
       </View>
     </View>
   );
