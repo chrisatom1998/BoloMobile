@@ -40,7 +40,9 @@ function plural(count: number, word: string) {
 export default function HomeScreen() {
   const router = useRouter();
   const state = useAppState();
-  // Read-only view of the shared live voice session; home never starts or stops it.
+  // Today reads the shared live voice session's status. For a minimized session it only calls
+  // expand(), the same public call the floating bubble makes, so the minimized flag clears.
+  // It never starts, stops or otherwise changes a session.
   const floatingAsha = useAshaVoiceSession();
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
@@ -300,7 +302,7 @@ export default function HomeScreen() {
               <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
               <Text style={styles.nextTitle}>{hero.title}</Text>
               {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
-              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalLine} testID="today-goal-value">{goalCaption}</Text>
+              <Text style={styles.goalLine} testID="today-goal-value">{goalCaption}</Text>
             </View>
             {/* Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. At accessibility sizes the column row puts it under the text. */}
             <View accessible={false} importantForAccessibility="no" style={[styles.nextAffordance, largeTextLayout && styles.nextAffordanceLarge]} testID="today-next-start">

@@ -79,7 +79,9 @@ describe('home accessibility', () => {
     expect(view.queryByText('0')).toBeNull();
     // The caption leads with the one-word action; the row label above keeps the full "Start lesson".
     expect(view.getByTestId('today-goal-value').props.children).toBe('Start · 0 of 5 min today');
-    expect(view.getByTestId('today-goal-value').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    // The caption wraps and scales like the row's title, so it never truncates at large Dynamic Type.
+    expect(view.getByTestId('today-goal-value').props.numberOfLines).toBeUndefined();
+    expect(view.getByTestId('today-goal-value').props.maxFontSizeMultiplier).toBeUndefined();
     // The minutes caption never drops below 12pt; it uses a type role, not an ad-hoc size.
     expect(StyleSheet.flatten(view.getByTestId('today-goal-value').props.style).fontSize).toBeGreaterThanOrEqual(12);
     expect(view.queryByText('of 5 min')).toBeNull();
