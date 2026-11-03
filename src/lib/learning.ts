@@ -58,14 +58,6 @@ export function weeklyPractice(history: PracticeDay[], today = dateKey()) {
   return result;
 }
 
-export function categoryMastery(progress: Record<string, SceneProgress>) {
-  return (['Food', 'Travel', 'Everyday', 'Health', 'Social', 'Work'] as SceneCategory[]).map((category) => {
-    const categoryScenes = scenes.filter((scene) => scene.category === category);
-    const completed = categoryScenes.filter((scene) => (progress[scene.id]?.completions ?? 0) > 0).length;
-    return { category, completed, total: categoryScenes.length, percent: Math.round(completed / categoryScenes.length * 100) };
-  });
-}
-
 export function learningAccuracy(progress: Record<string, SceneProgress>) {
   const totals = Object.values(progress).reduce((sum, item) => ({
     correct: sum.correct + item.totalCorrect,

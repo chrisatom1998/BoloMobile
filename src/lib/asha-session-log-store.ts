@@ -337,7 +337,7 @@ export function useAshaSessionLog(): AshaSessionRecord[] {
  * once; a long-running app needs this again when it returns to the foreground
  * and when Last session opens, or an expired record stays visible.
  */
-export function refreshAshaSessionRetention() {
+function refreshAshaSessionRetention() {
   if (!ashaSessionLogEnabled) return;
   apply(() => {
     enforceRetention();
@@ -386,8 +386,10 @@ export function logAshaSessionEvent(event: AshaSessionEvent, responseLanguage: A
         activeId = null;
         pendingActive = null;
         return;
-      default:
-        return;
+      default: {
+        const unreachable: never = event;
+        return unreachable;
+      }
     }
   });
 }

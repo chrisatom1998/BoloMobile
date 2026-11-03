@@ -55,10 +55,6 @@ function preferredWordsInOriginalText(text: string, preferred: string) {
   return romanizeDevanagari(text.replace(sourceWord, () => preferredWords[index++]!));
 }
 
-// ---------------------------------------------------------------------------
-// Legacy (string-only) transcript rendering per script preference.
-// ---------------------------------------------------------------------------
-
 /** Devanagari letters, marks and digits; danda and abbreviation sign are treated as punctuation. */
 const HINDI_RUN = /[ऀ-ॣ०-९ॱ-ॿ]+(?:[ \t,;:'"’\-–…]+[ऀ-ॣ०-९ॱ-ॿ]+)*/gu;
 const HINDI_WORD = /[ऀ-ॣ०-९ॱ-ॿ]+/gu;

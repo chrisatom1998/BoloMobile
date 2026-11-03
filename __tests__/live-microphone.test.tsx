@@ -2,7 +2,6 @@ import {
   LIVE_MIC_EXPLAINER,
   classifyLiveMicrophone,
   ensureLiveMicrophone,
-  waitForExplainerPaint,
 } from '../src/lib/live-microphone';
 import { ashaInviteAction, ashaInviteLine, ashaInviteSharing } from '../src/lib/asha-invite';
 
@@ -70,10 +69,6 @@ describe('live microphone access', () => {
 
     expect(allowed).toBe(true);
     expect(getPermission).not.toHaveBeenCalled();
-  });
-
-  it('pauses so the explainer can paint before the system prompt', async () => {
-    await waitForExplainerPaint();
   });
 });
 

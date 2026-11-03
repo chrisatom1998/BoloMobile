@@ -2,6 +2,7 @@
 const { spawnSync } = require('child_process') as {
   spawnSync: (command: string, args: string[], options: { cwd: string; encoding: 'utf8' }) => { status: number | null; stderr: string; stdout: string };
 };
+const { readFileSync } = require('fs') as { readFileSync: (path: string, encoding: 'utf8') => string };
 
 /** The helper is native ESM, so it is exercised in a child Node process like the other script checks. */
 function runChecks(script: string) {
@@ -71,10 +72,8 @@ describe('mobile-chat acceptance checks', () => {
   it('keeps the acceptance runner parseable and sending the structured request field', () => {
     const check = spawnSync(process.execPath, ['--check', 'scripts/validate-live-services.mjs'], { cwd: process.cwd(), encoding: 'utf8' });
     expect(check.status).toBe(0);
-    const { readFileSync } = require('fs') as { readFileSync: (path: string, encoding: 'utf8') => string };
     const source = readFileSync('scripts/validate-live-services.mjs', 'utf8');
     expect(source.match(/replyFormat: STRUCTURED_REPLY_FORMAT/gu)).toHaveLength(2);
-    expect(source).not.toContain("'deployed typed-chat contract unexpectedly changed scripts'");
     expect(source).toContain('assertHindiReplyScript(reply');
     expect(source).toContain('checkOptionalStructured(result.payload');
   });

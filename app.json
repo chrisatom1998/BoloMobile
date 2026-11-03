@@ -89,7 +89,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F5F0E8",
+          "backgroundColor": "#F6F3ED",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 180
         }
@@ -97,7 +97,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow Bolo to use your microphone for Hindi practice and conversations.",
+          "microphonePermission": "Asha, Bolo's AI Hindi tutor, listens through your microphone during live practice. Audio is sent to Bolo's voice service only while a session is on.",
           "recordAudioAndroid": true,
           "enableBackgroundPlayback": false,
           "enableBackgroundRecording": false

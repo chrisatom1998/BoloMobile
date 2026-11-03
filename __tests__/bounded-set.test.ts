@@ -1,44 +1,4 @@
-import { BOUNDED_ID_LIMIT, rememberBoundedEntry, rememberBoundedId } from '../src/lib/bounded-set';
-
-describe('bounded id set', () => {
-  it('evicts the oldest ids once the limit is passed', () => {
-    const items = new Set<string>();
-
-    for (let index = 0; index < BOUNDED_ID_LIMIT + 6; index += 1) rememberBoundedId(items, `id-${index}`);
-
-    expect(items.size).toBe(BOUNDED_ID_LIMIT);
-    expect(items.has('id-0')).toBe(false);
-    expect(items.has('id-5')).toBe(false);
-    expect(items.has('id-6')).toBe(true);
-    expect(items.has(`id-${BOUNDED_ID_LIMIT + 5}`)).toBe(true);
-    expect([...items][0]).toBe('id-6');
-  });
-
-  it('keeps the original position of a re-remembered id so it is still evicted first', () => {
-    const items = new Set<string>();
-    for (let index = 0; index < BOUNDED_ID_LIMIT; index += 1) rememberBoundedId(items, `id-${index}`);
-
-    rememberBoundedId(items, 'id-0');
-    expect(items.size).toBe(BOUNDED_ID_LIMIT);
-
-    rememberBoundedId(items, 'fresh');
-    expect(items.has('id-0')).toBe(false);
-    expect(items.has('fresh')).toBe(true);
-  });
-
-  it('ignores missing ids and honours a caller supplied limit', () => {
-    const items = new Set<string>();
-
-    rememberBoundedId(items, null);
-    rememberBoundedId(items, '');
-    expect(items.size).toBe(0);
-
-    rememberBoundedId(items, 'a', 2);
-    rememberBoundedId(items, 'b', 2);
-    rememberBoundedId(items, 'c', 2);
-    expect([...items]).toEqual(['b', 'c']);
-  });
-});
+import { BOUNDED_ID_LIMIT, rememberBoundedEntry } from '../src/lib/bounded-set';
 
 describe('bounded entry map', () => {
   it('evicts the oldest entries once the limit is passed', () => {

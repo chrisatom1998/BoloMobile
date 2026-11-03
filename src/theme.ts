@@ -26,12 +26,10 @@ export const lightColors = {
   forestSoft: '#DDECE8',
 
   danger: '#A93B2B',
-  dangerSurface: '#B84737',
   dangerSoft: '#FBEDEA',
   dangerLine: '#E4B5AE',
 
   success: '#1C6650',
-  successSoft: '#EBF6F1',
 
   gold: '#E7AC3D',
   goldSoft: '#FFF1C9',
@@ -39,8 +37,6 @@ export const lightColors = {
   goldIcon: '#B87D17',
   /** Readable text on goldSoft surfaces. */
   goldText: '#6B4A10',
-  /** Readable secondary text on a solid gold surface. */
-  goldDeepText: '#4A3408',
 
   /** Neutral progress-track fill behind coloured bars. */
   track: '#EDE6DC',
@@ -51,17 +47,23 @@ export const lightColors = {
   night: '#10201E',
   nightSurface: '#1E302D',
   nightLine: '#34504B',
-  nightNav: '#0B1716',
   white: '#FFFFFF',
   black: '#000000',
 
-  shadowOpacityScale: 1,
-
-  heroRaised: '#18201E',
   heroSubtle: '#BFC9C6',
-  heroGlyph: 'rgba(255, 255, 255, 0.18)',
   /** Faint decorative Devanagari watermark on brand (rust) surfaces. */
   onBrandWatermark: 'rgba(255, 255, 255, 0.08)',
+  /** Body text on brand (rust) surfaces. */
+  onBrandText: '#FBEFE8',
+  /** Frosted chips and callouts on brand surfaces. */
+  onBrandChip: 'rgba(255, 255, 255, 0.14)',
+  onBrandCallout: 'rgba(255, 255, 255, 0.10)',
+  /** Hairlines and empty ring tracks on brand surfaces. */
+  onBrandLine: 'rgba(255, 255, 255, 0.18)',
+  onBrandTrack: 'rgba(255, 255, 255, 0.22)',
+  onBrandOutline: 'rgba(255, 255, 255, 0.5)',
+  /** The current step's dot fill on brand surfaces. */
+  onBrandGoldTint: 'rgba(231, 172, 61, 0.25)',
 
   orb: '#E76B48',
   orbActive: '#D85F3D',
@@ -90,6 +92,77 @@ export const spacing = {
   xxl: 32,
   /** Side padding for every screen. */
   gutter: 20,
+} as const;
+
+/** Shared layout measures. */
+export const layout = {
+  /** Smallest height of a tappable control. */
+  touchTarget: 44,
+  /** Trailing space after the last suggestion chip once the row is scrolled to the end. Same width as the screen gutter. */
+  chipEndInset: spacing.gutter,
+  /** Space between the suggestion row and the screen edge. */
+  chipScrollInset: spacing.lg,
+  /** How much of the next chip stays in view so the row shows it can scroll. */
+  chipPeek: spacing.xl,
+  /**
+   * Stack the Asha header below this width. A 393pt phone stays on one row.
+   */
+  headerStackBelow: 360,
+  /** Distance scrolled before the Asha header collapses to a bar. */
+  headerCollapseOffset: spacing.xxl + spacing.lg,
+  /**
+   * Dynamic Type at this scale or larger is an accessibility size.
+   * The Asha header starts as a compact bar with a small avatar so a chat bubble fits.
+   */
+  accessibilityFontScale: 1.6,
+  /** Caps the Asha title, Private label, subtitle, READY status, and the voice-off card. */
+  headerFontScaleCap: 1.3,
+  /** Portrait and mic when live voice is off. Same dim as a disabled control, with no new color. */
+  voiceUnavailableOpacity: 0.5,
+  /**
+   * Caps the composer so three lines can hold "Ask in English or Hindi…".
+   * Still well above the body size, so the field grows at accessibility sizes.
+   */
+  composerFontScaleCap: 2.4,
+  /** Lines the composer keeps so the placeholder stays whole at an accessibility size. */
+  composerLines: 3,
+  /** Extra room so the last composer line clears the field's own padding. */
+  composerLineSlack: spacing.lg,
+  /** Asha's portrait diameter on the Today hero (Option A mockup); the rings sit half and a full `todayRingGap` outside it. */
+  todayPortraitSize: 200,
+  /** Today portrait at accessibility text sizes and on 360pt phones: leaves room for the copy below. */
+  todayPortraitSizeCompact: 148,
+  /** Space between the Today portrait and its outer status ring. */
+  todayRingGap: 20,
+  /** Next lesson row body: the 44pt goal ring plus the row's own padding. */
+  nextRowMinHeight: 72,
+  /** The compact "Then: …" row under the next-step row in the collapsed card. Informational, so it only needs the touch-target height. */
+  nextUpRowMinHeight: 44,
+  /**
+   * Expo web draws the tab bar as a fixed pill at the top of the page (24px down, 40px tall) instead of a bottom bar.
+   * Today's content starts below its bottom edge on web only; native tabs sit at the bottom and need no inset.
+   */
+  webTabBarInset: 64,
+  /** Status pill on the Today hero (live sessions only): a readout, not a control, so it sits below the touch target. */
+  statusPillMinHeight: 32,
+  /** Step marker on the Today steps list. */
+  stepDotSize: 22,
+  /** Asha's small portrait on the SPEAK step invite. */
+  ashaInvitePortraitSize: 48,
+  /** Status dot inside the LISTENING/SPEAKING pill, same as the Asha screen's. */
+  statusDotSize: 8,
+  /** Chevron glyph inside the 44pt expand toggle on the Next lesson row. */
+  chevronIconSize: 22,
+  /** Brand-soft circle behind the play glyph on the Next lesson row's Start affordance. */
+  playCircleSize: 28,
+  /** Play glyph inside `playCircleSize`. */
+  playIconSize: 14,
+  /** Check glyph centred in the 44pt goal ring once the daily goal is met. */
+  goalCheckIconSize: 18,
+  /** Arrow glyph beside the label on the Next lesson panel's outline button. */
+  arrowIconSize: 18,
+  /** Flame glyph inside the streak pill on the Today top bar. */
+  streakIconSize: 18,
 } as const;
 
 export const radius = {
@@ -172,8 +245,7 @@ export type NamedStyles = Record<string, ViewStyle | TextStyle | ImageStyle>;
 const styleCache = new WeakMap<object, WeakMap<object, NamedStyles>>();
 
 /**
- * Builds a themed stylesheet hook. Results are cached per (factory, palette) pair,
- * so switching schemes reuses stylesheets instead of rebuilding them each render.
+ * Builds a themed stylesheet hook. Results are cached per (factory, palette) pair.
  */
 export function makeStyles<T extends NamedStyles>(factory: (colors: ThemeColors) => T) {
   return function useThemedStyles(): T {

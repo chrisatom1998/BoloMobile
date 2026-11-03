@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const defaultRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const EXPECTED_MICROPHONE_USAGE = 'Allow Bolo to use your microphone for Hindi practice and conversations.';
+const EXPECTED_MICROPHONE_USAGE = "Asha, Bolo's AI Hindi tutor, listens through your microphone during live practice. Audio is sent to Bolo's voice service only while a session is on.";
 const PERMANENT_RELEASE_APP_IDENTIFIER = 'com.bolo.hindi';
 const PRODUCTION_API_URL = 'https://api-v2.appdeploy.ai/app/74e39779183cf78fed';
 const PRODUCTION_SITE_URL = 'https://74e39779183cf78fed.v2.appdeploy.ai';

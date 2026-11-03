@@ -226,7 +226,6 @@ describe('Asha voice session above the navigator', () => {
     });
     expect(isFloatingAshaMinimized()).toBe(true);
     expect(view.getByTestId('minimized').props.children).toBe('yes');
-    expect(isFloatingAshaMinimized()).toBe(true);
     expect(view.getByTestId('bubble-status').props.children).toBe('disconnected');
 
     await act(async () => {

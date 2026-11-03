@@ -24,6 +24,8 @@ type SegmentedControlProps<T extends string> = {
   stacked?: boolean;
   /** Reflows options into full-width rows when a compact segmented row cannot safely fit Dynamic Type. */
   stackedAtLargeText?: boolean;
+  /** Caps Dynamic Type on the option labels. */
+  maxFontSizeMultiplier?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
   /** `dark` restyles the control for night-coloured screens such as Asha. */
@@ -46,6 +48,7 @@ export function SegmentedControl<T extends string>({
   options,
   stacked = false,
   stackedAtLargeText = false,
+  maxFontSizeMultiplier,
   style,
   testID,
   tone = 'light',
@@ -79,7 +82,7 @@ export function SegmentedControl<T extends string>({
               onPress={() => select(option.value)}
               style={({ pressed }) => [styles.stackedTrigger, dark && styles.stackedTriggerDark, selected && (dark ? styles.stackedTriggerSelectedDark : styles.stackedTriggerSelected), disabled && styles.stackedTriggerDisabled, pressed && !disabled && styles.stackedTriggerPressed]}
             >
-              <Text style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && !selected && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
+              <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && !selected && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
             </Pressable>
           );
         })}
@@ -121,7 +124,7 @@ export function SegmentedControl<T extends string>({
                     pressed && !disabled && styles.stackedTriggerPressed,
                   ]}
                 >
-                  <Text style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && !selected && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
+                  <Text maxFontSizeMultiplier={maxFontSizeMultiplier} style={[styles.stackedLabel, dark && styles.labelDark, selected && (dark ? styles.labelSelectedDark : styles.stackedLabelSelected), disabled && !selected && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>{option.label}</Text>
                 </Pressable>
               );
             })}
@@ -152,7 +155,7 @@ export function SegmentedControl<T extends string>({
             value={option.value}
           >
             {({ isSelected }) => (
-              <Tabs.Label numberOfLines={2} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && !isSelected && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
+              <Tabs.Label maxFontSizeMultiplier={maxFontSizeMultiplier} numberOfLines={maxFontSizeMultiplier ? 1 : 2} style={[styles.label, dark && styles.labelDark, isSelected && (dark ? styles.labelSelectedDark : styles.labelSelected), disabled && !isSelected && (dark ? styles.labelDisabledDark : styles.labelDisabled)]}>
                 {option.label}
               </Tabs.Label>
             )}

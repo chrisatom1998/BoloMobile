@@ -25,8 +25,6 @@ module.exports = {
   Gesture: {
     Exclusive: () => chain(),
     Pan: () => chain(),
-    Race: () => chain(),
-    Simultaneous: () => chain(),
     Tap: () => chain(),
   },
 };

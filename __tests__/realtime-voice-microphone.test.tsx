@@ -54,7 +54,7 @@ function Harness({ active = true, disabled = false }: { active?: boolean; disabl
   const [phase, setPhase] = useState<'idle' | 'explaining' | 'denied'>('idle');
   return (
     <View>
-      <RealtimeVoiceButton active={active} clientId="client-12345678" disabled={disabled} onError={jest.fn()} onMicrophonePhase={setPhase} onTurnComplete={jest.fn()} />
+      <RealtimeVoiceButton active={active} clientId="client-12345678" disabled={disabled} onError={jest.fn()} onMicrophonePhase={setPhase} />
       {phase === 'explaining' ? <Text>{LIVE_MIC_EXPLAINER}</Text> : null}
       {phase === 'denied' ? <Text>{LIVE_MIC_PERMISSION_MESSAGE}</Text> : null}
     </View>

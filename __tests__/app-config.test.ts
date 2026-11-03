@@ -118,6 +118,26 @@ describe('Expo app configuration', () => {
     expect(() => appConfig({ config: fixture() })).toThrow(/BOLO_PUBLIC_SITE_URL must be an absolute https URL/u);
   });
 
+  it('asks for the microphone with the Asha live-practice explanation', () => {
+    const appJson = require('../app.json') as { expo: { plugins: unknown[]; ios: { infoPlist?: Record<string, unknown> } } };
+    const plugin = appJson.expo.plugins.find((entry) => Array.isArray(entry) && entry[0] === 'expo-audio') as [string, Record<string, unknown>];
+    const expected = "Asha, Bolo's AI Hindi tutor, listens through your microphone during live practice. Audio is sent to Bolo's voice service only while a session is on.";
+
+    expect(plugin[1].microphonePermission).toBe(expected);
+    // Nothing in infoPlist may override the plugin's string with older copy.
+    expect(appJson.expo.ios.infoPlist?.NSMicrophoneUsageDescription ?? expected).toBe(expected);
+  });
+
+  it('paints the native splash in the theme background so launch is one seamless screen', () => {
+    const { lightColors } = require('../src/theme') as { lightColors: { background: string } };
+    const appJson = require('../app.json') as { expo: { plugins: unknown[]; splash?: { backgroundColor?: string } } };
+    const plugin = appJson.expo.plugins.find((entry) => Array.isArray(entry) && entry[0] === 'expo-splash-screen') as [string, Record<string, unknown>];
+
+    expect(plugin[1].backgroundColor).toBe(lightColors.background);
+    // Only the plugin configures the splash; a stray top-level entry would reintroduce a second color.
+    expect(appJson.expo.splash).toBeUndefined();
+  });
+
   it('opts iOS into the UIKit scene lifecycle required by the iOS 27 SDK', () => {
     const appJson = require('../app.json') as { expo: { plugins: unknown[] } };
     const plugin = appJson.expo.plugins.find((entry) => Array.isArray(entry) && entry[0] === 'expo-build-properties');

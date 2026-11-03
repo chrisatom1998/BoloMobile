@@ -4,7 +4,7 @@ import { Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { TapPressable } from '@/components/tap-pressable';
-import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { layout, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type MinimizeProps = {
   onPress: () => void;
@@ -24,7 +24,7 @@ export function AshaMinimizeButton({ onPress }: MinimizeProps) {
       style={styles.minimizeButton}
       testID="asha-minimize"
     >
-      <ChevronDown color={colors.white} size={18} strokeWidth={2.4} />
+      <ChevronDown accessibilityLabel="Minimize Asha" accessible={false} color={colors.white} size={18} strokeWidth={2.4} />
     </TapPressable>
   );
 }
@@ -68,8 +68,10 @@ export function AshaMinimizedCover({ onExpand, statusLabel }: CoverProps) {
 
 const useStyles = makeStyles((c) => ({
   minimizeButton: {
-    width: 36,
-    height: 36,
+    width: layout.touchTarget,
+    height: layout.touchTarget,
+    minWidth: layout.touchTarget,
+    minHeight: layout.touchTarget,
     borderRadius: radius.pill,
     borderCurve: 'continuous',
     borderColor: c.nightLine,

@@ -1,4 +1,4 @@
-import type { ScriptPreference, StructuredCorrection, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
+import type { StructuredCorrection, StructuredPhrase, StructuredReply } from '@/state/app-state-types';
 
 /** The request field that asks `/api/mobile-chat` for a structured block. Older servers ignore it. */
 export const STRUCTURED_REPLY_FORMAT = 'structured-v1' as const;
@@ -150,30 +150,4 @@ export function structuredSaveCandidates(structured: StructuredReply): Structure
 /** Canonical Devanagari source for the Words tray: every taught or corrected Hindi line. */
 export function structuredHindiSource(structured: StructuredReply) {
   return structuredSaveCandidates(structured).map((phrase) => phrase.devanagari).join(' · ');
-}
-
-/**
- * A readable one-string rendering of a structured reply, respecting the
- * learner's script preference. Used for speech fallbacks and accessibility.
- */
-export function structuredReplyText(structured: StructuredReply, scriptPreference: ScriptPreference = 'both') {
-  const hindi = (devanagari: string, romanized: string) => scriptPreference === 'latin'
-    ? romanized
-    : scriptPreference === 'devanagari'
-      ? devanagari
-      : `${devanagari} (${romanized})`;
-  const lines: string[] = [];
-  if (structured.intro) lines.push(structured.intro);
-  for (const phrase of structured.phrases ?? []) lines.push(`${hindi(phrase.devanagari, phrase.romanized)} — ${phrase.english}`);
-  for (const correction of structured.corrections ?? []) {
-    const said = correction.youSaid.devanagari && correction.youSaid.romanized
-      ? hindi(correction.youSaid.devanagari, correction.youSaid.romanized)
-      : correction.youSaid.devanagari && scriptPreference !== 'latin'
-        ? correction.youSaid.devanagari
-        : correction.youSaid.romanized ?? correction.youSaid.devanagari ?? '';
-    const say = hindi(correction.say.devanagari, correction.say.romanized);
-    lines.push(`You said ${said}. Say ${say}${correction.say.english ? ` — ${correction.say.english}` : ''}.${correction.note ? ` ${correction.note}` : ''}`);
-  }
-  if (structured.outro) lines.push(structured.outro);
-  return lines.join('\n');
 }

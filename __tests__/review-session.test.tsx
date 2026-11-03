@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 
 const mockRouterReplace = jest.fn();
 
@@ -399,6 +399,28 @@ describe('ReviewScreen say it aloud', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
     expect(mockAppState.reviewPhrase).toHaveBeenCalledWith(phraseA.hi, true);
     expect(checkPronunciationMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps the hint penalty when Say it aloud starts while the hint is still playing', async () => {
+    let resolveHint: (played: boolean) => void = () => {};
+    const hintPlayback = new Promise<boolean>((resolve) => {
+      resolveHint = resolve;
+    });
+    speakTextMock.mockReturnValueOnce(hintPlayback);
+    const view = await render(<ReviewScreen />);
+
+    await fireEvent.press(view.getByRole('button', { name: 'Hear a hint' }));
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Reveal answer' }));
+    await fireEvent.press(view.getByLabelText('Record pronunciation'));
+    await act(async () => {
+      resolveHint(false);
+      await hintPlayback;
+    });
+
+    expect(view.getByText('Hint used, so this card counts as Again.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Got it' }));
+    expect(mockAppState.reviewPhrase).toHaveBeenLastCalledWith(phraseA.hi, false);
   });
 
   it.each([0, 3])('pauses Listen while a practice clip is being checked (mastery %i)', async (mastery) => {
