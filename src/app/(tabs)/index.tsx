@@ -60,7 +60,7 @@ export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
   const compactHero = largeTextLayout || windowWidth <= 380;
-  const { goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, practiceHistory, reviewStreakDays, sceneProgress: savedSceneProgress, streak } = state;
+  const { goal, learnerProfile, motionPreference = DEFAULT_MOTION_PREFERENCE, phraseReviews, phrases, practice, practiceHistory, reviewStreakDays, sceneProgress: savedSceneProgress, streak, streakDays } = state;
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const [nextExpanded, setNextExpanded] = useState(false);
@@ -121,9 +121,9 @@ export default function HomeScreen() {
   );
   // Nothing practised yet: no streak pill or goal ring, one first step, and a welcome under the portrait.
   const firstRun = useMemo(
-    () => isFirstRun({ practice, practiceHistory, sceneProgress, streak }),
+    () => isFirstRun({ practice, practiceHistory, reviewStreakDays, sceneProgress, streak, streakDays }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- calendarDay re-checks whether today's minutes are today's.
-    [calendarDay, practice, practiceHistory, sceneProgress, streak],
+    [calendarDay, practice, practiceHistory, reviewStreakDays, sceneProgress, streak, streakDays],
   );
   const lessonSelection = useMemo(() => {
     const { lessonId, mode, plan } = selectNextLesson(sceneProgress, learnerProfile);

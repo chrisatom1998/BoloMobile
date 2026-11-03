@@ -64,20 +64,27 @@ function lessonFinishedToday({ practiceHistory = [], sceneProgress }: TodayPlanI
 
 type FirstRunInput = {
   streak: number;
-  practice: Pick<PersistedState['practice'], 'date' | 'seconds'>;
+  practice: Pick<PersistedState['practice'], 'date' | 'seconds'> & Partial<Pick<PersistedState['practice'], 'chaiDone' | 'liveDone'>>;
   practiceHistory?: PersistedState['practiceHistory'];
+  /** Every day with recorded practice, whether or not it still counts toward the streak. */
+  streakDays?: PersistedState['streakDays'];
+  reviewStreakDays?: PersistedState['reviewStreakDays'];
   sceneProgress?: LessonProgressMap;
   now?: Date;
 };
 
 /**
- * True until the learner has practised at all: no streak, no minutes today or on any
- * past day, and no lesson started or finished. Derived from stored progress only.
+ * True until the learner has practised at all: no streak, no minutes today, no recorded
+ * day, no history row, no live or chai turn, and no lesson started or finished. Derived
+ * from stored progress only. Onboarding writes just the goal and profile, so any history
+ * row or recorded day is real activity even when it logged zero seconds: a lapsed streak
+ * must not turn a returning learner back into a first-timer.
  */
-export function isFirstRun({ now, practice, practiceHistory = [], sceneProgress = {}, streak }: FirstRunInput) {
+export function isFirstRun({ now, practice, practiceHistory = [], reviewStreakDays = [], sceneProgress = {}, streak, streakDays = [] }: FirstRunInput) {
   if (streak > 0) return false;
   if (practice.date === dateKey(now) && practice.seconds > 0) return false;
-  if (practiceHistory.some((day) => day.seconds > 0)) return false;
+  if (practice.liveDone || practice.chaiDone) return false;
+  if (practiceHistory.length > 0 || streakDays.length > 0 || reviewStreakDays.length > 0) return false;
   return !Object.values(sceneProgress).some((progress) => (progress?.completions ?? 0) > 0 || (progress?.lastBeatIndex ?? 0) > 0);
 }
 

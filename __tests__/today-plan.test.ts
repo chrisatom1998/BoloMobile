@@ -126,8 +126,10 @@ describe('isFirstRun', () => {
     expect(isFirstRun({ ...untouched, practiceHistory: [], sceneProgress: {} })).toBe(true);
     // Stale minutes from another day do not count as today's.
     expect(isFirstRun({ ...untouched, practice: { date: '2026-10-30', seconds: 0 } })).toBe(true);
-    // A history row with no minutes, and progress rows that were never started, are still untouched.
-    expect(isFirstRun({ ...untouched, practiceHistory: [{ answers: 0, correct: 0, date: today, reviews: 0, seconds: 0 }], sceneProgress: { 'plan-essentials-01': { completions: 0, lastBeatIndex: 0 } } })).toBe(true);
+    // Progress rows that were never started, and empty day lists, are still untouched.
+    expect(isFirstRun({ ...untouched, reviewStreakDays: [], sceneProgress: { 'plan-essentials-01': { completions: 0, lastBeatIndex: 0 } }, streakDays: [] })).toBe(true);
+    // A stale live or chai flag from another day with no recorded day does not count either.
+    expect(isFirstRun({ ...untouched, practice: { chaiDone: false, date: '2026-10-30', liveDone: false, seconds: 0 } })).toBe(true);
   });
 
   it('ends with a streak, minutes today, minutes on any past day, or a lesson started or finished', () => {
@@ -136,5 +138,28 @@ describe('isFirstRun', () => {
     expect(isFirstRun({ ...untouched, practiceHistory: [{ answers: 0, correct: 0, date: '2026-10-01', reviews: 0, seconds: 60 }] })).toBe(false);
     expect(isFirstRun({ ...untouched, sceneProgress: { 'plan-essentials-01': { completions: 0, lastBeatIndex: 1 } } })).toBe(false);
     expect(isFirstRun({ ...untouched, sceneProgress: { 'plan-essentials-01': { completions: 1 } } })).toBe(false);
+  });
+
+  it('ends with any durable activity, even when it recorded no minutes', () => {
+    // Onboarding writes only the goal and profile, so any history row means the learner practised.
+    expect(isFirstRun({ ...untouched, practiceHistory: [{ answers: 0, correct: 0, date: today, reviews: 0, seconds: 0 }] })).toBe(false);
+    expect(isFirstRun({ ...untouched, streakDays: ['2026-10-01'] })).toBe(false);
+    expect(isFirstRun({ ...untouched, reviewStreakDays: ['2026-10-01'] })).toBe(false);
+    expect(isFirstRun({ ...untouched, practice: { chaiDone: true, date: '2026-10-01', liveDone: false, seconds: 0 } })).toBe(false);
+    expect(isFirstRun({ ...untouched, practice: { chaiDone: false, date: '2026-10-01', liveDone: true, seconds: 0 } })).toBe(false);
+  });
+
+  it('stays over for a returning learner whose streak expired after a zero-second live turn', () => {
+    // markLiveTurn() can store liveDone with a zero-second history row and add the day to streakDays.
+    // Once the streak lapses to 0, that day list and the flag are the only trace of the practice.
+    const expired = {
+      ...untouched,
+      practice: { chaiDone: false, date: '2026-10-01', liveDone: true, seconds: 0 },
+      practiceHistory: [{ answers: 0, correct: 0, date: '2026-10-01', reviews: 0, seconds: 0 }],
+      streakDays: ['2026-10-01'],
+    };
+    expect(isFirstRun(expired)).toBe(false);
+    expect(isFirstRun({ ...expired, practiceHistory: [] })).toBe(false);
+    expect(isFirstRun({ ...expired, practiceHistory: [], streakDays: [] })).toBe(false);
   });
 });
