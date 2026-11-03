@@ -128,6 +128,41 @@ export const layout = {
   composerLines: 3,
   /** Extra room so the last composer line clears the field's own padding. */
   composerLineSlack: spacing.lg,
+  /** Asha's portrait diameter on the Today hero (Option A mockup); the rings sit half and a full `todayRingGap` outside it. */
+  todayPortraitSize: 200,
+  /** Today portrait at accessibility text sizes and on 360pt phones: leaves room for the copy below. */
+  todayPortraitSizeCompact: 148,
+  /** Space between the Today portrait and its outer status ring. */
+  todayRingGap: 20,
+  /** Next lesson row body: the 44pt goal ring plus the row's own padding. */
+  nextRowMinHeight: 72,
+  /** The compact "Then: …" row under the next-step row in the collapsed card. Informational, so it only needs the touch-target height. */
+  nextUpRowMinHeight: 44,
+  /**
+   * Expo web draws the tab bar as a fixed pill at the top of the page (24px down, 40px tall) instead of a bottom bar.
+   * Today's content starts below its bottom edge on web only; native tabs sit at the bottom and need no inset.
+   */
+  webTabBarInset: 64,
+  /** Status pill on the Today hero (live sessions only): a readout, not a control, so it sits below the touch target. */
+  statusPillMinHeight: 32,
+  /** Step marker on the Today steps list. */
+  stepDotSize: 22,
+  /** Asha's small portrait on the SPEAK step invite. */
+  ashaInvitePortraitSize: 48,
+  /** Status dot inside the LISTENING/SPEAKING pill, same as the Asha screen's. */
+  statusDotSize: 8,
+  /** Chevron glyph inside the 44pt expand toggle on the Next lesson row. */
+  chevronIconSize: 22,
+  /** Brand-soft circle behind the play glyph on the Next lesson row's Start affordance. */
+  playCircleSize: 28,
+  /** Play glyph inside `playCircleSize`. */
+  playIconSize: 14,
+  /** Check glyph centred in the 44pt goal ring once the daily goal is met. */
+  goalCheckIconSize: 18,
+  /** Arrow glyph beside the label on the Next lesson panel's outline button. */
+  arrowIconSize: 18,
+  /** Flame glyph inside the streak pill on the Today top bar. */
+  streakIconSize: 18,
 } as const;
 
 export const radius = {

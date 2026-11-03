@@ -16,6 +16,8 @@ tags:
 - runFlow: ../subflows/enter-development-build.yaml
 - assertVisible: "Hear this"
 - runFlow: ../subflows/complete-onboarding.yaml
+# PR screenshots only: optional steps, then back to the collapsed card.
+- runFlow: ../subflows/today-screenshots.yaml
 - tapOn: "Asha"
 # The CI build has no live URL, so Talk with Asha is hidden and Type to Asha
 # opens the same consent sheet. The invite sits above that button. VoiceOver
@@ -78,3 +80,5 @@ tags:
 - tapOn: "Cancel"
 - assertNotVisible: "Delete your Bolo data?"
 - assertVisible: "Delete my Bolo data"
+# PR screenshots only, after every smoke assertion: Today at the largest text size.
+- runFlow: ../subflows/today-largest-text-screenshots.yaml
