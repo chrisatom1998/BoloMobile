@@ -16,22 +16,76 @@ export type TodayPlan = {
   nextStep: TodayStepKey | null;
 };
 
+/** The slice of scene progress Today reads; the full record is accepted too. */
+type LessonProgress = Partial<Pick<PersistedState['sceneProgress'][string], 'completions' | 'lastBeatIndex'>>;
+type LessonProgressMap = Record<string, LessonProgress | undefined>;
+
 type TodayPlanInput = {
   dueCount: number;
   practice: Pick<PersistedState['practice'], 'date' | 'liveDone'>;
   practiceHistory?: PersistedState['practiceHistory'];
   reviewStreakDays?: PersistedState['reviewStreakDays'];
+  /**
+   * When given, the lesson step can only be done once a lesson has a completion, so it
+   * never reads "Finished a lesson" beside a path showing 0 completed lessons.
+   */
+  sceneProgress?: LessonProgressMap;
   now?: Date;
 };
 
 const stepOrder: TodayStepKey[] = ['review', 'lesson', 'asha'];
 
-function lessonFinishedToday({ practiceHistory = [] }: TodayPlanInput, today: string) {
+/**
+ * Which of a plan's lessons are complete. The one source for the Your path meta, its
+ * VoiceOver label and the segment bar, so the three can never disagree.
+ */
+export function completedLessonIds(lessonIds: readonly string[], sceneProgress: LessonProgressMap) {
+  return lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0);
+}
+
+/** Count form of `completedLessonIds`, for one plan. `learning.completedLessonCount` counts across every plan. */
+export function completedLessonCount(lessonIds: readonly string[], sceneProgress: LessonProgressMap) {
+  return completedLessonIds(lessonIds, sceneProgress).length;
+}
+
+function anyLessonCompleted(sceneProgress: LessonProgressMap) {
+  return Object.values(sceneProgress).some((progress) => (progress?.completions ?? 0) > 0);
+}
+
+function lessonFinishedToday({ practiceHistory = [], sceneProgress }: TodayPlanInput, today: string) {
   // Review answers also count toward `answers`, so only the remainder came from lessons.
   // A completed scene left at beat 0 is not enough: reopening it, or Asha checkpointing
   // it, refreshes `lastPracticedAt` without recording a lesson finished today.
   const history = practiceHistory.find((day) => day.date === today);
-  return Boolean(history && history.answers - history.reviews > 0);
+  if (!history || history.answers - history.reviews <= 0) return false;
+  // completeScene records both together, so with progress in hand a finished lesson must also show a completion.
+  return sceneProgress === undefined || anyLessonCompleted(sceneProgress);
+}
+
+type FirstRunInput = {
+  streak: number;
+  practice: Pick<PersistedState['practice'], 'date' | 'seconds'> & Partial<Pick<PersistedState['practice'], 'chaiDone' | 'liveDone'>>;
+  practiceHistory?: PersistedState['practiceHistory'];
+  /** Every day with recorded practice, whether or not it still counts toward the streak. */
+  streakDays?: PersistedState['streakDays'];
+  reviewStreakDays?: PersistedState['reviewStreakDays'];
+  sceneProgress?: LessonProgressMap;
+  now?: Date;
+};
+
+/**
+ * True until the learner has practised at all: no streak, no minutes today, no recorded
+ * day, no history row, no live or chai turn, and no lesson started or finished. Derived
+ * from stored progress only. Onboarding writes just the goal and profile, so any history
+ * row or recorded day is real activity even when it logged zero seconds: a lapsed streak
+ * must not turn a returning learner back into a first-timer.
+ */
+export function isFirstRun({ now, practice, practiceHistory = [], reviewStreakDays = [], sceneProgress = {}, streak, streakDays = [] }: FirstRunInput) {
+  if (streak > 0) return false;
+  if (practice.date === dateKey(now) && practice.seconds > 0) return false;
+  if (practice.liveDone || practice.chaiDone) return false;
+  if (practiceHistory.length > 0 || streakDays.length > 0 || reviewStreakDays.length > 0) return false;
+  return !Object.values(sceneProgress).some((progress) => (progress?.completions ?? 0) > 0 || (progress?.lastBeatIndex ?? 0) > 0);
 }
 
 /**
