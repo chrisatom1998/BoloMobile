@@ -11,8 +11,7 @@ const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const portraitSize = layout.todayPortraitSize;
 const portraitSizeCompact = layout.todayPortraitSizeCompact;
 const ringGap = layout.todayRingGap;
-/** Status dot inside the pill, same as the Asha screen's. */
-const statusDotSize = 8;
+const statusDotSize = layout.statusDotSize;
 
 type Props = {
   /** Smaller portrait for accessibility text sizes and narrow phones. */

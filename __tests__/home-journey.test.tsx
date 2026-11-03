@@ -6,7 +6,7 @@ import { FlatList, StyleSheet, type StyleProp, type ViewStyle } from 'react-nati
 
 import { getScene } from '../src/data/scenes';
 import { dateKey } from '../src/lib/storage';
-import { colors, spacing } from '../src/theme';
+import { colors, layout, spacing } from '../src/theme';
 
 const mockRouterPush = jest.fn();
 const mockSetGoal = jest.fn();
@@ -129,6 +129,8 @@ describe('HomeScreen primary journey', () => {
     expect(portrait.props.accessibilityRole).toBe('button');
     expect(portrait.props.accessibilityLabel).toBe('Talk to Asha');
     expect(within(view.getByTestId('today-asha-status')).getByText('READY')).toBeTruthy();
+    const statusDot = view.getByTestId('today-asha-status').children[0] as unknown as { props: { style: StyleProp<ViewStyle> } };
+    expect(StyleSheet.flatten(statusDot.props.style)).toMatchObject({ width: layout.statusDotSize, height: layout.statusDotSize });
     expect(within(hero).getByText('Ready when you are').props.accessibilityLiveRegion).toBe('polite');
     // No body line: on Today a tap only opens the Asha screen, so "Tap Asha to unmute…" would be wrong here.
     expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
@@ -296,18 +298,64 @@ describe('HomeScreen primary journey', () => {
     expect(toggle.minHeight).toBeGreaterThanOrEqual(44);
   });
 
-  it('ends the expanded panel with a filled rust button for the step action', async () => {
+  it('shows a Start affordance in the row body that VoiceOver skips', async () => {
+    const view = await render(<HomeScreen />);
+
+    const row = view.getByTestId('today-next-row');
+    // A phrase is due in this fixture, so the step action is "Start review": the affordance keeps the first word.
+    const affordance = within(row).getByTestId('today-next-start');
+    expect(affordance.props.accessible).toBe(false);
+    expect(affordance.props.importantForAccessibility).toBe('no');
+    expect(within(affordance).getByText('Start')).toBeTruthy();
+    expect(StyleSheet.flatten(within(affordance).getByText('Start').props.style).color).toBe(colors.brandText);
+    const circle = within(affordance).getByTestId('today-next-start-circle');
+    expect(StyleSheet.flatten(circle.props.style)).toMatchObject({ width: layout.playCircleSize, height: layout.playCircleSize, backgroundColor: colors.brandSoft });
+    // The row label and hint are unchanged; the affordance is decorative.
+    expect(row.props.accessibilityLabel).toBe('Start review, Review your phrases, 5 of 10 min today');
+    expect(row.props.accessibilityHint).toBe('Starts the review');
+    // Order inside the row: ring, text column, affordance; the chevron stays outside the row.
+    const rowIds = collectTestIds(row);
+    expect(rowIds.indexOf('today-next-practice')).toBeLessThan(rowIds.indexOf('today-next-start'));
+    expect(rowIds).not.toContain('today-next-toggle');
+  });
+
+  it('shortens the step action to one word for the affordance', async () => {
+    mockAppState.reviewStreakDays = [dateKey()];
+    const view = await render(<HomeScreen />);
+    expect(within(view.getByTestId('today-next-start')).getByText('Start')).toBeTruthy();
+
+    mockAppState.phrases = [];
+    mockAppState.sceneProgress = { 'plan-essentials-03': { completions: 0, lastBeatIndex: 2, lastPracticedAt: '2026-07-20T12:00:00.000Z' } };
+    await view.rerender(<HomeScreen />);
+    expect(within(view.getByTestId('today-next-start')).getByText('Continue')).toBeTruthy();
+
+    mockAppState.sceneProgress = {};
+    mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
+    await view.rerender(<HomeScreen />);
+    expect(within(view.getByTestId('today-next-start')).getByText('Talk')).toBeTruthy();
+
+    mockAppState.practice = { chaiDone: false, date: dateKey(), liveDone: true, seconds: 600 };
+    mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 600 }];
+    await view.rerender(<HomeScreen />);
+    expect(within(view.getByTestId('today-next-start')).getByText('Keep going')).toBeTruthy();
+  });
+
+  it('keeps Talk with Asha the only filled button and ends the panel with an outline button', async () => {
     const view = await render(<HomeScreen />);
     expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha']);
 
     await fireEvent.press(view.getByTestId('today-next-toggle'));
-    expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha', 'today-next-step']);
+    expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha']);
     const nextStep = view.getByTestId('today-next-step');
-    expect(StyleSheet.flatten(nextStep.props.style)).toMatchObject({ backgroundColor: colors.brand, minHeight: 52 });
+    const nextStepStyle = StyleSheet.flatten(nextStep.props.style);
+    expect(nextStepStyle).toMatchObject({ backgroundColor: 'transparent', borderColor: colors.brand, flex: 1 });
+    expect(nextStepStyle.borderWidth).toBeGreaterThanOrEqual(1.5);
+    expect(nextStepStyle.borderWidth).toBeLessThanOrEqual(2);
+    expect(nextStepStyle.minHeight).toBeGreaterThanOrEqual(layout.touchTarget);
     // A phrase is due in this fixture, so the step action is the review.
     expect(nextStep.props.accessibilityLabel).toBe('Start review');
     expect(within(nextStep).getByText('Start review')).toBeTruthy();
-    expect(StyleSheet.flatten(within(nextStep).getByText('Start review').props.style).color).toBe(colors.white);
+    expect(StyleSheet.flatten(within(nextStep).getByText('Start review').props.style).color).toBe(colors.brandText);
     expect(within(view.getByTestId('today-hero-footer')).getByTestId('today-next-step')).toBeTruthy();
     const panelIds = collectTestIds(view.getByTestId('today-next-details'));
     expect(panelIds[panelIds.length - 1]).toBe('today-next-step');

@@ -1,7 +1,7 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowRight, Check, ChevronDown, ChevronUp, Flame, Mic, Settings } from 'lucide-react-native';
+import { ArrowRight, Check, ChevronDown, ChevronUp, Flame, Mic, Play, Settings } from 'lucide-react-native';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -189,6 +189,8 @@ export default function HomeScreen() {
   // moves up into the row so the panel does not repeat it.
   const rowCaption = hero.meta ?? hero.subtitle;
   const detailsSubtitle = hero.meta ? hero.subtitle : undefined;
+  // The row's Start affordance shows the action's first word ("Start lesson" → Start); "Keep going" stays whole.
+  const affordanceLabel = hero.action === 'Keep going' ? hero.action : hero.action.split(' ')[0];
 
   const stepCopy = useCallback((step: TodayStep) => {
     if (step.key === 'review') {
@@ -293,6 +295,13 @@ export default function HomeScreen() {
               {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
               <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalLine} testID="today-goal-value">{minutesLine}</Text>
             </View>
+            {/* Decorative: the row's label already names the action, so VoiceOver skips this. At accessibility sizes the column row puts it under the text. */}
+            <View accessible={false} importantForAccessibility="no" style={[styles.nextAffordance, largeTextLayout && styles.nextAffordanceLarge]} testID="today-next-start">
+              <View style={styles.playCircle} testID="today-next-start-circle">
+                <Play color={colors.brand} fill={colors.brand} size={layout.playIconSize} strokeWidth={2} />
+              </View>
+              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.nextAffordanceText}>{affordanceLabel}</Text>
+            </View>
           </Pressable>
           <Pressable
             accessibilityLabel={`Next lesson, ${hero.title}, ${nextExpanded ? 'expanded' : 'collapsed'}`}
@@ -303,8 +312,8 @@ export default function HomeScreen() {
             testID="today-next-toggle"
           >
             {nextExpanded
-              ? <ChevronUp color={colors.muted} size={22} strokeWidth={2.2} />
-              : <ChevronDown color={colors.muted} size={22} strokeWidth={2.2} />}
+              ? <ChevronUp color={colors.muted} size={layout.chevronIconSize} strokeWidth={2.2} />
+              : <ChevronDown color={colors.muted} size={layout.chevronIconSize} strokeWidth={2.2} />}
           </Pressable>
         </View>
 
@@ -383,7 +392,7 @@ export default function HomeScreen() {
               <View style={[styles.detailsFooter, largeTextLayout && styles.detailsFooterLarge]} testID="today-hero-footer">
                 <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.nextStepButton} testID="today-next-step">
                   <Text style={styles.nextStepButtonText}>{hero.action}</Text>
-                  <ArrowRight color={colors.white} size={18} strokeWidth={2.2} />
+                  <ArrowRight color={colors.brand} size={18} strokeWidth={2.2} />
                 </PressableFeedback>
               </View>
             </MotionReveal>
@@ -446,6 +455,12 @@ const useStyles = makeStyles((c) => {
   goalMinutesLong: { ...type.caption, fontWeight: '700' },
   goalLine: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   nextCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  // Play glyph in a brand-soft circle plus the action's first word: says the row itself starts the step.
+  nextAffordance: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
+  // In the column layout the affordance sits under the text, flush with its leading edge.
+  nextAffordanceLarge: { alignSelf: 'flex-start' },
+  playCircle: { width: layout.playCircleSize, height: layout.playCircleSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft },
+  nextAffordanceText: { ...type.label, color: c.brandText },
   nextKicker: { ...type.eyebrow, color: c.muted },
   nextKickerDone: { color: c.forestText },
   nextTitle: { ...type.label, color: c.ink },
@@ -473,9 +488,9 @@ const useStyles = makeStyles((c) => {
   stepMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   detailsFooter: { flexDirection: 'row' },
   detailsFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  // Rust fill, like Talk with Asha: the panel's closing action is the step itself, not a secondary option.
-  nextStepButton: { ...button.primary, flex: 1 },
-  nextStepButtonText: button.primaryText,
+  // Rust outline: Talk with Asha keeps the screen's one filled button, so the panel's closing action reads as secondary.
+  nextStepButton: { ...button.secondary, flex: 1, backgroundColor: 'transparent', borderColor: c.brand, borderWidth: 2 },
+  nextStepButtonText: { ...button.secondaryText, color: c.brandText },
   planCell: { width: '100%', gap: spacing.md },
   pathHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   pathHeadingLarge: { flexDirection: 'column', alignItems: 'flex-start' },

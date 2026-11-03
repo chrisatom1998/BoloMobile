@@ -4,7 +4,7 @@ jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 
-import { layout } from '../src/theme';
+import { colors, layout } from '../src/theme';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -79,7 +79,14 @@ describe('home accessibility', () => {
     expect(view.queryByText('0')).toBeNull();
     expect(view.getByTestId('today-goal-value').props.children).toBe('0 of 5 min today');
     expect(view.getByTestId('today-goal-value').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    // The minutes caption never drops below 12pt; it uses a type role, not an ad-hoc size.
+    expect(StyleSheet.flatten(view.getByTestId('today-goal-value').props.style).fontSize).toBeGreaterThanOrEqual(12);
     expect(view.queryByText('of 5 min')).toBeNull();
+    // The Start affordance is decorative: the row's own label already names the action.
+    const affordance = view.getByTestId('today-next-start');
+    expect(affordance.props.accessible).toBe(false);
+    expect(affordance.props.importantForAccessibility).toBe('no');
+    expect(view.queryByLabelText('Start')).toBeNull();
     // The ring is hidden from VoiceOver inside the row so the minutes are not announced twice.
     expect(dial.props.accessible).toBe(false);
     expect(dial.props.accessibilityElementsHidden).toBe(true);
@@ -107,6 +114,8 @@ describe('home accessibility', () => {
     const firstPlan = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
     const nextStep = view.getByTestId('today-next-step');
     expect(StyleSheet.flatten(nextStep.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    // An outline button: the rust fill stays with Talk with Asha, so the panel's action still reads as secondary.
+    expect(StyleSheet.flatten(nextStep.props.style)).toMatchObject({ backgroundColor: 'transparent', borderColor: colors.brand });
     expect(nextStep.props.accessibilityLabel).toBe('Start lesson');
     for (const tile of ['today-plan-catalog']) {
       expect(StyleSheet.flatten(view.getByTestId(tile).props.style).minHeight).toBeGreaterThanOrEqual(44);
@@ -133,6 +142,11 @@ describe('home accessibility', () => {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
       expect(StyleSheet.flatten(view.getByTestId('today-next-row').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'column' });
+      // The Start affordance wraps under the text column instead of squeezing the title.
+      const row = view.getByTestId('today-next-row');
+      const rowChildren = row.children.map((child) => (typeof child === 'object' ? child.props.testID : undefined));
+      expect(rowChildren.indexOf('today-next-practice')).toBeLessThan(rowChildren.indexOf('today-next-start'));
+      expect(StyleSheet.flatten(view.getByTestId('today-next-start').props.style)).toMatchObject({ alignSelf: 'flex-start' });
       expect(StyleSheet.flatten(view.getByTestId('today-asha-portrait').props.style).width).toBe(layout.todayPortraitSizeCompact);
       await fireEvent.press(view.getByTestId('today-next-toggle'));
       expect(StyleSheet.flatten(view.getByTestId('today-hero-footer').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });

@@ -142,6 +142,14 @@ export const layout = {
   stepDotSize: 22,
   /** Asha's small portrait on the SPEAK step invite. */
   ashaInvitePortraitSize: 48,
+  /** Status dot inside the READY/LISTENING pill, same as the Asha screen's. */
+  statusDotSize: 8,
+  /** Chevron glyph inside the 44pt expand toggle on the Next lesson row. */
+  chevronIconSize: 22,
+  /** Brand-soft circle behind the play glyph on the Next lesson row's Start affordance. */
+  playCircleSize: 28,
+  /** Play glyph inside `playCircleSize`. */
+  playIconSize: 14,
 } as const;
 
 export const radius = {
