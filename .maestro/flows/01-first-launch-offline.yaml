@@ -14,7 +14,7 @@ tags:
     permissions:
       microphone: deny
 - runFlow: ../subflows/enter-development-build.yaml
-- assertVisible: "Hear this"
+- assertVisible: "Say namaste"
 - runFlow: ../subflows/complete-onboarding.yaml
 - stopApp
 - launchApp:
@@ -23,7 +23,7 @@ tags:
       EXDevMenuShowsAtLaunch: false
       EXDevMenuShowFloatingActionButton: false
 - runFlow: ../subflows/dismiss-dev-menu.yaml
-- assertNotVisible: "Hear this"
+- assertNotVisible: "Say namaste"
 - setAirplaneMode: enabled
 - scrollUntilVisible:
     element:

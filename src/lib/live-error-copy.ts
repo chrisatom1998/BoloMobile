@@ -14,7 +14,7 @@ type Rule = { test: RegExp; text: string; action: LiveErrorAction };
 
 // Matched in order. Each technical message maps to one plain line and one next step.
 const RULES: Rule[] = [
-  { test: /physical iphone|ios simulator/i, text: 'Live voice needs a real iPhone, not the simulator.', action: 'none' },
+  { test: /physical iphone|ios simulator/i, text: 'Live voice requires a physical iPhone, not the simulator.', action: 'none' },
   { test: /no microphone is available/i, text: 'No microphone was found. Check that nothing else is using it, then try again.', action: 'retry' },
   { test: /wait before starting another|rate limit|too many/i, text: LIVE_BUSY_MESSAGE, action: 'wait' },
   { test: /took too long|timed out|timeout/i, text: LIVE_SLOW_NETWORK_MESSAGE, action: 'retry' },

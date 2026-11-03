@@ -8,7 +8,7 @@ appId: com.bolo.hindi
     text: "Bolo, http://.*:8081"
     optional: true
 - extendedWaitUntil:
-    visible: ".*(Hear this|This is the developer menu).*"
+    visible: ".*(Say namaste|This is the developer menu).*"
     timeout: 30000
 - tapOn:
     text: "Continue"
