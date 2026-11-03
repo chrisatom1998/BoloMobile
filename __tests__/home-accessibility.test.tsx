@@ -2,9 +2,9 @@
 jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { Dimensions, StyleSheet } from 'react-native';
+import { Dimensions, Platform, StyleSheet } from 'react-native';
 
-import { colors, layout } from '../src/theme';
+import { colors, layout, spacing } from '../src/theme';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
@@ -99,7 +99,7 @@ describe('home accessibility', () => {
     expect(within(affordance).queryByText(/./u)).toBeNull();
     expect(view.queryByLabelText('Start')).toBeNull();
     expect(view.queryByText('Start')).toBeNull();
-    // It sits between the text column and the chevron.
+    // It sits inside the row body, before the chevron. (Jest's default window has fontScale 2, so this renders the stacked row; the default-text order is checked below at fontScale 1.)
     const cardRow = view.getByTestId('today-next-card');
     const cardRowIds: string[] = [];
     const collect = (node: { children?: unknown[]; props?: { testID?: string } }) => {
@@ -109,8 +109,9 @@ describe('home accessibility', () => {
       }
     };
     collect(cardRow);
-    expect(cardRowIds.indexOf('today-next-practice')).toBeLessThan(cardRowIds.indexOf('today-next-start-circle'));
+    expect(cardRowIds.indexOf('today-goal-dial')).toBeLessThan(cardRowIds.indexOf('today-next-start-circle'));
     expect(cardRowIds.indexOf('today-next-start-circle')).toBeLessThan(cardRowIds.indexOf('today-next-toggle'));
+    expect(cardRowIds.indexOf('today-next-practice')).toBeLessThan(cardRowIds.indexOf('today-next-toggle'));
     // The ring is hidden from VoiceOver inside the row so the minutes are not announced twice.
     expect(dial.props.accessible).toBe(false);
     expect(dial.props.accessibilityElementsHidden).toBe(true);
@@ -164,20 +165,88 @@ describe('home accessibility', () => {
 
     try {
       const view = await render(<HomeScreen />);
-      expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
-      expect(StyleSheet.flatten(view.getByTestId('today-next-row').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'column' });
-      // The Play icon affordance wraps under the text column instead of squeezing the title.
+      // Header: the greeting is capped like the Asha header title, and the streak pill and gear get their own left-aligned row under it.
+      const topbar = view.getByTestId('today-topbar');
+      expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
+      expect(view.getByText('Namaste').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+      expect(view.getByText('नमस्ते').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+      const topbarChildren = topbar.children.map((child) => (typeof child === 'object' ? child.props.testID : undefined));
+      expect(topbarChildren.indexOf('today-topbar-actions')).toBe(topbarChildren.length - 1);
+      const actions = view.getByTestId('today-topbar-actions');
+      expect(StyleSheet.flatten(actions.props.style)).toMatchObject({ alignSelf: 'flex-start', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start' });
+      expect(within(actions).getByTestId('today-streak')).toBeTruthy();
+      expect(within(actions).getByTestId('today-settings')).toBeTruthy();
+
+      // Next-step row: a top line with the ring on the left and the play affordance on the right, then the text column at full width below.
+      expect(StyleSheet.flatten(view.getByTestId('today-next-card-row').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
       const row = view.getByTestId('today-next-row');
+      expect(StyleSheet.flatten(row.props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
+      expect(row.props.accessibilityRole).toBe('button');
+      expect(row.props.accessibilityLabel).toBe('Start lesson, A warm hello, 0 of 5 min today');
+      expect(row.props.accessibilityHint).toBe('Starts the lesson');
       const rowChildren = row.children.map((child) => (typeof child === 'object' ? child.props.testID : undefined));
-      expect(rowChildren.indexOf('today-next-practice')).toBeLessThan(rowChildren.indexOf('today-next-start'));
-      expect(StyleSheet.flatten(view.getByTestId('today-next-start').props.style)).toMatchObject({ alignSelf: 'flex-start' });
+      expect(rowChildren).toEqual(['today-next-top-line', 'today-next-practice']);
+      const topLine = view.getByTestId('today-next-top-line');
+      expect(StyleSheet.flatten(topLine.props.style)).toMatchObject({ flexDirection: 'row', justifyContent: 'space-between', paddingRight: layout.touchTarget, width: '100%' });
+      const topLineChildren = topLine.children.map((child) => (typeof child === 'object' ? child.props.testID : undefined));
+      expect(topLineChildren).toEqual(['today-goal-dial', 'today-next-start']);
+      expect(StyleSheet.flatten(view.getByTestId('today-next-practice').props.style)).toMatchObject({ width: '100%' });
+      expect(StyleSheet.flatten(view.getByTestId('today-next-start').props.style)).toMatchObject({ width: layout.touchTarget, height: layout.touchTarget });
+      // The chevron stays its own 44pt button at the trailing end of the top line, outside the row body.
+      const toggle = view.getByTestId('today-next-toggle');
+      expect(within(row).queryByTestId('today-next-toggle')).toBeNull();
+      expect(toggle.props.accessibilityRole).toBe('button');
+      expect(toggle.props.accessibilityState).toEqual({ expanded: false });
+      expect(toggle.props.accessibilityLabel).toBe('Next lesson, A warm hello, collapsed');
+      expect(StyleSheet.flatten(toggle.props.style)).toMatchObject({ width: layout.touchTarget, height: layout.touchTarget, position: 'absolute', top: spacing.md, right: spacing.sm });
+
       expect(StyleSheet.flatten(view.getByTestId('today-asha-portrait').props.style).width).toBe(layout.todayPortraitSizeCompact);
       await fireEvent.press(view.getByTestId('today-next-toggle'));
+      expect(view.getByTestId('today-next-toggle').props.accessibilityState).toEqual({ expanded: true });
       expect(StyleSheet.flatten(view.getByTestId('today-hero-footer').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
     }
     finally {
       await act(async () => Dimensions.set({ screen, window }));
     }
+  });
+
+  it('keeps the default-text header on one wrapping row with the ring, text and play affordance inline', async () => {
+    const window = Dimensions.get('window');
+    const screen = Dimensions.get('screen');
+    await act(async () => Dimensions.set({ screen: { ...screen, fontScale: 1 }, window: { ...window, fontScale: 1 } }));
+
+    try {
+      const view = await render(<HomeScreen />);
+      // The top bar wraps rather than overlapping: a streak-and-gear row that no longer fits drops below the greeting.
+      expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' });
+      expect(StyleSheet.flatten(view.getByTestId('today-topbar-actions').props.style).alignSelf).toBeUndefined();
+      expect(view.getByText('Namaste').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+      // Ring, text column, play affordance on one line; the chevron is in flow after the row body.
+      expect(view.queryByTestId('today-next-top-line')).toBeNull();
+      expect(StyleSheet.flatten(view.getByTestId('today-next-card-row').props.style)).toMatchObject({ flexDirection: 'row' });
+      const row = view.getByTestId('today-next-row');
+      expect(StyleSheet.flatten(row.props.style)).toMatchObject({ flexDirection: 'row' });
+      const rowChildren = row.children.map((child) => (typeof child === 'object' ? child.props.testID : undefined));
+      expect(rowChildren).toEqual(['today-goal-dial', 'today-next-practice', 'today-next-start']);
+      expect(StyleSheet.flatten(view.getByTestId('today-next-practice').props.style).width).toBeUndefined();
+      expect(StyleSheet.flatten(view.getByTestId('today-next-toggle').props.style).position).toBeUndefined();
+    }
+    finally {
+      await act(async () => Dimensions.set({ screen, window }));
+    }
+  });
+
+  it('keeps the iOS top padding at the list token with no tab bar inset', async () => {
+    const view = await render(<HomeScreen />);
+    expect(Platform.OS).toBe('ios');
+    expect(StyleSheet.flatten(view.getByTestId('today-guided-plan-list').props.contentContainerStyle).paddingTop).toBe(spacing.lg);
+  });
+
+  it('insets Today below the fixed top tab bar on web', async () => {
+    // Expo web draws the tab bar as a fixed pill over the top of the page, so the date line and greeting start below it.
+    jest.replaceProperty(Platform, 'OS', 'web');
+    const view = await render(<HomeScreen />);
+    expect(StyleSheet.flatten(view.getByTestId('today-guided-plan-list').props.contentContainerStyle).paddingTop).toBe(spacing.lg + layout.webTabBarInset);
   });
 
   it('stacks the greeting row and shrinks the portrait on narrow default-text phones', async () => {

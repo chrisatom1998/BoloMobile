@@ -47,9 +47,12 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const sharedStyles = useSharedStyles();
   const styles = useStyles();
+  // On web the tab bar is a fixed pill at the top of the page, so Today's date line and greeting start below it.
   const contentTopPadding = Platform.OS === 'android'
     ? Math.max(spacing.lg, (StatusBar.currentHeight ?? 0) + spacing.md)
-    : spacing.lg;
+    : Platform.OS === 'web'
+      ? spacing.lg + layout.webTabBarInset
+      : spacing.lg;
   const largeTextLayout = useLargeTextLayout();
   const { width: windowWidth } = useWindowDimensions();
   const stackedTopbarLayout = largeTextLayout || windowWidth <= 380;
@@ -222,17 +225,73 @@ export default function HomeScreen() {
 
   if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
 
+  // Hidden from VoiceOver inside the row: the row's own label already reads the minutes.
+  const goalDial = (
+    <View
+      accessible={false}
+      accessibilityElementsHidden
+      accessibilityLabel={`${goalPercent} percent of daily goal complete`}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: goalPercent }}
+      importantForAccessibility="no-hide-descendants"
+      style={styles.goalDial}
+      testID="today-goal-dial"
+    >
+      <Svg aria-hidden height={goalRingSize} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${goalRingSize} ${goalRingSize}`} width={goalRingSize}>
+        <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={goalRingStroke} />
+        {goalReached ? (
+          <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.brand} strokeWidth={goalRingStroke} />
+        ) : goalPercent > 0 ? (
+          <Circle
+            cx={goalRingSize / 2}
+            cy={goalRingSize / 2}
+            fill="none"
+            r={goalRingRadius}
+            stroke={colors.brand}
+            strokeDasharray={`${goalRingLength * goalPercent / 100} ${goalRingLength}`}
+            strokeLinecap="round"
+            strokeWidth={goalRingStroke}
+          />
+        ) : null}
+      </Svg>
+      {/* No numeral: the ring only shows progress, and the caption beside it carries the minutes. A check marks a met goal. */}
+      {goalReached ? (
+        <View pointerEvents="none" style={styles.goalCheck} testID="today-goal-check">
+          <Check color={colors.brand} size={layout.goalCheckIconSize} strokeWidth={3} />
+        </View>
+      ) : null}
+    </View>
+  );
+  // Three lines: kicker, title, one caption. Subtitles live in the panel.
+  const nextCopy = (
+    <View style={[styles.nextCopy, largeTextLayout && styles.nextCopyLarge]} testID="today-next-practice">
+      <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
+      <Text style={styles.nextTitle}>{hero.title}</Text>
+      <Text style={styles.goalLine} testID="today-goal-value">{goalCaption}</Text>
+    </View>
+  );
+  // Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. The 44pt wrapper gives the glyph a full-size footprint inside the row's single tap target.
+  const nextAffordance = (
+    <View accessible={false} importantForAccessibility="no" style={styles.nextAffordance} testID="today-next-start">
+      <View style={styles.playCircle} testID="today-next-start-circle">
+        <Play color={colors.brand} fill={colors.brand} size={layout.playIconSize} strokeWidth={2} />
+      </View>
+    </View>
+  );
+
   const header = (
     <View style={styles.headerContent}>
       <View style={[styles.topbar, stackedTopbarLayout && styles.topbarLarge]} testID="today-topbar">
         <View style={styles.greetingCopy}>
           <Text style={styles.dateLine}>{dateLine}</Text>
           <View style={styles.greetingRow}>
-            <JournalDisplay style={styles.greeting}>Namaste</JournalDisplay>
-            <Text accessibilityLanguage="hi-IN" style={styles.greetingHindi}>नमस्ते</Text>
+            {/* Capped like the Asha header title, so the stacked header leaves room for the streak and settings row. */}
+            <JournalDisplay maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.greeting}>Namaste</JournalDisplay>
+            <Text accessibilityLanguage="hi-IN" maxFontSizeMultiplier={layout.headerFontScaleCap} style={styles.greetingHindi}>नमस्ते</Text>
           </View>
         </View>
-        <View style={styles.topbarActions}>
+        {/* Stacked: the streak pill and gear share their own left-aligned row under the greeting. */}
+        <View style={[styles.topbarActions, stackedTopbarLayout && styles.topbarActionsLarge]} testID="today-topbar-actions">
           <Pressable accessibilityLabel={`${streak} day practice streak`} accessibilityRole="button" hitSlop={4} onPress={() => router.push('/progress' as Href)} style={styles.streakPill} testID="today-streak">
             <Flame color={colors.goldIcon} size={layout.streakIconSize} strokeWidth={2.2} />
             <Text style={styles.streakText}>{streak} day{streak === 1 ? '' : 's'}</Text>
@@ -252,7 +311,7 @@ export default function HomeScreen() {
       </MotionReveal>
 
       <View onLayout={measureNextCard} style={styles.nextCard} testID="today-next-card">
-        <View style={styles.nextCardRow}>
+        <View style={[styles.nextCardRow, largeTextLayout && styles.nextCardRowLarge]} testID="today-next-card-row">
           {/* The row body is the step action itself; the chevron beside it is the only expand control. */}
           <Pressable
             accessibilityHint={hero.hint}
@@ -262,60 +321,29 @@ export default function HomeScreen() {
             style={[styles.nextRow, largeTextLayout && styles.nextRowLarge]}
             testID="today-next-row"
           >
-            {/* Hidden from VoiceOver inside the row: the row's own label already reads the minutes. */}
-            <View
-              accessible={false}
-              accessibilityElementsHidden
-              accessibilityLabel={`${goalPercent} percent of daily goal complete`}
-              accessibilityRole="progressbar"
-              accessibilityValue={{ min: 0, max: 100, now: goalPercent }}
-              importantForAccessibility="no-hide-descendants"
-              style={styles.goalDial}
-              testID="today-goal-dial"
-            >
-              <Svg aria-hidden height={goalRingSize} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${goalRingSize} ${goalRingSize}`} width={goalRingSize}>
-                <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={goalRingStroke} />
-                {goalReached ? (
-                  <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.brand} strokeWidth={goalRingStroke} />
-                ) : goalPercent > 0 ? (
-                  <Circle
-                    cx={goalRingSize / 2}
-                    cy={goalRingSize / 2}
-                    fill="none"
-                    r={goalRingRadius}
-                    stroke={colors.brand}
-                    strokeDasharray={`${goalRingLength * goalPercent / 100} ${goalRingLength}`}
-                    strokeLinecap="round"
-                    strokeWidth={goalRingStroke}
-                  />
-                ) : null}
-              </Svg>
-              {/* No numeral: the ring only shows progress, and the caption beside it carries the minutes. A check marks a met goal. */}
-              {goalReached ? (
-                <View pointerEvents="none" style={styles.goalCheck} testID="today-goal-check">
-                  <Check color={colors.brand} size={layout.goalCheckIconSize} strokeWidth={3} />
+            {largeTextLayout ? (
+              <>
+                {/* Accessibility sizes: ring left and play right on one line, with the chevron at that line's trailing end, so the text column below gets the full card width. */}
+                <View style={styles.nextTopLine} testID="today-next-top-line">
+                  {goalDial}
+                  {nextAffordance}
                 </View>
-              ) : null}
-            </View>
-            {/* Three lines: kicker, title, one caption. Subtitles live in the panel. */}
-            <View style={styles.nextCopy} testID="today-next-practice">
-              <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
-              <Text style={styles.nextTitle}>{hero.title}</Text>
-              <Text style={styles.goalLine} testID="today-goal-value">{goalCaption}</Text>
-            </View>
-            {/* Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. The 44pt wrapper gives the glyph a full-size footprint inside the row's single tap target. At accessibility sizes the column row puts it under the text. */}
-            <View accessible={false} importantForAccessibility="no" style={[styles.nextAffordance, largeTextLayout && styles.nextAffordanceLarge]} testID="today-next-start">
-              <View style={styles.playCircle} testID="today-next-start-circle">
-                <Play color={colors.brand} fill={colors.brand} size={layout.playIconSize} strokeWidth={2} />
-              </View>
-            </View>
+                {nextCopy}
+              </>
+            ) : (
+              <>
+                {goalDial}
+                {nextCopy}
+                {nextAffordance}
+              </>
+            )}
           </Pressable>
           <Pressable
             accessibilityLabel={`Next lesson, ${hero.title}, ${nextExpanded ? 'expanded' : 'collapsed'}`}
             accessibilityRole="button"
             accessibilityState={{ expanded: nextExpanded }}
             onPress={toggleNext}
-            style={styles.nextToggle}
+            style={[styles.nextToggle, largeTextLayout && styles.nextToggleLarge]}
             testID="today-next-toggle"
           >
             {nextExpanded
@@ -432,7 +460,8 @@ const useStyles = makeStyles((c) => {
   return {
   list: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'stretch', gap: spacing.md, marginBottom: spacing.lg },
-  topbar: { width: '100%', minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  // Wraps, so a streak-and-gear row that no longer fits beside the greeting drops below it instead of overlapping.
+  topbar: { width: '100%', minHeight: 56, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   topbarLarge: { minHeight: 0, flexDirection: 'column', alignItems: 'stretch', gap: spacing.md, paddingRight: 0 },
   greetingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   dateLine: { ...type.caption, color: c.muted },
@@ -440,6 +469,8 @@ const useStyles = makeStyles((c) => {
   greeting: { ...type.display },
   greetingHindi: { ...hindiType(20), color: c.brand },
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Its own row under the greeting, left-aligned; wraps rather than overflowing if the pill grows.
+  topbarActionsLarge: { alignSelf: 'flex-start', justifyContent: 'flex-start', flexWrap: 'wrap' },
   streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: spacing.md, paddingRight: spacing.md },
   streakText: { ...type.label, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
   settingsButton: { width: 44, height: 44, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
@@ -451,19 +482,25 @@ const useStyles = makeStyles((c) => {
   nextCard: { width: '100%', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
   // Less padding on the trailing edge: the 44pt toggle supplies its own.
   nextCardRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.lg, paddingRight: spacing.sm },
+  // Accessibility sizes: the row body takes the full card width and the chevron is placed at the top line's trailing end.
+  nextCardRowLarge: { flexDirection: 'column', alignItems: 'stretch', paddingRight: spacing.lg },
   nextRow: { minWidth: 0, flex: 1, minHeight: layout.nextRowMinHeight, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
-  nextRowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
+  nextRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
+  // Ring left, play right; the trailing padding keeps the play circle clear of the chevron sitting over this line's end.
+  nextTopLine: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingRight: layout.touchTarget },
   nextToggle: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  // Sits on the top line's trailing end, level with the ring (the row's own vertical padding), still a separate 44pt button.
+  nextToggleLarge: { position: 'absolute', top: spacing.md, right: spacing.sm },
   goalDial: { width: goalRingSize, height: goalRingSize, alignItems: 'center', justifyContent: 'center' },
   // Rotating the whole ring starts the arc at 12 o'clock without SVG transform props, which web rejects.
   goalRing: { transform: [{ rotate: '-90deg' }] },
   goalCheck: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   goalLine: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   nextCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
+  // Full width below the top line in the column layout, so long titles wrap at the card's width.
+  nextCopyLarge: { width: '100%', flexGrow: 0, flexBasis: 'auto' },
   // Play glyph in a brand-soft circle, centred in a 44pt box: says the row itself starts the step without taking width from the text column.
   nextAffordance: { width: layout.touchTarget, height: layout.touchTarget, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
-  // In the column layout the affordance sits under the text, flush with its leading edge.
-  nextAffordanceLarge: { alignSelf: 'flex-start' },
   playCircle: { width: layout.playCircleSize, height: layout.playCircleSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft },
   nextKicker: { ...type.eyebrow, color: c.muted },
   // Rust, not forest: Today keeps to the brand palette, and a finished day is a celebration rather than a graded answer.

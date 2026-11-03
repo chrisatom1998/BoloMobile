@@ -325,10 +325,12 @@ describe('HomeScreen primary journey', () => {
     // The row label and hint are unchanged; the affordance is decorative.
     expect(row.props.accessibilityLabel).toBe('Start review, Review your phrases, 5 of 10 min today');
     expect(row.props.accessibilityHint).toBe('Starts the review');
-    // Order inside the card row: ring, text column, Play circle, then the chevron outside the row.
+    // Order inside the card: ring, then the Play circle, with the text column and the chevron after; the chevron sits outside the row body.
+    // (Jest's default window has fontScale 2, so the row renders stacked here; home-accessibility checks the default-text order at fontScale 1.)
     const cardRowIds = collectTestIds(view.getByTestId('today-next-card'));
-    expect(cardRowIds.indexOf('today-next-practice')).toBeLessThan(cardRowIds.indexOf('today-next-start-circle'));
+    expect(cardRowIds.indexOf('today-goal-dial')).toBeLessThan(cardRowIds.indexOf('today-next-start-circle'));
     expect(cardRowIds.indexOf('today-next-start-circle')).toBeLessThan(cardRowIds.indexOf('today-next-toggle'));
+    expect(cardRowIds.indexOf('today-next-practice')).toBeLessThan(cardRowIds.indexOf('today-next-toggle'));
     expect(collectTestIds(row)).not.toContain('today-next-toggle');
   });
 

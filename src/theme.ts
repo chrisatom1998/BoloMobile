@@ -136,6 +136,11 @@ export const layout = {
   todayRingGap: 20,
   /** Next lesson row body: the 44pt goal ring plus the row's own padding. */
   nextRowMinHeight: 72,
+  /**
+   * Expo web draws the tab bar as a fixed pill at the top of the page (24px down, 40px tall) instead of a bottom bar.
+   * Today's content starts below its bottom edge on web only; native tabs sit at the bottom and need no inset.
+   */
+  webTabBarInset: 64,
   /** Status pill on the Today hero (live sessions only): a readout, not a control, so it sits below the touch target. */
   statusPillMinHeight: 32,
   /** Step marker on the Today steps list. */
