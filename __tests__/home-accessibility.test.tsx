@@ -1,7 +1,7 @@
 // Keep built-in journey fixtures independent of locally imported lessons.
 jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { Dimensions, StyleSheet } from 'react-native';
 
 import { colors, layout } from '../src/theme';
@@ -82,11 +82,26 @@ describe('home accessibility', () => {
     // The minutes caption never drops below 12pt; it uses a type role, not an ad-hoc size.
     expect(StyleSheet.flatten(view.getByTestId('today-goal-value').props.style).fontSize).toBeGreaterThanOrEqual(12);
     expect(view.queryByText('of 5 min')).toBeNull();
-    // The Start affordance is decorative: the row's own label already names the action.
+    // The Play icon affordance is decorative: the row's own label already names the action, and it carries no text of its own.
     const affordance = view.getByTestId('today-next-start');
     expect(affordance.props.accessible).toBe(false);
     expect(affordance.props.importantForAccessibility).toBe('no');
+    expect(within(affordance).getByTestId('today-next-start-circle')).toBeTruthy();
+    expect(within(affordance).queryByText(/./u)).toBeNull();
     expect(view.queryByLabelText('Start')).toBeNull();
+    expect(view.queryByText('Start')).toBeNull();
+    // It sits between the text column and the chevron.
+    const cardRow = view.getByTestId('today-next-card');
+    const cardRowIds: string[] = [];
+    const collect = (node: { children?: unknown[]; props?: { testID?: string } }) => {
+      if (node.props?.testID) cardRowIds.push(node.props.testID);
+      for (const child of node.children ?? []) {
+        if (child && typeof child === 'object') collect(child as { children?: unknown[]; props?: { testID?: string } });
+      }
+    };
+    collect(cardRow);
+    expect(cardRowIds.indexOf('today-next-practice')).toBeLessThan(cardRowIds.indexOf('today-next-start-circle'));
+    expect(cardRowIds.indexOf('today-next-start-circle')).toBeLessThan(cardRowIds.indexOf('today-next-toggle'));
     // The ring is hidden from VoiceOver inside the row so the minutes are not announced twice.
     expect(dial.props.accessible).toBe(false);
     expect(dial.props.accessibilityElementsHidden).toBe(true);
@@ -142,7 +157,7 @@ describe('home accessibility', () => {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
       expect(StyleSheet.flatten(view.getByTestId('today-next-row').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'column' });
-      // The Start affordance wraps under the text column instead of squeezing the title.
+      // The Play icon affordance wraps under the text column instead of squeezing the title.
       const row = view.getByTestId('today-next-row');
       const rowChildren = row.children.map((child) => (typeof child === 'object' ? child.props.testID : undefined));
       expect(rowChildren.indexOf('today-next-practice')).toBeLessThan(rowChildren.indexOf('today-next-start'));

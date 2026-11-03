@@ -298,46 +298,26 @@ describe('HomeScreen primary journey', () => {
     expect(toggle.minHeight).toBeGreaterThanOrEqual(44);
   });
 
-  it('shows a Start affordance in the row body that VoiceOver skips', async () => {
+  it('shows a Play icon affordance in the row body that VoiceOver skips', async () => {
     const view = await render(<HomeScreen />);
 
     const row = view.getByTestId('today-next-row');
-    // A phrase is due in this fixture, so the step action is "Start review": the affordance keeps the first word.
     const affordance = within(row).getByTestId('today-next-start');
     expect(affordance.props.accessible).toBe(false);
     expect(affordance.props.importantForAccessibility).toBe('no');
-    expect(within(affordance).getByText('Start')).toBeTruthy();
-    expect(StyleSheet.flatten(within(affordance).getByText('Start').props.style).color).toBe(colors.brandText);
+    // Icon only: no text label, so the text column keeps its width at 393pt.
+    expect(within(affordance).queryByText(/./u)).toBeNull();
+    expect(view.queryByText('Start')).toBeNull();
     const circle = within(affordance).getByTestId('today-next-start-circle');
     expect(StyleSheet.flatten(circle.props.style)).toMatchObject({ width: layout.playCircleSize, height: layout.playCircleSize, backgroundColor: colors.brandSoft });
     // The row label and hint are unchanged; the affordance is decorative.
     expect(row.props.accessibilityLabel).toBe('Start review, Review your phrases, 5 of 10 min today');
     expect(row.props.accessibilityHint).toBe('Starts the review');
-    // Order inside the row: ring, text column, affordance; the chevron stays outside the row.
-    const rowIds = collectTestIds(row);
-    expect(rowIds.indexOf('today-next-practice')).toBeLessThan(rowIds.indexOf('today-next-start'));
-    expect(rowIds).not.toContain('today-next-toggle');
-  });
-
-  it('shortens the step action to one word for the affordance', async () => {
-    mockAppState.reviewStreakDays = [dateKey()];
-    const view = await render(<HomeScreen />);
-    expect(within(view.getByTestId('today-next-start')).getByText('Start')).toBeTruthy();
-
-    mockAppState.phrases = [];
-    mockAppState.sceneProgress = { 'plan-essentials-03': { completions: 0, lastBeatIndex: 2, lastPracticedAt: '2026-07-20T12:00:00.000Z' } };
-    await view.rerender(<HomeScreen />);
-    expect(within(view.getByTestId('today-next-start')).getByText('Continue')).toBeTruthy();
-
-    mockAppState.sceneProgress = {};
-    mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 300 }];
-    await view.rerender(<HomeScreen />);
-    expect(within(view.getByTestId('today-next-start')).getByText('Talk')).toBeTruthy();
-
-    mockAppState.practice = { chaiDone: false, date: dateKey(), liveDone: true, seconds: 600 };
-    mockAppState.practiceHistory = [{ answers: 10, correct: 9, date: dateKey(), reviews: 0, seconds: 600 }];
-    await view.rerender(<HomeScreen />);
-    expect(within(view.getByTestId('today-next-start')).getByText('Keep going')).toBeTruthy();
+    // Order inside the card row: ring, text column, Play circle, then the chevron outside the row.
+    const cardRowIds = collectTestIds(view.getByTestId('today-next-card'));
+    expect(cardRowIds.indexOf('today-next-practice')).toBeLessThan(cardRowIds.indexOf('today-next-start-circle'));
+    expect(cardRowIds.indexOf('today-next-start-circle')).toBeLessThan(cardRowIds.indexOf('today-next-toggle'));
+    expect(collectTestIds(row)).not.toContain('today-next-toggle');
   });
 
   it('keeps Talk with Asha the only filled button and ends the panel with an outline button', async () => {

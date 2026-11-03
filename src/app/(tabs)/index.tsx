@@ -189,8 +189,6 @@ export default function HomeScreen() {
   // moves up into the row so the panel does not repeat it.
   const rowCaption = hero.meta ?? hero.subtitle;
   const detailsSubtitle = hero.meta ? hero.subtitle : undefined;
-  // The row's Start affordance shows the action's first word ("Start lesson" → Start); "Keep going" stays whole.
-  const affordanceLabel = hero.action === 'Keep going' ? hero.action : hero.action.split(' ')[0];
 
   const stepCopy = useCallback((step: TodayStep) => {
     if (step.key === 'review') {
@@ -295,12 +293,11 @@ export default function HomeScreen() {
               {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
               <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalLine} testID="today-goal-value">{minutesLine}</Text>
             </View>
-            {/* Decorative: the row's label already names the action, so VoiceOver skips this. At accessibility sizes the column row puts it under the text. */}
+            {/* Decorative: the row's label already names the action, so VoiceOver skips this. Icon only, so the text column keeps its width at 393pt. At accessibility sizes the column row puts it under the text. */}
             <View accessible={false} importantForAccessibility="no" style={[styles.nextAffordance, largeTextLayout && styles.nextAffordanceLarge]} testID="today-next-start">
               <View style={styles.playCircle} testID="today-next-start-circle">
                 <Play color={colors.brand} fill={colors.brand} size={layout.playIconSize} strokeWidth={2} />
               </View>
-              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.nextAffordanceText}>{affordanceLabel}</Text>
             </View>
           </Pressable>
           <Pressable
@@ -455,12 +452,11 @@ const useStyles = makeStyles((c) => {
   goalMinutesLong: { ...type.caption, fontWeight: '700' },
   goalLine: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   nextCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
-  // Play glyph in a brand-soft circle plus the action's first word: says the row itself starts the step.
-  nextAffordance: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 0 },
+  // Play glyph in a brand-soft circle: says the row itself starts the step without taking width from the text column.
+  nextAffordance: { flexShrink: 0 },
   // In the column layout the affordance sits under the text, flush with its leading edge.
   nextAffordanceLarge: { alignSelf: 'flex-start' },
   playCircle: { width: layout.playCircleSize, height: layout.playCircleSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft },
-  nextAffordanceText: { ...type.label, color: c.brandText },
   nextKicker: { ...type.eyebrow, color: c.muted },
   nextKickerDone: { color: c.forestText },
   nextTitle: { ...type.label, color: c.ink },
