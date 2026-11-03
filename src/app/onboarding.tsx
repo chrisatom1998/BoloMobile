@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SayItAloud, type SayItAloudPhase } from '@/components/say-it-aloud';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { playOfflineSpeech } from '@/lib/offline-voice-player';
@@ -15,25 +16,13 @@ import { hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyle
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
 
-type OnboardingStep = 'listen' | 'level' | 'goal';
-type ReplyId = 'namaste' | 'thanks' | 'bye';
-
-const replies: { id: ReplyId; hi: string; latin: string; en: string; correct: boolean }[] = [
-  { id: 'namaste', hi: 'नमस्ते', latin: 'Namaste', en: 'Hello', correct: true },
-  { id: 'thanks', hi: 'धन्यवाद', latin: 'Dhanyavaad', en: 'Thank you', correct: false },
-  { id: 'bye', hi: 'अलविदा', latin: 'Alvida', en: 'Goodbye', correct: false },
-];
+// Two steps for a new learner: say a first word, then a plan that already has sensible defaults.
+type OnboardingStep = 'speak' | 'plan';
 
 const levels: { value: LearnerLevel; label: string; detail: string }[] = [
   { value: 'new', label: 'New to Hindi', detail: 'Start with essential patterns.' },
   { value: 'beginner', label: 'Beginner', detail: 'I know greetings and a few phrases.' },
   { value: 'intermediate', label: 'Intermediate', detail: 'Give me richer real-life situations.' },
-];
-
-const scripts: { value: ScriptPreference; label: string }[] = [
-  { value: 'both', label: 'Hindi + transliteration' },
-  { value: 'devanagari', label: 'Hindi script only' },
-  { value: 'latin', label: 'Transliteration first' },
 ];
 
 const goals: { value: LearningGoal; label: string }[] = [
@@ -87,23 +76,25 @@ export default function OnboardingScreen() {
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
   const recalibrating = mode === 'recalibrate' && learnerProfile.completed;
-  const steps: OnboardingStep[] = recalibrating ? ['level', 'goal'] : ['listen', 'level', 'goal'];
+  const steps: OnboardingStep[] = recalibrating ? ['plan'] : ['speak', 'plan'];
   const [stepIndex, setStepIndex] = useState(0);
-  const step = steps[stepIndex] ?? 'goal';
+  const step = steps[stepIndex] ?? 'plan';
   const [replayToken, setReplayToken] = useState(0);
-  const [reply, setReply] = useState<ReplyId | null>(null);
+  const [sayPhase, setSayPhase] = useState<SayItAloudPhase>('idle');
+  // Said it, or chose to say it later: either way the learner moves on.
+  const [spoken, setSpoken] = useState(false);
   const [level, setLevel] = useState<LearnerLevel>(recalibrating ? learnerProfile.level : 'new');
-  const [scriptPreference, setScriptPreference] = useState<ScriptPreference>(recalibrating ? learnerProfile.scriptPreference : 'both');
+  // How Hindi appears is a Settings choice; setup keeps the default so nothing stands between the learner and Asha.
+  const scriptPreference: ScriptPreference = recalibrating ? learnerProfile.scriptPreference : 'both';
   const [primaryGoal, setPrimaryGoal] = useState<LearningGoal>(recalibrating ? learnerProfile.primaryGoal : 'conversation');
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const mountedRef = useRef(true);
-  const heardNamaste = reply === 'namaste';
 
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   useEffect(() => {
-    if (step !== 'listen') return undefined;
+    if (step !== 'speak') return undefined;
     const controller = new AbortController();
     void (async () => {
       try {
@@ -144,7 +135,7 @@ export default function OnboardingScreen() {
   }
 
   function continueForward() {
-    if (step === 'listen' && !heardNamaste) return;
+    if (step === 'speak' && !spoken) return;
     if (stepIndex >= steps.length - 1) {
       void finish();
       return;
@@ -154,7 +145,7 @@ export default function OnboardingScreen() {
 
   const stepNumber = stepIndex + 1;
   const onLastStep = stepIndex >= steps.length - 1;
-  const continueDisabled = (step === 'listen' && !heardNamaste) || saving;
+  const continueDisabled = (step === 'speak' && !spoken) || saving;
   const continueLabel = onLastStep ? (recalibrating ? 'Save my practice plan' : 'Start practicing') : 'Continue';
 
   return (
@@ -171,46 +162,31 @@ export default function OnboardingScreen() {
         </View>
 
         <View style={styles.body}>
-          {step === 'listen' ? (
-            <View style={styles.stack}>
-              <Text accessibilityRole="header" style={styles.heading}>Hear this</Text>
-              <Text accessibilityLanguage="hi-IN" style={styles.hindi}>नमस्ते</Text>
-              <Text style={styles.latin}>Namaste</Text>
-              <Text style={sharedStyles.body}>Saved in the app. No connection and no microphone.</Text>
-              <Pressable accessibilityLabel="Hear नमस्ते again" accessibilityRole="button" onPress={() => setReplayToken((current) => current + 1)} style={styles.hearButton} testID="onboarding-hear-again">
-                <Text style={styles.hearText}>Hear it again</Text>
-              </Pressable>
-              <Text style={styles.prompt}>Which reply fits?</Text>
-              <ChoiceRow
-                choices={replies.map((item) => ({ detail: `${item.latin}, ${item.en}`, hindi: true, label: item.hi, value: item.id }))}
-                label="Reply to नमस्ते"
-                onChange={setReply}
-                testIDFor={(choice) => choice.value === 'namaste' ? 'onboarding-reply-namaste' : undefined}
-                value={reply}
-              />
-              {reply && !heardNamaste ? <Text accessibilityLiveRegion="polite" style={styles.miss}>Listen again — नमस्ते is hello.</Text> : null}
-            </View>
-          ) : null}
-
-          {step === 'level' ? (
-            <View style={styles.stack}>
-              <Text accessibilityRole="header" style={styles.heading}>Where are you starting?</Text>
-              <Text style={sharedStyles.body}>This tunes the first lessons. You can change it later.</Text>
-              <ChoiceRow choices={levels} label="Hindi level" onChange={setLevel} value={level} />
-              <Text accessibilityRole="header" style={styles.subheading}>How should Hindi appear?</Text>
-              <ChoiceRow choices={scripts} label="Hindi script preference" onChange={setScriptPreference} value={scriptPreference} />
-            </View>
-          ) : null}
-
-          {step === 'goal' ? (
+          {step === 'speak' ? (
             <View style={styles.stack}>
               <View style={styles.ashaRow}>
                 <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
                 <View style={styles.ashaCopy}>
-                  <Text accessibilityRole="header" style={styles.heading}>Meet Asha</Text>
-                  <Text style={sharedStyles.body}>Asha is your voice tutor. When you are ready, she practices these lines out loud with you.</Text>
+                  <Text accessibilityRole="header" style={styles.heading}>Say namaste</Text>
+                  <Text style={sharedStyles.body}>Asha says it first. Then it’s your turn, out loud. She’ll wait.</Text>
                 </View>
               </View>
+              <Text accessibilityLanguage="hi-IN" style={styles.hindi}>नमस्ते</Text>
+              <Text style={styles.latin}>Namaste · hello</Text>
+              <Pressable accessibilityLabel="Hear नमस्ते again" accessibilityRole="button" onPress={() => setReplayToken((current) => current + 1)} style={styles.hearButton} testID="onboarding-hear-again">
+                <Text style={styles.hearText}>Hear it again</Text>
+              </Pressable>
+              <SayItAloud onHeard={() => setSpoken(true)} onPhase={setSayPhase} onSkip={() => { setSpoken(true); setSayPhase('idle'); setStepIndex((current) => current + 1); }} phase={sayPhase} />
+              <Text style={styles.miss}>Your voice stays on this phone. Nothing is uploaded here.</Text>
+            </View>
+          ) : null}
+
+          {step === 'plan' ? (
+            <View style={styles.stack}>
+              <Text accessibilityRole="header" style={styles.heading}>{recalibrating ? 'Tune your plan' : 'Your plan'}</Text>
+              <Text style={sharedStyles.body}>{recalibrating ? 'Change what Asha focuses on.' : 'These are set for a fresh start. Change them now or any time in Settings.'}</Text>
+              <Text accessibilityRole="header" style={styles.subheading}>Where are you starting?</Text>
+              <ChoiceRow choices={levels} label="Hindi level" onChange={setLevel} value={level} />
               <Text accessibilityRole="header" style={styles.subheading}>What matters most?</Text>
               <ChoiceRow choices={goals} label="Learning goal" onChange={setPrimaryGoal} value={primaryGoal} />
             </View>

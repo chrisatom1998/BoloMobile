@@ -1,19 +1,13 @@
 appId: com.bolo.hindi
 ---
 - extendedWaitUntil:
-    visible: "Hear this"
+    visible: "Say namaste"
     timeout: 20000
+# The simulator has no reliable microphone, so the first word is said later.
 - tapOn:
-    id: "onboarding-reply-namaste"
-- tapOn:
-    id: "onboarding-continue"
+    id: "say-it-skip"
 - extendedWaitUntil:
-    visible: "Where are you starting?"
-    timeout: 15000
-- tapOn:
-    id: "onboarding-continue"
-- extendedWaitUntil:
-    visible: "Meet Asha"
+    visible: "Your plan"
     timeout: 15000
 - tapOn:
     id: "onboarding-start"

@@ -247,25 +247,27 @@ describe('previously uncovered audit screens', () => {
     });
   });
 
-  it('writes the same profile fields from three screens, with reply language and daily minutes as defaults', async () => {
+  it('writes the same profile fields from two screens, with script, reply language and daily minutes as defaults', async () => {
     const view = await render(<OnboardingScreen />);
 
-    expect(view.getByRole('header', { name: 'Hear this' })).toBeTruthy();
+    // Step 1 is a first word out loud; the mic is asked for here, so Asha needs no later setup.
+    expect(view.getByRole('header', { name: 'Say namaste' })).toBeTruthy();
+    expect(view.getByText('Step 1 of 2')).toBeTruthy();
     expect(view.queryByText('Check microphone access')).toBeNull();
     expect(view.queryByText('Asha’s replies')).toBeNull();
     expect(view.queryByRole('radio', { name: '5 minutes' })).toBeNull();
     expect(view.getByTestId('onboarding-continue').props.accessibilityState).toEqual({ disabled: true });
+    expect(StyleSheet.flatten(view.getByRole('header', { name: 'Say namaste' }).props.style).fontFamily).toBe('Georgia');
 
-    await fireEvent.press(view.getByRole('radio', { name: 'धन्यवाद, Dhanyavaad, Thank you' }));
+    // Permission is declined in this harness: the learner is told it is fine and can move on.
+    await fireEvent.press(view.getByTestId('say-it-listen'));
+    await waitFor(() => expect(view.getByTestId('say-it-denied')).toBeTruthy());
     expect(view.getByTestId('onboarding-continue').props.accessibilityState).toEqual({ disabled: true });
-    await fireEvent.press(view.getByTestId('onboarding-reply-namaste'));
-    expect(StyleSheet.flatten(view.getByTestId('onboarding-reply-namaste').props.style).borderColor).toBe('#172523');
-    expect(StyleSheet.flatten(view.getByRole('header', { name: 'Hear this' }).props.style).fontFamily).toBe('Georgia');
-    await fireEvent.press(view.getByTestId('onboarding-continue'));
+    await fireEvent.press(view.getByTestId('say-it-skip'));
 
+    expect(view.getByRole('header', { name: 'Your plan' })).toBeTruthy();
+    expect(view.queryByRole('radio', { name: 'Transliteration first' })).toBeNull();
     await fireEvent.press(view.getByRole('radio', { name: 'Beginner, I know greetings and a few phrases.' }));
-    await fireEvent.press(view.getByRole('radio', { name: 'Transliteration first' }));
-    await fireEvent.press(view.getByTestId('onboarding-continue'));
     await fireEvent.press(view.getByRole('radio', { name: 'Travel' }));
     await fireEvent.press(view.getByRole('button', { name: 'Start practicing' }));
 
@@ -274,7 +276,7 @@ describe('previously uncovered audit screens', () => {
       microphoneTested: false,
       primaryGoal: 'travel',
       responseLanguage: 'en',
-      scriptPreference: 'latin',
+      scriptPreference: 'both',
     }, 10);
     expect(mockRouter.replace).toHaveBeenCalledWith('/');
   });
@@ -294,16 +296,13 @@ describe('previously uncovered audit screens', () => {
     };
     const view = await render(<OnboardingScreen />);
 
-    expect(view.queryByRole('header', { name: 'Hear this' })).toBeNull();
+    expect(view.queryByRole('header', { name: 'Say namaste' })).toBeNull();
     expect(view.getByRole('radio', { name: 'Intermediate, Give me richer real-life situations.' }).props.accessibilityState).toEqual({ checked: true });
-    expect(view.getByRole('radio', { name: 'Transliteration first' }).props.accessibilityState).toEqual({ checked: true });
-    await fireEvent.press(view.getByTestId('onboarding-continue'));
     expect(view.getByRole('radio', { name: 'Travel' }).props.accessibilityState).toEqual({ checked: true });
     await fireEvent.press(view.getByRole('button', { name: 'Cancel recalibration' }));
     expect(mockRouter.back).toHaveBeenCalledTimes(1);
 
     const saving = await render(<OnboardingScreen />);
-    await fireEvent.press(saving.getByTestId('onboarding-continue'));
     await fireEvent.press(saving.getByRole('button', { name: 'Save my practice plan' }));
     expect(mockCompleteOnboarding).toHaveBeenCalledWith({
       displayName: 'Chris',

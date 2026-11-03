@@ -26,6 +26,14 @@ jest.mock('@/state/app-state', () => ({
   useAppState: () => mockAppState,
 }));
 
+jest.mock('expo-audio', () => ({
+  RecordingPresets: { HIGH_QUALITY: {} },
+  requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: false })),
+  setAudioModeAsync: jest.fn(async () => undefined),
+  useAudioRecorder: jest.fn(() => ({ isRecording: false })),
+  useAudioRecorderState: jest.fn(() => ({ isRecording: false })),
+}));
+
 import OnboardingScreen from '../src/app/onboarding';
 
 function deferred<T>() {
@@ -54,10 +62,9 @@ describe('OnboardingScreen finish', () => {
     };
   });
 
+  // Recalibration is a single step, so the screen opens on its last step.
   async function openLastStep() {
-    const view = await render(<OnboardingScreen />);
-    await fireEvent.press(view.getByTestId('onboarding-continue'));
-    return view;
+    return render(<OnboardingScreen />);
   }
 
   it('stays on the screen and explains when the completed setup cannot be stored', async () => {
