@@ -32,8 +32,8 @@ export const LIVE_OFFLINE_MESSAGE = 'Live voice needs an internet connection. Le
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
 export type InterruptedReason = Extract<AshaSessionEndReason, 'connection_lost' | 'backgrounded'>;
 export const interruptedCopy: Record<InterruptedReason, string> = {
-  connection_lost: 'Connection lost. This conversation is saved on your device.',
-  backgrounded: 'The session ended when you left Bolo. This conversation is saved on your device.',
+  connection_lost: 'Lost connection. Want to pick up where we left off?',
+  backgrounded: 'The call paused when you left Bolo. Want to pick up where we left off?',
 };
 
 export function sharesSpeaker(left: ChatMessage | undefined, right: ChatMessage | undefined) {

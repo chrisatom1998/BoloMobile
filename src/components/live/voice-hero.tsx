@@ -13,6 +13,8 @@ import { layout, spacing } from '@/theme';
 export function VoiceHero({
   accessibilityCompact,
   aiConsent,
+  callFocus,
+  cancelConnecting,
   colors,
   compactVoiceLayout,
   conversationStarted,
@@ -28,8 +30,12 @@ export function VoiceHero({
   restingVoiceLayout,
   scrollToChat,
   setConsentSheetOpen,
+  slowConnecting,
   speechCaption,
   styles,
+  toggleTranscript,
+  transcriptOpen,
+  realtimeLocked,
   voiceHeroBody,
   voiceHeroTitle,
   languageControl,
@@ -81,22 +87,23 @@ export function VoiceHero({
                 </View>
               ) : null}
               {aiConsent ? <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">
-                {headerCollapsed || accessibilityCompact ? null : languageControl}
+                {/* The language is fixed for the call, so the switch leaves the screen until it ends. */}
+                {headerCollapsed || accessibilityCompact || realtimeLocked ? null : languageControl}
                 {accessibilityCompact ? null : (
                 <View style={[styles.voiceStage, compactVoiceLayout && styles.voiceStageCompact, restingVoiceLayout && styles.voiceStageResting, { width: heroContentWidth }]}>
                   {/* Asha's portrait is the tap-to-talk control: status rings and pulses wrap it. */}
                   <View style={styles.portraitControl} testID="asha-portrait-control">
                     {talkControl}
-                    <Pressable accessibilityLabel="Open transcript" accessibilityRole="button" onPress={scrollToChat} style={styles.chatButton}>
-                      <MessageCircle accessibilityLabel="Open transcript" accessible={false} color={colors.white} size={20} />
+                    <Pressable accessibilityLabel={realtimeLocked ? (transcriptOpen ? 'Hide transcript' : 'Show transcript') : 'Open transcript'} accessibilityRole="button" onPress={realtimeLocked ? toggleTranscript : scrollToChat} style={styles.chatButton} testID="live-transcript-toggle">
+                      <MessageCircle accessible={false} color={colors.white} size={20} />
                     </Pressable>
                   </View>
                   <View style={styles.heroCopy}>
                     <View style={styles.statusRow} testID="asha-voice-status">
-                      <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
+                      <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive, realtimeStatus === 'thinking' && styles.statusDotThinking]} />
                       <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={liveConfigError ? styles.voiceOffCaption : styles.liveVoiceText}>{liveConfigError ? 'Voice off' : statusKicker}</Text>
                     </View>
-                    {liveConfigError ? null : microphoneGuidance ?? (conversationStarted ? (
+                    {liveConfigError ? null : microphoneGuidance ?? (conversationStarted && !callFocus ? (
                       <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                     ) : (
                       <>
@@ -104,6 +111,11 @@ export function VoiceHero({
                         <Text style={styles.heroBody}>{voiceHeroBody}</Text>
                       </>
                     ))}
+                    {slowConnecting && realtimeStatus === 'connecting' ? (
+                      <Pressable accessibilityRole="button" onPress={cancelConnecting} style={styles.secondaryActionButton} testID="live-cancel-connecting">
+                        <Text style={styles.secondaryActionText}>Cancel</Text>
+                      </Pressable>
+                    ) : null}
                   </View>
                 </View>
                 )}

@@ -25,7 +25,10 @@ import { useAshaLiveSession } from '@/hooks/use-asha-live-session';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { useMotionPreference } from '@/hooks/use-motion-preference';
-import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import type { ConnectionStartInfo, LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus, StartTurnOptions } from '@/hooks/use-realtime-conversation';
+import { friendlyLiveError, type LiveErrorAction } from '@/lib/live-error-copy';
+import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
+import { liveRowText } from '@/lib/live-transcripts';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
 import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
@@ -74,6 +77,14 @@ export default function LiveScreen() {
   const [pendingUserMessage, setPendingUserMessage] = useState<ChatMessage | null>(null);
   const [consentSheetOpen, setConsentSheetOpen] = useState(false);
   const [error, setError] = useState('');
+  // The one next step offered under the error banner.
+  const [errorAction, setErrorAction] = useState<LiveErrorAction>('none');
+  // During a call the transcript stays one tap away so the screen holds only Asha and her status.
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  // The call has been connecting for a while: say so and offer a way out.
+  const [slowConnecting, setSlowConnecting] = useState(false);
+  // Whether the call's microphone is open; reported by whichever control owns the session.
+  const [ownedMicOn, setOwnedMicOn] = useState(false);
   const [microphonePhase, setMicrophonePhase] = useState<LiveMicrophonePhase>('idle');
   const [trackedConsent, setTrackedConsent] = useState(aiConsent);
   if (aiConsent !== trackedConsent) {
@@ -154,7 +165,10 @@ export default function LiveScreen() {
       animatedFollowRef.current = false;
     }, animatedFollowReleaseMs);
   }, []);
-  const composerMicActionRef = useRef<(() => void) | null>(null);
+  const composerMicActionRef = useRef<((options?: StartTurnOptions) => void) | null>(null);
+  const ownedDisconnectRef = useRef<((reason?: AshaSessionEndReason) => void) | null>(null);
+  const chatHistoryRef = useRef(chatHistory);
+  useEffect(() => { chatHistoryRef.current = chatHistory; }, [chatHistory]);
   const [composerMicActionBound, setComposerMicActionBound] = useState(false);
   const [chipClipWidth, setChipClipWidth] = useState(0);
   const [chipWidths, setChipWidths] = useState<number[]>([0, 0, 0, 0]);
@@ -172,7 +186,10 @@ export default function LiveScreen() {
   const realtimeOwnsAudio = realtimeLocked;
   const replyPlaybackLocked = busy || clearingChat || realtimeOwnsAudio;
   const hasTranscriptMessages = !clearingChat && (chatHistory.length > 0 || pendingUserMessage !== null);
-  const headerCollapsed = hasTranscriptMessages || scrolledCompact || accessibilityCompact;
+  const inCall = realtimeLocked;
+  // While a call hides its transcript, keep Asha large; the list is empty, so there is nothing to make room for.
+  const callFocus = inCall && !transcriptOpen;
+  const headerCollapsed = (hasTranscriptMessages && !callFocus) || scrolledCompact || accessibilityCompact;
   // At large text the fixed header (stacked title, actions, two-row language switch) can fill most of
   // the space left above the keyboard. While typing there, keep only the title so the transcript and
   // composer still fit. Everything comes back when the keyboard closes.
@@ -195,25 +212,24 @@ export default function LiveScreen() {
   const clearChatDisabled = busy || clearingChat || realtimeLocked || chatHistory.length === 0;
   const voiceHeroTitle = {
     disconnected: 'Ready when you are',
-    connecting: 'Connecting to Asha',
+    connecting: slowConnecting ? 'Still connecting…' : 'Connecting to Asha',
     ready: 'Your microphone is muted',
-    recording: 'Your microphone is on',
+    recording: 'Asha is listening',
+    thinking: 'Asha is thinking',
     responding: 'Asha is speaking',
   }[realtimeStatus];
   const voiceHeroBody = {
     disconnected: 'Tap Asha to start talking with her.',
-    connecting: 'Opening a private live voice session…',
+    connecting: slowConnecting ? 'Your network may be slow. You can cancel and try again.' : 'Opening a private live voice session…',
     ready: 'Tap Asha to unmute and join the conversation.',
-    recording: 'Speak naturally, even while Asha talks. Tap to mute.',
-    responding: 'Your mic is muted. Tap Asha to speak at any time.',
+    recording: 'Go ahead, speak naturally. Tap Asha to mute.',
+    responding: 'You can talk over her any time. Tap Asha to mute.',
+    thinking: 'One moment while she gets her reply ready.',
   }[realtimeStatus];
-  const composerMicLabel = {
-    disconnected: 'Start a voice conversation',
-    connecting: 'Connecting…',
-    ready: 'Unmute microphone',
-    recording: 'Mute microphone',
-    responding: 'Unmute microphone',
-  }[realtimeStatus];
+  const micOn = floatingAsha.available ? (floatingAsha.voice?.microphoneEnabled ?? false) : ownedMicOn;
+  const composerMicLabel = realtimeStatus === 'disconnected' ? 'Start a voice conversation'
+    : realtimeStatus === 'connecting' ? 'Connecting…'
+      : micOn ? 'Mute microphone' : 'Unmute microphone';
   // Missing live URL is a build setup problem, so voice stays off in every build. Typing still works.
   const liveConfigError = liveVoiceConfigError();
   const focusAshaComposer = useCallback(() => {
@@ -253,7 +269,7 @@ export default function LiveScreen() {
     scrollTailIntoView(!reducedMotion);
   }, [reducedMotion, scrollTailIntoView]);
 
-  const bindComposerMicAction = useCallback((action: (() => void) | null) => {
+  const bindComposerMicAction = useCallback((action: ((options?: StartTurnOptions) => void) | null) => {
     composerMicActionRef.current = action;
     setComposerMicActionBound((current) => (action !== null) === current ? current : action !== null);
   }, []);
@@ -262,6 +278,30 @@ export default function LiveScreen() {
     if (composerMicDisabled) return;
     composerMicActionRef.current?.();
   }, [composerMicDisabled]);
+  // Reconnects with the recent turns, so Asha picks up where the dropped call left off.
+  const resumeConversation = useCallback(() => {
+    if (composerMicDisabled) return;
+    setInterruptedReason(null);
+    setError('');
+    setErrorAction('none');
+    composerMicActionRef.current?.({ resume: true });
+  }, [composerMicDisabled]);
+  const dismissInterruption = useCallback(() => setInterruptedReason(null), []);
+  const resumeHistory = useCallback(() => chatHistoryRef.current.map(({ role, text }) => ({ role, text })), []);
+  // Cancels a connection attempt that is taking too long.
+  const cancelConnecting = useCallback(() => {
+    if (floatingAsha.available) floatingAsha.endSession();
+    else ownedDisconnectRef.current?.('user_ended');
+  }, [floatingAsha]);
+  const toggleTranscript = useCallback(() => setTranscriptOpen((open) => !open), []);
+  useEffect(() => {
+    if (realtimeStatus !== 'connecting') return undefined;
+    const timer = setTimeout(() => setSlowConnecting(true), SLOW_CONNECT_MS);
+    return () => clearTimeout(timer);
+  }, [realtimeStatus]);
+  // Settled during render: the hint ends with the attempt, and each call starts focused on Asha.
+  if (realtimeStatus !== 'connecting' && slowConnecting) setSlowConnecting(false);
+  if (!inCall && transcriptOpen) setTranscriptOpen(false);
 
   const clearPendingUserMessage = useCallback((expectedId: string) => {
     setPendingUserMessage((current) => current?.id === expectedId ? null : current);
@@ -422,7 +462,7 @@ export default function LiveScreen() {
     const messages: ChatMessage[] = rows.filter((row) => row.text.trim()).map((row) => ({
       id: row.id,
       role: row.speaker,
-      text: row.text,
+      text: liveRowText(row),
       ...(row.speaker === 'asha' ? { language: responseLanguage } : {}),
     }));
     // The whole snapshot is revisable: late timestamped deltas can merge two
@@ -627,16 +667,17 @@ export default function LiveScreen() {
     const previous = realtimeStatusRef.current;
     realtimeStatusRef.current = status;
     setRealtimeStatus(status);
-    if (status === 'recording') setError('');
+    if (status === 'recording') { setError(''); setErrorAction('none'); }
     if (status === 'connecting' && previous === 'disconnected') {
       setError('');
+      setErrorAction('none');
       snapshotIdsRef.current.current = [];
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
     }
   }, []);
-  const startNewConversation = useCallback(async (signal: AbortSignal) => {
+  const startNewConversation = useCallback(async (signal: AbortSignal, info?: ConnectionStartInfo) => {
     if (!mountedRef.current || signal.aborted) return;
     chatActivityRef.current += 1;
     // Claim the screen synchronously rather than waiting for the button's
@@ -646,6 +687,12 @@ export default function LiveScreen() {
     // connection may create a new record; the automatic reset keeps saved sessions.
     await ensureAshaSessionLogLoaded();
     if (!mountedRef.current || signal.aborted) return;
+    // A resumed call keeps the conversation on screen; Asha gets the recent turns as context.
+    if (info?.resume) {
+      setInterruptedReason(null);
+      snapshotIdsRef.current.current = [];
+      return;
+    }
     const cleared = await resetChat();
     if (!mountedRef.current || signal.aborted) return;
     if (!cleared) throw new Error('The previous chat could not be cleared. Please try starting a new conversation again.');
@@ -658,7 +705,12 @@ export default function LiveScreen() {
     // Only a transport failure or timeout before the call started proves there is no
     // connection. Configuration, rejected payloads, microphone, and peer errors keep their copy.
     const offline = connecting && (details?.kind === 'network' || details?.kind === 'timeout');
-    setError(offline ? LIVE_OFFLINE_MESSAGE : message);
+    if (offline) { setError(LIVE_OFFLINE_MESSAGE); setErrorAction('none'); return; }
+    // Plain words and one next step; the raw reason stays in the diagnostics screen.
+    const friendly = friendlyLiveError(message, details?.kind, [LIVE_MIC_PERMISSION_MESSAGE, LIVE_OFFLINE_MESSAGE]);
+    if (!friendly.text) return;
+    setError(friendly.text);
+    setErrorAction(friendly.action);
   }, []);
   // Interrupted sessions keep their transcript on screen with a note that it is saved.
   const handleSessionEvent = useCallback((event: AshaSessionEvent) => {
@@ -678,6 +730,7 @@ export default function LiveScreen() {
   // Delete Bolo data ends the owned call as `data_deleted` before it removes the log.
   const unregisterLiveCallEnderRef = useRef<(() => void) | null>(null);
   const bindOwnedDisconnect = useCallback((disconnect: ((reason?: AshaSessionEndReason) => void) | null) => {
+    ownedDisconnectRef.current = disconnect;
     unregisterLiveCallEnderRef.current?.();
     unregisterLiveCallEnderRef.current = disconnect ? registerLiveCallEnder(disconnect) : null;
   }, []);
@@ -852,6 +905,15 @@ export default function LiveScreen() {
       conversationStarted={conversationStarted}
       discardReport={discardReport}
       error={error}
+      errorAction={errorAction}
+      cancelConnecting={cancelConnecting}
+      callFocus={callFocus}
+      dismissInterruption={dismissInterruption}
+      resumeConversation={resumeConversation}
+      resumeHistory={resumeHistory}
+      slowConnecting={slowConnecting}
+      toggleTranscript={toggleTranscript}
+      transcriptOpen={transcriptOpen}
       finishPhraseSheet={finishPhraseSheet}
       finishWordSheet={finishWordSheet}
       floatingAsha={floatingAsha}
@@ -872,7 +934,9 @@ export default function LiveScreen() {
       listRef={listRef}
       liveSession={liveSession}
       microphonePhase={microphonePhase}
+      micOn={micOn}
       motionMode={motionMode}
+      setOwnedMicOn={setOwnedMicOn}
       nearBottomRef={nearBottomRef}
       openPhrasePicker={openPhrasePicker}
       pendingReports={pendingReports}
@@ -935,5 +999,7 @@ export default function LiveScreen() {
     </LiveScreenView>
   );
 }
+
+const SLOW_CONNECT_MS = 6_000;
 
 const useStyles = makeStyles(createLiveStyles);

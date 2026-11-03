@@ -11,7 +11,16 @@ export type LiveTranscriptRow = {
   startMs: number;
   endMs: number;
   fragments: LiveTranscriptFragment[];
+  /** The learner spoke over this line, so Asha stopped before finishing it. */
+  interrupted?: boolean;
 };
+
+/** Row text for the chat: a cut-off line ends with an ellipsis unless it already closed a sentence. */
+export function liveRowText(row: Pick<LiveTranscriptRow, 'text' | 'interrupted'>) {
+  const text = row.text.trim();
+  if (!row.interrupted || !text || /[.!?।…]$/.test(text)) return text;
+  return `${text}…`;
+}
 
 // A display grouping heuristic only. It never finishes a model turn, controls
 // playback, or triggers a tool. Late fragments may expand or merge older rows.
@@ -47,6 +56,7 @@ export function createLiveTranscriptStore(prefix: string) {
         startMs: Math.min(...fragments.map((part) => part.start_ms)),
         endMs: Math.max(...fragments.map((part) => part.end_ms)),
         fragments,
+        ...(matching.some((entry) => entry.interrupted) ? { interrupted: true } : {}),
       };
       // Existing row positions stay stable while overlapping speakers stream.
       rows = first
@@ -54,6 +64,13 @@ export function createLiveTranscriptStore(prefix: string) {
         : [...rows, row];
       rows = rows.slice(-100);
       return { row, rows: rows.map((entry) => ({ ...entry, fragments: entry.fragments.map((part) => ({ ...part })) })) };
+    },
+    /** Flags the speaker's latest line as cut short. Returns false when there is no such line. */
+    markInterrupted(speaker: LiveTranscriptRow['speaker']) {
+      const last = [...rows].reverse().find((row) => row.speaker === speaker);
+      if (!last || last.interrupted) return false;
+      rows = rows.map((row) => row.id === last.id ? { ...row, interrupted: true } : row);
+      return true;
     },
   };
 }

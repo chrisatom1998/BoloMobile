@@ -9,7 +9,8 @@ import type { LiveStyles } from '@/components/live/live-styles';
 import type { RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import { useAshaLiveSession } from '@/hooks/use-asha-live-session';
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
-import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import type { ConnectionStartInfo, LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus, StartTurnOptions } from '@/hooks/use-realtime-conversation';
+import type { LiveErrorAction } from '@/lib/live-error-copy';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
 import type { OutboxEntry } from '@/lib/sync-outbox';
 import type { AshaVoiceSession } from '@/state/asha-voice-session';
@@ -24,7 +25,17 @@ export type LiveScreenViewProps = {
   aiConsent: boolean;
   animatedFollowRef: RefObject<boolean>;
   audioError: string;
-  bindComposerMicAction: (action: (() => void) | null) => void;
+  bindComposerMicAction: (action: ((options?: StartTurnOptions) => void) | null) => void;
+  /** A call is on and its transcript is tucked away, so only Asha and her status show. */
+  callFocus: boolean;
+  cancelConnecting: () => void;
+  dismissInterruption: () => void;
+  errorAction: LiveErrorAction;
+  resumeConversation: () => void;
+  resumeHistory: () => { role: 'you' | 'asha'; text: string }[];
+  slowConnecting: boolean;
+  toggleTranscript: () => void;
+  transcriptOpen: boolean;
   bindOwnedDisconnect: (disconnect: ((reason?: AshaSessionEndReason) => void) | null) => void;
   busy: boolean;
   changeResponseLanguage: (nextLanguage: AshaResponseLanguage) => void;
@@ -71,6 +82,8 @@ export type LiveScreenViewProps = {
   listRef: RefObject<FlatList<ChatMessage> | null>;
   liveSession: LiveSession;
   microphonePhase: LiveMicrophonePhase;
+  micOn: boolean;
+  setOwnedMicOn: (enabled: boolean) => void;
   motionMode: EffectiveMotion;
   nearBottomRef: RefObject<boolean>;
   openPhrasePicker: (message: ChatMessage, prefill?: StructuredPhrase) => void;
@@ -116,7 +129,7 @@ export type LiveScreenViewProps = {
   showRealtimeError: (message: string, details?: RealtimeErrorDetails) => void;
   speak: (text: string) => Promise<boolean>;
   speechCaption: { speaker: 'asha' | 'you'; text: string } | null;
-  startNewConversation: (signal: AbortSignal) => Promise<void>;
+  startNewConversation: (signal: AbortSignal, info?: ConnectionStartInfo) => Promise<void>;
   studioPhrase: SavedPhrase;
   studioPhraseMastery: number;
   styles: LiveStyles;

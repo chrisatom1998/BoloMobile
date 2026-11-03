@@ -20,6 +20,7 @@ export function LiveScreenHeader({
   insets,
   languageMenuOpen,
   liveConfigError,
+  realtimeLocked,
   realtimeStatus,
   reflowHeaderLayout,
   router,
@@ -40,7 +41,7 @@ export function LiveScreenHeader({
         <View style={styles.headerAvatarCluster}>
           {talkControl}
           <View style={styles.headerStatus} testID="asha-voice-status">
-            <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive]} />
+            <View style={[styles.statusDot, realtimeStatus === 'recording' && styles.statusDotLive, realtimeStatus === 'thinking' && styles.statusDotThinking]} />
             <Text accessibilityLiveRegion={conversationStarted ? 'polite' : undefined} maxFontSizeMultiplier={layout.headerFontScaleCap} style={liveConfigError ? styles.voiceOffCaption : styles.liveVoiceText}>{liveConfigError ? 'Voice off' : statusKicker}</Text>
           </View>
         </View>
@@ -97,7 +98,7 @@ export function LiveScreenHeader({
         {accessibilityCompact ? (
           <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, styles.headerSubtitleInset]}>Your Hindi coach</Text>
         ) : null}
-        {headerCollapsed && aiConsent && !accessibilityCompact && !composingAtLargeText ? languageControl : null}
+        {headerCollapsed && aiConsent && !accessibilityCompact && !composingAtLargeText && !realtimeLocked ? languageControl : null}
         {accessibilityCompact && languageMenuOpen && aiConsent && !composingAtLargeText ? languageControl : null}
       </View>
   );
