@@ -128,6 +128,20 @@ export const layout = {
   composerLines: 3,
   /** Extra room so the last composer line clears the field's own padding. */
   composerLineSlack: spacing.lg,
+  /** Asha's portrait diameter on the Today hero (Option A mockup); the rings sit half and a full `todayRingGap` outside it. */
+  todayPortraitSize: 200,
+  /** Today portrait at accessibility text sizes and on 360pt phones: leaves room for the copy below. */
+  todayPortraitSizeCompact: 148,
+  /** Space between the Today portrait and its outer status ring. */
+  todayRingGap: 20,
+  /** Next lesson row body: the 44pt goal ring plus the row's own padding. */
+  nextRowMinHeight: 72,
+  /** Status pill on the Today hero: a readout, not a control, so it sits below the touch target. */
+  statusPillMinHeight: 32,
+  /** Step marker on the Today steps list. */
+  stepDotSize: 22,
+  /** Asha's small portrait on the SPEAK step invite. */
+  ashaInvitePortraitSize: 48,
 } as const;
 
 export const radius = {

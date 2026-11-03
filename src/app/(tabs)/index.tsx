@@ -1,7 +1,7 @@
 import { Redirect, useRouter, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { PressableFeedback } from 'heroui-native/pressable-feedback';
-import { ArrowRight, Check, ChevronDown, ChevronRight, Flame, Mic, Settings } from 'lucide-react-native';
+import { ArrowRight, Check, ChevronDown, ChevronUp, Flame, Mic, Settings } from 'lucide-react-native';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, StatusBar, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -11,7 +11,7 @@ import { MotionReveal } from '@/components/motion';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { TodayAshaHero } from '@/components/today-asha-hero';
 import { getScene } from '@/data/scenes';
-import { lessonPlans, type LessonPlan } from '@/data/lesson-plans';
+import { lessonPlans } from '@/data/lesson-plans';
 import { selectNextLesson } from '@/lib/lesson-path';
 import { useCalendarDay } from '@/hooks/use-calendar-day';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
@@ -56,23 +56,24 @@ export default function HomeScreen() {
   const { mode: motionMode } = useMotionPreference(motionPreference);
   const sceneProgress = useMemo(() => savedSceneProgress ?? {}, [savedSceneProgress]);
   const [nextExpanded, setNextExpanded] = useState(false);
-  const listRef = useRef<FlatList<LessonPlan>>(null);
-  const nextRowHeightRef = useRef(0);
-  // Set when the row opens; the panel's first layout then scrolls it under the row.
+  const listRef = useRef<FlatList<never>>(null);
+  // The card's offset inside the list header, so an opened panel can scroll the row to the top.
+  const nextCardTopRef = useRef(0);
+  // Set when the panel opens; its first layout then scrolls the card into view.
   const revealPendingRef = useRef(false);
   const toggleNext = useCallback(() => setNextExpanded((expanded) => {
     revealPendingRef.current = !expanded;
     return !expanded;
   }), []);
-  const measureNextRow = useCallback((event: LayoutChangeEvent) => {
-    nextRowHeightRef.current = event.nativeEvent.layout.height;
+  const measureNextCard = useCallback((event: LayoutChangeEvent) => {
+    nextCardTopRef.current = event.nativeEvent.layout.y;
   }, []);
-  // The row sits near the bottom of a phone screen, so an opened panel would otherwise land below the fold.
+  // The card sits near the bottom of a phone screen, so an opened panel would otherwise land below the fold.
   const revealDetails = useCallback(() => {
     if (!revealPendingRef.current) return;
     revealPendingRef.current = false;
-    listRef.current?.scrollToIndex({ animated: motionMode !== 'reduced', index: 0, viewOffset: nextRowHeightRef.current + spacing.lg, viewPosition: 0 });
-  }, [motionMode]);
+    listRef.current?.scrollToOffset({ animated: motionMode !== 'reduced', offset: Math.max(0, contentTopPadding + nextCardTopRef.current - spacing.lg) });
+  }, [contentTopPadding, motionMode]);
   const openLesson = useCallback((lessonId: string) => router.push({ pathname: '/scene/[id]', params: { id: lessonId } }), [router]);
   const openPlan = useCallback((planId: string) => router.push({ pathname: '/lesson-plans', params: { planId } }), [router]);
   // A minimized session expands the way the floating bubble does, which also brings the Asha screen back.
@@ -89,7 +90,7 @@ export default function HomeScreen() {
   // Past the goal the ring shows "15+" rather than a lopsided "911 of 15 min".
   const goalMet = minutesToday > goal;
   const minutesLabel = goalMet ? `${goal}+` : String(minutesToday);
-  const goalUnit = goalMet ? 'min' : `of ${goal} min`;
+  const minutesLine = goalMet ? `${goal}+ min today` : `${minutesToday} of ${goal} min today`;
   // Every due phrase counts here, not the 5-phrase review-session cap from duePhrases.
   // `calendarDay` re-runs these after midnight: this tab stays mounted, and
   // phrases can fall due overnight without their references changing.
@@ -115,6 +116,7 @@ export default function HomeScreen() {
 
     return {
       action: mode === 'continue' ? 'Continue' : mode === 'next' ? 'Start lesson' : 'Review lesson',
+      hint: mode === 'continue' ? 'Continues the lesson' : mode === 'next' ? 'Starts the lesson' : 'Opens the lesson again',
       kicker: mode === 'continue' ? 'CONTINUE LESSON' : mode === 'next' ? 'NEXT LESSON' : 'REVIEW LESSON',
       lessonId,
       plan,
@@ -137,6 +139,7 @@ export default function HomeScreen() {
     const lessonStep = {
       action: lessonSelection.action,
       chips: (heroScene?.words ?? []).map((word) => ({ key: word, latin: false, text: word })),
+      hint: lessonSelection.hint,
       kicker: stepKicker('lesson', lessonSelection.kicker),
       meta: lessonNumber > 0 ? `${lessonSelection.plan.title} · Lesson ${lessonNumber} of ${lessonSelection.plan.lessonIds.length}` : undefined,
       onPress: () => openLesson(lessonSelection.lessonId),
@@ -148,6 +151,7 @@ export default function HomeScreen() {
         return {
           action: 'Start review',
           chips: reviewPreview.map((item) => ({ ...item, latin: showLatinPreview })),
+          hint: 'Starts the review',
           kicker: stepKicker('review', 'REVIEW'),
           meta: undefined,
           onPress: () => router.push('/review' as Href),
@@ -160,6 +164,7 @@ export default function HomeScreen() {
         return {
           action: 'Talk with Asha',
           chips: [],
+          hint: 'Opens the Asha screen',
           kicker: stepKicker('asha', 'SPEAK'),
           meta: undefined,
           onPress: openAsha,
@@ -171,6 +176,7 @@ export default function HomeScreen() {
           ...lessonStep,
           action: 'Keep going',
           chips: [],
+          hint: 'Starts the next lesson',
           kicker: 'DONE FOR TODAY',
           meta: undefined,
           subtitle: `Today’s practice is complete. ${streak > 0 ? `${plural(streak, 'day')} in a row. ` : ''}More is optional.`,
@@ -195,7 +201,22 @@ export default function HomeScreen() {
     return step.status === 'done' ? { label: 'Spoke with Asha', meta: 'Done' } : { label: 'Chat with Asha', meta: '3 min' };
   }, [lessonSelection.title]);
 
-  const header = useMemo(() => (
+  const planDetails = useMemo(() => {
+    const completed = currentPlan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
+    const selectedLessonIndex = currentPlan.lessonIds.indexOf(lessonSelection.lessonId);
+    const selectedProgress = sceneProgress[lessonSelection.lessonId];
+    const selectedLessonIsInProgress = selectedLessonIndex >= 0
+      && (selectedProgress?.completions ?? 0) === 0
+      && (selectedProgress?.lastBeatIndex ?? 0) > 0;
+    const planMeta = selectedLessonIsInProgress
+      ? `Lesson ${selectedLessonIndex + 1} in progress`
+      : `${completed} of ${currentPlan.lessonIds.length} lessons`;
+    return { completed, planMeta, selectedLessonIsInProgress };
+  }, [currentPlan, lessonSelection.lessonId, sceneProgress]);
+
+  if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
+
+  const header = (
     <View style={styles.headerContent}>
       <View style={[styles.topbar, stackedTopbarLayout && styles.topbarLarge]} testID="today-topbar">
         <View style={styles.greetingCopy}>
@@ -224,80 +245,71 @@ export default function HomeScreen() {
         </Pressable>
       </MotionReveal>
 
-      <Pressable
-        accessibilityLabel={`${hero.kicker}, ${hero.title}, ${minutesLabel} ${goalUnit} practised today`}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: nextExpanded }}
-        onLayout={measureNextRow}
-        onPress={toggleNext}
-        style={[styles.nextRow, largeTextLayout && styles.nextRowLarge]}
-        testID="today-next-row"
-      >
-        <View style={styles.goalColumn}>
-          <View
-            accessible
-            accessibilityLabel={`${goalPercent} percent of daily goal complete`}
-            accessibilityRole="progressbar"
-            accessibilityValue={{ min: 0, max: 100, now: goalPercent }}
-            style={styles.goalDial}
-            testID="today-goal-dial"
+      <View onLayout={measureNextCard} style={styles.nextCard} testID="today-next-card">
+        <View style={styles.nextCardRow}>
+          {/* The row body is the step action itself; the chevron beside it is the only expand control. */}
+          <Pressable
+            accessibilityHint={hero.hint}
+            accessibilityLabel={`${hero.action}, ${hero.title}, ${minutesLine}`}
+            accessibilityRole="button"
+            onPress={hero.onPress}
+            style={[styles.nextRow, largeTextLayout && styles.nextRowLarge]}
+            testID="today-next-row"
           >
-            <Svg aria-hidden height={goalRingSize} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${goalRingSize} ${goalRingSize}`} width={goalRingSize}>
-              <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={goalRingStroke} />
-              {goalPercent > 0 ? (
-                <Circle
-                  cx={goalRingSize / 2}
-                  cy={goalRingSize / 2}
-                  fill="none"
-                  r={goalRingRadius}
-                  stroke={colors.brand}
-                  strokeDasharray={`${goalRingLength * goalPercent / 100} ${goalRingLength}`}
-                  strokeLinecap="round"
-                  strokeWidth={goalRingStroke}
-                />
-              ) : null}
-            </Svg>
-            <View pointerEvents="none" style={styles.goalValue}>
-              {/* The 44pt ring cannot grow with Dynamic Type, so its numeral is capped; the row's label carries the value. */}
-              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={[styles.goalMinutes, minutesLabel.length >= 3 && styles.goalMinutesLong]}>{minutesLabel}</Text>
+            {/* Hidden from VoiceOver inside the row: the row's own label already reads the minutes. */}
+            <View
+              accessible={false}
+              accessibilityElementsHidden
+              accessibilityLabel={`${goalPercent} percent of daily goal complete`}
+              accessibilityRole="progressbar"
+              accessibilityValue={{ min: 0, max: 100, now: goalPercent }}
+              importantForAccessibility="no-hide-descendants"
+              style={styles.goalDial}
+              testID="today-goal-dial"
+            >
+              <Svg aria-hidden height={goalRingSize} pointerEvents="none" style={styles.goalRing} viewBox={`0 0 ${goalRingSize} ${goalRingSize}`} width={goalRingSize}>
+                <Circle cx={goalRingSize / 2} cy={goalRingSize / 2} fill="none" r={goalRingRadius} stroke={colors.track} strokeWidth={goalRingStroke} />
+                {goalPercent > 0 ? (
+                  <Circle
+                    cx={goalRingSize / 2}
+                    cy={goalRingSize / 2}
+                    fill="none"
+                    r={goalRingRadius}
+                    stroke={colors.brand}
+                    strokeDasharray={`${goalRingLength * goalPercent / 100} ${goalRingLength}`}
+                    strokeLinecap="round"
+                    strokeWidth={goalRingStroke}
+                  />
+                ) : null}
+              </Svg>
+              <View pointerEvents="none" style={styles.goalValue}>
+                {/* The 44pt ring cannot grow with Dynamic Type, so its numeral is capped; the row's minutes line carries the value. */}
+                <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={[styles.goalMinutes, minutesLabel.length >= 3 && styles.goalMinutesLong]}>{minutesLabel}</Text>
+              </View>
             </View>
-          </View>
-          <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalUnit} testID="today-goal-value">{goalUnit}</Text>
+            <View style={styles.nextCopy} testID="today-next-practice">
+              <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
+              <Text style={styles.nextTitle}>{hero.title}</Text>
+              {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
+              <Text maxFontSizeMultiplier={layout.headerFontScaleCap} numberOfLines={1} style={styles.goalLine} testID="today-goal-value">{minutesLine}</Text>
+            </View>
+          </Pressable>
+          <Pressable
+            accessibilityLabel={`Next lesson, ${hero.title}, ${nextExpanded ? 'expanded' : 'collapsed'}`}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: nextExpanded }}
+            onPress={toggleNext}
+            style={styles.nextToggle}
+            testID="today-next-toggle"
+          >
+            {nextExpanded
+              ? <ChevronUp color={colors.muted} size={22} strokeWidth={2.2} />
+              : <ChevronDown color={colors.muted} size={22} strokeWidth={2.2} />}
+          </Pressable>
         </View>
-        <View style={styles.nextCopy} testID="today-next-practice">
-          <Text numberOfLines={2} style={[styles.nextKicker, dayComplete && styles.nextKickerDone]}>{hero.kicker}</Text>
-          <Text style={styles.nextTitle}>{hero.title}</Text>
-          {rowCaption ? <Text numberOfLines={2} style={styles.nextMeta}>{rowCaption}</Text> : null}
-        </View>
-        {nextExpanded
-          ? <ChevronDown color={colors.muted} size={22} strokeWidth={2.2} />
-          : <ChevronRight color={colors.muted} size={22} strokeWidth={2.2} />}
-      </Pressable>
-    </View>
-  ), [colors, compactHero, dateLine, dayComplete, floatingAsha.status, goalPercent, goalUnit, hero, largeTextLayout, measureNextRow, minutesLabel, motionMode, nextExpanded, openAsha, rowCaption, router, stackedTopbarLayout, streak, styles, toggleNext]);
 
-  if (learnerProfile?.completed === false) return <Redirect href={'/onboarding' as Href} />;
-
-  return (
-    <>
-      <FlatList
-        ref={listRef}
-        contentInsetAdjustmentBehavior="never"
-        contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
-        data={nextExpanded && currentPlan ? [currentPlan] : []}
-        keyExtractor={(plan) => plan.id}
-        renderItem={({ item: plan }) => {
-          const completed = plan.lessonIds.filter((id) => (sceneProgress[id]?.completions ?? 0) > 0).length;
-          const selectedLessonIndex = plan.lessonIds.indexOf(lessonSelection.lessonId);
-          const selectedProgress = sceneProgress[lessonSelection.lessonId];
-          const selectedLessonIsInProgress = selectedLessonIndex >= 0
-            && (selectedProgress?.completions ?? 0) === 0
-            && (selectedProgress?.lastBeatIndex ?? 0) > 0;
-          const planMeta = selectedLessonIsInProgress
-            ? `Lesson ${selectedLessonIndex + 1} in progress`
-            : `${completed} of ${plan.lessonIds.length} lessons`;
-          return (
-            <View onLayout={revealDetails} testID="today-next-details">
+        {nextExpanded ? (
+          <View onLayout={revealDetails} style={styles.nextDetails} testID="today-next-details">
             <MotionReveal mode={motionMode} motionKey={currentStep ?? 'done'} style={styles.details}>
               {detailsSubtitle ? <Text style={styles.detailsSubtitle}>{detailsSubtitle}</Text> : null}
 
@@ -341,13 +353,6 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              <View style={[styles.detailsFooter, largeTextLayout && styles.detailsFooterLarge]} testID="today-hero-footer">
-                <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.nextStepButton} testID="today-next-step">
-                  <Text style={styles.nextStepButtonText}>{hero.action}</Text>
-                  <ArrowRight color={colors.ink} size={18} strokeWidth={2.2} />
-                </PressableFeedback>
-              </View>
-
               <View style={styles.planCell} testID="today-current-plan">
                 <View style={[styles.pathHeading, largeTextLayout && styles.pathHeadingLarge]}>
                   <JournalDisplay style={styles.pathTitle}>Your path</JournalDisplay>
@@ -356,17 +361,17 @@ export default function HomeScreen() {
                   </PressableFeedback>
                 </View>
                 <PressableFeedback
-                  accessibilityLabel={`${plan.title}, plan ${plan.order} of ${lessonPlans.length}, ${selectedLessonIsInProgress ? `${planMeta.toLowerCase()}, ` : ''}${completed} of ${plan.lessonIds.length} lessons complete`}
+                  accessibilityLabel={`${currentPlan.title}, plan ${currentPlan.order} of ${lessonPlans.length}, ${planDetails.selectedLessonIsInProgress ? `${planDetails.planMeta.toLowerCase()}, ` : ''}${planDetails.completed} of ${currentPlan.lessonIds.length} lessons complete`}
                   accessibilityRole="button"
-                  onPress={() => openPlan(plan.id)}
-                  style={styles.planCard}
+                  onPress={() => openPlan(currentPlan.id)}
+                  style={styles.planRow}
                 >
                   <View style={[styles.planCopy, largeTextLayout && styles.planCopyLarge]}>
-                    <Text style={styles.planTitle}>{plan.title}</Text>
-                    <Text style={styles.planMeta}>{planMeta}</Text>
+                    <Text style={styles.planTitle}>{currentPlan.title}</Text>
+                    <Text style={styles.planMeta}>{planDetails.planMeta}</Text>
                   </View>
                   <View style={styles.planSegments} testID="today-plan-segments">
-                    {plan.lessonIds.map((lessonId, index) => {
+                    {currentPlan.lessonIds.map((lessonId, index) => {
                       const done = (sceneProgress[lessonId]?.completions ?? 0) > 0;
                       const current = !done && lessonId === lessonSelection.lessonId;
                       return <View key={lessonId} style={[styles.planSegment, done && styles.planSegmentDone, current && styles.planSegmentCurrent]} testID={`today-plan-segment-${index}`} />;
@@ -374,10 +379,29 @@ export default function HomeScreen() {
                   </View>
                 </PressableFeedback>
               </View>
+
+              <View style={[styles.detailsFooter, largeTextLayout && styles.detailsFooterLarge]} testID="today-hero-footer">
+                <PressableFeedback accessibilityLabel={hero.action} accessibilityRole="button" onPress={hero.onPress} style={styles.nextStepButton} testID="today-next-step">
+                  <Text style={styles.nextStepButtonText}>{hero.action}</Text>
+                  <ArrowRight color={colors.white} size={18} strokeWidth={2.2} />
+                </PressableFeedback>
+              </View>
             </MotionReveal>
-            </View>
-          );
-        }}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+
+  return (
+    <>
+      {/* The panel lives in the header so it shares the row's card; the list itself only scrolls. */}
+      <FlatList
+        ref={listRef}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[styles.list, { paddingTop: contentTopPadding }]}
+        data={[]}
+        renderItem={() => null}
         ListHeaderComponent={header}
         style={sharedStyles.screen}
         testID="today-guided-plan-list"
@@ -403,26 +427,32 @@ const useStyles = makeStyles((c) => {
   streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: spacing.md, paddingRight: spacing.md },
   streakText: { ...type.label, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
   settingsButton: { width: 44, height: 44, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
-  heroBlock: { width: '100%', alignItems: 'stretch', gap: spacing.xl, paddingBottom: spacing.sm },
+  // Tight so the Next lesson card's top lands near 480pt on a 393x852 phone.
+  heroBlock: { width: '100%', alignItems: 'stretch', gap: spacing.md },
   talkButton: { ...button.primary, alignSelf: 'stretch' },
   talkButtonText: button.primaryText,
-  // 72pt: the 44pt ring plus its unit caption, with the row's own padding.
-  nextRow: { width: '100%', minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  // One white card holds the row, the expand toggle and, when open, the details panel.
+  nextCard: { width: '100%', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
+  // Less padding on the trailing edge: the 44pt toggle supplies its own.
+  nextCardRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.lg, paddingRight: spacing.sm },
+  nextRow: { minWidth: 0, flex: 1, minHeight: layout.nextRowMinHeight, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   nextRowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  goalColumn: { alignItems: 'center', gap: spacing.xs },
+  nextToggle: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   goalDial: { width: goalRingSize, height: goalRingSize, alignItems: 'center', justifyContent: 'center' },
   // Rotating the whole ring starts the arc at 12 o'clock without SVG transform props, which web rejects.
   goalRing: { transform: [{ rotate: '-90deg' }] },
   goalValue: { position: 'absolute', alignItems: 'center' },
   goalMinutes: { ...type.label, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
   goalMinutesLong: { ...type.caption, fontWeight: '700' },
-  goalUnit: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
+  goalLine: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   nextCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   nextKicker: { ...type.eyebrow, color: c.muted },
   nextKickerDone: { color: c.forestText },
   nextTitle: { ...type.label, color: c.ink },
   nextMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
-  details: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', gap: spacing.lg, paddingBottom: spacing.lg },
+  // A hairline separates the panel from the row inside the same card.
+  nextDetails: { borderTopColor: c.line, borderTopWidth: 1, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  details: { width: '100%', gap: spacing.lg },
   detailsSubtitle: { ...type.body, color: c.ink },
   heroWords: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   heroWord: { maxWidth: '100%', borderRadius: radius.sm, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
@@ -430,11 +460,11 @@ const useStyles = makeStyles((c) => {
   heroWordText: { ...hindiType(17), color: c.brandText },
   heroWordLatin: { ...type.body, color: c.brandText },
   ashaInvite: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
-  ashaInvitePortrait: { width: 48, height: 48, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  ashaInvitePortrait: { width: layout.ashaInvitePortraitSize, height: layout.ashaInvitePortraitSize, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
   ashaInviteText: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
   steps: { gap: spacing.xs, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
   stepRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  stepDot: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: c.lineStrong, borderWidth: 2 },
+  stepDot: { width: layout.stepDotSize, height: layout.stepDotSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: c.lineStrong, borderWidth: 2 },
   stepDotDone: { backgroundColor: c.gold, borderColor: c.gold },
   stepDotCurrent: { backgroundColor: c.goldSoft, borderColor: c.goldIcon },
   stepLabel: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
@@ -443,16 +473,17 @@ const useStyles = makeStyles((c) => {
   stepMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
   detailsFooter: { flexDirection: 'row' },
   detailsFooterLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  // Secondary: the screen's one filled button is Talk with Asha.
-  nextStepButton: { ...button.secondary, flex: 1 },
-  nextStepButtonText: button.secondaryText,
-  planCell: { width: '100%', gap: spacing.md, paddingTop: spacing.sm },
+  // Rust fill, like Talk with Asha: the panel's closing action is the step itself, not a secondary option.
+  nextStepButton: { ...button.primary, flex: 1 },
+  nextStepButtonText: button.primaryText,
+  planCell: { width: '100%', gap: spacing.md },
   pathHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   pathHeadingLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   pathTitle: { ...type.headline },
   allPlans: button.quiet,
   allPlansText: button.quietText,
-  planCard: { width: '100%', minHeight: 48, gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg },
+  // A hairline, not a card inside the card.
+  planRow: { width: '100%', minHeight: 48, gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
   planCopy: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   planCopyLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },

@@ -84,7 +84,7 @@ function collectFilledButtons(node: unknown, found: string[] = []) {
 
 async function renderExpanded() {
   const view = await render(<HomeScreen />);
-  await fireEvent.press(view.getByTestId('today-next-row'));
+  await fireEvent.press(view.getByTestId('today-next-toggle'));
   return view;
 }
 
@@ -130,7 +130,10 @@ describe('HomeScreen primary journey', () => {
     expect(portrait.props.accessibilityLabel).toBe('Talk to Asha');
     expect(within(view.getByTestId('today-asha-status')).getByText('READY')).toBeTruthy();
     expect(within(hero).getByText('Ready when you are').props.accessibilityLiveRegion).toBe('polite');
-    expect(within(hero).getByText('Tap Asha to start talking with her.')).toBeTruthy();
+    // No body line: on Today a tap only opens the Asha screen, so "Tap Asha to unmute…" would be wrong here.
+    expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
+    expect(within(hero).queryByText(/Tap Asha/u)).toBeNull();
+    expect(within(hero).getAllByRole('text').map((node) => node.props.children)).toEqual(['READY', 'Ready when you are']);
     const talk = view.getByTestId('today-talk-with-asha');
     expect(talk.props.accessibilityRole).toBe('button');
     expect(within(talk).getByText('Talk with Asha')).toBeTruthy();
@@ -180,24 +183,25 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it('scrolls the opened panel into view below the row', async () => {
-    const scrollToIndex = jest.spyOn(FlatList.prototype, 'scrollToIndex').mockImplementation(() => {});
+  it('scrolls the opened panel into view with the card at the top', async () => {
+    const scrollToOffset = jest.spyOn(FlatList.prototype, 'scrollToOffset').mockImplementation(() => {});
     const view = await render(<HomeScreen />);
 
-    await fireEvent(view.getByTestId('today-next-row'), 'layout', { nativeEvent: { layout: { height: 80, width: 350, x: 0, y: 0 } } });
-    await fireEvent.press(view.getByTestId('today-next-row'));
+    await fireEvent(view.getByTestId('today-next-card'), 'layout', { nativeEvent: { layout: { height: 100, width: 350, x: 0, y: 480 } } });
+    await fireEvent.press(view.getByTestId('today-next-toggle'));
     await fireEvent(view.getByTestId('today-next-details'), 'layout', { nativeEvent: { layout: { height: 400, width: 350, x: 0, y: 0 } } });
 
-    expect(scrollToIndex).toHaveBeenCalledTimes(1);
-    expect(scrollToIndex).toHaveBeenCalledWith({ animated: true, index: 0, viewOffset: 80 + spacing.lg, viewPosition: 0 });
+    expect(scrollToOffset).toHaveBeenCalledTimes(1);
+    // The card's y inside the header plus the list's 16pt top padding, less 16pt of air above the card.
+    expect(scrollToOffset).toHaveBeenCalledWith({ animated: true, offset: 480 + spacing.lg - spacing.lg });
 
     // Collapsing and re-opening scrolls again; a later relayout of the open panel does not.
     await fireEvent(view.getByTestId('today-next-details'), 'layout', { nativeEvent: { layout: { height: 420, width: 350, x: 0, y: 0 } } });
-    expect(scrollToIndex).toHaveBeenCalledTimes(1);
-    await fireEvent.press(view.getByTestId('today-next-row'));
-    await fireEvent.press(view.getByTestId('today-next-row'));
+    expect(scrollToOffset).toHaveBeenCalledTimes(1);
+    await fireEvent.press(view.getByTestId('today-next-toggle'));
+    await fireEvent.press(view.getByTestId('today-next-toggle'));
     await fireEvent(view.getByTestId('today-next-details'), 'layout', { nativeEvent: { layout: { height: 400, width: 350, x: 0, y: 0 } } });
-    expect(scrollToIndex).toHaveBeenCalledTimes(2);
+    expect(scrollToOffset).toHaveBeenCalledTimes(2);
   });
 
   it('mirrors the shared session status in the pill, heading and rings', async () => {
@@ -207,7 +211,7 @@ describe('HomeScreen primary journey', () => {
 
     expect(within(view.getByTestId('today-asha-status')).getByText('SPEAKING')).toBeTruthy();
     expect(view.getByText('Asha is speaking')).toBeTruthy();
-    expect(view.getByText('Your mic is muted. Tap Asha to speak at any time.')).toBeTruthy();
+    expect(view.queryByText('Your mic is muted. Tap Asha to speak at any time.')).toBeNull();
     expect(StyleSheet.flatten(view.getByTestId('today-asha-ring-outer').props.style).borderColor).toBe(colors.orb);
     expect(StyleSheet.flatten(view.getByTestId('today-asha-ring-inner').props.style).borderColor).toBe(colors.orbActive);
 
@@ -224,43 +228,89 @@ describe('HomeScreen primary journey', () => {
     expect(StyleSheet.flatten(view.getByTestId('today-asha-ring-inner').props.style).borderColor).toBe(colors.portraitRing);
   });
 
-  it('keeps the next lesson collapsed until the row is tapped', async () => {
+  it('starts the lesson from the row body without expanding it', async () => {
     mockAppState.reviewStreakDays = [dateKey()];
     const view = await render(<HomeScreen />);
 
     const row = view.getByTestId('today-next-row');
     expect(row.props.accessibilityRole).toBe('button');
-    expect(row.props.accessibilityState).toEqual({ expanded: false });
-    expect(row.props.accessibilityLabel).toBe('STEP 2 OF 3 · NEXT LESSON, A warm hello, 5 of 10 min practised today');
+    expect(row.props.accessibilityState?.expanded).toBeUndefined();
+    expect(row.props.accessibilityLabel).toBe('Start lesson, A warm hello, 5 of 10 min today');
+    expect(row.props.accessibilityHint).toBe('Starts the lesson');
     expect(view.getByText('STEP 2 OF 3 · NEXT LESSON')).toBeTruthy();
+    expect(within(row).getByTestId('today-goal-dial', { includeHiddenElements: true })).toBeTruthy();
+    expect(within(row).getByText('A warm hello')).toBeTruthy();
+
+    await fireEvent.press(row);
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1);
+    expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
+    expect(view.queryByTestId('today-next-details')).toBeNull();
+    expect(view.getByTestId('today-next-toggle').props.accessibilityState).toEqual({ expanded: false });
+  });
+
+  it('expands and collapses the next lesson from the chevron only', async () => {
+    mockAppState.reviewStreakDays = [dateKey()];
+    const view = await render(<HomeScreen />);
+
+    const toggle = view.getByTestId('today-next-toggle');
+    expect(toggle.props.accessibilityRole).toBe('button');
+    expect(toggle.props.accessibilityState).toEqual({ expanded: false });
+    expect(toggle.props.accessibilityLabel).toBe('Next lesson, A warm hello, collapsed');
     expect(view.queryByTestId('today-next-details')).toBeNull();
     expect(view.queryByTestId('today-steps')).toBeNull();
     expect(view.queryByTestId('today-current-plan')).toBeNull();
     expect(view.queryByTestId('today-next-step')).toBeNull();
     expect(view.queryByTestId('today-lesson-words')).toBeNull();
 
-    await fireEvent.press(row);
-    expect(view.getByTestId('today-next-row').props.accessibilityState).toEqual({ expanded: true });
-    const details = view.getByTestId('today-next-details');
+    await fireEvent.press(toggle);
+    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(view.getByTestId('today-next-toggle').props.accessibilityState).toEqual({ expanded: true });
+    expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, A warm hello, expanded');
+    // The panel opens inside the row's card, under a hairline.
+    const card = view.getByTestId('today-next-card');
+    expect(StyleSheet.flatten(card.props.style)).toMatchObject({ backgroundColor: colors.paperRaised, borderColor: colors.line, borderWidth: 1 });
+    const details = within(card).getByTestId('today-next-details');
+    expect(StyleSheet.flatten(details.props.style)).toMatchObject({ borderTopColor: colors.line, borderTopWidth: 1 });
     expect(within(details).getByTestId('today-steps')).toBeTruthy();
     expect(within(details).getByTestId('today-lesson-words')).toBeTruthy();
     expect(within(details).getByTestId('today-current-plan')).toBeTruthy();
     expect(within(details).getByTestId('today-next-step')).toBeTruthy();
     expect(within(details).getByText('Your path')).toBeTruthy();
 
-    await fireEvent.press(view.getByTestId('today-next-row'));
-    expect(view.getByTestId('today-next-row').props.accessibilityState).toEqual({ expanded: false });
+    await fireEvent.press(view.getByTestId('today-next-toggle'));
+    expect(view.getByTestId('today-next-toggle').props.accessibilityState).toEqual({ expanded: false });
+    expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, A warm hello, collapsed');
     expect(view.queryByTestId('today-next-details')).toBeNull();
   });
 
-  it('shows exactly one filled rust button, collapsed and expanded', async () => {
+  it('gives the row body and the chevron full-size touch targets', async () => {
+    const view = await render(<HomeScreen />);
+
+    expect(StyleSheet.flatten(view.getByTestId('today-next-row').props.style).minHeight).toBe(72);
+    expect(StyleSheet.flatten(view.getByTestId('today-next-row').props.style).minHeight).toBeGreaterThanOrEqual(44);
+    const toggle = StyleSheet.flatten(view.getByTestId('today-next-toggle').props.style);
+    expect(toggle.width).toBeGreaterThanOrEqual(44);
+    expect(toggle.height).toBeGreaterThanOrEqual(44);
+    expect(toggle.minWidth).toBeGreaterThanOrEqual(44);
+    expect(toggle.minHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  it('ends the expanded panel with a filled rust button for the step action', async () => {
     const view = await render(<HomeScreen />);
     expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha']);
 
-    await fireEvent.press(view.getByTestId('today-next-row'));
-    expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha']);
+    await fireEvent.press(view.getByTestId('today-next-toggle'));
+    expect(collectFilledButtons(view.toJSON())).toEqual(['today-talk-with-asha', 'today-next-step']);
     const nextStep = view.getByTestId('today-next-step');
-    expect(StyleSheet.flatten(nextStep.props.style)).toMatchObject({ backgroundColor: colors.paper, borderColor: colors.lineStrong });
+    expect(StyleSheet.flatten(nextStep.props.style)).toMatchObject({ backgroundColor: colors.brand, minHeight: 52 });
+    // A phrase is due in this fixture, so the step action is the review.
+    expect(nextStep.props.accessibilityLabel).toBe('Start review');
+    expect(within(nextStep).getByText('Start review')).toBeTruthy();
+    expect(StyleSheet.flatten(within(nextStep).getByText('Start review').props.style).color).toBe(colors.white);
+    expect(within(view.getByTestId('today-hero-footer')).getByTestId('today-next-step')).toBeTruthy();
+    const panelIds = collectTestIds(view.getByTestId('today-next-details'));
+    expect(panelIds[panelIds.length - 1]).toBe('today-next-step');
   });
 
   it('starts the day with review when phrases are due and previews them', async () => {
@@ -357,9 +407,10 @@ describe('HomeScreen primary journey', () => {
     expect(view.getByText('Today’s practice is complete. 7 days in a row. More is optional.')).toBeTruthy();
     // Success reads forest, as the old finished-day card did.
     expect(StyleSheet.flatten(view.getByText('DONE FOR TODAY').props.style).color).toBe(colors.forestText);
-    expect(view.getByTestId('today-next-row').props.accessibilityLabel).toMatch(/^DONE FOR TODAY, Shabaash!, /u);
+    expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Keep going, Shabaash!, 10 of 10 min today');
+    expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, Shabaash!, collapsed');
 
-    await fireEvent.press(view.getByTestId('today-next-row'));
+    await fireEvent.press(view.getByTestId('today-next-toggle'));
     expect(view.getByTestId('today-step-asha').props.accessibilityLabel).toBe('Step 2 of 2, Spoke with Asha, done');
     await fireEvent.press(view.getByLabelText('Keep going'));
     expect(mockRouterPush).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } });
@@ -377,7 +428,7 @@ describe('HomeScreen primary journey', () => {
     expect(mockRouterPush).toHaveBeenNthCalledWith(3, '/progress');
   });
 
-  it('keeps the hero, the next row and the steps above the current plan', async () => {
+  it('keeps the hero, the next row, the steps and the current plan above the step button', async () => {
     const view = await renderExpanded();
 
     expect(view.getByText('Your path')).toBeTruthy();
@@ -390,9 +441,14 @@ describe('HomeScreen primary journey', () => {
     const testIds = collectTestIds(view.toJSON());
     expect(testIds.indexOf('today-asha-hero')).toBeLessThan(testIds.indexOf('today-talk-with-asha'));
     expect(testIds.indexOf('today-talk-with-asha')).toBeLessThan(testIds.indexOf('today-next-row'));
-    expect(testIds.indexOf('today-next-row')).toBeLessThan(testIds.indexOf('today-steps'));
-    expect(testIds.indexOf('today-steps')).toBeLessThan(testIds.indexOf('today-next-step'));
-    expect(testIds.indexOf('today-next-step')).toBeLessThan(testIds.indexOf('today-current-plan'));
+    expect(testIds.indexOf('today-next-row')).toBeLessThan(testIds.indexOf('today-next-toggle'));
+    expect(testIds.indexOf('today-next-toggle')).toBeLessThan(testIds.indexOf('today-steps'));
+    expect(testIds.indexOf('today-steps')).toBeLessThan(testIds.indexOf('today-current-plan'));
+    expect(testIds.indexOf('today-current-plan')).toBeLessThan(testIds.indexOf('today-next-step'));
+    // The plan row is a hairline inside the card, not a second white card.
+    const planRow = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
+    expect(StyleSheet.flatten(planRow.props.style)).toMatchObject({ borderTopColor: colors.line, borderTopWidth: 1 });
+    expect(StyleSheet.flatten(planRow.props.style).backgroundColor).toBeUndefined();
     expect(view.queryByText('Or jump to')).toBeNull();
     expect(view.queryByLabelText('5 minute daily goal')).toBeNull();
   });
@@ -433,22 +489,34 @@ describe('HomeScreen primary journey', () => {
   it('shows daily goal progress inside the next lesson row', async () => {
     const view = await render(<HomeScreen />);
 
-    const dial = view.getByTestId('today-goal-dial');
+    // The ring is a silent numeral inside the row, hidden from assistive tech; the row's label and the minutes line carry the value.
+    const hidden = { includeHiddenElements: true };
+    expect(view.queryByTestId('today-goal-dial')).toBeNull();
+    const dial = view.getByTestId('today-goal-dial', hidden);
     expect(dial.props.accessibilityRole).toBe('progressbar');
     expect(dial.props.accessibilityValue).toEqual({ min: 0, max: 100, now: 50 });
     expect(dial.props.accessibilityLabel).toBe('50 percent of daily goal complete');
-    expect(view.getByTestId('today-goal-value').props.children).toBe('of 10 min');
-    expect(within(view.getByTestId('today-next-row')).getByTestId('today-goal-dial')).toBeTruthy();
+    expect(dial.props.accessible).toBe(false);
+    expect(dial.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(within(dial).getAllByRole('text', hidden).map((node) => node.props.children)).toEqual(['5']);
+    expect(view.queryByText('of 10 min', hidden)).toBeNull();
+    const row = view.getByTestId('today-next-row');
+    expect(within(row).getByTestId('today-goal-dial', hidden)).toBeTruthy();
+    const minutes = within(view.getByTestId('today-next-practice')).getByTestId('today-goal-value');
+    expect(minutes.props.children).toBe('5 of 10 min today');
+    expect(row.props.accessibilityLabel).toBe('Start review, Review your phrases, 5 of 10 min today');
 
     mockAppState.goal = 15;
     await view.rerender(<HomeScreen />);
-    expect(view.getByTestId('today-goal-value').props.children).toBe('of 15 min');
-    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('33 percent of daily goal complete');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('5 of 15 min today');
+    expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('33 percent of daily goal complete');
 
     mockAppState.practice = { chaiDone: true, date: dateKey(), liveDone: true, seconds: 1200 };
     await view.rerender(<HomeScreen />);
-    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('100 percent of daily goal complete');
-    expect(view.getByTestId('today-goal-value').props.children).toBe('min');
-    expect(view.getByText('15+')).toBeTruthy();
+    expect(view.getByTestId('today-goal-dial', hidden).props.accessibilityLabel).toBe('100 percent of daily goal complete');
+    expect(view.getByTestId('today-goal-value').props.children).toBe('15+ min today');
+    expect(view.getByTestId('today-next-row').props.accessibilityLabel).toBe('Start review, Review your phrases, 15+ min today');
+    expect(view.getByText('15+', hidden)).toBeTruthy();
+    expect(view.queryByText('min', hidden)).toBeNull();
   });
 });

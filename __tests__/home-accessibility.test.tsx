@@ -42,6 +42,7 @@ describe('home accessibility', () => {
     const portrait = view.getByTestId('today-asha-portrait');
     const talk = view.getByTestId('today-talk-with-asha');
     const nextRow = view.getByTestId('today-next-row');
+    const nextToggle = view.getByTestId('today-next-toggle');
     const topbar = view.getByTestId('today-topbar');
 
     expect(StyleSheet.flatten(settings.props.style).minHeight).toBeGreaterThanOrEqual(44);
@@ -50,19 +51,39 @@ describe('home accessibility', () => {
     expect(portrait.props.accessibilityRole).toBe('button');
     expect(StyleSheet.flatten(portrait.props.style).width).toBeGreaterThanOrEqual(44);
     expect(StyleSheet.flatten(talk.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    // The row body is the step action; the chevron beside it is a separate 44pt expand control.
+    expect(StyleSheet.flatten(nextRow.props.style).minHeight).toBe(layout.nextRowMinHeight);
     expect(StyleSheet.flatten(nextRow.props.style).minHeight).toBeGreaterThanOrEqual(44);
     expect(nextRow.props.accessibilityRole).toBe('button');
-    expect(nextRow.props.accessibilityState).toEqual({ expanded: false });
-    expect(nextRow.props.accessibilityLabel).toBe('STEP 1 OF 2 · NEXT LESSON, A warm hello, 0 of 5 min practised today');
-    expect(view.getByTestId('today-goal-dial').props.accessibilityLabel).toBe('0 percent of daily goal complete');
+    expect(nextRow.props.accessibilityState?.expanded).toBeUndefined();
+    expect(nextRow.props.accessibilityLabel).toBe('Start lesson, A warm hello, 0 of 5 min today');
+    expect(nextRow.props.accessibilityHint).toBe('Starts the lesson');
+    expect(StyleSheet.flatten(nextToggle.props.style).width).toBeGreaterThanOrEqual(44);
+    expect(StyleSheet.flatten(nextToggle.props.style).height).toBeGreaterThanOrEqual(44);
+    expect(nextToggle.props.accessibilityRole).toBe('button');
+    expect(nextToggle.props.accessibilityState).toEqual({ expanded: false });
+    expect(nextToggle.props.accessibilityLabel).toBe('Next lesson, A warm hello, collapsed');
+    // The ring is hidden from assistive tech, so queries must opt in to see it.
+    const dial = view.getByTestId('today-goal-dial', { includeHiddenElements: true });
+    expect(dial.props.accessibilityRole).toBe('progressbar');
+    expect(dial.props.accessibilityValue).toEqual({ min: 0, max: 100, now: 0 });
+    expect(dial.props.accessibilityLabel).toBe('0 percent of daily goal complete');
     // Dynamic Type stays capped on the hero copy, as it is on the Asha screen header.
-    for (const text of ['READY', 'Ready when you are', 'Tap Asha to start talking with her.']) {
+    for (const text of ['READY', 'Ready when you are']) {
       expect(view.getByText(text).props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
     }
+    expect(view.queryByText('Tap Asha to start talking with her.')).toBeNull();
     expect(view.getByText('Ready when you are').props.accessibilityLiveRegion).toBe('polite');
-    // The 44pt goal ring cannot grow with Dynamic Type, so its numeral is capped too; the row's label carries the value.
-    expect(view.getByText('0').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    // The 44pt goal ring cannot grow with Dynamic Type, so its numeral is capped too; the row's minutes line carries the value.
+    expect(view.getByText('0', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    expect(view.queryByText('0')).toBeNull();
+    expect(view.getByTestId('today-goal-value').props.children).toBe('0 of 5 min today');
     expect(view.getByTestId('today-goal-value').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
+    expect(view.queryByText('of 5 min')).toBeNull();
+    // The ring is hidden from VoiceOver inside the row so the minutes are not announced twice.
+    expect(dial.props.accessible).toBe(false);
+    expect(dial.props.accessibilityElementsHidden).toBe(true);
+    expect(dial.props.importantForAccessibility).toBe('no-hide-descendants');
     const leakedAccessibilityProps: string[] = [];
     const visit = (node: { children?: unknown; props?: Record<string, unknown> }) => {
       if (node.props?.accessibilityElementsHidden || node.props?.importantForAccessibility) {
@@ -73,15 +94,20 @@ describe('home accessibility', () => {
         if (child && typeof child === 'object') visit(child as { children?: unknown; props?: Record<string, unknown> });
       }
     };
-    visit(view.getByTestId('today-goal-dial'));
+    for (const child of dial.children) {
+      if (child && typeof child === 'object') visit(child as { children?: unknown; props?: Record<string, unknown> });
+    }
     expect(leakedAccessibilityProps).toEqual([]);
     expect(view.getByText('0 days')).toBeTruthy();
     expect(StyleSheet.flatten(topbar.props.style)).toMatchObject({ justifyContent: 'space-between' });
 
-    await fireEvent.press(nextRow);
+    await fireEvent.press(nextToggle);
+    expect(view.getByTestId('today-next-toggle').props.accessibilityState).toEqual({ expanded: true });
+    expect(view.getByTestId('today-next-toggle').props.accessibilityLabel).toBe('Next lesson, A warm hello, expanded');
     const firstPlan = view.getByLabelText('Start speaking, plan 1 of 10, 0 of 10 lessons complete');
     const nextStep = view.getByTestId('today-next-step');
     expect(StyleSheet.flatten(nextStep.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(nextStep.props.accessibilityLabel).toBe('Start lesson');
     for (const tile of ['today-plan-catalog']) {
       expect(StyleSheet.flatten(view.getByTestId(tile).props.style).minHeight).toBeGreaterThanOrEqual(44);
     }
@@ -107,8 +133,8 @@ describe('home accessibility', () => {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0 });
       expect(StyleSheet.flatten(view.getByTestId('today-next-row').props.style)).toMatchObject({ alignItems: 'flex-start', flexDirection: 'column' });
-      expect(StyleSheet.flatten(view.getByTestId('today-asha-portrait').props.style).width).toBeLessThan(200);
-      await fireEvent.press(view.getByTestId('today-next-row'));
+      expect(StyleSheet.flatten(view.getByTestId('today-asha-portrait').props.style).width).toBe(layout.todayPortraitSizeCompact);
+      await fireEvent.press(view.getByTestId('today-next-toggle'));
       expect(StyleSheet.flatten(view.getByTestId('today-hero-footer').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column' });
     }
     finally {
@@ -124,7 +150,7 @@ describe('home accessibility', () => {
     try {
       const view = await render(<HomeScreen />);
       expect(StyleSheet.flatten(view.getByTestId('today-topbar').props.style)).toMatchObject({ alignItems: 'stretch', flexDirection: 'column', minHeight: 0, paddingRight: 0 });
-      expect(StyleSheet.flatten(view.getByTestId('today-asha-portrait').props.style).width).toBeLessThan(200);
+      expect(StyleSheet.flatten(view.getByTestId('today-asha-portrait').props.style).width).toBe(layout.todayPortraitSizeCompact);
     }
     finally {
       await act(async () => Dimensions.set({ screen, window }));
