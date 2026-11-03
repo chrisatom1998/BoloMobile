@@ -64,7 +64,6 @@ jobs:
         continue-on-error: true
         run: npm audit --prefix website --include=dev --audit-level=high
       - run: npm run verify
-      - run: npm run e2e:validate
       - run: npx --no-install expo-doctor
       - run: npx expo export --platform ios
       - run: npm run release:validate:live

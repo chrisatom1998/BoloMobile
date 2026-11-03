@@ -61,10 +61,6 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ back: mockRouterBack, canGoBack: mockRouterCanGoBack, dismissTo: mockRouterDismissTo, replace: mockRouterReplace }),
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
-}));
-
 jest.mock('lucide-react-native', () => ({
   Bookmark: () => null,
   Check: () => null,

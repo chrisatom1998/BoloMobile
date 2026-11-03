@@ -15,10 +15,10 @@ import Animated, {
 import type { EffectiveMotion } from '@/hooks/use-motion-preference';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
 import { boloApiErrorKind, type BoloApiErrorKind } from '@/services/bolo-api';
-import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeInputTranscript, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import { useRealtimeConversation, type LiveSessionSetup, type LiveTranscriptRow, type RealtimeTranscriptUpdate, type RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { hapticSelect, hapticStartRecording, hapticTap } from '@/lib/haptics';
 import { ensureLiveMicrophone, type LiveMicrophonePhase } from '@/lib/live-microphone';
-import { makeStyles, radius, spacing, useTheme } from '@/theme';
+import { layout, makeStyles, radius, spacing, useTheme } from '@/theme';
 import type { AshaResponseLanguage, ChatMessage } from '@/state/app-state-types';
 
 type Props = {
@@ -31,14 +31,17 @@ type Props = {
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
   compact?: boolean;
   disabled?: boolean;
+  /** Missing live URL. The portrait and mic stay on screen, but they cannot start a call. */
+  unavailable?: boolean;
   enabled?: boolean;
   motionMode?: EffectiveMotion;
   /**
    * `minimal` is a compact, single-orb treatment for dense conversation headers.
    * `portrait` makes `children` (Asha's portrait) the tap-to-talk control itself,
    * with the status rings and pulses applied around it instead of a separate orb.
+   * `avatar` is that same control at the compact header size, without the rings.
    */
-  size?: 'regular' | 'minimal' | 'portrait';
+  size?: 'regular' | 'minimal' | 'portrait' | 'avatar';
   /** The face rendered inside the control when `size` is `portrait`. */
   children?: ReactNode;
   /** `dark` renders the saffron orb for the night-coloured Asha screen. Styling only. */
@@ -49,7 +52,6 @@ type Props = {
   active?: boolean;
   /** Reports the pre-prompt explainer and a denial that should offer Settings. */
   onMicrophonePhase?: (phase: LiveMicrophonePhase) => void;
-  onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
   /** Session start, ready, and end for the on-device session log. Only used when this control owns the session. */
   onSessionEvent?: (event: AshaSessionEvent) => void;
   /** Shares this exact control's session teardown with the hosting screen. */
@@ -58,7 +60,6 @@ type Props = {
   onTurnActionReady?: (action: (() => void) | null) => void;
   onStatusChange?: (status: RealtimeVoiceStatus) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
-  onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
   responseLanguage?: AshaResponseLanguage;
   /**
    * When set, this control renders an existing session instead of owning one.
@@ -185,8 +186,8 @@ function errorDetails(cause: unknown): RealtimeErrorDetails {
 }
 
 function OwnedRealtimeVoiceButton(props: Props) {
-  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage = 'en' } = props;
-  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onInputTranscriptComplete, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, onTurnComplete, responseLanguage });
+  const { clientId, enabled = true, history, liveSession, onConnectionStart, onError, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, responseLanguage = 'en' } = props;
+  const voice = useRealtimeConversation({ clientId, enabled, history, liveSession, onConnectionStart, onError, onSessionEvent, onTranscriptChange, onTranscriptSnapshot, responseLanguage });
   return <RealtimeVoiceButtonView {...props} owned voice={voice} />;
 }
 
@@ -195,20 +196,26 @@ export function RealtimeVoiceButton(props: Props) {
   return <OwnedRealtimeVoiceButton {...props} />;
 }
 
-function RealtimeVoiceButtonView({ active = true, children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
+function RealtimeVoiceButtonView({ active = true, children, compact = false, disabled = false, motionMode = 'gentle', onDisconnectReady, onError, onMicrophonePhase, onStatusChange, onTurnActionReady, owned, size = 'regular', tone = 'light', unavailable = false, voice }: Props & { owned: boolean; voice: RealtimeVoiceControls }) {
   const onStatusChangeRef = useRef(onStatusChange);
   const onMicrophonePhaseRef = useRef(onMicrophonePhase);
   const ensuringRef = useRef(false);
   // Bumped whenever a pending start must not go ahead: the screen leaves view,
   // the control is disabled, or it unmounts.
   const startAttemptRef = useRef(0);
-  const blocked = disabled || voice.status === 'connecting';
+  const blocked = disabled || unavailable || voice.status === 'connecting';
+  const controlLabel = (surface: 'talk' | 'start') => {
+    if (unavailable) return 'Asha voice, unavailable';
+    if (voice.status === 'disconnected' && surface === 'talk') return 'Talk to Asha';
+    return labels[voice.status];
+  };
   const connected = voice.status !== 'disconnected';
   const styles = useStyles();
   const { colors } = useTheme();
   const { orbStyle, rippleStyle } = useOrbMotion(voice.status, motionMode);
   const minimal = size === 'minimal';
   const portrait = size === 'portrait';
+  const avatar = size === 'avatar';
   const dark = tone === 'dark';
   const voiceIconSize = minimal ? 32 : 52;
   const iconColor = dark ? colors.ink : colors.white;
@@ -306,6 +313,33 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
 
   const accessibilityHint = connected ? 'The microphone stays on until you mute it or end the session. You can speak while Asha is speaking.' : 'Starts live conversation with your microphone on.';
 
+  if (avatar) {
+    const avatarButton = (
+      <Pressable
+        accessibilityHint={unavailable ? undefined : accessibilityHint}
+        accessibilityLabel={controlLabel('talk')}
+        accessibilityRole={unavailable ? undefined : 'button'}
+        accessibilityState={{ disabled: blocked }}
+        disabled={blocked}
+        onPress={press}
+        style={[styles.avatarButton, blocked && styles.disabled]}
+        testID="realtime-voice-orb"
+      >
+        {children}
+      </Pressable>
+    );
+    if (!connected) return avatarButton;
+    // Muting keeps the call open, so the compact header still needs its own way to hang up.
+    return (
+      <View style={styles.avatarRow}>
+        {avatarButton}
+        <Pressable accessibilityLabel="End live voice session" accessibilityRole="button" onPress={endSession} style={styles.avatarEndButton} testID="realtime-voice-end">
+          <X color={colors.white} size={18} />
+        </Pressable>
+      </View>
+    );
+  }
+
   if (portrait) {
     const recording = voice.status === 'recording';
     const StatusIcon = recording ? MicOff : Mic;
@@ -319,9 +353,9 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
         />
         <Animated.View style={orbStyle}>
           <Pressable
-            accessibilityLabel={voice.status === 'disconnected' ? 'Talk to Asha' : labels[voice.status]}
-            accessibilityHint={accessibilityHint}
-            accessibilityRole="button"
+            accessibilityLabel={controlLabel('talk')}
+            accessibilityHint={unavailable ? undefined : accessibilityHint}
+            accessibilityRole={unavailable ? undefined : 'button'}
             accessibilityState={{ disabled: blocked }}
             disabled={blocked}
             onPress={press}
@@ -357,8 +391,8 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
       />
       <Animated.View style={orbStyle}>
         <Pressable
-          accessibilityLabel={labels[voice.status]}
-          accessibilityHint={accessibilityHint}
+          accessibilityLabel={controlLabel('start')}
+          accessibilityHint={unavailable ? undefined : accessibilityHint}
           accessibilityRole="button"
           accessibilityState={{ disabled: blocked }}
           disabled={blocked}
@@ -418,6 +452,9 @@ const useStyles = makeStyles((c) => ({
   endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Negative margins centre the button on the orb.
   // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
   endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
+  avatarButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, overflow: 'hidden' },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  avatarEndButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   // Portrait variant: the 112pt (96pt compact) portrait is the control; rings sit around it.
   stagePortrait: { width: '100%', height: 144 },
   stagePortraitCompact: { height: 124 },
@@ -434,5 +471,5 @@ const useStyles = makeStyles((c) => ({
   portraitBadgeRecording: { backgroundColor: c.orbRecording },
   portraitBadgeConnecting: { backgroundColor: c.heroSubtle },
   endButtonPortrait: { right: 0 },
-  disabled: { opacity: 0.5 },
+  disabled: { opacity: layout.voiceUnavailableOpacity },
 }));

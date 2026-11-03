@@ -16,20 +16,24 @@ tags:
 - runFlow: ../subflows/enter-development-build.yaml
 - assertVisible: "Hear this"
 - runFlow: ../subflows/complete-onboarding.yaml
+# PR screenshots only: optional steps, then back to the collapsed card.
+- runFlow: ../subflows/today-screenshots.yaml
 - tapOn: "Asha"
-# The invite sits above the button. VoiceOver hears "Asha says:" plus the
-# line, and scrolling the button to 80% visible pushes that line off the top.
+# The CI build has no live URL, so Talk with Asha is hidden and Type to Asha
+# opens the same consent sheet. The invite sits above that button. VoiceOver
+# hears "Asha says:" plus the line, and scrolling the button to 80% visible
+# pushes that line off the top.
 - assertVisible: ".*Greet me like a neighbor and tell me your name.*"
 - scrollUntilVisible:
     element:
-      text: "Talk with Asha"
+      text: "Type to Asha"
     direction: DOWN
     speed: 60
     visibilityPercentage: 80
     centerElement: false
     timeout: 45000
-- assertVisible: "Talk with Asha"
-- tapOn: "Talk with Asha"
+- assertVisible: "Type to Asha"
+- tapOn: "Type to Asha"
 - assertVisible: "Before your first live conversation"
 - scrollUntilVisible:
     element:
@@ -76,3 +80,5 @@ tags:
 - tapOn: "Cancel"
 - assertNotVisible: "Delete your Bolo data?"
 - assertVisible: "Delete my Bolo data"
+# PR screenshots only, after every smoke assertion: Today at the largest text size.
+- runFlow: ../subflows/today-largest-text-screenshots.yaml

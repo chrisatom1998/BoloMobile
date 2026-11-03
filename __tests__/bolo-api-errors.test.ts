@@ -7,7 +7,7 @@ jest.mock('expo-constants', () => ({
 }));
 
 import { observe } from '../src/lib/observability';
-import { BoloApiError, boloApiErrorKind, createLiveCall, isOfflineBoloApiError, parseRetryAfterMs, reportGeneratedMessage, sendMobileChat } from '../src/services/bolo-api';
+import { BoloApiError, boloApiErrorKind, createLiveCall, isOfflineBoloApiError, liveVoiceConfigError, LIVE_VOICE_CONFIG_MESSAGE, parseRetryAfterMs, reportGeneratedMessage, sendMobileChat } from '../src/services/bolo-api';
 
 const observeMock = observe as jest.MockedFunction<typeof observe>;
 
@@ -253,8 +253,17 @@ describe('Bolo API shared failure boundary', () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     mockLiveApiUrl = undefined;
-    const config = await createLiveCall({ clientId: 'client-12345678', offerSdp, responseLanguage: 'en' }).catch((cause: unknown) => cause);
-    expect(config).toMatchObject({ kind: 'config', message: 'Live voice isn’t available right now. You can still type to Asha.' });
+    const dev = (globalThis as { __DEV__?: boolean }).__DEV__;
+    (globalThis as { __DEV__?: boolean }).__DEV__ = false;
+    let config: unknown;
+    try {
+      expect(liveVoiceConfigError()).toBe(LIVE_VOICE_CONFIG_MESSAGE);
+      config = await createLiveCall({ clientId: 'client-12345678', offerSdp, responseLanguage: 'en' }).catch((cause: unknown) => cause);
+    } finally {
+      (globalThis as { __DEV__?: boolean }).__DEV__ = dev;
+    }
+    expect(warning).not.toHaveBeenCalled();
+    expect(config).toMatchObject({ kind: 'config', message: LIVE_VOICE_CONFIG_MESSAGE });
     expect(isOfflineBoloApiError(config)).toBe(false);
 
     mockLiveApiUrl = 'https://live.example.test';

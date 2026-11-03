@@ -1,5 +1,5 @@
 import { Send } from 'lucide-react-native';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ActivityIndicator, Text, TextInput, useWindowDimensions, View } from 'react-native';
 
 import type { createLiveStyles } from '@/app/(tabs)/live';
@@ -13,13 +13,23 @@ type Props = {
   styles: ReturnType<typeof createLiveStyles>;
 };
 
+export type LiveComposerHandle = {
+  focus: () => void;
+};
+
 /**
  * Owns the typed message draft so a keystroke re-renders only the composer,
  * leaving the animated hero and the chat list untouched.
  */
-export const LiveComposer = memo(function LiveComposer({ disabled, onSend, styles }: Props) {
+export const LiveComposer = memo(forwardRef<LiveComposerHandle, Props>(function LiveComposer({ disabled, onSend, styles }, ref) {
   const { colors } = useTheme();
   const { fontScale } = useWindowDimensions();
+  const inputRef = useRef<TextInput>(null);
+  useImperativeHandle(ref, () => ({
+    focus() {
+      inputRef.current?.focus();
+    },
+  }), []);
   const composerScale = Math.min(fontScale, layout.composerFontScaleCap);
   const composerLines = fontScale >= layout.accessibilityFontScale ? layout.composerLines : 1;
   const composerPad = spacing.lg + spacing.lg + layout.composerLineSlack;
@@ -74,6 +84,7 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
       ) : null}
       <View style={styles.inputRow}>
         <TextInput
+          ref={inputRef}
           accessibilityHint="Type in English or Hindi. Return starts a new line; use Send to send."
           accessibilityLabel="Message Asha"
           editable={!locked}
@@ -103,4 +114,4 @@ export const LiveComposer = memo(function LiveComposer({ disabled, onSend, style
       </View>
     </View>
   );
-});
+}));

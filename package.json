@@ -30,7 +30,7 @@
     "expo-web-browser": "57.0.3",
     "expo-widgets": "57.0.23",
     "heroui-native": "1.0.11",
-    "lucide-react-native": "^1.61.0",
+    "lucide-react-native": "^1.65.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
@@ -45,7 +45,7 @@
     "tailwind-merge": "3.7.0",
     "tailwind-variants": "3.3.1",
     "tailwindcss": "4.3.3",
-    "uniwind": "1.13.0"
+    "uniwind": "1.13.1"
   },
   "devDependencies": {
     "@testing-library/react-native": "^14.1.0",
@@ -96,7 +96,7 @@
     "production:validate": "node ./scripts/validate-production-config.mjs",
     "native:validate": "node ./scripts/validate-native-project.mjs",
     "security:audit:runtime": "node ./scripts/audit-runtime-dependencies.mjs",
-    "postinstall": "node ./scripts/patch-query-string-decoder.mjs"
+    "postinstall": "node ./scripts/patch-query-string-decoder.mjs && node ./scripts/patch-minimatch-callable.mjs"
   },
   "expo": {
     "doctor": {
@@ -129,9 +129,6 @@
   "overrides": {
     "uuid": "^11.1.1",
     "brace-expansion": "^5.0.12",
-    "minimatch@^3.0.0": {
-      "brace-expansion": "1.1.21"
-    },
     "node-forge": "1.4.2",
     "zod": "4.6.7",
     "decode-uri-component": "0.5.1",
@@ -145,7 +142,9 @@
     "expo-dev-launcher": "57.0.20",
     "expo-dev-menu": "57.0.18",
     "@expo/inline-modules": "0.1.7",
-    "expo-constants": "57.0.21"
+    "expo-constants": "57.0.21",
+    "minimatch": "11.0.4",
+    "glob@>=9.0.0 <=14.0.1": "14.0.3"
   },
   "private": true
 }

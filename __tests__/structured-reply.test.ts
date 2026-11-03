@@ -2,7 +2,6 @@ import {
   MAX_STRUCTURED_REPLY_BYTES,
   sanitizeStructuredReply,
   structuredHindiSource,
-  structuredReplyText,
   structuredSaveCandidates,
 } from '../src/lib/structured-reply';
 
@@ -83,14 +82,5 @@ describe('structured helpers', () => {
     ]);
     expect(structuredSaveCandidates({ version: 1, phrases: [valid.phrases[0]!, valid.phrases[0]!] })).toHaveLength(1);
     expect(structuredHindiSource(structured)).toBe('चाय में चीनी कम डालिए। · डालिए');
-  });
-
-  it('renders a readable string per script preference', () => {
-    const structured = sanitizeStructuredReply(valid)!;
-    expect(structuredReplyText(structured, 'latin')).not.toMatch(/[ऀ-ॿ]/u);
-    expect(structuredReplyText(structured, 'latin')).toContain('chaay mein cheeni kam daaliye. — Please put less sugar in the tea.');
-    expect(structuredReplyText(structured, 'devanagari')).not.toContain('(chaay');
-    expect(structuredReplyText(structured, 'both')).toContain('चाय में चीनी कम डालिए। (chaay mein cheeni kam daaliye.)');
-    expect(structuredReplyText(structured, 'both')).toContain('You said डालो (daalo). Say डालिए (daaliye) — please put. daalo is for friends.');
   });
 });

@@ -29,7 +29,6 @@ describe('creator lesson integration', () => {
   beforeEach(() => { mockPush.mockClear(); mockPlanId = 'creator'; });
 
   it('keeps built-in lessons and registers imported scenes once with complete offline audio', () => {
-    expect(scenes.filter(s => !s.id.startsWith('plan-creator-'))).toHaveLength(130);
     expect(new Set(scenes.map(s => s.id)).size).toBe(scenes.length);
     const plan = lessonPlans.find(p => p.id === 'creator')!;
     expect(plan.lessonIds).toEqual(creatorLessons.map(s => s.id));

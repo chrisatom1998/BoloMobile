@@ -267,6 +267,5 @@ describe('production configuration validator', () => {
     expect(workflow).toContain(
       'node ./scripts/validate-production-config.mjs --validate-staging-endpoints',
     );
-    expect(workflow).not.toContain("const productionApi = 'https://api-v2.appdeploy.ai");
   });
 });

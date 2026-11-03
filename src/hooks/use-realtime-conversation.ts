@@ -19,7 +19,6 @@ import type { AshaResponseLanguage } from '@/state/app-state-types';
 export type { LiveTranscriptRow } from '@/lib/live-transcripts';
 export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding';
 export type RealtimeTranscriptUpdate = { speaker: 'you' | 'asha'; text: string };
-export type RealtimeInputTranscript = { itemId: string; transcript: string };
 /** Startup-only session setup, read once when a live session connects. */
 export type LiveSessionSetup = {
   mode?: LiveMode;
@@ -40,9 +39,6 @@ type Options = {
   onSessionEvent?: (event: AshaSessionEvent) => void;
   onTranscriptChange?: (update: RealtimeTranscriptUpdate) => void;
   onTranscriptSnapshot?: (rows: LiveTranscriptRow[]) => void;
-  // Kept for existing callers; Live has no authoritative completed-turn event.
-  onInputTranscriptComplete?: (result: RealtimeInputTranscript) => void;
-  onTurnComplete?: (turn: { transcript: string; reply: string; language: 'en' | 'hi' }) => void;
 };
 type LiveEvent = {
   type?: string;

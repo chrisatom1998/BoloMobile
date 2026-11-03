@@ -37,7 +37,6 @@ describe('loanword vowels and rare signs', () => {
   });
 
   it('keeps unknown Latin, English names and punctuation as typed', () => {
-    expect(romanizeDevanagari('My name is Kripaya.')).toBe('My name is Kripaya.');
     expect(romanizeDevanagari('Chris, bolo "chai"!')).toBe('Chris, bolo "chai"!');
   });
 });

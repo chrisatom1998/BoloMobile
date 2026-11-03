@@ -27,12 +27,6 @@ This project does not use `wrangler.jsonc`.
   image-optimization endpoint when no Images binding is configured
 - `public/` — icons, screenshots, and the Open Graph image
 - `.openai/hosting.json` declares optional Sites D1 and R2 bindings (all unset)
-- `app/chatgpt-auth.ts` — unused ChatGPT sign-in helpers kept from the hosting
-  template; nothing imports them today. If a page ever calls
-  `requireChatGPTUser()`, the site must only be served behind the hosting
-  platform's trusted proxy, because the `oai-authenticated-user-*` headers it
-  reads are spoofable on any other surface.
-- `examples/d1/` — optional D1 example surface, not wired into the build
 
 ## Content notes
 

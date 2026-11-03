@@ -1,5 +1,4 @@
-import { scenes } from '../src/data/scenes';
-import { categoryMastery, dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, reviewCardMode, weeklyPractice } from '../src/lib/learning';
+import { dueSavedPhrases, learningAccuracy, milestoneProgress, recommendedScenes, reviewCardMode, weeklyPractice } from '../src/lib/learning';
 import { defaultLearnerProfile } from '../src/lib/storage';
 import type { PhraseReview, SavedPhrase, SceneProgress } from '../src/state/app-state-types';
 
@@ -71,17 +70,11 @@ describe('adaptive learning', () => {
     expect(result.at(-1)?.seconds).toBe(0);
   });
 
-  it('derives category mastery, cumulative accuracy, and can-do milestones', () => {
+  it('derives cumulative accuracy and can-do milestones', () => {
     const sceneProgress = {
       chai: progress({ completions: 1, totalCorrect: 2, totalAnswers: 2 }),
       restaurant: progress({ completions: 1, totalCorrect: 1, totalAnswers: 2 }),
     };
-    const foodTotal = scenes.filter((scene) => scene.category === 'Food').length;
-    expect(categoryMastery(sceneProgress).find((item) => item.category === 'Food')).toMatchObject({
-      completed: 2,
-      total: foodTotal,
-      percent: Math.round(2 / foodTotal * 100),
-    });
     expect(learningAccuracy(sceneProgress)).toBe(75);
     expect(milestoneProgress(sceneProgress).find((item) => item.id === 'order-food')?.achieved).toBe(true);
   });

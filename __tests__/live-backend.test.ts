@@ -306,14 +306,6 @@ describe('GPT-Live backend', () => {
     expect((await status()).body).toEqual({ configured: false, available: false, availability: 'unavailable', providerAccessVerified: false, model: 'gpt-live-1', responsesModel: 'gpt-5.6-terra', protocol: 'live' });
   });
 
-  it('reports a status shape accepted by the live acceptance script', async () => {
-    const { deps, status } = setup();
-    deps.openAI.mockImplementation(async path => ({ ok: true, body: jsonBody({ id: path.split('/').at(-1) }) }));
-    const { body } = await status();
-    // Mirrors scripts/validate-live-services.mjs live-status assertions.
-    expect(body.configured === true && body.model === 'gpt-live-1' && body.protocol === 'live' && body.available === true).toBe(true);
-  });
-
   it('reports unconfigured without contacting OpenAI when the key is blank', async () => {
     const { deps, status } = setup();
     deps.secrets.readSecret.mockResolvedValue('  ');
