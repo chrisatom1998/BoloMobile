@@ -1,0 +1,41 @@
+appId: com.bolo.hindi
+---
+# PR screenshots of Today at the largest accessibility text size. The launch
+# argument sets UIKit's preferred content size for this launch only; Maestro
+# adds the leading dash to string arguments. Every step is optional or a
+# screenshot, so the smoke flow passes either way.
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+      UIPreferredContentSizeCategoryName: "UICTContentSizeCategoryAccessibilityXXXL"
+- runFlow: dismiss-dev-menu.yaml
+- extendedWaitUntil:
+    visible:
+      id: "today-settings"
+    timeout: 60000
+    optional: true
+- takeScreenshot:
+    path: today/largest-text-top
+- scrollUntilVisible:
+    element:
+      id: "today-next-row"
+    direction: DOWN
+    speed: 40
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+    optional: true
+- takeScreenshot:
+    path: today/largest-text-row
+- tapOn:
+    id: "today-next-toggle"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "today-next-details"
+    timeout: 8000
+    optional: true
+- takeScreenshot:
+    path: today/largest-text-expanded

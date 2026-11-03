@@ -1,0 +1,29 @@
+appId: com.bolo.hindi
+---
+# PR screenshots of Today for a learner who just finished onboarding.
+# Every step is optional or a screenshot, so the smoke flow passes either way.
+- extendedWaitUntil:
+    visible:
+      id: "today-next-row"
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: today/first-run-collapsed
+- tapOn:
+    id: "today-next-toggle"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "today-next-details"
+    timeout: 8000
+    optional: true
+- takeScreenshot:
+    path: today/first-run-expanded
+- tapOn:
+    id: "today-next-toggle"
+    optional: true
+- extendedWaitUntil:
+    notVisible:
+      id: "today-next-details"
+    timeout: 8000
+    optional: true
