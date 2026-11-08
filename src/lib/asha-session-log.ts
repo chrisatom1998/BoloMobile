@@ -208,7 +208,10 @@ export function mergeAshaSessionRows(record: AshaSessionRecord, snapshot: AshaSn
   const sequences = [...snapshotIds].map(rowSequence);
   const windowStart = sequences.length && sequences.every((value) => value !== null) ? Math.min(...(sequences as number[])) : null;
   const retained = record.rows.filter((row) => {
-    if (snapshotIds.has(row.id)) return incoming.has(row.id);
+    // A snapshot that still names this id is a revision, even when the new text
+    // is blank and fails sanitization. Keep the stored row. Only an id that has
+    // left the window (merged into an earlier row) is removed below.
+    if (snapshotIds.has(row.id)) return true;
     if (windowStart === null) return true;
     const sequence = rowSequence(row.id);
     return sequence === null || sequence < windowStart;
