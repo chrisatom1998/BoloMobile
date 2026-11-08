@@ -963,6 +963,32 @@ describe('lesson audit regressions', () => {
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 12, expect.objectContaining({ correct: 2, total: 2, score: 100 }));
   });
 
+  it('drops the mismatched-checkpoint warning after Practice again starts a fresh run', async () => {
+    mockAppState.sceneProgress.chai = resumeAt(1, { total: 0, correct: 0, score: 0, seconds: 99 });
+    const view = await render(<SceneScreen />);
+    expect(view.getByText(/This saved lesson no longer matches its turns/)).toBeTruthy();
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByTestId('scene-continue'));
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByTestId('scene-continue'));
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
+    expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+    expect(view.queryByText(/This saved lesson no longer matches its turns/)).toBeNull();
+    expect(view.queryByText(/This older saved lesson has no answer history/)).toBeNull();
+  });
+
+  it('drops the legacy-checkpoint warning after Practice again starts a fresh run', async () => {
+    mockAppState.sceneProgress.chai = { lastBeatIndex: 1 };
+    const view = await render(<SceneScreen />);
+    expect(view.getByText(/This older saved lesson has no answer history/)).toBeTruthy();
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByTestId('scene-continue'));
+    await fireEvent.press(view.getByTestId('scene-choice-0'));
+    await fireEvent.press(view.getByTestId('scene-continue'));
+    await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
+    expect(view.queryByText(/This older saved lesson has no answer history/)).toBeNull();
+  });
+
   it('asks for the name on its own step, then keeps it in the answer', async () => {
     mockSceneId = 'plan-essentials-02';
     const view = await render(<SceneScreen />);
