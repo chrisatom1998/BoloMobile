@@ -194,19 +194,22 @@ function AshaVoiceSessionHost({
     });
   }, [onVoice, voice.disconnect, voice.finishTurn, voice.isPlaying, voice.microphoneEnabled, voice.startTurn, voice.status]);
 
-  // The Asha screen owns these side effects while it is mounted. If it is gone, keep the transcript.
+  // The Asha screen clears the previous chat when it starts a call. If it is
+  // not listening, clear at the start of the connection — before captions
+  // arrive — and keep whatever was stored once the call is ready.
   useEffect(() => {
     const status = voice.status;
     const previous = previousStatusRef.current;
     previousStatusRef.current = status;
     if (listenersRef.current) return;
     const ids = snapshotIdsRef.current;
-    if (status === 'connecting' && previous === 'disconnected') ids.current = [];
+    if (status === 'connecting' && previous === 'disconnected') {
+      ids.current = [];
+      void appRef.current.clearChatHistory();
+    }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
       observe('voice_connection_succeeded');
       void stopSpeaking();
-      appRef.current.clearChatHistory();
-      ids.current = [];
     }
   }, [listenersRef, observe, stopSpeaking, voice.status]);
 
