@@ -122,7 +122,9 @@
         "expo-splash-screen",
         "expo-widgets",
         "expo-dev-client",
-        "jest-expo"
+        "jest-expo",
+        "expo-build-properties",
+        "expo-glass-effect"
       ]
     }
   },
