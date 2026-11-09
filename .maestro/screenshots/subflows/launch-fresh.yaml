@@ -1,0 +1,19 @@
+appId: com.bolo.hindi
+---
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+    clearState: true
+    clearKeychain: true
+    permissions:
+      microphone: deny
+      notifications: deny
+- tapOn:
+    text: "Open"
+    optional: true
+- runFlow: ../../subflows/dismiss-dev-menu.yaml
+- extendedWaitUntil:
+    visible: "Hear this|Your Hindi plan in one minute"
+    timeout: 60000

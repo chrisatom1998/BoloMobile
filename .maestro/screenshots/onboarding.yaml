@@ -1,0 +1,81 @@
+appId: com.bolo.hindi
+name: Onboarding screens
+---
+- runFlow: subflows/launch-fresh.yaml
+- runFlow:
+    when:
+      visible: "Hear this"
+    commands:
+      - takeScreenshot: onboarding-1
+      - scrollUntilVisible:
+          element:
+            id: "onboarding-reply-namaste"
+          direction: DOWN
+          timeout: 20000
+          speed: 40
+          visibilityPercentage: 80
+          centerElement: true
+      - tapOn:
+          id: "onboarding-reply-namaste"
+      - tapOn:
+          id: "onboarding-continue"
+      - extendedWaitUntil:
+          visible: "Where are you starting?"
+          timeout: 20000
+      - takeScreenshot: onboarding-2
+      - tapOn:
+          id: "onboarding-continue"
+      - extendedWaitUntil:
+          visible: "Meet Asha"
+          timeout: 20000
+      - takeScreenshot: onboarding-3
+- runFlow:
+    when:
+      visible: "Your Hindi plan in one minute"
+    commands:
+      - takeScreenshot: onboarding-1
+      - scrollUntilVisible:
+          element:
+            text: "How should Hindi appear?"
+          direction: DOWN
+          timeout: 45000
+          speed: 60
+          visibilityPercentage: 80
+          centerElement: true
+      - takeScreenshot: onboarding-2
+      - scrollUntilVisible:
+          element:
+            text: "What matters most?"
+          direction: DOWN
+          timeout: 45000
+          speed: 60
+          visibilityPercentage: 80
+          centerElement: true
+      - takeScreenshot: onboarding-3
+      - scrollUntilVisible:
+          element:
+            text: "Asha’s replies"
+          direction: DOWN
+          timeout: 45000
+          speed: 60
+          visibilityPercentage: 80
+          centerElement: true
+      - takeScreenshot: onboarding-4
+      - scrollUntilVisible:
+          element:
+            text: "Daily practice target"
+          direction: DOWN
+          timeout: 45000
+          speed: 60
+          visibilityPercentage: 80
+          centerElement: true
+      - takeScreenshot: onboarding-5
+      - scrollUntilVisible:
+          element:
+            text: "Optional microphone check"
+          direction: DOWN
+          timeout: 45000
+          speed: 60
+          visibilityPercentage: 80
+          centerElement: true
+      - takeScreenshot: onboarding-6
