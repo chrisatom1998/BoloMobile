@@ -2407,6 +2407,51 @@ describe('live coaching state', () => {
     await flushMicrotasks();
   });
 
+  it('does not confirm a transcript save when storage fails after the sheet has closed', async () => {
+    const result = deferred<'failed'>();
+    appState.__togglePhraseMock.mockReturnValueOnce(result.promise);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Save phrase: Hello there.'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    await act(async () => {
+      result.resolve('failed');
+      await Promise.resolve();
+    });
+    expect(alert).not.toHaveBeenCalledWith('Phrase saved', expect.anything());
+    alert.mockRestore();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
+  it('does not confirm a transcript save when the phrase could not be stored', async () => {
+    appState.__togglePhraseMock.mockResolvedValueOnce('failed');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Save phrase: Hello there.'));
+    await fireEvent.changeText(view.getByLabelText('Hindi phrase'), 'नमस्ते');
+    await fireEvent.changeText(view.getByLabelText('Romanized Hindi phrase'), 'Namaste');
+    await fireEvent.changeText(view.getByLabelText('English phrase meaning'), 'Hello');
+    await fireEvent.press(view.getByRole('button', { name: 'Save phrase' }));
+
+    expect(appState.__togglePhraseMock).toHaveBeenCalledWith({ hi: 'नमस्ते', latin: 'Namaste', en: 'Hello' });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(alert).not.toHaveBeenCalledWith('Phrase saved', expect.anything());
+    alert.mockRestore();
+    await view.unmount();
+    await flushMicrotasks();
+  });
+
   it('tells the learner the collection is full instead of confirming a transcript save', async () => {
     appState.__togglePhraseMock.mockResolvedValueOnce('full');
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);

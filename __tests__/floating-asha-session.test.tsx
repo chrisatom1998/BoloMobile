@@ -250,6 +250,30 @@ describe('Asha voice session above the navigator', () => {
     expect(isFloatingAshaMinimized()).toBe(false);
   });
 
+  it('clears the previous chat when a call starts with no screen listening, and keeps captions that arrive before the call is ready', async () => {
+    const view = await renderSession();
+    mockStatus = 'connecting';
+    await act(async () => {
+      view.rerender(<AshaVoiceSessionProvider><Probe /></AshaVoiceSessionProvider>);
+    });
+    expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
+
+    mockTranscriptSnapshot?.([{ id: 'asha-1', speaker: 'asha', text: 'Hello' }]);
+    expect(mockReplaceLiveChatSnapshot).toHaveBeenCalledWith([], [
+      { id: 'asha-1', role: 'asha', text: 'Hello', language: 'en' },
+    ]);
+
+    mockStatus = 'ready';
+    await act(async () => {
+      view.rerender(<AshaVoiceSessionProvider><Probe /></AshaVoiceSessionProvider>);
+    });
+    expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
+    mockTranscriptSnapshot?.([{ id: 'asha-2', speaker: 'asha', text: 'Again' }]);
+    expect(mockReplaceLiveChatSnapshot).toHaveBeenLastCalledWith(['asha-1'], [
+      { id: 'asha-2', role: 'asha', text: 'Again', language: 'en' },
+    ]);
+  });
+
   it('writes transcript snapshots itself when the conversation screen is not listening', async () => {
     await renderSession();
     mockTranscriptSnapshot?.([

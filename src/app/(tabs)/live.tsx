@@ -110,6 +110,9 @@ export default function LiveScreen() {
   const pendingPhraseAlertRef = useRef<{ session: number; title: string; message: string } | null>(null);
   const phraseSheetSessionRef = useRef(0);
   const closingPhraseSessionRef = useRef(0);
+  // Set once the closing sheet has finished, so a save result that arrives
+  // afterwards can show its own notice instead of a premature success.
+  const phraseSheetDismissedRef = useRef(false);
   const [wordDefinitionPhrase, setWordDefinitionPhrase] = useState<string | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
   const [screenFocused, setScreenFocused] = useState(true);
@@ -780,29 +783,44 @@ export default function LiveScreen() {
     </Pressable>
   ) : null;
 
+  const publishPhraseNotice = useCallback((session: number, title: string, message: string) => {
+    if (phraseSheetSessionRef.current !== session || closingPhraseSessionRef.current !== session) return;
+    if (phraseSheetDismissedRef.current) {
+      showAppAlert(title, message);
+      return;
+    }
+    pendingPhraseAlertRef.current = { session, title, message };
+  }, []);
+
   const saveTranscriptPhrase = useCallback((phrase: SavedPhrase) => {
     const alreadySaved = phrases.some((saved) => saved.hi.trim().toLocaleLowerCase() === phrase.hi.trim().toLocaleLowerCase());
     const session = phraseSheetSessionRef.current;
     closingPhraseSessionRef.current = session;
-    pendingPhraseAlertRef.current = {
-      session,
-      title: alreadySaved ? 'Phrase already saved' : 'Phrase saved',
-      message: `${phrase.latin} — ${phrase.en}`,
-    };
+    phraseSheetDismissedRef.current = false;
+    const detail = `${phrase.latin} — ${phrase.en}`;
+    // Already saved is known immediately. A new save waits for storage so a
+    // failure cannot close the sheet with "Phrase saved".
+    if (alreadySaved) publishPhraseNotice(session, 'Phrase already saved', detail);
     setPhraseSheetVisible(false);
     if (alreadySaved) return;
     void togglePhrase(phrase).then((result) => {
-      if (result !== 'full') return;
-      // Nothing was saved. Replace the queued "Phrase saved" notice while the
-      // sheet is still closing, or tell the learner now if it already closed.
-      const pending = pendingPhraseAlertRef.current;
-      if (pending && pending.session === session) {
-        pendingPhraseAlertRef.current = { session, title: SAVED_PHRASES_FULL_TITLE, message: SAVED_PHRASES_FULL_MESSAGE };
-      } else if (closingPhraseSessionRef.current === session && phraseSheetSessionRef.current === session) {
-        showAppAlert(SAVED_PHRASES_FULL_TITLE, SAVED_PHRASES_FULL_MESSAGE);
+      switch (result) {
+        case 'saved':
+          publishPhraseNotice(session, 'Phrase saved', detail);
+          return;
+        case 'full':
+          publishPhraseNotice(session, SAVED_PHRASES_FULL_TITLE, SAVED_PHRASES_FULL_MESSAGE);
+          return;
+        case 'failed':
+        case 'removed':
+          return;
+        default: {
+          const unexpected: never = result;
+          return unexpected;
+        }
       }
     });
-  }, [phrases, togglePhrase]);
+  }, [phrases, publishPhraseNotice, togglePhrase]);
 
   const closePhraseSheet = useCallback(() => {
     closingPhraseSessionRef.current = phraseSheetSessionRef.current;
@@ -811,6 +829,7 @@ export default function LiveScreen() {
 
   const finishPhraseSheet = useCallback(() => {
     if (closingPhraseSessionRef.current !== phraseSheetSessionRef.current) return;
+    phraseSheetDismissedRef.current = true;
     setPhraseSheetVisible(false);
     setPhraseMessage(null);
     const pending = pendingPhraseAlertRef.current;

@@ -89,13 +89,13 @@ function SceneScreen() {
   const { elapsedSeconds, reset: resetTimer, touch: touchTimer } = useForegroundTimer();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const savedProgress = scene ? sceneProgress?.[scene.id] : undefined;
-  const [legacyCheckpoint] = useState(() => !savedProgress?.attempt && (savedProgress?.lastBeatIndex ?? 0) > 0);
+  const [legacyCheckpoint, setLegacyCheckpoint] = useState(() => !savedProgress?.attempt && (savedProgress?.lastBeatIndex ?? 0) > 0);
   const savedPosition = savedProgress?.lastBeatIndex ?? 0;
   const checkpointMatchesLesson = Boolean(scene && savedProgress?.attempt
     && Number.isInteger(savedPosition) && savedPosition >= 0 && savedPosition < scene.beats.length
     && Number.isInteger(savedProgress.attempt.total)
     && savedProgress.attempt.total >= savedPosition && savedProgress.attempt.total <= savedPosition + 1);
-  const [incompatibleCheckpoint] = useState(() => Boolean(savedProgress?.attempt) && !checkpointMatchesLesson);
+  const [incompatibleCheckpoint, setIncompatibleCheckpoint] = useState(() => Boolean(savedProgress?.attempt) && !checkpointMatchesLesson);
   const [initialAttempt] = useState(() => checkpointMatchesLesson ? savedProgress?.attempt : undefined);
   const [initialBeatIndex, setInitialBeatIndex] = useState(() => scene && initialAttempt && (savedProgress?.lastBeatIndex ?? 0) < scene.beats.length ? savedProgress?.lastBeatIndex ?? 0 : 0);
   const [beatIndex, setBeatIndex] = useState(initialBeatIndex);
@@ -374,6 +374,8 @@ function SceneScreen() {
     void stopSpeaking();
     clearAudioError();
     resetTimer();
+    setLegacyCheckpoint(false);
+    setIncompatibleCheckpoint(false);
     autoPlayedBeatRef.current = null;
     setInitialBeatIndex(0);
     setBeatIndex(0);

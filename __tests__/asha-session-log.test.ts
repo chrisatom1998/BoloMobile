@@ -94,6 +94,15 @@ describe('Asha session log records', () => {
     expect(mergeAshaSessionRows(second, [row('live-0', 'you', 'I speak Hindi'), row('live-1', 'asha', 'Yes?')])).toBe(second);
   });
 
+  it('keeps a stored row when a later snapshot still lists that id but the text is blank', () => {
+    const first = mergeAshaSessionRows(started(), [row('live-2', 'you', 'Kept text', 0, 400)]);
+    const revised = mergeAshaSessionRows(first, [row('live-2', 'you', '   ', 0, 400), row('live-3', 'asha', 'Next', 500, 800)]);
+    expect(revised.rows).toEqual([
+      { id: 'live-2', speaker: 'you', text: 'Kept text', startMs: 0, endMs: 400 },
+      { id: 'live-3', speaker: 'asha', text: 'Next', startMs: 500, endMs: 800 },
+    ]);
+  });
+
   it('keeps early turns that slid out of the 100-row snapshot window across more than 100 rows', () => {
     let record = started();
     // Deliver 160 rows as the live store does: every snapshot is the newest 100 rows.

@@ -27,7 +27,7 @@ Verified against the source in this PR working tree. API code lives in `src/serv
 - `post()` in `bolo-api.ts` has a 30 s timeout. Network failures turn into `BoloApiError('Bolo is unavailable right now. Check your connection and try again.')` with no `status`, and timeouts into `'The request timed out…'`. There is no connectivity check before a request. The repo does not depend on `@react-native-community/netinfo` (`package.json`).
 - After the transport is up, the hook waits up to `START_TIMEOUT_MS` (15 s) for `session.started` and then sets status to `ready`.
 - `useAshaLiveSession()` (`src/hooks/use-asha-live-session.ts`) supplies the session `mode`, lesson `context` (`buildLiveSessionContext` in `src/lib/live-tools.ts`), and a client tool environment.
-- When a new session starts, the old conversation is wiped. On the Asha screen, `startNewConversation` → `resetChat()` → `clearChatHistory()` (`src/app/(tabs)/live.tsx`). In the floating host, `AshaVoiceSessionHost` calls `appRef.current.clearChatHistory()` on the `connecting → ready` transition (`src/state/asha-voice-session.tsx`).
+- When a new session starts, the old conversation is wiped. On the Asha screen, `startNewConversation` → `resetChat()` → `clearChatHistory()` (`src/app/(tabs)/live.tsx`). In the floating host, if the Asha screen is not listening, `AshaVoiceSessionHost` calls `clearChatHistory()` on the `disconnected → connecting` transition, before captions arrive. Becoming ready does not clear the transcript (`src/state/asha-voice-session.tsx`).
 
 ### Streaming and transcripts
 
