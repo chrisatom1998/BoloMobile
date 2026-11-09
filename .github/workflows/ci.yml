@@ -7,7 +7,10 @@ on:
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
-  cancel-in-progress: true
+  # Main pushes share this group. Leave the in-progress run alone: cancelling
+  # it made required-checks fail on cancelled macOS jobs and turn the commit red.
+  # Pull requests still cancel the previous run for the same ref.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -381,7 +384,11 @@ jobs:
 
   required-checks:
     name: required-checks
-    if: always()
+    # `cancelled()` is true only when the workflow run itself was cancelled, so
+    # this gate is skipped instead of failing the check. It still runs after a
+    # failed, skipped, or timed-out dependency. `always()` would run during a
+    # cancel and the non-success exit below would record a failure.
+    if: ${{ !cancelled() }}
     needs:
       - dependency-audit
       - verify
