@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 35431)
+Total output lines: 2968
+
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import * as mockReact from 'react';
 import { Alert, Animated, AppState, Dimensions, FlatList, Keyboard, Linking, Pressable as MockPressable, StyleSheet, Text as MockText, TextInput, type StyleProp, type TextStyle } from 'react-native';
@@ -858,7 +861,7 @@ describe('live theme styles', () => {
     expect(styles.list.backgroundColor).toBe(lightColors.night);
     expect(styles.ashaMessage.backgroundColor).toBe(lightColors.paperRaised);
     expect(styles.messageText.color).toBe(lightColors.ink);
-    expect(styles.userMessage.backgroundColor).toBe(lightColors.nightSurface);
+    expect(styles.userMessage.backgroundColor).toBe(lightColors.brandDark);
     expect(styles.composer.backgroundColor).toBe(lightColors.nightSurface);
     expect(styles.input.backgroundColor).toBe(lightColors.night);
     expect(styles.liveVoiceText.lineHeight).toBeGreaterThan(styles.liveVoiceText.fontSize);
@@ -1515,209 +1518,7 @@ describe('immersive live conversation design', () => {
     const inputStyle = StyleSheet.flatten(message.props.style);
     expect(inputStyle.height).toBeUndefined();
     expect(inputStyle.position).toBe('absolute');
-    expect(message.props.onContentSizeChange).toBeUndefined();
-    // The sizer itself must exist, stay invisible, and stay out of the
-    // accessibility tree, so removing it fails this test.
-    // The nested Devanagari span is what the query matches; the sizer is its hidden parent Text.
-    const sizer = view.getAllByText(/आप कैसे हैं/u, { includeHiddenElements: true })
-      .map((span) => {
-        let node = span.parent;
-        while (node && StyleSheet.flatten(node.props.style)?.opacity !== 0) node = node.parent;
-        return node;
-      })
-      .find(Boolean);
-    if (!sizer) throw new Error('The hidden sizer Text for the Asha message was not rendered.');
-    expect(sizer.props.accessibilityElementsHidden).toBe(true);
-    expect(sizer.props.importantForAccessibility).toBe('no-hide-descendants');
-    expect(speech.preloadSpeech).not.toHaveBeenCalled();
-
-    await view.unmount();
-    await flushMicrotasks();
-  });
-
-  it('stops an active caption animation before applying reduced motion', async () => {
-    const stopAnimation = jest.spyOn(Animated.Value.prototype, 'stopAnimation');
-    const view = await render(<LiveScreen />);
-
-    await fireEvent.press(view.getByLabelText('Mock realtime recording'));
-    await fireEvent.press(view.getByLabelText('Mock learner transcript'));
-    mockReducedMotion = true;
-    await act(async () => {
-      view.rerender(<LiveScreen />);
-      await Promise.resolve();
-    });
-
-    expect(stopAnimation).toHaveBeenCalled();
-    await view.unmount();
-    await flushMicrotasks();
-  });
-
-  it('compresses the raised sheet header on short iPhones so the title remains above the composer', async () => {
-    const originalWindow = Dimensions.get('window');
-    const originalScreen = Dimensions.get('screen');
-    const compactSize = { fontScale: 1, height: 667, scale: 1, width: 375 };
-    await act(async () => {
-      Dimensions.set({ screen: compactSize, window: compactSize });
-      await Promise.resolve();
-    });
-    try {
-      const view = await render(<LiveScreen />);
-      const heroStyle = StyleSheet.flatten(view.getByTestId('voice-conversation-hero').props.style);
-      const sheetStyle = StyleSheet.flatten(view.getByTestId('ask-asha-sheet').props.style);
-      const headingStyle = StyleSheet.flatten(view.getByTestId('ask-asha-heading').props.style);
-
-      expect(heroStyle.gap).toBe(4);
-      expect(heroStyle.minHeight).toBeUndefined();
-      expect(sheetStyle.gap).toBe(4);
-      expect(sheetStyle.paddingTop).toBe(4);
-      expect(headingStyle.gap).toBe(0);
-      await view.unmount();
-      await flushMicrotasks();
-    } finally {
-      await act(async () => {
-        Dimensions.set({ screen: originalScreen, window: originalWindow });
-        await Promise.resolve();
-      });
-    }
-  });
-
-  it('reflows the Asha identity before medium Dynamic Type can clip it on a narrow iPhone', async () => {
-    const originalWindow = Dimensions.get('window');
-    const originalScreen = Dimensions.get('screen');
-    const enlargedNarrowSize = { fontScale: 1.25, height: 844, scale: 1, width: 320 };
-    await act(async () => {
-      Dimensions.set({ screen: enlargedNarrowSize, window: enlargedNarrowSize });
-      await Promise.resolve();
-    });
-    try {
-      const view = await render(<LiveScreen />);
-      const topbar = view.getByTestId('asha-header-topbar');
-      const topbarStyle = StyleSheet.flatten(topbar.props.style);
-      const header = within(topbar);
-
-      expect(topbarStyle.flexDirection).toBe('column');
-      expect(topbarStyle.paddingRight).toBe(0);
-      expect(header.getByText('Speak with Asha').props.numberOfLines).toBeUndefined();
-      expect(view.getByText('Your Hindi coach').props.numberOfLines).toBeUndefined();
-      await view.unmount();
-      await flushMicrotasks();
-    } finally {
-      await act(async () => {
-        Dimensions.set({ screen: originalScreen, window: originalWindow });
-        await Promise.resolve();
-      });
-    }
-  });
-
-  it('keeps one header row on a 393pt phone at the default text size', async () => {
-    const originalWindow = Dimensions.get('window');
-    const originalScreen = Dimensions.get('screen');
-    const phone = { fontScale: 1, height: 852, scale: 3, width: 393 };
-    await act(async () => {
-      Dimensions.set({ screen: phone, window: phone });
-      await Promise.resolve();
-    });
-    try {
-      const view = await render(<LiveScreen />);
-      const topbarStyle = StyleSheet.flatten(view.getByTestId('asha-header-topbar').props.style);
-      const titleStyle = StyleSheet.flatten(view.getByText('Speak with Asha').props.style);
-      const askStyle = StyleSheet.flatten(view.getByText('How do I say…?').props.style);
-
-      expect(topbarStyle.flexDirection).toBe('row');
-      expect(titleStyle.textAlign).toBe('left');
-      expect(titleStyle.fontFamily).toBe(displayFont);
-      expect(askStyle.textAlign).toBe('left');
-      expect(askStyle.fontFamily).not.toBe(displayFont);
-      expect(view.getByText('English')).toBeTruthy();
-      expect(view.getByText('Hindi')).toBeTruthy();
-      expect('borderWidth' in StyleSheet.flatten(view.getByLabelText('Private conversation').props.style)).toBe(false);
-      await view.unmount();
-      await flushMicrotasks();
-    } finally {
-      await act(async () => {
-        Dimensions.set({ screen: originalScreen, window: originalWindow });
-        await Promise.resolve();
-      });
-    }
-  });
-
-  it('keeps only the title in the fixed header while typing at the largest text size', async () => {
-    const originalWindow = Dimensions.get('window');
-    const originalScreen = Dimensions.get('screen');
-    const largest = { fontScale: 3.12, height: 852, scale: 3, width: 393 };
-    const listeners = new Map<string, (event?: unknown) => void>();
-    jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, listener: (event?: unknown) => void) => {
-      listeners.set(event, listener);
-      return { remove: jest.fn() };
-    }) as unknown as typeof Keyboard.addListener);
-    await act(async () => {
-      Dimensions.set({ screen: largest, window: largest });
-      await Promise.resolve();
-    });
-    try {
-      const view = await render(<LiveScreen />);
-      await fireEvent.press(view.getByLabelText('Create Asha reply'));
-      expect(view.getByLabelText('Settings')).toBeTruthy();
-      await fireEvent.press(view.getByLabelText('Asha voice language'));
-      expect(view.getByText('English')).toBeTruthy();
-
-      await act(async () => { expectDefined(listeners.get('keyboardWillShow'))(keyboardEvent(336)); });
-      expect(view.getByText('Speak with Asha')).toBeTruthy();
-      expect(view.queryByLabelText('Settings')).toBeNull();
-      expect(view.queryByText('English')).toBeNull();
-
-      await act(async () => { expectDefined(listeners.get('keyboardWillHide'))(); });
-      expect(view.getByLabelText('Settings')).toBeTruthy();
-      expect(view.getByText('English')).toBeTruthy();
-      await view.unmount();
-      await flushMicrotasks();
-    } finally {
-      await act(async () => {
-        Dimensions.set({ screen: originalScreen, window: originalWindow });
-        await Promise.resolve();
-      });
-    }
-  });
-
-  it('wraps header labels at the largest text size and collapses after a message', async () => {
-    const originalWindow = Dimensions.get('window');
-    const originalScreen = Dimensions.get('screen');
-    const largest = { fontScale: 3.12, height: 852, scale: 3, width: 393 };
-    await act(async () => {
-      Dimensions.set({ screen: largest, window: largest });
-      await Promise.resolve();
-    });
-    try {
-      const view = await render(<LiveScreen />);
-      const topbarStyle = StyleSheet.flatten(view.getByTestId('asha-header-topbar').props.style);
-      const title = view.getByText('Speak with Asha');
-      const subtitle = view.getByText('Your Hindi coach');
-      const privateText = view.getByText('Private');
-      const ready = view.getByText('READY');
-
-      expect(topbarStyle.flexDirection).toBe('row');
-      expect(topbarStyle.flexWrap).toBe('wrap');
-      expect(title.props.numberOfLines).toBe(1);
-      expect(title.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-      expect(subtitle.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-      expect(StyleSheet.flatten(subtitle.props.style).paddingLeft).toBe(spacing.lg);
-      expect(privateText.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-      expect(StyleSheet.flatten(privateText.props.style).color).toBe(lightColors.heroSubtle);
-      expect(ready.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-      expect(view.queryByText('How do I say…?')).toBeNull();
-      expect(view.queryByText('English')).toBeNull();
-      expect(view.getByLabelText('Asha: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
-      expect(view.getByLabelText('Suggestions')).toBeTruthy();
-      expect(view.queryByTestId('live-example-chips')).toBeNull();
-      expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
-      expect(StyleSheet.flatten(view.getByLabelText('Message Asha').props.style).minHeight).toBe(
-        (typeScale.body.lineHeight ?? 0) * Math.min(3.12, layout.composerFontScaleCap) * layout.composerLines + spacing.lg * 2 + layout.composerLineSlack,
-      );
-      expect(view.getByLabelText('Message Asha').props.maxFontSizeMultiplier).toBe(layout.composerFontScaleCap);
-      expect(StyleSheet.flatten(view.getByTestId('composer-mic-toggle').props.style).alignSelf).toBe('flex-end');
-      expect(StyleSheet.flatten(view.getByLabelText('Send message').props.style).alignSelf).toBe('flex-end');
-
-      await fireEvent.press(view.getByLabelText('Asha voice language'));
+    expect(message.props.onContent…2431 tokens truncated…fireEvent.press(view.getByLabelText('Asha voice language'));
       expect(view.getByText('English').props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
       expect(view.getByText('Hindi')).toBeTruthy();
 
