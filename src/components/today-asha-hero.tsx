@@ -1,10 +1,11 @@
 import { Image } from 'expo-image';
+import { Mic } from 'lucide-react-native';
 import { Text, View } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import type { RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { ashaStatusCopy } from '@/lib/asha-status-copy';
-import { layout, makeStyles, radius, spacing, type NamedStyles, type } from '@/theme';
+import { layout, makeStyles, radius, spacing, type NamedStyles, type, useTheme } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 
@@ -30,6 +31,7 @@ type Props = {
  */
 export function TodayAshaHero({ compact, onPress, status, welcome = false }: Props) {
   const styles = useStyles();
+  const { colors } = useTheme();
   const copy = ashaStatusCopy(status);
   const live = status !== 'disconnected';
   const recording = status === 'recording';
@@ -43,6 +45,9 @@ export function TodayAshaHero({ compact, onPress, status, welcome = false }: Pro
         <Pressable accessibilityLabel="Talk to Asha" accessibilityRole="button" onPress={onPress} style={[styles.portraitButton, compact && styles.portraitButtonCompact]} testID="today-asha-portrait">
           <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={[styles.portrait, compact && styles.portraitCompact]} transition={0} />
         </Pressable>
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.micBadge}>
+          <Mic color={colors.white} size={layout.goalCheckIconSize} strokeWidth={2.2} />
+        </View>
       </View>
       <View style={styles.copy}>
         {live ? (
@@ -75,6 +80,18 @@ const useStyles = makeStyles((c) => ({
   portraitButtonCompact: { width: portraitSizeCompact, height: portraitSizeCompact },
   portrait: { width: portraitSize, height: portraitSize, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.brandSoft },
   portraitCompact: { width: portraitSizeCompact, height: portraitSizeCompact },
+  micBadge: {
+    position: 'absolute',
+    bottom: 0,
+    width: layout.touchTarget,
+    height: layout.touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    borderColor: c.backgroundWarm,
+    backgroundColor: c.brand,
+  },
   copy: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm },
   // Only rendered while live, so the pill is always the brand-soft variant.
   pill: { minHeight: layout.statusPillMinHeight, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.brandSoft, borderColor: c.brandSoft, borderWidth: 1, paddingHorizontal: spacing.md },
