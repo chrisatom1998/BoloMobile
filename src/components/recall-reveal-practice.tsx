@@ -146,8 +146,9 @@ const useStyles = makeStyles((c) => ({
   gradeRow: { flexDirection: 'row', gap: spacing.sm },
   gradeWrong: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   gradeWrongText: { ...type.label, color: c.danger, fontWeight: '700' },
-  gradeRight: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.success, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  gradeRightText: { ...type.label, color: c.white, fontWeight: '700' },
+  // Same size, gap and padding as Needs work so the two grades match in the row.
+  gradeRight: { ...buttons.positive, minHeight: 48, flex: 1, gap: spacing.xs, paddingHorizontal: spacing.md },
+  gradeRightText: buttons.positiveText,
   disabled: { opacity: 0.4 },
   footer: { ...type.caption, color: c.muted },
 }));

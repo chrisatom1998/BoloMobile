@@ -197,6 +197,7 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   compactCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
   compactBody: { ...type.caption, color: c.muted },
+  // No side padding, so the link's text lines up with compactBody above it, as before the quiet variant.
   compactButton: { ...buttons.quiet, alignSelf: 'flex-start', paddingHorizontal: 0 },
   compactButtonText: buttons.quietText,
   sheetScreen: { flex: 1, backgroundColor: c.background },
