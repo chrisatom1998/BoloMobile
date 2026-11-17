@@ -29,6 +29,52 @@ export function splitTranslationNote(text: string): { english: string; note: str
   return { english: trimmed, note: '' };
 }
 
+/** A pause this long between two pieces of English marks a new translation, not a breath. */
+const NEW_TRANSLATION_GAP_MS = 250;
+
+type PairingUnit = { id: string; speaker: LiveTranscriptRow['speaker']; text: string };
+
+/**
+ * The transcript store glues English that arrives close together into one row, even when
+ * somebody spoke again in between. That would give the first line both translations and
+ * leave the second with none, so an English row is split again wherever a new Hindi line
+ * began during a pause in it. The later part is placed after that Hindi line.
+ */
+function toPairingUnits(rows: readonly LiveTranscriptRow[]): PairingUnit[] {
+  const heard = rows.filter((row) => row.speaker === 'you' && row.text.trim());
+  const after = new Map<string, PairingUnit[]>();
+  const units: PairingUnit[] = [];
+  for (const row of rows) {
+    if (row.speaker === 'you') {
+      units.push({ id: row.id, speaker: 'you', text: row.text }, ...(after.get(row.id) ?? []));
+      continue;
+    }
+    const fragments = row.fragments ?? [];
+    let text = fragments.length ? '' : row.text;
+    let part = 0;
+    // The first part stays where the row is; a later part follows the line that interrupted it.
+    let holder: string | null = null;
+    const flush = () => {
+      const unit: PairingUnit = { id: part ? `${row.id}-part${part}` : row.id, speaker: 'asha', text };
+      if (holder) after.set(holder, [...(after.get(holder) ?? []), unit]);
+      else units.push(unit);
+      text = '';
+      part += 1;
+    };
+    fragments.forEach((fragment, index) => {
+      const previous = fragments[index - 1];
+      if (previous && fragment.start_ms - previous.end_ms >= NEW_TRANSLATION_GAP_MS) {
+        const interrupter = heard.find((line) => line.startMs >= previous.end_ms && line.startMs <= fragment.start_ms
+          && rows.indexOf(line) > rows.indexOf(row));
+        if (interrupter) { flush(); holder = interrupter.id; }
+      }
+      text += fragment.delta;
+    });
+    flush();
+  }
+  return units;
+}
+
 /**
  * Pairs what was heard with its translation. The live session reports heard speech
  * and the interpreter's reply as two separate streams, in the order they arrive.
@@ -36,7 +82,7 @@ export function splitTranslationNote(text: string): { english: string; note: str
  */
 export function pairTranslationLines(rows: readonly LiveTranscriptRow[]): TranslationLine[] {
   const lines: { id: string; hindi: string; raw: string }[] = [];
-  for (const row of rows) {
+  for (const row of toPairingUnits(rows)) {
     const text = row.text.trim();
     if (!text) continue;
     if (row.speaker === 'you') {

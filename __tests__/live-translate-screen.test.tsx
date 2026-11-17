@@ -115,5 +115,9 @@ describe('Live Translate screen', () => {
     expect(screen.getByTestId('translate-big-text')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('translate-clear'));
     expect(screen.queryByText('Food is ready.')).toBeNull();
+    // The session still holds its full history; cleared lines must not come back with the next one.
+    await act(async () => mockOptions.onTranscriptSnapshot?.([row('c', 'you', 'खाना तैयार है।'), row('d', 'asha', 'Food is ready.'), row('e', 'you', 'चाय पियोगे?'), row('f', 'asha', 'Will you have tea?')]));
+    expect(screen.queryByText('Food is ready.')).toBeNull();
+    expect(screen.getByText('Will you have tea?')).toBeTruthy();
   });
 });

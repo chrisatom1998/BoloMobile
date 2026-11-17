@@ -49,6 +49,8 @@ export default function LiveTranslateScreen() {
   const [replies, setReplies] = useState<Record<string, ReplyHelp>>({});
   const [elapsedMs, setElapsedMs] = useState(0);
   const rowsRef = useRef(rows);
+  /** Ids of transcript rows removed by Clear while the session kept listening. */
+  const clearedRef = useRef(new Set<string>());
   const scrollRef = useRef<ScrollView>(null);
   const followingRef = useRef(true);
   const replyRequestsRef = useRef(new Map<string, AbortController>());
@@ -59,6 +61,8 @@ export default function LiveTranslateScreen() {
   const archiveCurrent = useCallback(() => {
     const finished = pairTranslationLines(rowsRef.current).filter((line) => line.hindi || line.english);
     rowsRef.current = [];
+    // A new connection starts a fresh transcript with new ids.
+    clearedRef.current.clear();
     setRows([]);
     if (finished.length) setEarlier((previous) => [...previous, ...finished.map((line) => ({ ...line, pending: false }))].slice(-200));
   }, []);
@@ -71,7 +75,12 @@ export default function LiveTranslateScreen() {
     muteAssistantAudio: true,
     onConnectionStart: archiveCurrent,
     onError: setError,
-    onTranscriptSnapshot: (snapshot) => { rowsRef.current = snapshot; setRows(snapshot); },
+    onTranscriptSnapshot: (snapshot) => {
+      // The session keeps its whole history, so lines removed by Clear are filtered out again.
+      const kept = clearedRef.current.size ? snapshot.filter((row) => !clearedRef.current.has(row.id)) : snapshot;
+      rowsRef.current = kept;
+      setRows(kept);
+    },
   });
   const { disconnect, finishTurn, microphoneEnabled, startTurn, status } = voice;
   const connected = status !== 'disconnected';
@@ -128,6 +137,7 @@ export default function LiveTranslateScreen() {
   const clear = useCallback(() => {
     replyRequestsRef.current.forEach((controller) => controller.abort());
     replyRequestsRef.current.clear();
+    rowsRef.current.forEach((row) => clearedRef.current.add(row.id));
     rowsRef.current = [];
     setRows([]);
     setEarlier([]);

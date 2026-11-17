@@ -1,5 +1,5 @@
 import { buildReplyContext, formatListeningTime, pairTranslationLines, REPLY_HELP_QUESTION, splitTranslationNote } from '@/lib/live-translate';
-import type { LiveTranscriptRow } from '@/lib/live-transcripts';
+import { createLiveTranscriptStore, type LiveTranscriptRow } from '@/lib/live-transcripts';
 import { buildMobileChatPayload, createLiveCall } from '@/services/bolo-api';
 
 function row(id: string, speaker: 'you' | 'asha', text: string): LiveTranscriptRow {
@@ -7,6 +7,20 @@ function row(id: string, speaker: 'you' | 'asha', text: string): LiveTranscriptR
 }
 
 describe('Live Translate pairing', () => {
+  it('gives each line its own translation when the store merges two close English replies', () => {
+    const store = createLiveTranscriptStore('t');
+    store.append('you', { delta: 'खाना तैयार है।', start_ms: 0, end_ms: 500 });
+    store.append('asha', { delta: 'Food is ', start_ms: 1000, end_ms: 1500 });
+    store.append('asha', { delta: 'ready.', start_ms: 1500, end_ms: 2000 });
+    store.append('you', { delta: 'चाय बना दो ना', start_ms: 2500, end_ms: 2900 });
+    const rows = store.append('asha', { delta: 'Please make tea.', start_ms: 3000, end_ms: 3500 })!.rows;
+    expect(rows.filter((entry) => entry.speaker === 'asha')).toHaveLength(1);
+    expect(pairTranslationLines(rows).map(({ hindi, english, pending }) => ({ hindi, english, pending }))).toEqual([
+      { hindi: 'खाना तैयार है।', english: 'Food is ready.', pending: false },
+      { hindi: 'चाय बना दो ना', english: 'Please make tea.', pending: false },
+    ]);
+  });
+
   it('pairs each heard line with the translation that follows it', () => {
     expect(pairTranslationLines([
       row('a', 'you', 'खाना तैयार है।'),
