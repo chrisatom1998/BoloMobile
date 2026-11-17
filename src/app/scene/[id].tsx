@@ -884,7 +884,7 @@ const useStyles = makeStyles((c) => ({
   ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
   asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft }, // Asha's small portrait in the scene header.
-  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: radius.xl, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
+  bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: radius.xl, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs }, // The 6pt top-left corner is the speech-bubble tail toward Asha.
   bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
   speakerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   speakerName: { ...type.caption, color: c.muted, fontWeight: '600' },

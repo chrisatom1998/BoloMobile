@@ -162,8 +162,8 @@ const useStyles = makeStyles((c) => ({
     borderLeftColor: c.gold,
     borderTopRightRadius: radius.md,
     borderBottomRightRadius: radius.md,
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
+    borderTopLeftRadius: 6, // Tighter corners on the gold accent edge.
+    borderBottomLeftRadius: 6, // Same as top-left.
     borderCurve: 'continuous',
     paddingVertical: spacing.md,
     paddingLeft: spacing.md,
