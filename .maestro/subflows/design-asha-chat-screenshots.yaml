@@ -1,0 +1,85 @@
+appId: com.bolo.hindi
+---
+# ONE-TIME PR screenshots for #175, approved by Chris on 2026-11-17: sends
+# exactly one real typed message to the live Bolo API to capture a phrase card
+# and a Hindi chat line. Reverted right after its CI run. Every step is
+# optional or a screenshot, and it runs last, so the smoke flow passes either way.
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+- runFlow: dismiss-dev-menu.yaml
+- openLink: bolo://live
+- tapOn:
+    text: "Open"
+    optional: true
+- scrollUntilVisible:
+    element:
+      id: "type-to-asha"
+    direction: DOWN
+    speed: 40
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 20000
+    optional: true
+- tapOn:
+    id: "type-to-asha"
+    optional: true
+- extendedWaitUntil:
+    visible: "Enable live practice"
+    timeout: 10000
+    optional: true
+- scrollUntilVisible:
+    element:
+      text: "Enable live practice"
+    direction: DOWN
+    speed: 60
+    visibilityPercentage: 80
+    centerElement: false
+    timeout: 20000
+    optional: true
+- tapOn:
+    text: "Enable live practice"
+    optional: true
+- tapOn:
+    id: "message-asha-input"
+    optional: true
+- inputText:
+    text: "How do I say thank you in Hindi?"
+    optional: true
+- takeScreenshot:
+    path: design-chat/composer-typed
+- tapOn:
+    id: "send-asha-message"
+    optional: true
+    retryTapIfNoChange: false
+- extendedWaitUntil:
+    visible:
+      id: "chat-phrase-.*-0"
+    timeout: 90000
+    optional: true
+- takeScreenshot:
+    path: design-chat/reply
+- scrollUntilVisible:
+    element:
+      id: "chat-phrase-.*-0"
+    direction: DOWN
+    speed: 40
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design-chat/phrase-card
+- scrollUntilVisible:
+    element:
+      id: "live-transcript-assistant"
+    direction: UP
+    speed: 40
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design-chat/hindi-line
