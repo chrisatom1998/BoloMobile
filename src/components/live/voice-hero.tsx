@@ -110,7 +110,7 @@ export function VoiceHero({
                 </View>
                 )}
                 {/* Live Translate has its own screen. Offered only between calls, since both use the microphone. */}
-                {realtimeStatus === 'disconnected' && !liveConfigError && !headerCollapsed && !conversationStarted ? (
+                {realtimeStatus === 'disconnected' && !liveConfigError && !headerCollapsed ? (
                   <Pressable
                     accessibilityHint="Opens Live Translate, which listens to Hindi spoken nearby and shows it in English."
                     accessibilityLabel="Live Translate"

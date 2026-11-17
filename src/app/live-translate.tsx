@@ -1,5 +1,5 @@
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { ChevronLeft, Cloud, EyeOff, MessageCircle, Mic, Pause, Play, Square, Trash2, Type as TypeIcon, Users } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -78,11 +78,13 @@ export default function LiveTranslateScreen() {
   const connecting = status === 'connecting';
   const listening = connected && microphoneEnabled;
 
-  // The Asha tab is a night surface with a light status bar; this screen matches it.
-  useEffect(() => {
+  // A night surface needs light status bar text. The Asha tab resets the bar to dark as it
+  // loses focus, which can land after this screen mounts, so apply it again on the next frame.
+  useFocusEffect(useCallback(() => {
     setStatusBarStyle('light', true);
-    return () => setStatusBarStyle('dark', true);
-  }, []);
+    const frame = requestAnimationFrame(() => setStatusBarStyle('light', true));
+    return () => { cancelAnimationFrame(frame); setStatusBarStyle('dark', true); };
+  }, []));
 
   // A phone left on the table must not auto-lock: locking ends the session.
   useEffect(() => {
@@ -279,7 +281,7 @@ export default function LiveTranslateScreen() {
         </View>
       ) : null}
 
-      {error ? <Text accessibilityRole="alert" style={styles.error} testID="translate-error">{error}</Text> : null}
+      {error ? <View style={styles.errorCard}><Text accessibilityRole="alert" style={styles.errorCardText} testID="translate-error">{error}</Text></View> : null}
 
       {showIntro ? (
         <ScrollView contentContainerStyle={styles.intro} style={styles.fill}>
@@ -343,6 +345,8 @@ const useStyles = makeStyles((c) => ({
   clearButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
   clearText: { ...type.caption, fontWeight: '600', color: c.gold },
   error: { ...type.caption, color: c.dangerSoft, paddingHorizontal: spacing.gutter, paddingVertical: spacing.sm },
+  errorCard: { marginHorizontal: spacing.gutter, marginVertical: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine },
+  errorCardText: { ...type.body, color: c.danger },
   feed: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', gap: spacing.md, paddingHorizontal: spacing.gutter, paddingTop: spacing.sm, paddingBottom: spacing.xl },
   card: { backgroundColor: c.paper, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs, borderWidth: 2, borderColor: c.paper },
   cardPending: { borderColor: c.gold, borderStyle: 'dashed' },

@@ -19,7 +19,7 @@ let mockVoice = { status: 'disconnected', microphoneEnabled: false };
 let mockConsent = true;
 let mockOptions: HookOptions = {};
 
-jest.mock('expo-router', () => ({ Stack: { Screen: () => null }, useRouter: () => ({ back: mockBack }) }));
+jest.mock('expo-router', () => ({ Stack: { Screen: () => null }, useFocusEffect: (effect: () => void | (() => void)) => jest.requireActual('react').useEffect(effect, [effect]), useRouter: () => ({ back: mockBack }) }));
 jest.mock('expo-status-bar', () => ({ setStatusBarStyle: jest.fn() }));
 jest.mock('expo-keep-awake', () => ({ activateKeepAwakeAsync: jest.fn(async () => undefined), deactivateKeepAwake: jest.fn(async () => undefined) }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
@@ -108,7 +108,7 @@ describe('Live Translate screen', () => {
     const screen = await render(<LiveTranslateScreen />);
     await act(async () => mockOptions.onTranscriptSnapshot?.([row('a', 'you', 'नमस्ते'), row('b', 'asha', 'Hello.')]));
     await act(async () => mockOptions.onConnectionStart?.(new AbortController().signal));
-    await act(async () => mockOptions.onTranscriptSnapshot?.([row('a', 'you', 'खाना तैयार है।'), row('b', 'asha', 'Food is ready.')]));
+    await act(async () => mockOptions.onTranscriptSnapshot?.([row('c', 'you', 'खाना तैयार है।'), row('d', 'asha', 'Food is ready.')]));
     expect(screen.getByText('Hello.')).toBeTruthy();
     expect(screen.getByText('Food is ready.')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('translate-big-text-toggle'));
