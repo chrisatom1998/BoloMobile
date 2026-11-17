@@ -99,8 +99,8 @@ describe('Live Translate screen', () => {
     await fireEvent.press(screen.getByTestId('translate-ask-reply'));
     await waitFor(() => expect(screen.getByText('Haan ji, thodi aur.')).toBeTruthy());
     expect(screen.getByText('Yes please, a little more.')).toBeTruthy();
-    expect(mockSendMobileChat.mock.calls[0]![0]).toMatchObject({ clientId: 'mobile-client-123', structuredReply: true, messages: [] });
-    expect(mockSendMobileChat.mock.calls[0]![0].text).toContain('और रोटी चाहिए क्या?');
+    expect(mockSendMobileChat.mock.calls[0]![0]).toMatchObject({ clientId: 'mobile-client-123', structuredReply: true });
+    expect(mockSendMobileChat.mock.calls[0]![0].messages[0].text).toContain('और रोटी चाहिए क्या?');
   });
 
   it('keeps earlier lines when listening restarts, switches to big text, and clears on request', async () => {

@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AiConsentGate } from '@/components/ai-consent-gate';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useRealtimeConversation, type LiveTranscriptRow } from '@/hooks/use-realtime-conversation';
-import { buildReplyPrompt, formatListeningTime, pairTranslationLines, type TranslationLine } from '@/lib/live-translate';
+import { buildReplyContext, formatListeningTime, pairTranslationLines, REPLY_HELP_QUESTION, type TranslationLine } from '@/lib/live-translate';
 import { endRealtimeVoiceSession } from '@/lib/voice';
 import { LIVE_TRANSLATE_MODE, liveVoiceConfigError, sendMobileChat } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
@@ -139,7 +139,7 @@ export default function LiveTranslateScreen() {
     const controller = new AbortController();
     replyRequestsRef.current.set(line.id, controller);
     setReplies((previous) => ({ ...previous, [line.id]: { status: 'loading' } }));
-    sendMobileChat({ clientId, messages: [], responseLanguage: 'en', structuredReply: true, text: buildReplyPrompt(line) }, controller.signal)
+    sendMobileChat({ clientId, messages: [{ id: `translate-${line.id}`, role: 'you', text: buildReplyContext(line) }], responseLanguage: 'en', structuredReply: true, text: REPLY_HELP_QUESTION }, controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
         setReplies((previous) => ({ ...previous, [line.id]: { status: 'done', phrases: result.structured?.phrases?.slice(0, 2) ?? [], text: result.reply.trim() } }));

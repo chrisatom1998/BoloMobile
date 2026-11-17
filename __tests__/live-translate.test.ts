@@ -1,6 +1,6 @@
-import { buildReplyPrompt, formatListeningTime, pairTranslationLines, splitTranslationNote } from '@/lib/live-translate';
+import { buildReplyContext, formatListeningTime, pairTranslationLines, REPLY_HELP_QUESTION, splitTranslationNote } from '@/lib/live-translate';
 import type { LiveTranscriptRow } from '@/lib/live-transcripts';
-import { createLiveCall } from '@/services/bolo-api';
+import { buildMobileChatPayload, createLiveCall } from '@/services/bolo-api';
 
 function row(id: string, speaker: 'you' | 'asha', text: string): LiveTranscriptRow {
   return { id, speaker, text, startMs: 0, endMs: 0, fragments: [] };
@@ -53,10 +53,17 @@ describe('Live Translate pairing', () => {
   it('formats listening time and builds the reply question from the line', () => {
     expect(formatListeningTime(0)).toBe('0:00');
     expect(formatListeningTime(252_900)).toBe('4:12');
-    const prompt = buildReplyPrompt({ hindi: 'और रोटी चाहिए क्या?', english: 'Do you want more roti?' });
-    expect(prompt).toContain('और रोटी चाहिए क्या?');
-    expect(prompt).toContain('Do you want more roti?');
-    expect(prompt).toContain('romanization');
+    const context = buildReplyContext({ hindi: 'और रोटी चाहिए क्या?', english: 'Do you want more roti?' });
+    expect(context).toContain('और रोटी चाहिए क्या?');
+    expect(context).toContain('Do you want more roti?');
+    expect(REPLY_HELP_QUESTION).toContain('romanization');
+  });
+
+  it('keeps the reply question within the chat server\u2019s 500 character message limit', () => {
+    const long = { hindi: 'क'.repeat(400), english: 'x'.repeat(400) };
+    const payload = buildMobileChatPayload({ clientId: 'mobile-client-123', messages: [{ id: 'a', role: 'you', text: buildReplyContext(long) }], responseLanguage: 'en', structuredReply: true, text: REPLY_HELP_QUESTION });
+    expect(payload.text!.length).toBeLessThanOrEqual(500);
+    expect(payload.messages[0]!.text.length).toBeLessThanOrEqual(600);
   });
 
   it('still rejects unknown live modes before any request', async () => {

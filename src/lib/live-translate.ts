@@ -62,14 +62,19 @@ export function formatListeningTime(elapsedMs: number): string {
   return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-/** The typed question Asha gets when the learner taps "Ask Asha how to reply" on a line. */
-export function buildReplyPrompt(line: Pick<TranslationLine, 'hindi' | 'english'>): string {
-  const heard = line.hindi.trim().slice(0, 300);
-  const meaning = line.english.trim().slice(0, 300);
+/**
+ * The question Asha gets when the learner taps "Ask Asha how to reply" on a line.
+ * The chat server rejects a message over 500 characters, and the app adds Asha's own
+ * instructions to it, so the ask stays short and the heard line travels as chat context.
+ */
+export const REPLY_HELP_QUESTION = 'What could I say back? Give 1 or 2 short, polite Hindi replies a beginner can say, each with romanization and English.';
+
+export function buildReplyContext(line: Pick<TranslationLine, 'hindi' | 'english'>): string {
+  const heard = line.hindi.trim().slice(0, 240);
+  const meaning = line.english.trim().slice(0, 240);
   return [
-    'A family member just said this to me in Hindi and I do not speak Hindi well.',
+    'A family member just said this to me in Hindi.',
     heard ? `They said: "${heard}"` : '',
     meaning ? `It means: "${meaning}"` : '',
-    'Give me one or two short, natural, polite things I could say back in Hindi. For each, give the Devanagari, an easy romanization, and the English meaning. Keep them simple enough for a beginner to say aloud.',
   ].filter(Boolean).join(' ');
 }
