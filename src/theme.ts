@@ -223,6 +223,13 @@ export const type = {
   eyebrow: { fontSize: 12, lineHeight: 16, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
 } as const satisfies Record<string, TextStyle>;
 
+/**
+ * Lining, tabular figures for any style that renders numbers (counts, minutes, streaks,
+ * "Turn 2 of 6"): Georgia's old-style 0 otherwise reads as o, and counts stop jittering
+ * as they change. Spread as `fontVariant: numeralVariant`.
+ */
+export const numeralVariant: NonNullable<TextStyle['fontVariant']> = ['lining-nums', 'tabular-nums'];
+
 /** Widest comfortable measure for a single content column on tablets. */
 export const maxContentWidth = 640;
 

@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { hindiType, layout, maxContentWidth, radius, spacing, type, useTheme } from '@/theme';
+import { hindiType, layout, maxContentWidth, numeralVariant, radius, spacing, type, useTheme } from '@/theme';
 
 export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   screen: { flex: 1, backgroundColor: c.night },
@@ -175,7 +175,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },
   composerMic: { alignSelf: 'flex-end', width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  charCount: { ...type.caption, color: c.heroSubtle, textAlign: 'right', fontWeight: '600' },
+  charCount: { ...type.caption, color: c.heroSubtle, textAlign: 'right', fontVariant: numeralVariant, fontWeight: '600' },
   charCountLimit: { color: c.gold },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   input: { ...type.body, flex: 1, minHeight: 52, maxHeight: 120, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },

@@ -11,7 +11,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { currentLessonPlan, inProgressLesson } from '@/lib/lesson-path';
 import type { SceneProgress } from '@/state/app-state-types';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
+import { displayFont, makeStyles, numeralVariant, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
 
 /** Scroll distance after which the plan's large in-page title has left the screen. */
 const DETAIL_TITLE_SCROLL_OFFSET = 120;
@@ -252,7 +252,7 @@ const useStyles = makeStyles((c) => ({
   headingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   headingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   headingCopyLarge: { flex: 0, width: '100%' },
-  title: { ...type.display, textAlign: 'left' },
+  title: { ...type.display, fontVariant: numeralVariant, textAlign: 'left' },
   titleLarge: { maxWidth: '100%' },
   detailTitle: { ...type.display, textAlign: 'left' },
   detailTitleLarge: { maxWidth: '100%' },
@@ -263,18 +263,18 @@ const useStyles = makeStyles((c) => ({
   plans: { width: '100%', gap: spacing.md },
   detailSummary: { width: '100%', gap: spacing.sm, borderRadius: radius.lg, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
   detailSummaryTopline: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  detailSummaryLabel: { ...type.label, color: c.ink, fontWeight: '700' },
-  detailSummaryPercent: { ...type.label, color: c.brandText, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
+  detailSummaryLabel: { ...type.label, color: c.ink, fontVariant: numeralVariant, fontWeight: '700' },
+  detailSummaryPercent: { ...type.label, color: c.brandText, fontVariant: numeralVariant, fontWeight: '700' },
   detailCue: { ...type.caption, color: c.muted },
   lessons: { width: '100%', gap: spacing.sm },
   lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
   lessonCardCurrent: { backgroundColor: c.brandSoft, borderLeftWidth: 4, borderLeftColor: c.brand },
   lessonCardLarge: { alignItems: 'flex-start', minHeight: 96, padding: spacing.lg },
-  lessonNumberText: { ...type.bodyLarge, minWidth: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
+  lessonNumberText: { ...type.bodyLarge, minWidth: 28, color: c.mutedSoft, fontFamily: displayFont, fontVariant: numeralVariant, fontWeight: '700' },
   lessonNumberTextComplete: { color: c.forestText },
   lessonNumberTextCurrent: { color: c.ink },
   lessonCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
-  lessonStatus: { ...type.eyebrow, color: c.brandText },
+  lessonStatus: { ...type.eyebrow, color: c.brandText, fontVariant: numeralVariant },
   lessonTitle: { ...type.headline, color: c.ink },
   lessonSubtitle: { ...type.caption, color: c.muted },
   lessonArrow: { ...type.headline, color: c.mutedSoft, fontWeight: '400' },
@@ -284,9 +284,9 @@ const useStyles = makeStyles((c) => ({
   planCardLarge: { padding: spacing.lg, gap: spacing.sm },
   planAccent: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   planTopline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
-  planOrder: { ...type.eyebrow, color: c.brandText },
+  planOrder: { ...type.eyebrow, color: c.brandText, fontVariant: numeralVariant },
   planOrderCurrent: { color: c.brandText },
-  planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
+  planMeta: { ...type.caption, color: c.muted, fontVariant: numeralVariant, fontWeight: '700' },
   planTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   planCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   planTitle: { ...type.headline, color: c.ink },
