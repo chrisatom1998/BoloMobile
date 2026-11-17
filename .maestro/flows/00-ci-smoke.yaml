@@ -88,3 +88,5 @@ tags:
 - runFlow: ../subflows/design-larger-text-screenshots.yaml
 # PR screenshots only, after every smoke assertion: Today at the largest text size.
 - runFlow: ../subflows/today-largest-text-screenshots.yaml
+# PR screenshots only: the Asha tab at the same largest text size.
+- runFlow: ../subflows/design-asha-largest-text-screenshots.yaml
