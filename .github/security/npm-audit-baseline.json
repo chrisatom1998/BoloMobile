@@ -1,5 +1,31 @@
 {
   "schemaVersion": 2,
-  "reviewBy": "2027-01-01",
-  "allowedAdvisories": []
+  "reviewBy": "2027-01-15",
+  "allowedAdvisories": [
+    {
+      "package": "picomatch",
+      "advisory": "GHSA-fc5q-39xc-vjpf",
+      "severity": "high",
+      "usage": "build-only",
+      "rationale": "Reached only through build and test tooling (Expo CLI, Metro, Jest, tinyglobby) that matches repo file paths; not bundled into the app. No patched picomatch release exists yet (all versions <=4.0.7 affected). Accepted by chris johnson until 2027-01-15.",
+      "pathFingerprint": {
+        "isDirect": false,
+        "nodes": [
+          "node_modules/anymatch/node_modules/picomatch",
+          "node_modules/jest-util/node_modules/picomatch",
+          "node_modules/micromatch/node_modules/picomatch",
+          "node_modules/picomatch"
+        ],
+        "effects": [
+          "@expo/cli",
+          "@expo/metro-config",
+          "anymatch",
+          "fdir",
+          "jest-util",
+          "micromatch",
+          "tinyglobby"
+        ]
+      }
+    }
+  ]
 }

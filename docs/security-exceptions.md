@@ -1,6 +1,10 @@
 # Dependency security exceptions
 
-No temporary high-severity exceptions are active.
+One temporary high-severity exception is active.
+
+## Active exceptions
+
+- [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) (`picomatch`, ReDoS through single-branch repeated extglobs). Published 2026-11-17. Every released `picomatch` version (up to 4.0.7) is affected, so no upgrade clears it. It is reached only through build and test tooling (Expo CLI, Metro, Jest, tinyglobby) that matches file paths from this repo, never user input, and it is not bundled into the app. Accepted by chris johnson on 2026-11-17 until 2027-01-15. Remove this exception and bump `picomatch` as soon as a patched release ships.
 
 ## Historical remediation
 
@@ -18,7 +22,9 @@ If either old advisory appears again, the audit gate will treat it as an unappro
 ```json
 {
   "version": 1,
-  "exceptions": []
+  "exceptions": [
+    { "ghsa": "GHSA-fc5q-39xc-vjpf", "module": "picomatch", "owner": "chris johnson", "acceptedOn": "2026-11-17", "expires": "2027-01-15" }
+  ]
 }
 ```
 <!-- acceptance-record:end -->

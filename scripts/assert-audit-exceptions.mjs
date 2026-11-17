@@ -12,9 +12,12 @@ const acceptanceBegin = '<!-- acceptance-record:begin -->';
 const acceptanceEnd = '<!-- acceptance-record:end -->';
 const blockingSeverities = new Set(['high', 'critical']);
 // Temporary, owner-approved exceptions. Each must match docs/security-exceptions.md.
-// None are active. Zod and node-forge are pinned to patched releases, and the
-// braces advisory is no longer reported.
-const approvedExceptions = new Map();
+// picomatch GHSA-fc5q-39xc-vjpf has no patched release yet (every version up to
+// 4.0.7 is affected) and is reached only through build and test tooling.
+// Accepted by chris johnson on 2026-11-17.
+const approvedExceptions = new Map([
+  ['GHSA-fc5q-39xc-vjpf', { module: 'picomatch', expires: '2027-01-15' }],
+]);
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

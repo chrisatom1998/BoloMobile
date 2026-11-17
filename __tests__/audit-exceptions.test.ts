@@ -54,6 +54,15 @@ function emptyAcceptance(): AcceptanceRecord {
   };
 }
 
+function activeAcceptance(): AcceptanceRecord {
+  return {
+    version: 1,
+    exceptions: [
+      { ghsa: 'GHSA-fc5q-39xc-vjpf', module: 'picomatch', owner: 'chris johnson', acceptedOn: '2026-08-01', expires: '2027-01-15' },
+    ],
+  };
+}
+
 function advisory(ghsa: string, title: string) {
   return {
     source: ghsa,
@@ -110,11 +119,39 @@ describe('dependency audit exceptions', () => {
     expect(result.failures.join(' ')).toContain('not approved by the audit gate');
   });
 
-  it('accepts a clean audit when no high-severity exceptions are approved', () => {
-    const result = evaluate(cleanAudit(), emptyAcceptance());
+  it('accepts a clean audit with the active exception record', () => {
+    const result = evaluate(cleanAudit(), activeAcceptance());
 
     expect(result.ok).toBe(true);
     expect(result.failures).toEqual([]);
+  });
+
+  it('requires every approved exception to stay in the record', () => {
+    const result = evaluate(cleanAudit(), emptyAcceptance());
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join(' ')).toContain('must contain exactly 1 approved entries');
+  });
+
+  it('accepts the approved picomatch advisory on its reviewed module', () => {
+    const audit = {
+      auditReportVersion: 2,
+      vulnerabilities: {
+        picomatch: { name: 'picomatch', severity: 'high', via: [{ source: 1, name: 'picomatch', url: 'https://github.com/advisories/GHSA-fc5q-39xc-vjpf', severity: 'high', range: '<=4.0.7' }] },
+      },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 1, critical: 0, total: 1 } },
+    };
+    const result = evaluate(audit, activeAcceptance());
+
+    expect(result.ok).toBe(true);
+    expect(result.accepted.map((entry) => entry.module)).toEqual(['picomatch']);
+  });
+
+  it('rejects the picomatch exception once it expires', () => {
+    const result = evaluate(cleanAudit(), activeAcceptance(), '2027-01-16T12:00:00.000Z');
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join(' ')).toContain('expired on 2027-01-15');
   });
 
   it('rejects the retired braces and node-forge advisories if they reappear', () => {
@@ -157,7 +194,7 @@ describe('dependency audit exceptions', () => {
       },
     };
 
-    expect(evaluate(audit, emptyAcceptance()).ok).toBe(true);
+    expect(evaluate(audit, activeAcceptance()).ok).toBe(true);
   });
 
   it('fails closed on a pure high-severity via cycle', () => {
