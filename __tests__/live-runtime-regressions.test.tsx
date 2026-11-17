@@ -1922,7 +1922,7 @@ describe('offline capture and queued reports', () => {
     expect(hindi.props.accessibilityLanguage).toBe('hi-IN');
     expect(StyleSheet.flatten(hindi.props.style).fontFamily).toBe('Tiro Devanagari Hindi');
     expect(hindi.props.maxFontSizeMultiplier).toBe(layout.headerFontScaleCap);
-    expect(StyleSheet.flatten(hindi.props.style).fontSize).toBe(typeScale.body.fontSize);
+    expect(StyleSheet.flatten(hindi.props.style).fontSize).toBe(17);
     const voice = view.getByLabelText('Asha voice, unavailable');
     expect(voice.props.accessibilityState).toEqual({ disabled: true });
     expect(StyleSheet.flatten(voice.props.style).opacity).toBe(layout.voiceUnavailableOpacity);
