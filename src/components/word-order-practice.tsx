@@ -7,7 +7,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { buttons, hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type PracticeResult = 'correct' | 'incorrect';
 
@@ -190,8 +190,9 @@ const useStyles = makeStyles((c) => ({
   tileUsedText: { color: c.muted },
   tileLocked: { opacity: 0.4 },
   controls: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  primary: { minHeight: 44, flexGrow: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  primaryText: { ...type.label, color: c.white, fontWeight: '700' },
+  // Sits in a wrapping row beside the secondary controls, so it keeps their 44 pt height.
+  primary: { ...buttons.primary, minHeight: 44, flexGrow: 1 },
+  primaryText: buttons.primaryText,
   secondary: { minHeight: 44, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   secondaryText: { ...type.label, color: c.ink, fontWeight: '700' },
   disabled: { opacity: 0.4 },

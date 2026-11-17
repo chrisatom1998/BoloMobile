@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { hindiType, layout, maxContentWidth, radius, spacing, type, useTheme } from '@/theme';
+import { buttons, hindiType, layout, maxContentWidth, radius, spacing, type, useTheme } from '@/theme';
 
 export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   screen: { flex: 1, backgroundColor: c.night },
@@ -52,8 +52,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   languageSelector: { alignSelf: 'center' },
   inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
   inviteRingCompact: { width: 124, height: 124 },
-  talkButton: { minHeight: 50, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  talkButtonText: { ...type.label, color: c.white, textAlign: 'center' },
+  talkButton: { ...buttons.primary, alignSelf: 'stretch' },
+  talkButtonText: buttons.primaryText,
   micDenied: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm },
   liveControls: { alignSelf: 'center', alignItems: 'center', gap: spacing.md },
   liveControlsResting: { gap: spacing.xs },

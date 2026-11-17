@@ -992,6 +992,6 @@ const useStyles = makeStyles((c) => ({
   finishLabel: { ...type.caption, color: c.muted, textAlign: 'center' },
   secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...type.label, color: c.ink },
-  tertiaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  tertiaryText: { ...type.label, color: c.brandText },
+  tertiaryButton: buttons.quiet,
+  tertiaryText: buttons.quietText,
 }));

@@ -95,8 +95,9 @@ const useStyles = makeStyles((c) => ({
   question: { ...type.headline, color: c.ink },
   detail: { ...type.caption, color: c.muted },
   actions: { gap: spacing.sm, marginTop: spacing.xs },
-  yesButton: buttons.primary,
-  yesText: buttons.primaryText,
+  // Secondary: the lesson's own finish action below stays the one filled button.
+  yesButton: buttons.secondary,
+  yesText: buttons.secondaryText,
   notNowButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
   notNowText: { ...type.label, color: c.muted },
   disabled: { opacity: 0.5 },

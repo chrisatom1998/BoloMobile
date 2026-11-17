@@ -6,7 +6,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import type { ScriptPreference } from '@/state/app-state-types';
 import { hapticSelect, hapticSuccess, hapticWarning } from '@/lib/haptics';
-import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { buttons, hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type PracticeResult = 'correct' | 'incorrect';
 
@@ -141,8 +141,8 @@ const useStyles = makeStyles((c) => ({
   answerEyebrow: { ...type.eyebrow, color: c.heroSubtle },
   answerHindi: { ...hindiType(20), color: c.white },
   answerLatin: { ...type.label, color: c.heroSubtle, fontWeight: '700' },
-  primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  primaryText: { ...type.label, color: c.white, fontWeight: '700' },
+  primary: buttons.primary,
+  primaryText: buttons.primaryText,
   gradeRow: { flexDirection: 'row', gap: spacing.sm },
   gradeWrong: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   gradeWrongText: { ...type.label, color: c.danger, fontWeight: '700' },
