@@ -141,12 +141,12 @@ const useStyles = makeStyles((c) => ({
   answerEyebrow: { ...type.eyebrow, color: c.heroSubtle },
   answerHindi: { ...hindiType(20), color: c.white },
   answerLatin: { ...type.label, color: c.heroSubtle, fontWeight: '700' },
-  primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md }, // Control height, above the 44pt touch target.
   primaryText: { ...type.label, color: c.white, fontWeight: '700' },
   gradeRow: { flexDirection: 'row', gap: spacing.sm },
-  gradeWrong: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  gradeWrong: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md }, // Control height, above the 44pt touch target.
   gradeWrongText: { ...type.label, color: c.danger, fontWeight: '700' },
-  gradeRight: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.success, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  gradeRight: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.success, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md }, // Control height, above the 44pt touch target.
   gradeRightText: { ...type.label, color: c.white, fontWeight: '700' },
   disabled: { opacity: 0.4 },
   footer: { ...type.caption, color: c.muted },

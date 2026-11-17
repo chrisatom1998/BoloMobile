@@ -98,6 +98,10 @@ export const spacing = {
 export const layout = {
   /** Smallest height of a tappable control. */
   touchTarget: 44,
+  /** Round icon button beside the voice orb (End) and the live composer mic. */
+  roundControl: 48,
+  /** Larger round icon button on the night surface: dark End, Asha chat, Send. */
+  roundControlLarge: 52,
   /** Trailing space after the last suggestion chip once the row is scrolled to the end. Same width as the screen gutter. */
   chipEndInset: spacing.gutter,
   /** Space between the suggestion row and the screen edge. */
@@ -143,6 +147,8 @@ export const layout = {
    * Today's content starts below its bottom edge on web only; native tabs sit at the bottom and need no inset.
    */
   webTabBarInset: 64,
+  /** Extra space under the last Progress card so it scrolls well clear of the tab bar. `audit-screen-regressions` requires at least 100. */
+  progressEndClearance: 120,
   /** Status pill on the Today hero (live sessions only): a readout, not a control, so it sits below the touch target. */
   statusPillMinHeight: 32,
   /** Step marker on the Today steps list. */

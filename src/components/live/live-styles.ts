@@ -27,7 +27,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   screenHeader: { alignItems: 'center', backgroundColor: c.night, paddingBottom: spacing.xs },
   headerSettings: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.nightLine, borderWidth: 1 },
   voiceHeroLarge: { overflow: 'visible' },
-  topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  topbar: { minHeight: 48, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }, // Header row, a little taller than the touch target.
   // During a call the avatar row gains End and a longer status, so the actions drop to a second row instead of running off screen.
   topbarCompact: { flexWrap: 'wrap', rowGap: spacing.sm },
   topbarLarge: { alignItems: 'stretch', flexDirection: 'column', gap: spacing.md, minHeight: 0, paddingRight: 0 },
@@ -48,11 +48,11 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   headerActionsStacked: { alignSelf: 'flex-start', flexWrap: 'wrap' },
   privateBadge: { flexDirection: 'row', alignItems: 'center', flexShrink: 0, gap: spacing.xs },
   privateText: { ...type.caption, flexShrink: 0, color: c.heroSubtle, fontWeight: '600' },
-  chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -26, width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  chatButton: { position: 'absolute', left: 0, top: '50%', marginTop: -layout.roundControlLarge / 2, width: layout.roundControlLarge, height: layout.roundControlLarge, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   languageSelector: { alignSelf: 'center' },
-  inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' },
-  inviteRingCompact: { width: 124, height: 124 },
-  talkButton: { minHeight: 50, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  inviteRing: { width: 144, height: 144, borderRadius: radius.pill, borderWidth: 2, borderColor: c.portraitRing, alignItems: 'center', justifyContent: 'center' }, // Ring 16pt out from the 112pt portrait, as on the voice control.
+  inviteRingCompact: { width: 124, height: 124 }, // Ring 14pt out from the 96pt compact portrait.
+  talkButton: { minHeight: 50, alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg }, // Talk button height, above the touch target.
   talkButtonText: { ...type.label, color: c.white, textAlign: 'center' },
   micDenied: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm },
   liveControls: { alignSelf: 'center', alignItems: 'center', gap: spacing.md },
@@ -61,8 +61,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   voiceStageResting: { gap: spacing.xs },
   voiceStageCompact: { gap: spacing.sm },
   portraitControl: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface },
-  ashaPortraitCompact: { width: 96, height: 96 },
+  ashaPortrait: { width: 112, height: 112, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 3, backgroundColor: c.nightSurface }, // Asha's portrait diameter; 3pt gold rim.
+  ashaPortraitCompact: { width: 96, height: 96 }, // Compact portrait diameter.
   // Only the largest-text avatar control uses this size; its ring is sized to match.
   ashaPortraitCollapsed: { width: layout.touchTarget, height: layout.touchTarget, borderWidth: 2 },
   heroCopy: { alignSelf: 'stretch', alignItems: 'center', gap: spacing.xs },
@@ -86,15 +86,15 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   studioPhraseCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   studioPhraseEyebrow: { ...type.eyebrow, color: c.gold },
   studioPhraseEnglish: { ...type.headline, color: c.white, fontWeight: '600' },
-  studioListenIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  studioListenIcon: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' }, // Icon disc inside the listen row; the row is the control.
   studioPhraseHindi: { ...hindiType(20), color: c.white },
   studioPhraseLatin: { ...type.label, color: c.gold },
   studioPhraseFooter: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   studioPhraseCue: { ...type.caption, minWidth: 0, flex: 1, color: c.heroSubtle },
-  studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
+  studioMastery: { minHeight: 28, borderRadius: radius.pill, backgroundColor: c.goldSoft, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm }, // Mastery chip: a readout, not a control.
   studioMasteryText: { ...type.caption, color: c.goldText, fontWeight: '700' },
   featuredPhraseSection: { alignItems: 'center', backgroundColor: c.night, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, paddingBottom: spacing.xl },
-  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, paddingBottom: spacing.md },
+  askSection: { minHeight: 0, alignSelf: 'stretch', alignItems: 'center', gap: spacing.sm, marginTop: -1, position: 'relative', zIndex: 2, borderTopLeftRadius: 32, borderTopRightRadius: 32, borderCurve: 'continuous', backgroundColor: c.night, borderTopColor: c.nightLine, borderTopWidth: 1, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, paddingBottom: spacing.md }, // 32pt top corners (above radius.xxl) round the ask sheet over the hero; -1 tucks it over the hairline.
   askSectionCompact: { gap: spacing.xs, paddingTop: spacing.xs },
   askSectionResting: { gap: spacing.xs, paddingTop: spacing.xs, paddingBottom: 0 },
   askHeading: { width: '100%', alignSelf: 'stretch', flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
@@ -135,13 +135,13 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   messageActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs, paddingTop: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
   messageActionsYou: { borderTopColor: c.nightLine },
   typingBubble: { minWidth: 84, paddingVertical: spacing.md },
-  typingDots: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 10, paddingVertical: spacing.xs },
-  typingDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: c.brand },
-  smallAction: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
+  typingDots: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 10, paddingVertical: spacing.xs }, // Holds one row of typing dots.
+  typingDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: c.brand }, // Typing indicator dot.
+  smallAction: { minHeight: layout.touchTarget, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   smallActionText: { ...type.caption, color: c.muted, fontWeight: '700' },
   reportedText: { color: c.success },
-  moreAction: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
-  reportStatus: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
+  moreAction: { minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
+  reportStatus: { minHeight: layout.touchTarget, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
   // Inline Devanagari inside a chat line: Tiro at the body size; 16 * 1.45 rounds to the 23pt body leading.
   messageHindi: { ...hindiType(16), color: c.ink },
   structuredBody: { alignSelf: 'stretch', gap: spacing.sm },
@@ -149,8 +149,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   correction: { alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, overflow: 'hidden' },
   correctionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   correctionRowStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: spacing.xs },
-  correctionLabel: { ...type.caption, width: 64, color: c.muted, fontWeight: '700' },
-  correctionWords: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: 2 },
+  correctionLabel: { ...type.caption, width: 64, color: c.muted, fontWeight: '700' }, // Fixed label column so correction words line up.
+  correctionWords: { flex: 1, minWidth: 0, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: spacing.sm, rowGap: spacing.xs },
   correctionHindi: { ...hindiType(20), color: c.ink },
   correctionRoman: { ...type.label, color: c.ink },
   // RN cannot colour the strike itself, so the muted colour and the row label carry the meaning.
@@ -174,21 +174,21 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   composerEntry: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   // LiveComposer's root: fills the row beside the mic toggle and stacks the character count above the input.
   composerField: { flex: 1, minWidth: 0, gap: spacing.xs },
-  composerMic: { alignSelf: 'flex-end', width: 48, height: 48, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  composerMic: { alignSelf: 'flex-end', width: layout.roundControl, height: layout.roundControl, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.gold, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   charCount: { ...type.caption, color: c.heroSubtle, textAlign: 'right', fontWeight: '600' },
   charCountLimit: { color: c.gold },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
-  input: { ...type.body, flex: 1, minHeight: 52, maxHeight: 120, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },
+  input: { ...type.body, flex: 1, minHeight: 52, maxHeight: 120, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.night, borderColor: c.nightLine, borderWidth: 1, color: c.white, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg }, // Same height as the 52pt send button; grows to 120.
   inputDisabled: { opacity: 0.72 },
-  sendButton: { alignSelf: 'flex-end', width: 52, height: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
+  sendButton: { alignSelf: 'flex-end', width: layout.roundControlLarge, height: layout.roundControlLarge, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.45 },
-  thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  thinkingRow: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, // Readout row, not a control.
   requestStatus: { ...type.caption, color: c.gold, textAlign: 'center', fontWeight: '600' },
   errorBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.danger, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   noticeBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.nightLine, backgroundColor: c.night, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   noticeText: { ...type.caption, flex: 1, color: c.white },
   error: { ...type.caption, flex: 1, color: c.dangerSoft },
-  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' }, // Inline error link; hitSlop 8 makes the tap area 48pt.
   settingsLinkText: { ...type.label, color: c.white, textDecorationLine: 'underline', fontWeight: '700' },
 } as const);
 

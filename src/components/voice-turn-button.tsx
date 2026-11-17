@@ -272,7 +272,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
 const useStyles = makeStyles((c) => ({
   wrapper: { gap: spacing.sm },
   button: {
-    minHeight: 50,
+    minHeight: 50, // Control height, above the 44pt touch target.
     borderRadius: radius.pill,
     borderCurve: 'continuous',
     backgroundColor: c.brand,
@@ -290,6 +290,6 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   label: { ...type.label, color: c.white, fontWeight: '700' },
   error: { ...type.caption, color: c.danger },
-  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' }, // Inline error link; hitSlop 8 makes the tap area 48pt.
   settingsLinkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
 }));

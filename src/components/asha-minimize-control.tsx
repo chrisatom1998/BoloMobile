@@ -97,7 +97,7 @@ const useStyles = makeStyles((c) => ({
   title: { ...type.display, color: c.white, textAlign: 'center' },
   body: { ...type.body, maxWidth: 300, color: c.heroSubtle, textAlign: 'center' },
   returnButton: {
-    minHeight: 48,
+    minHeight: 48, // Control height, above the 44pt touch target.
     marginTop: spacing.sm,
     borderRadius: radius.pill,
     borderCurve: 'continuous',

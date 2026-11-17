@@ -9,7 +9,7 @@ import { openPublicPage } from '@/lib/public-pages';
 import { observe, observeOncePerSession } from '@/lib/observability';
 import { AI_CONSENT_VERSION } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
+import { layout, makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
 
 type AiConsentPresentation = 'card' | 'sheet';
 
@@ -183,13 +183,13 @@ const useStyles = makeStyles((c) => ({
   summaryItem: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   bullet: { ...type.label, color: c.brandText, fontWeight: '700' },
   summaryText: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
-  disclosure: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  disclosure: { alignSelf: 'flex-start', minHeight: layout.touchTarget, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   disclosureText: { ...type.label, color: c.brandText, fontWeight: '700' },
   disclosureChevron: { ...type.label, color: c.brandText, fontWeight: '700' },
   notice: { gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
   body: { ...type.body, color: c.ink },
   detail: { ...type.caption, color: c.muted },
-  link: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  link: { alignSelf: 'flex-start', minHeight: layout.touchTarget, justifyContent: 'center' },
   linkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
   button: buttons.primary,
   buttonText: buttons.primaryText,
@@ -197,11 +197,11 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   compactCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
   compactBody: { ...type.caption, color: c.muted },
-  compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
+  compactButton: { alignSelf: 'flex-start', minHeight: layout.touchTarget, justifyContent: 'center' },
   compactButtonText: { ...type.label, color: c.brandText, fontWeight: '700' },
   sheetScreen: { flex: 1, backgroundColor: c.background },
-  sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  sheetClose: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
+  sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.gutter }, // Sheet header bar holding the 44pt Close button.
+  sheetClose: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.xs },
   sheetCloseText: buttons.quietText,
-  sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  sheetContent: { paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxl },
 }));

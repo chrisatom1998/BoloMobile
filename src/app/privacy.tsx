@@ -75,6 +75,6 @@ const useStyles = makeStyles((c) => ({
   title: { ...type.label, color: c.ink, fontWeight: '700' },
   body: { ...type.body, color: c.muted },
   links: { gap: spacing.sm, paddingTop: spacing.sm },
-  link: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paper, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  link: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, backgroundColor: c.paper, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, // Control height, above the 44pt touch target.
   linkText: { ...type.label, flex: 1, color: c.brandText, fontWeight: '700' },
 }));

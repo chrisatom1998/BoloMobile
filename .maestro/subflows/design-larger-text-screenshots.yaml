@@ -1,0 +1,64 @@
+appId: com.bolo.hindi
+---
+# PR screenshots at Larger Text one step above the default (UIKit "XL").
+# The launch argument applies to this launch only. Every step is optional or
+# a screenshot, so the smoke flow passes either way.
+- launchApp:
+    arguments:
+      EXDevMenuIsOnboardingFinished: true
+      EXDevMenuShowsAtLaunch: false
+      EXDevMenuShowFloatingActionButton: false
+      UIPreferredContentSizeCategoryName: "UICTContentSizeCategoryXL"
+- runFlow: dismiss-dev-menu.yaml
+- extendedWaitUntil:
+    visible:
+      id: "today-settings"
+    timeout: 60000
+    optional: true
+- takeScreenshot:
+    path: design-xl/today
+- tapOn:
+    id: "today-settings"
+    optional: true
+- extendedWaitUntil:
+    visible: "Learning preferences"
+    timeout: 8000
+    optional: true
+- takeScreenshot:
+    path: design-xl/settings-top
+- scrollUntilVisible:
+    element:
+      text: "Animation style"
+    direction: DOWN
+    speed: 40
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design-xl/settings-animation
+- openLink: bolo://lesson-plans
+- tapOn:
+    text: "Open"
+    optional: true
+- takeScreenshot:
+    path: design-xl/lesson-plans
+- openLink: bolo://review
+- tapOn:
+    text: "Open"
+    optional: true
+- takeScreenshot:
+    path: design-xl/review
+- openLink: bolo://
+- tapOn:
+    text: "Open"
+    optional: true
+- tapOn:
+    text: "Phrases"
+    optional: true
+- takeScreenshot:
+    path: design-xl/phrases
+- tapOn:
+    text: "Progress"
+    optional: true
+- takeScreenshot:
+    path: design-xl/progress

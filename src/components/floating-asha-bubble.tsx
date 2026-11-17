@@ -29,7 +29,7 @@ import {
 } from '@/lib/floating-asha';
 import { useAppState } from '@/state/app-state';
 import { DEFAULT_MOTION_PREFERENCE } from '@/lib/storage';
-import { makeStyles, radius, useTheme } from '@/theme';
+import { makeStyles, radius, spacing, useTheme } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const SPRING = { damping: 22, stiffness: 240, mass: 0.8 };
@@ -245,8 +245,8 @@ const useStyles = makeStyles((c) => ({
     borderColor: c.gold,
   },
   portrait: {
-    width: 64,
-    height: 64,
+    width: 64, // 6pt inside the 76pt bubble so the ring shows around it.
+    height: 64, // Same as width.
     borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: c.gold,
@@ -254,10 +254,10 @@ const useStyles = makeStyles((c) => ({
   },
   liveDot: {
     position: 'absolute',
-    right: 6,
-    bottom: 6,
-    width: 12,
-    height: 12,
+    right: spacing.sm,
+    bottom: spacing.sm,
+    width: 12, // Larger than the 8pt status dot so it reads on the portrait.
+    height: 12, // Same as width.
     borderRadius: radius.pill,
     borderWidth: 2,
     borderColor: c.night,
@@ -267,8 +267,8 @@ const useStyles = makeStyles((c) => ({
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 28,
-    height: 28,
+    width: 28, // Small close glyph on the bubble; hitSlop 10 gives it a 48pt tap area.
+    height: 28, // Same as width.
     borderRadius: radius.pill,
     backgroundColor: c.nightSurface,
     borderWidth: StyleSheet.hairlineWidth,

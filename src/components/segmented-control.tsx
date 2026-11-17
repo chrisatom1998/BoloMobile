@@ -3,7 +3,7 @@ import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-nat
 
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { hapticSelect } from '@/lib/haptics';
-import { makeStyles, spacing, type, radius } from '@/theme';
+import { layout, makeStyles, spacing, type, radius } from '@/theme';
 
 export type SegmentOption<T extends string> = {
   accessibilityLabel?: string;
@@ -169,7 +169,7 @@ export function SegmentedControl<T extends string>({
 const useStyles = makeStyles((c) => ({
   list: {
     alignSelf: 'stretch',
-    minHeight: 52,
+    minHeight: 52, // Track around the 44pt segments.
     overflow: 'hidden',
     borderRadius: radius.md,
     borderCurve: 'continuous',
@@ -180,7 +180,7 @@ const useStyles = makeStyles((c) => ({
     boxShadow: '0 3px 10px rgba(0, 0, 0, 0.04)',
   },
   listCompact: {
-    minHeight: 50,
+    minHeight: 50, // Compact track around the 44pt segments.
     borderRadius: radius.md,
     padding: spacing.xs,
   },
@@ -190,14 +190,14 @@ const useStyles = makeStyles((c) => ({
   trigger: {
     zIndex: 1,
     minWidth: 0,
-    minHeight: 44,
+    minHeight: layout.touchTarget,
     flex: 1,
     borderRadius: radius.sm,
     borderCurve: 'continuous',
     paddingHorizontal: spacing.sm,
   },
   triggerCompact: {
-    minHeight: 44,
+    minHeight: layout.touchTarget,
     borderRadius: radius.sm,
   },
   indicator: {
@@ -225,7 +225,7 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.sm,
   },
   stackedTrigger: {
-    minHeight: 48,
+    minHeight: 48, // Stacked option height, above the 44pt touch target.
     borderRadius: radius.md,
     borderCurve: 'continuous',
     borderColor: c.line,

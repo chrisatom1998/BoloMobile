@@ -202,15 +202,15 @@ const useStyles = makeStyles((c) => ({
   header: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
   progress: { ...type.label, color: c.ink, fontWeight: '700' },
   mastery: { ...type.label, color: c.muted, fontWeight: '700' },
-  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
+  track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line }, // Progress bar thickness.
   trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
-  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 240, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
+  card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 240, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl }, // Flashcard height floor.
   prompt: { ...type.display, color: c.ink, textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
   hindi: { ...hindiType(28), color: c.ink, textAlign: 'center' },
   latin: { ...type.bodyLarge, color: c.brandText, textAlign: 'center', fontWeight: '600' },
   audioRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  audioButton: { minHeight: 46, borderRadius: radius.pill, backgroundColor: c.backgroundWarm, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md }, // Control height, above the 44pt touch target.
   audioText: { ...type.label, color: c.brandText },
   hintNote: { ...type.caption, color: c.muted },
   error: { ...type.caption, color: c.danger, textAlign: 'center' },
@@ -218,12 +218,12 @@ const useStyles = makeStyles((c) => ({
   revealButton: buttons.primary,
   revealText: buttons.primaryText,
   grades: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  gradeButton: { minWidth: 140, flexGrow: 1, minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  gradeButton: { minWidth: 140, flexGrow: 1, minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg }, // Grade button height, above the 44pt touch target.
   againButton: { backgroundColor: c.paper, borderWidth: 1, borderColor: c.lineStrong },
   gotItButton: { backgroundColor: c.forest },
   againText: buttons.secondaryText,
   gotItText: { ...type.label, color: c.white, fontWeight: '700' },
-  doneMark: { width: 72, height: 72, borderRadius: radius.xl, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
+  doneMark: { width: 72, height: 72, borderRadius: radius.xl, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' }, // Decorative done mark.
   title: { ...type.title, color: c.ink, textAlign: 'center' },
   body: { ...type.body, color: c.muted, textAlign: 'center' },
 }));

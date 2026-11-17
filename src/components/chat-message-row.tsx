@@ -22,7 +22,7 @@ const actionHitSlop = { bottom: 0, left: spacing.xs / 2, right: spacing.xs / 2, 
 
 // Web textareas draw a resize grip, which makes a chat line look editable.
 const webChatText = { resize: 'none' } as TextStyle;
-const selectableTextFrame: ViewStyle = { alignSelf: 'stretch', minHeight: 23 };
+const selectableTextFrame: ViewStyle = { alignSelf: 'stretch', minHeight: 23 }; // One 23pt body line, so the frame keeps its height while the hidden sizer measures.
 const hiddenSizer: TextStyle = { opacity: 0 };
 
 export function phrasePlaybackKey(messageId: string, phrase: Pick<StructuredPhrase, 'devanagari'>) {

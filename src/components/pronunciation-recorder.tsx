@@ -11,7 +11,7 @@ import { speakText } from '@/lib/speech';
 import { checkPronunciation, reportGeneratedMessage, type ReportReason } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { layout, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type Props = {
   /** Review sheet: no tinted panel or heading, just an outlined "Record pronunciation" row. */
@@ -139,6 +139,6 @@ const useStyles = makeStyles((c) => ({
   body: { ...type.caption, color: c.muted },
   feedbackCard: { gap: spacing.sm },
   feedback: { ...type.label, color: c.ink },
-  reportButton: { alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
+  reportButton: { alignSelf: 'flex-start', minHeight: layout.touchTarget, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
   reportText: { ...type.caption, color: c.muted, fontWeight: '700' },
 }));

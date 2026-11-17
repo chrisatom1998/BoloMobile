@@ -6,7 +6,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { phraseCardLines, phraseCardListenLabel } from '@/lib/phrase-card-lines';
 import type { ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { hindiType, layout, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 export type PhraseCardVariant = 'light' | 'night';
 export type PhraseCardSize = 'regular' | 'compact';
@@ -162,8 +162,8 @@ const useStyles = makeStyles((c) => ({
     borderLeftColor: c.gold,
     borderTopRightRadius: radius.md,
     borderBottomRightRadius: radius.md,
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
+    borderTopLeftRadius: 6, // Tighter corners on the gold accent edge.
+    borderBottomLeftRadius: 6, // Same as top-left.
     borderCurve: 'continuous',
     paddingVertical: spacing.md,
     paddingLeft: spacing.md,
@@ -191,8 +191,8 @@ const useStyles = makeStyles((c) => ({
   accessory: { marginTop: spacing.xs },
   listen: {
     alignSelf: 'center',
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: layout.touchTarget,
+    minHeight: layout.touchTarget,
     borderRadius: radius.pill,
     backgroundColor: c.brandSoft,
     alignItems: 'center',
