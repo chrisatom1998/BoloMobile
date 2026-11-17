@@ -12,7 +12,7 @@ import type { RealtimePeerSession } from '@/lib/realtime-peer.types';
 import { stopSpeaking } from '@/lib/speech';
 import { drainAudioSessionEvents, getVoiceAudioMode, getVoiceSessionStatus, reactivateRealtimeVoiceSession, readAudioSessionState, registerRealtimeVoiceOwner, resetVoiceAudioMode, setVoiceAudioMode } from '@/lib/voice';
 import { LIVE_MIC_PERMISSION_MESSAGE } from '@/lib/live-permission';
-import { createLiveCall, type LiveCallContext, type LiveMode } from '@/services/bolo-api';
+import { createLiveCall, type LiveCallContext, LIVE_TRANSLATE_MODE, type LiveCallMode } from '@/services/bolo-api';
 import type { AshaResponseLanguage } from '@/state/app-state-types';
 
 
@@ -21,7 +21,7 @@ export type RealtimeVoiceStatus = 'disconnected' | 'connecting' | 'ready' | 'rec
 export type RealtimeTranscriptUpdate = { speaker: 'you' | 'asha'; text: string };
 /** Startup-only session setup, read once when a live session connects. */
 export type LiveSessionSetup = {
-  mode?: LiveMode;
+  mode?: LiveCallMode;
   context?: LiveCallContext;
   /** When present, the session requests Bolo tools and this client executes them. */
   toolEnvironment?: LiveToolEnvironment;
@@ -32,6 +32,8 @@ type Options = {
   responseLanguage?: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
   liveSession?: () => LiveSessionSetup | null;
+  /** Live Translate shows the reply as text only, so the session's voice is never played. */
+  muteAssistantAudio?: boolean;
   /** Runs once per new connection, before any transport or transcript can arrive. */
   onConnectionStart?: (signal: AbortSignal) => void | Promise<void>;
   onError: (message: string) => void;
@@ -213,7 +215,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
     toolExecutorRef.current = executor;
     let serverSessionId: string | undefined;
     sessionOpenRef.current = true;
-    callbacksRef.current.onSessionEvent?.({ type: 'starting', mode: setup?.mode, lessonId: setup?.context?.lessonId });
+    callbacksRef.current.onSessionEvent?.({ type: 'starting', mode: setup?.mode === LIVE_TRANSLATE_MODE ? undefined : setup?.mode, lessonId: setup?.context?.lessonId });
     const promise = (async () => {
       await callbacksRef.current.onConnectionStart?.(controller.signal);
       if (!current()) return;
@@ -245,6 +247,7 @@ export function useRealtimeConversation({ clientId, enabled = true, responseLang
           return call.answerSdp;
         },
         signal: controller.signal,
+        muteRemoteAudio: callbacksRef.current.muteAssistantAudio === true,
         onMessage: (raw) => {
           if (!current()) return;
           if (liveDiagnosticsEnabled) {

@@ -1,5 +1,6 @@
 import { Image } from 'expo-image';
-import { MessageCircle } from 'lucide-react-native';
+import { useRouter, type Href } from 'expo-router';
+import { ChevronRight, Languages, MessageCircle } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { Text, View, type ImageStyle, type StyleProp } from 'react-native';
 
@@ -44,6 +45,7 @@ export function VoiceHero({
   statusKicker: string;
   talkControl: ReactNode;
 }) {
+  const router = useRouter();
   return (
             <View style={[styles.voiceHero, compactVoiceLayout && styles.voiceHeroCompact, restingVoiceLayout && styles.voiceHeroResting, largeTextLayout && styles.voiceHeroLarge, headerCollapsed && styles.voiceHeroCollapsed, { paddingTop: accessibilityCompact || restingVoiceLayout ? spacing.xs : spacing.md }, accessibilityCompact && aiConsent && !speechCaption && microphonePhase === 'idle' && styles.voiceHeroHidden]} testID="voice-conversation-hero">
               {headerCollapsed ? null : <Text maxFontSizeMultiplier={layout.headerFontScaleCap} style={[styles.headerSubtitle, reflowHeaderLayout && styles.headerSubtitleStacked]}>Your Hindi coach</Text>}
@@ -107,6 +109,24 @@ export function VoiceHero({
                   </View>
                 </View>
                 )}
+                {/* Live Translate has its own screen. Offered only between calls, since both use the microphone. */}
+                {realtimeStatus === 'disconnected' && !liveConfigError && !headerCollapsed && !conversationStarted ? (
+                  <Pressable
+                    accessibilityHint="Opens Live Translate, which listens to Hindi spoken nearby and shows it in English."
+                    accessibilityLabel="Live Translate"
+                    accessibilityRole="button"
+                    onPress={() => router.push('/live-translate' as Href)}
+                    style={[styles.translateEntry, { width: heroContentWidth }]}
+                    testID="open-live-translate"
+                  >
+                    <Languages color={colors.gold} size={20} />
+                    <View style={styles.translateEntryCopy}>
+                      <Text style={styles.translateEntryTitle}>Live Translate</Text>
+                      <Text style={styles.translateEntryBody}>Hear Hindi around you, read it in English</Text>
+                    </View>
+                    <ChevronRight color={colors.heroSubtle} size={18} />
+                  </Pressable>
+                ) : null}
                 {/* The compact layout drops the stage, so permission guidance renders on its own. */}
                 {accessibilityCompact && microphoneGuidance ? <View style={[styles.heroCopy, { width: heroContentWidth }]}>{microphoneGuidance}</View> : null}
                 {/* Live captions are for the call in progress. Once it ends, each line lives in the chat below. */}

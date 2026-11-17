@@ -16,5 +16,7 @@ export type RealtimePeerOptions = {
   /** Estimated audible output from the received audio track, never from captions. */
   onPlaybackChange?: (playing: boolean) => void;
   onError?: (message: string) => void;
+  /** Never play the received audio. Live Translate reads the reply as captions only. */
+  muteRemoteAudio?: boolean;
   signal?: AbortSignal;
 };
