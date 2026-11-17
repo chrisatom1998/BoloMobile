@@ -290,6 +290,6 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   label: { ...type.label, color: c.white, fontWeight: '700' },
   error: { ...type.caption, color: c.danger },
-  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  settingsLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' }, // Inline error link; hitSlop 8 makes the tap area 48pt.
   settingsLinkText: { ...type.label, color: c.brandText, textDecorationLine: 'underline', fontWeight: '700' },
 }));

@@ -418,56 +418,55 @@ function RealtimeVoiceButtonView({ active = true, children, compact = false, dis
 }
 
 const useStyles = makeStyles((c) => ({
-  stage: { width: 282, height: 282, alignItems: 'center', justifyContent: 'center' },
-  stageCompact: { width: 220, height: 220 },
-  stageMinimal: { width: '100%', height: 104 },
+  stage: { width: 282, height: 282, alignItems: 'center', justifyContent: 'center' }, // Room for the outer ring and its glow.
+  stageCompact: { width: 220, height: 220 }, // Compact stage.
+  stageMinimal: { width: '100%', height: 104 }, // Minimal stage, as tall as its outer ring.
   ring: { position: 'absolute', borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: c.lineStrong },
-  ringOuter: { width: 278, height: 278 },
-  ringOuterCompact: { width: 216, height: 216 },
-  ringOuterMinimal: { width: 104, height: 104, opacity: 0.2 },
-  ringMiddle: { width: 238, height: 238 },
-  ringMiddleCompact: { width: 190, height: 190 },
-  ringMiddleMinimal: { width: 96, height: 96, opacity: 0.3 },
-  ringInner: { width: 204, height: 204 },
-  ringInnerCompact: { width: 164, height: 164 },
-  ringInnerMinimal: { width: 88, height: 88, opacity: 0.4 },
+  ringOuter: { width: 278, height: 278 }, // Orb geometry: decorative rings around the orb.
+  ringOuterCompact: { width: 216, height: 216 }, // Orb geometry: decorative rings around the orb.
+  ringOuterMinimal: { width: 104, height: 104, opacity: 0.2 }, // Orb geometry: decorative rings around the orb.
+  ringMiddle: { width: 238, height: 238 }, // Orb geometry: decorative rings around the orb.
+  ringMiddleCompact: { width: 190, height: 190 }, // Orb geometry: decorative rings around the orb.
+  ringMiddleMinimal: { width: 96, height: 96, opacity: 0.3 }, // Orb geometry: decorative rings around the orb.
+  ringInner: { width: 204, height: 204 }, // Orb geometry: decorative rings around the orb.
+  ringInnerCompact: { width: 164, height: 164 }, // Orb geometry: decorative rings around the orb.
+  ringInnerMinimal: { width: 88, height: 88, opacity: 0.4 }, // Orb geometry: decorative rings around the orb.
   ringInnerRecording: { borderWidth: 1.5, borderColor: c.brand },
-  orb: { width: 168, height: 168, borderRadius: radius.pill, backgroundColor: c.orb, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: c.orb, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.35, shadowRadius: 34, elevation: 8 },
-  orbCompact: { width: 148, height: 148 },
-  orbMinimal: { width: 88, height: 88, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 4 },
+  orb: { width: 168, height: 168, borderRadius: radius.pill, backgroundColor: c.orb, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', shadowColor: c.orb, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.35, shadowRadius: 34, elevation: 8 }, // Orb diameter; its shadow values are decorative.
+  orbCompact: { width: 148, height: 148 }, // Compact orb diameter.
+  orbMinimal: { width: 88, height: 88, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 16, elevation: 4 }, // Minimal orb diameter; decorative shadow.
   orbActive: { backgroundColor: c.orbActive, shadowOpacity: 0.56 },
   orbRecording: { backgroundColor: c.orbRecording },
-  orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: c.orbHighlight },
+  orbHighlight: { position: 'absolute', width: 122, height: 122, top: -34, left: -20, borderRadius: radius.pill, backgroundColor: c.orbHighlight }, // Decorative sheen, pushed up and left so only its lower arc shows on the orb.
   orbGlyph: { color: c.white, fontSize: 60, lineHeight: 72, fontWeight: '700' },  // Exception to the type scale: decorative orb glyph.
   orbGlyphMinimal: { fontSize: 32, lineHeight: 38 },  // Exception: decorative orb glyph.
-  endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -24, width: 48, height: 48, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
+  endButton: { position: 'absolute', right: 0, top: '50%', marginTop: -layout.roundControl / 2, width: layout.roundControl, height: layout.roundControl, borderRadius: radius.pill, backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine, alignItems: 'center', justifyContent: 'center' },
   endButtonCompact: { right: -spacing.lg },
-  endButtonMinimal: { right: 0, top: 28, marginTop: 0 },
+  endButtonMinimal: { right: 0, top: 28, marginTop: 0 }, // (104pt minimal stage - 48pt button) / 2: centred on the stage.
   ringDark: { borderColor: c.orbRingDark },
   ringInnerRecordingDark: { borderWidth: 1.5, borderColor: c.gold },
   orbDark: { backgroundColor: c.gold, shadowColor: c.gold, shadowOpacity: 0.3 },
   orbDarkActive: { backgroundColor: c.gold, shadowOpacity: 0.5 },
   orbDarkRecording: { backgroundColor: c.goldBright },
   orbGlyphDark: { color: c.ink },
-  endButtonDark: { width: 52, height: 52, marginTop: -26, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Negative margins centre the button on the orb.
-  // Same center as the 44pt minimal button (top 28 + 22), sized up to 52pt.
-  endButtonDarkMinimal: { width: 52, height: 52, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine },
+  endButtonDark: { width: layout.roundControlLarge, height: layout.roundControlLarge, marginTop: -layout.roundControlLarge / 2, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Negative margins centre the button on the orb.
+  endButtonDarkMinimal: { width: layout.roundControlLarge, height: layout.roundControlLarge, top: 24, backgroundColor: c.nightSurface, borderColor: c.nightLine }, // Centre 50pt down, as when the light button was 44pt (top 28 + 22).
   avatarButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, overflow: 'hidden' },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   avatarEndButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.nightSurface, borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   // Portrait variant: the 112pt (96pt compact) portrait is the control; rings sit around it.
-  stagePortrait: { width: '100%', height: 144 },
-  stagePortraitCompact: { height: 124 },
-  portraitRingOuter: { width: 144, height: 144, borderWidth: 2, borderColor: c.portraitRingFaint },
-  portraitRingOuterCompact: { width: 124, height: 124 },
+  stagePortrait: { width: '100%', height: 144 }, // Holds the 144pt outer ring.
+  stagePortraitCompact: { height: 124 }, // Holds the 124pt compact outer ring.
+  portraitRingOuter: { width: 144, height: 144, borderWidth: 2, borderColor: c.portraitRingFaint }, // Portrait rings sit 16pt and 8pt out from the 112pt portrait.
+  portraitRingOuterCompact: { width: 124, height: 124 }, // Compact rings sit 14pt and 7pt out from the 96pt portrait.
   portraitRingConnected: { borderColor: c.portraitRing },
-  portraitRingInner: { width: 128, height: 128, borderWidth: 2, borderColor: c.portraitRing },
-  portraitRingInnerCompact: { width: 110, height: 110 },
-  portraitRingRecording: { borderWidth: 3, borderColor: c.gold },
-  portraitButton: { width: 112, height: 112, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
-  portraitButtonCompact: { width: 96, height: 96 },
-  portraitBadge: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: radius.pill, borderWidth: 3, borderColor: c.night, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' },
-  portraitBadgeCompact: { width: 30, height: 30 },
+  portraitRingInner: { width: 128, height: 128, borderWidth: 2, borderColor: c.portraitRing }, // See portraitRingOuter.
+  portraitRingInnerCompact: { width: 110, height: 110 }, // See portraitRingOuter.
+  portraitRingRecording: { borderWidth: 3, borderColor: c.gold }, // Recording thickens the ring to 3pt.
+  portraitButton: { width: 112, height: 112, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' }, // Portrait diameter; it is the tap target, well above 44pt.
+  portraitButtonCompact: { width: 96, height: 96 }, // Compact portrait diameter.
+  portraitBadge: { position: 'absolute', right: 0, bottom: 0, width: 34, height: 34, borderRadius: radius.pill, borderWidth: 3, borderColor: c.night, backgroundColor: c.gold, alignItems: 'center', justifyContent: 'center' }, // Status badge over the portrait's corner; not a separate control.
+  portraitBadgeCompact: { width: 30, height: 30 }, // Compact status badge.
   portraitBadgeRecording: { backgroundColor: c.orbRecording },
   portraitBadgeConnecting: { backgroundColor: c.heroSubtle },
   endButtonPortrait: { right: 0 },

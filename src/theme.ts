@@ -98,6 +98,10 @@ export const spacing = {
 export const layout = {
   /** Smallest height of a tappable control. */
   touchTarget: 44,
+  /** Round icon button beside the voice orb (End) and the live composer mic. */
+  roundControl: 48,
+  /** Larger round icon button on the night surface: dark End, Asha chat, Send. */
+  roundControlLarge: 52,
   /** Trailing space after the last suggestion chip once the row is scrolled to the end. Same width as the screen gutter. */
   chipEndInset: spacing.gutter,
   /** Space between the suggestion row and the screen edge. */
