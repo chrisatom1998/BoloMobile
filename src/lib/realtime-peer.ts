@@ -34,6 +34,7 @@ export async function createRealtimePeerSession({
   onPlaybackChange,
   onClose,
   onMessage,
+  muteRemoteAudio = false,
   signal,
 }: RealtimePeerOptions): Promise<RealtimePeerSession> {
   if (signal?.aborted) throw new Error('The live voice connection was canceled.');
@@ -118,6 +119,13 @@ export async function createRealtimePeerSession({
       closeFromRemote();
     }
   });
+  // A disabled remote track is never rendered, so a muted session stays silent on the speaker.
+  const silenceRemoteAudio = () => {
+    if (!muteRemoteAudio || closed) return;
+    try { peer.getReceivers().forEach((receiver) => { if (receiver.track) receiver.track.enabled = false; }); }
+    catch { /* The receivers are not ready yet; the next track event retries. */ }
+  };
+  if (muteRemoteAudio) peerEvents.addEventListener('track', silenceRemoteAudio);
   peerEvents.addEventListener('connectionstatechange', updateDisconnectedWatchdog);
   peerEvents.addEventListener('iceconnectionstatechange', updateDisconnectedWatchdog);
 
@@ -150,6 +158,7 @@ export async function createRealtimePeerSession({
         if (closed || negotiation.signal.aborted) throw new Error('The live voice connection was canceled.');
         updateLiveDiagnostics({ sdpAudio: `${sdpAudioDirection(offerSdp)}/${sdpAudioDirection(answerSdp)}` });
         await peer.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+        silenceRemoteAudio();
       })().then(() => finish(), finish);
 
       signal?.addEventListener('abort', abort, { once: true });

@@ -13,6 +13,7 @@ export async function createRealtimePeerSession({
   onError,
   onClose,
   onMessage,
+  muteRemoteAudio = false,
   signal,
 }: RealtimePeerOptions): Promise<RealtimePeerSession> {
   if (signal?.aborted) throw new Error('The live voice connection was canceled.');
@@ -48,6 +49,7 @@ export async function createRealtimePeerSession({
   }
   const audio = new Audio();
   audio.autoplay = true;
+  audio.muted = muteRemoteAudio;
   peer.ontrack = (event) => {
     audio.srcObject = event.streams[0] ?? null;
     void audio.play().catch(() => {

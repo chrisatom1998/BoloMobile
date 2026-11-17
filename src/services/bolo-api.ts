@@ -83,6 +83,10 @@ type VoiceCoachResponse = {
 
 export const LIVE_MODES = ['hindi-immersion', 'hindi-english-help', 'beginner', 'conversation', 'lesson'] as const;
 export type LiveMode = (typeof LIVE_MODES)[number];
+/** Live Translate: the session listens to Hindi nearby and writes English. Not a tutoring mode. */
+export const LIVE_TRANSLATE_MODE = 'live-translate' as const;
+/** Every mode the live server accepts: Asha's tutoring modes plus Live Translate. */
+export type LiveCallMode = LiveMode | typeof LIVE_TRANSLATE_MODE;
 export type LiveVocabularyItem = { devanagari: string; romanization?: string; meaning?: string };
 /** Mirrors the trusted live server's validated `context` body field and its limits. */
 export type LiveCallContext = {
@@ -99,7 +103,7 @@ export type LiveCallInput = {
   offerSdp: string;
   responseLanguage: AshaResponseLanguage;
   history?: { role: 'you' | 'asha'; text: string }[];
-  mode?: LiveMode;
+  mode?: LiveCallMode;
   context?: LiveCallContext;
   /** Declares that this client executes Bolo function tools on the data channel. */
   clientTools?: boolean;
@@ -490,7 +494,7 @@ export async function createLiveCall(input: LiveCallInput, signal?: AbortSignal)
     || !['en', 'hi'].includes(input.responseLanguage)
     || (input.history !== undefined && (!Array.isArray(input.history)
       || input.history.some((row) => !isRecord(row) || !['you', 'asha'].includes(row.role) || typeof row.text !== 'string')))
-    || (input.mode !== undefined && !(LIVE_MODES as readonly string[]).includes(input.mode))
+    || (input.mode !== undefined && input.mode !== LIVE_TRANSLATE_MODE && !(LIVE_MODES as readonly string[]).includes(input.mode))
     || (input.clientTools !== undefined && typeof input.clientTools !== 'boolean')) {
     return Promise.reject(new BoloApiError('Bolo could not start this live voice session.', { kind: 'invalid_payload' }));
   }

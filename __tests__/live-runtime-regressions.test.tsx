@@ -65,6 +65,8 @@ jest.mock('lucide-react-native', () => ({
   History: () => null,
   Lock: () => null,
   MessageCircle: () => null,
+  ChevronRight: () => null,
+  Languages: () => null,
   Mic: () => null,
   MicOff: () => null,
   Send: () => null,
@@ -2347,10 +2349,13 @@ describe('live coaching state', () => {
     jest.clearAllMocks();
   });
 
-  it('does not expose live translation controls or captions', async () => {
+  it('offers Live Translate as its own screen, with no translation controls or captions inside a coaching call', async () => {
     const view = await render(<LiveScreen />);
 
-    expect(view.queryByText(/Live translate/iu)).toBeNull();
+    // Live Translate is a separate screen reached from one entry on the resting Asha screen.
+    expect(view.getAllByText(/Live translate/iu)).toHaveLength(1);
+    await fireEvent.press(view.getByTestId('open-live-translate'));
+    expect(mockRouterPush).toHaveBeenCalledWith('/live-translate');
     expect(view.queryByText(/English live caption/iu)).toBeNull();
     expect(view.queryByLabelText(/live translation/iu)).toBeNull();
     expect(view.getByLabelText('Open transcript')).toBeTruthy();
