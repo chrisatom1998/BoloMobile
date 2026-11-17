@@ -87,7 +87,7 @@ export function ChatMessageMenu({
 
 const useStyles = makeStyles((c) => ({
   backdrop: { flex: 1, justifyContent: 'flex-end' },
-  scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(16, 32, 30, 0.55)' },
+  scrim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: c.scrim },
   sheet: {
     backgroundColor: c.paperRaised,
     borderTopLeftRadius: radius.xl,
