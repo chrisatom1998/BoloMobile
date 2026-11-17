@@ -20,7 +20,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   voiceHeroHidden: { height: 0, minHeight: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' },
   liveConfigCard: { alignSelf: 'center', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.brand, backgroundColor: c.paper, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   liveConfigTitle: { ...type.title, color: c.ink },
-  liveConfigHindi: { ...hindiType(17), color: c.brand },
+  liveConfigHindi: { ...hindiType(20), color: c.brand },
   liveConfigBody: { ...type.body, color: c.ink },
   voiceUnavailable: { opacity: layout.voiceUnavailableOpacity },
   voiceOffCaption: { ...type.caption, flexShrink: 0, color: c.heroSubtle, textAlign: 'center' },
