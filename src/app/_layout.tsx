@@ -17,7 +17,7 @@ import { observe } from '@/lib/observability';
 import { releaseSplashScreen } from '@/lib/splash-screen';
 import { AshaVoiceSessionProvider } from '@/state/asha-voice-session';
 import { AppStateProvider, useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, spacing, useTheme, type } from '@/theme';
+import { displayFont, hindiType, layout, makeStyles, spacing, useTheme, type } from '@/theme';
 
 // Keep the native splash up until persisted app state has hydrated; AppNavigator releases it.
 // Module scope, per the expo-splash-screen docs: inside a component it can run after the splash is already gone.
@@ -111,7 +111,7 @@ function SheetDoneButton({ onPress }: { onPress: () => void }) {
 }
 
 const useStyles = makeStyles((c) => ({
-  sheetDone: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },
+  sheetDone: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.xs },
   sheetDoneText: { ...type.label, color: c.brandText },
   loading: {
     flex: 1,

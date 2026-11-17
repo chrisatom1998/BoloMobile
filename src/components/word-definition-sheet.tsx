@@ -10,7 +10,7 @@ import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { alignedHindiWordLabels, displayHindiTranscript } from '@/lib/learner-phrase-display';
 import { getContextualWordDefinition } from '@/services/bolo-api';
 import type { ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, radius, spacing, type, buttons } from '@/theme';
+import { hindiType, layout, makeStyles, radius, spacing, type, buttons } from '@/theme';
 
 type DefinitionState = {
   explanation?: string;
@@ -230,6 +230,6 @@ const useStyles = makeStyles((c) => ({
   definitionBody: { ...type.bodyLarge, color: c.ink },
   guidance: { ...type.body, color: c.muted },
   error: { ...type.body, color: c.danger },
-  retryButton: { alignSelf: 'flex-start', minHeight: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  retryButton: { alignSelf: 'flex-start', minHeight: layout.touchTarget, borderRadius: radius.pill, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   retryText: buttons.quietText,
 }));

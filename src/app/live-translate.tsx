@@ -14,7 +14,7 @@ import { endRealtimeVoiceSession } from '@/lib/voice';
 import { LIVE_TRANSLATE_MODE, liveVoiceConfigError, sendMobileChat } from '@/services/bolo-api';
 import { useAppState } from '@/state/app-state';
 import type { StructuredPhrase } from '@/state/app-state-types';
-import { buttons, hindiType, makeStyles, maxContentWidth, radius, spacing, type, useTheme } from '@/theme';
+import { buttons, hindiType, layout, makeStyles, maxContentWidth, radius, spacing, type, useTheme } from '@/theme';
 
 const KEEP_AWAKE_TAG = 'bolo-live-translate';
 /** How close to the bottom still counts as "following" the newest line. */
@@ -344,15 +344,15 @@ const useStyles = makeStyles((c) => ({
   headerCopy: { flex: 1 },
   eyebrow: { ...type.eyebrow, color: c.gold },
   title: { ...type.title, color: c.white },
-  iconButton: { width: 44, height: 44, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: c.nightSurface, borderWidth: 1, borderColor: c.nightLine },
+  iconButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: c.nightSurface, borderWidth: 1, borderColor: c.nightLine },
   iconButtonOn: { backgroundColor: c.gold, borderColor: c.gold },
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44, paddingHorizontal: spacing.gutter },
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: layout.touchTarget, paddingHorizontal: spacing.gutter },
   pill: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: c.nightSurface, borderWidth: 1, borderColor: c.nightLine },
   pillText: { ...type.caption, fontWeight: '700', color: c.white, fontVariant: ['lining-nums', 'tabular-nums'] },
   dot: { width: spacing.sm, height: spacing.sm, borderRadius: radius.pill, backgroundColor: c.orb },
   dotIdle: { backgroundColor: c.heroSubtle },
   stoppedText: { ...type.caption, fontWeight: '700', color: c.heroSubtle },
-  clearButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
+  clearButton: { minHeight: layout.touchTarget, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm },
   clearText: { ...type.caption, fontWeight: '600', color: c.gold },
   error: { ...type.caption, color: c.dangerSoft, paddingHorizontal: spacing.gutter, paddingVertical: spacing.sm },
   errorCard: { marginHorizontal: spacing.gutter, marginVertical: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.dangerLine },
@@ -365,9 +365,9 @@ const useStyles = makeStyles((c) => ({
   cardPendingText: { ...type.caption, fontWeight: '700', color: c.goldText },
   note: { backgroundColor: c.goldSoft, borderRadius: radius.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginTop: spacing.xs },
   noteText: { ...type.caption, color: c.goldText },
-  replyChip: { minHeight: 44, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.paperRaised },
+  replyChip: { minHeight: layout.touchTarget, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, marginTop: spacing.xs, borderRadius: radius.pill, borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.paperRaised },
   replyChipText: { ...type.caption, fontWeight: '600', color: c.brandText },
-  replyBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs, minHeight: 44 },
+  replyBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs, minHeight: layout.touchTarget },
   replyAnswer: { marginTop: spacing.xs, padding: spacing.md, gap: spacing.sm, borderRadius: radius.md, backgroundColor: c.brandSoft },
   replyEyebrow: { ...type.eyebrow, color: c.brandText },
   replyPhrase: { gap: 2 },

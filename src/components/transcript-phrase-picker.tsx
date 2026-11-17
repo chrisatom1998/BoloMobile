@@ -8,7 +8,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { prepareSavedPhraseFromText } from '@/services/bolo-api';
 import type { ChatMessage, SavedPhrase, StructuredPhrase } from '@/state/app-state-types';
 import { legacyTranscriptDisplay } from '@/lib/learner-phrase-display';
-import { makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
+import { layout, makeStyles, radius, spacing, useTheme, type, buttons } from '@/theme';
 
 type TranscriptPhrasePickerProps = {
   aiConsent: boolean;
@@ -205,7 +205,7 @@ const useStyles = makeStyles((c) => ({
   headerCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   eyebrow: { ...type.eyebrow, color: c.brandDark },
   title: { ...type.display, color: c.ink },
-  closeButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  closeButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   instructions: { ...type.body, color: c.muted },
   fieldGroup: { gap: spacing.sm },
   label: { ...type.caption, color: c.ink, fontWeight: '700' },

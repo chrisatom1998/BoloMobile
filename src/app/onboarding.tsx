@@ -10,7 +10,7 @@ import { playOfflineSpeech } from '@/lib/offline-voice-player';
 import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
+import { hindiType, layout, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
@@ -244,10 +244,10 @@ const useStyles = makeStyles((c) => ({
     paddingHorizontal: spacing.xl,
     width: '100%',
   },
-  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 44 },
+  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: layout.touchTarget },
   brandMark: { ...hindiType(28), color: c.brand },
   stepLabel: { ...type.eyebrow, color: c.brandText },
-  cancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
+  cancelButton: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.sm },
   cancelText: { ...type.label, color: c.ink },
   cancelSpacer: { width: 64 },
   body: { flex: 1, justifyContent: 'center' },
@@ -257,7 +257,7 @@ const useStyles = makeStyles((c) => ({
   hindi: { ...hindiType(56), color: c.ink },
   latin: { ...type.bodyLarge, color: c.brandText },
   prompt: { ...type.label, color: c.ink, marginTop: spacing.sm, fontWeight: '700' },
-  hearButton: { ...buttons.secondary, alignSelf: 'flex-start', minHeight: 44 },
+  hearButton: { ...buttons.secondary, alignSelf: 'flex-start', minHeight: layout.touchTarget },
   hearText: buttons.secondaryText,
   miss: { ...type.caption, color: c.muted },
   saveError: { ...type.caption, color: c.danger, textAlign: 'center' },

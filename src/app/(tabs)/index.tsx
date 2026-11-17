@@ -515,9 +515,9 @@ const useStyles = makeStyles((c) => {
   topbarActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Its own row under the greeting, left-aligned; wraps rather than overflowing if the pill grows.
   topbarActionsLarge: { alignSelf: 'flex-start', justifyContent: 'flex-start', flexWrap: 'wrap' },
-  streakPill: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: spacing.md, paddingRight: spacing.md },
+  streakPill: { minHeight: layout.touchTarget, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, paddingLeft: spacing.md, paddingRight: spacing.md },
   streakText: { ...type.label, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
-  settingsButton: { width: 44, height: 44, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
+  settingsButton: { width: layout.touchTarget, height: layout.touchTarget, minWidth: layout.touchTarget, minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
   // Tight so the Next lesson card's top lands near 480pt on a 393x852 phone.
   heroBlock: { width: '100%', alignItems: 'stretch', gap: spacing.md },
   talkButton: { ...button.primary, alignSelf: 'stretch' },

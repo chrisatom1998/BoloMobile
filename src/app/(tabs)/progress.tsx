@@ -13,7 +13,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { completedLessonCount, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
-import { createButtonStyles, displayFont, hindiType, makeStyles, radius, spacing, type, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { createButtonStyles, displayFont, hindiType, layout, makeStyles, radius, spacing, type, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
@@ -230,7 +230,7 @@ export const createProgressStyles = (c: ThemeColors) => {
   pageTitle: { ...type.display },
   pageSubtitle: { ...type.body, maxWidth: 300, color: c.muted, fontFamily: displayFont, textAlign: 'left' },
   pageSubtitleLarge: { maxWidth: '100%' },
-  shareButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  shareButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: spacing.gutter, gap: spacing.lg },
   // Tucked into the top-right corner, small and faint, so it never sits behind the bars.
   weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },

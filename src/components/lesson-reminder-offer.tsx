@@ -5,7 +5,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { NotificationPermissionError, schedulePracticeReminder } from '@/lib/practice-reminder';
 import type { ReminderSettings } from '@/state/app-state-types';
-import { makeStyles, radius, spacing, type, buttons } from '@/theme';
+import { layout, makeStyles, radius, spacing, type, buttons } from '@/theme';
 
 function formatReminderLabel(hour: number, minute: number) {
   const normalizedHour = Math.min(23, Math.max(0, hour));
@@ -97,7 +97,7 @@ const useStyles = makeStyles((c) => ({
   actions: { gap: spacing.sm, marginTop: spacing.xs },
   yesButton: buttons.primary,
   yesText: buttons.primaryText,
-  notNowButton: { alignItems: 'center', justifyContent: 'center', minHeight: 44 },
+  notNowButton: { alignItems: 'center', justifyContent: 'center', minHeight: layout.touchTarget },
   notNowText: { ...type.label, color: c.muted },
   disabled: { opacity: 0.5 },
 }));

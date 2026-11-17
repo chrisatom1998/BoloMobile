@@ -35,7 +35,7 @@ import { shuffleChoices } from '@/lib/shuffle-choices';
 import { trimTerminalPunctuation } from '@/lib/text';
 import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
+import { displayFont, hindiType, layout, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
@@ -867,7 +867,7 @@ const useStyles = makeStyles((c) => ({
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: spacing.md },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  closeButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
+  closeButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, alignItems: 'center', justifyContent: 'center' },
   progressHeaderLarge: { alignItems: 'flex-start', flexDirection: 'column', gap: spacing.sm },
   beatSegments: { minWidth: 0, flex: 1, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   beatSegment: { minWidth: 0, flex: 1, height: 8, borderRadius: radius.pill, backgroundColor: c.line },
@@ -906,7 +906,7 @@ const useStyles = makeStyles((c) => ({
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
   answerTitle: { ...type.bodyLarge, minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontWeight: '600' },
-  hintButton: { ...buttons.secondary, minWidth: 44, minHeight: 44, borderRadius: radius.pill, paddingHorizontal: spacing.md },
+  hintButton: { ...buttons.secondary, minWidth: layout.touchTarget, minHeight: layout.touchTarget, borderRadius: radius.pill, paddingHorizontal: spacing.md },
   hintButtonActive: { backgroundColor: c.ink, borderColor: c.ink },
   hintButtonText: { ...type.caption, color: c.ink, fontWeight: '600' },
   hintButtonTextActive: { color: c.white },
@@ -967,14 +967,14 @@ const useStyles = makeStyles((c) => ({
   saveCopyLarge: { flex: 0, width: '100%' },
   saveTitle: { ...type.label, color: c.ink },
   saveMeaning: { ...type.caption, color: c.muted },
-  saveButton: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  saveButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   saveButtonLarge: { alignSelf: 'flex-start' },
   saveButtonActive: { backgroundColor: c.brand, borderColor: c.brand },
   wordTray: { gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.brandSoft, padding: spacing.lg },
   wordTrayTitle: { ...type.label, color: c.brandText, fontWeight: '700' },
   wordTrayHint: { ...type.caption, color: c.muted },
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  wordToken: { minHeight: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600' },
   wordTokenHindi: hindiType(17),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
@@ -992,6 +992,6 @@ const useStyles = makeStyles((c) => ({
   finishLabel: { ...type.caption, color: c.muted, textAlign: 'center' },
   secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   secondaryText: { ...type.label, color: c.ink },
-  tertiaryButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  tertiaryButton: { minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   tertiaryText: { ...type.label, color: c.brandText },
 }));

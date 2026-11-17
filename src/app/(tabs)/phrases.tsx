@@ -20,7 +20,7 @@ import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { defaultLearnerProfile } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
 import type { SavedPhrase } from '@/state/app-state-types';
-import { displayFont, hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
+import { displayFont, hindiType, layout, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 type Filter = 'All' | SceneCategory;
@@ -274,7 +274,7 @@ const useStyles = makeStyles((c) => ({
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs },
   dueTitle: { ...type.label, color: c.ink, textAlign: 'left' },
   dueBody: { ...type.caption, color: c.muted, textAlign: 'left' },
-  dueAction: { ...buttons.primary, minHeight: 44 },
+  dueAction: { ...buttons.primary, minHeight: layout.touchTarget },
   dueActionText: buttons.primaryText,
   searchField: { width: '100%', alignSelf: 'stretch' },
   searchRow: { width: '100%', minHeight: 48 },
@@ -286,7 +286,7 @@ const useStyles = makeStyles((c) => ({
   cardMainLarge: { flexDirection: 'column', alignItems: 'stretch' },
   cardActions: { alignItems: 'center', gap: spacing.xs },
   cardActionsLarge: { flexDirection: 'row', justifyContent: 'flex-end' },
-  listenButton: { width: 44, height: 44, minHeight: 44, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
+  listenButton: { width: layout.touchTarget, height: layout.touchTarget, minHeight: layout.touchTarget, borderRadius: radius.pill, backgroundColor: c.brandSoft, alignItems: 'center', justifyContent: 'center' },
   copy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs },
   hindi: { ...hindiType(20), color: c.ink, textAlign: 'left' },
   latin: { ...type.label, color: c.brand, textAlign: 'left' },
@@ -297,7 +297,7 @@ const useStyles = makeStyles((c) => ({
   masterySegmentFilled: { backgroundColor: c.forest },
   mastery: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   masteryDue: { color: c.brandText },
-  removeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  removeButton: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   headerMeta: { alignItems: 'flex-end', gap: spacing.xs },
   speedButton: { ...buttons.secondary, minHeight: 36, paddingHorizontal: spacing.md },
   speedButtonText: { ...buttons.secondaryText, ...type.caption, fontWeight: '600' },
@@ -312,11 +312,11 @@ const useStyles = makeStyles((c) => ({
   emptyBody: { ...type.body, color: c.muted, textAlign: 'center' },
   emptyAction: { ...buttons.primary, minWidth: 180 },
   emptyActionText: buttons.primaryText,
-  consentNote: { minHeight: 44, justifyContent: 'center' },
+  consentNote: { minHeight: layout.touchTarget, justifyContent: 'center' },
   consentNoteText: { ...type.caption, color: c.muted },
   consentNoteLink: { color: c.brandText, fontWeight: '700', textDecorationLine: 'underline' },
   noResultsBlock: { alignItems: 'center', gap: spacing.sm, padding: spacing.xl },
   noResults: { ...type.body, color: c.muted, textAlign: 'center' },
-  clearFilters: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  clearFilters: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.lg },
   clearFiltersText: { ...type.label, color: c.brandText, fontWeight: '700' },
 }));

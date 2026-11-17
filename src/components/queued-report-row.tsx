@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import type { OutboxEntry } from '@/lib/sync-outbox';
-import { makeStyles, radius, spacing, useTheme, type } from '@/theme';
+import { layout, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 const EXCERPT_CHARACTERS = 80;
 
@@ -72,6 +72,6 @@ const useStyles = makeStyles((c) => ({
   mutedDark: { color: c.heroSubtle },
   statusFailed: { color: c.dangerSoft },
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  action: { minHeight: 44, justifyContent: 'center' },
+  action: { minHeight: layout.touchTarget, justifyContent: 'center' },
   actionText: { ...type.label, color: c.ink, textDecorationLine: 'underline', fontWeight: '700' },
 }));

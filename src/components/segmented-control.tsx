@@ -3,7 +3,7 @@ import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-nat
 
 import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { hapticSelect } from '@/lib/haptics';
-import { makeStyles, spacing, type, radius } from '@/theme';
+import { layout, makeStyles, spacing, type, radius } from '@/theme';
 
 export type SegmentOption<T extends string> = {
   accessibilityLabel?: string;
@@ -190,14 +190,14 @@ const useStyles = makeStyles((c) => ({
   trigger: {
     zIndex: 1,
     minWidth: 0,
-    minHeight: 44,
+    minHeight: layout.touchTarget,
     flex: 1,
     borderRadius: radius.sm,
     borderCurve: 'continuous',
     paddingHorizontal: spacing.sm,
   },
   triggerCompact: {
-    minHeight: 44,
+    minHeight: layout.touchTarget,
     borderRadius: radius.sm,
   },
   indicator: {
