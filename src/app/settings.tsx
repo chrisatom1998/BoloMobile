@@ -534,14 +534,14 @@ const useStyles = makeStyles((c) => ({
   linkCardLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   rowLarge: { flexDirection: 'column', alignItems: 'flex-start' },
-  icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' },
+  icon: { width: 32, height: 44, alignItems: 'center', justifyContent: 'center' }, // Icon column, as tall as the row's 44pt touch target.
   copy: { flex: 1, gap: spacing.xs },
   copyLarge: { flex: 0, width: '100%' },
   title: { ...type.label, color: c.ink, fontWeight: '700' },
   body: { ...type.caption, color: c.muted },
   detail: { ...type.caption, color: c.muted },
   motionPriority: { ...type.caption, color: c.muted },
-  destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  destructiveButton: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.dangerLine, backgroundColor: c.dangerSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm }, // Control height, above the 44pt touch target.
   destructiveText: { ...type.label, color: c.danger, fontWeight: '700' },
   disabled: { opacity: 0.5 },
   choiceLabel: { ...type.eyebrow, color: c.muted },

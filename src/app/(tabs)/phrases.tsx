@@ -268,7 +268,7 @@ const useStyles = makeStyles((c) => ({
   headerSubtitle: { ...type.body, maxWidth: 310, color: c.muted, fontFamily: displayFont, textAlign: 'left' },
   headerSubtitleLarge: { maxWidth: '100%' },
   savedCount: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], paddingBottom: spacing.xs },
-  dueCard: { width: '100%', minHeight: 76, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.brandSoft, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.lg },
+  dueCard: { width: '100%', minHeight: 76, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: c.brandSoft, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.lg }, // Due-review card height floor; the card is the control.
   dueCardLarge: { alignItems: 'flex-start', flexDirection: 'column' },
   dueCount: { color: c.ink, fontFamily: displayFont, fontSize: 44, lineHeight: 48, fontWeight: '700', fontVariant: ['lining-nums', 'tabular-nums'] },  // Exception to the type scale: hero numeral.
   dueCopy: { minWidth: 0, flex: 1, alignItems: 'flex-start', gap: spacing.xs },
@@ -277,7 +277,7 @@ const useStyles = makeStyles((c) => ({
   dueAction: { ...buttons.primary, minHeight: layout.touchTarget },
   dueActionText: buttons.primaryText,
   searchField: { width: '100%', alignSelf: 'stretch' },
-  searchRow: { width: '100%', minHeight: 48 },
+  searchRow: { width: '100%', minHeight: 48 }, // Search field height, above the 44pt touch target.
   search: { ...type.body, minWidth: 0, flex: 1, minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', borderWidth: 1, borderColor: c.inputBorder, backgroundColor: c.paperRaised, color: c.ink, paddingVertical: spacing.sm },
   error: { ...type.caption, color: c.danger },
   card: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', alignItems: 'stretch', backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', gap: spacing.md, paddingVertical: spacing.lg, paddingLeft: spacing.lg, paddingRight: spacing.lg },
@@ -293,17 +293,17 @@ const useStyles = makeStyles((c) => ({
   english: { ...type.caption, color: c.muted, textAlign: 'left' },
   masteryRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, paddingTop: spacing.sm },
   masteryMeter: { flexDirection: 'row', gap: spacing.xs },
-  masterySegment: { width: 18, height: 4, borderRadius: radius.pill, backgroundColor: c.track },
+  masterySegment: { width: 18, height: 4, borderRadius: radius.pill, backgroundColor: c.track }, // One mastery tick.
   masterySegmentFilled: { backgroundColor: c.forest },
   mastery: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   masteryDue: { color: c.brandText },
   removeButton: { width: layout.touchTarget, height: layout.touchTarget, alignItems: 'center', justifyContent: 'center' },
   headerMeta: { alignItems: 'flex-end', gap: spacing.xs },
-  speedButton: { ...buttons.secondary, minHeight: 36, paddingHorizontal: spacing.md },
+  speedButton: { ...buttons.secondary, minHeight: 36, paddingHorizontal: spacing.md }, // Compact chip height; below the 44pt touch target.
   speedButtonText: { ...buttons.secondaryText, ...type.caption, fontWeight: '600' },
   chipRow: { width: '100%', flexGrow: 0 },
   chips: { gap: spacing.sm, paddingRight: spacing.lg },
-  chip: { minHeight: 36, justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.paper, paddingHorizontal: spacing.md },
+  chip: { minHeight: 36, justifyContent: 'center', borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.lineStrong, backgroundColor: c.paper, paddingHorizontal: spacing.md }, // Compact chip height; below the 44pt touch target.
   chipSelected: { backgroundColor: c.ink, borderColor: c.ink },
   chipText: { ...type.label, color: c.ink },
   chipTextSelected: { color: c.white },

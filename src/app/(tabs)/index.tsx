@@ -505,7 +505,7 @@ const useStyles = makeStyles((c) => {
   list: { width: '100%', alignItems: 'stretch', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
   headerContent: { width: '100%', maxWidth: maxContentWidth, alignSelf: 'center', minWidth: 0, alignItems: 'stretch', gap: spacing.md, marginBottom: spacing.lg },
   // Wraps, so a streak-and-gear row that no longer fits beside the greeting drops below it instead of overlapping.
-  topbar: { width: '100%', minHeight: 56, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  topbar: { width: '100%', minHeight: 56, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md }, // Top bar height: holds the 44pt streak and settings controls.
   topbarLarge: { minHeight: 0, flexDirection: 'column', alignItems: 'stretch', gap: spacing.md, paddingRight: 0 },
   greetingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
   dateLine: { ...type.caption, color: c.muted },
@@ -568,7 +568,7 @@ const useStyles = makeStyles((c) => {
   ashaInvitePortrait: { width: layout.ashaInvitePortraitSize, height: layout.ashaInvitePortraitSize, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
   ashaInviteText: { ...type.body, minWidth: 0, flex: 1, color: c.ink },
   steps: { gap: spacing.xs, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
-  stepRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  stepRow: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, // Step row: a readout, not a control.
   stepDot: { width: layout.stepDotSize, height: layout.stepDotSize, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill, borderColor: c.lineStrong, borderWidth: 2 },
   stepDotDone: { backgroundColor: c.gold, borderColor: c.gold },
   stepDotCurrent: { backgroundColor: c.goldSoft, borderColor: c.goldIcon },
@@ -589,7 +589,7 @@ const useStyles = makeStyles((c) => {
   allPlans: button.quiet,
   allPlansText: button.quietText,
   // A hairline, not a card inside the card.
-  planRow: { width: '100%', minHeight: 48, gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
+  planRow: { width: '100%', minHeight: 48, gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md }, // Plan row height, above the 44pt touch target.
   planCopy: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   planCopyLarge: { flexDirection: 'column', alignItems: 'flex-start' },
   planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },

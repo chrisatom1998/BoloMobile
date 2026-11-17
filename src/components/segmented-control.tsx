@@ -169,7 +169,7 @@ export function SegmentedControl<T extends string>({
 const useStyles = makeStyles((c) => ({
   list: {
     alignSelf: 'stretch',
-    minHeight: 52,
+    minHeight: 52, // Track around the 44pt segments.
     overflow: 'hidden',
     borderRadius: radius.md,
     borderCurve: 'continuous',
@@ -180,7 +180,7 @@ const useStyles = makeStyles((c) => ({
     boxShadow: '0 3px 10px rgba(0, 0, 0, 0.04)',
   },
   listCompact: {
-    minHeight: 50,
+    minHeight: 50, // Compact track around the 44pt segments.
     borderRadius: radius.md,
     padding: spacing.xs,
   },
@@ -225,7 +225,7 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.sm,
   },
   stackedTrigger: {
-    minHeight: 48,
+    minHeight: 48, // Stacked option height, above the 44pt touch target.
     borderRadius: radius.md,
     borderCurve: 'continuous',
     borderColor: c.line,

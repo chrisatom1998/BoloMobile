@@ -258,7 +258,7 @@ const useStyles = makeStyles((c) => ({
   detailTitleLarge: { maxWidth: '100%' },
   intro: { ...type.caption, maxWidth: 310, color: c.muted },
   introLarge: { maxWidth: '100%' },
-  backButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  backButton: { minHeight: 48, alignSelf: 'flex-start', justifyContent: 'center', paddingHorizontal: spacing.sm }, // Control height, above the 44pt touch target.
   backButtonText: buttons.quietText,
   plans: { width: '100%', gap: spacing.md },
   detailSummary: { width: '100%', gap: spacing.sm, borderRadius: radius.lg, backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
@@ -267,9 +267,9 @@ const useStyles = makeStyles((c) => ({
   detailSummaryPercent: { ...type.label, color: c.brandText, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
   detailCue: { ...type.caption, color: c.muted },
   lessons: { width: '100%', gap: spacing.sm },
-  lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
+  lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md }, // Lesson row height floor; the row is the control.
   lessonCardCurrent: { backgroundColor: c.brandSoft, borderLeftWidth: 4, borderLeftColor: c.brand },
-  lessonCardLarge: { alignItems: 'flex-start', minHeight: 96, padding: spacing.lg },
+  lessonCardLarge: { alignItems: 'flex-start', minHeight: 96, padding: spacing.lg }, // Taller floor for the large lesson card.
   lessonNumberText: { ...type.bodyLarge, minWidth: 28, color: c.mutedSoft, fontFamily: 'Georgia', fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '700' },
   lessonNumberTextComplete: { color: c.forestText },
   lessonNumberTextCurrent: { color: c.ink },
@@ -292,11 +292,11 @@ const useStyles = makeStyles((c) => ({
   planTitle: { ...type.headline, color: c.ink },
   planTitleCompact: { ...type.headline },
   planSubtitle: { ...type.caption, color: c.muted },
-  track: { width: '100%', height: 7, overflow: 'hidden', borderRadius: radius.pill, backgroundColor: c.backgroundWarm },
+  track: { width: '100%', height: 7, overflow: 'hidden', borderRadius: radius.pill, backgroundColor: c.backgroundWarm }, // Progress bar thickness.
   fill: { height: '100%', borderRadius: radius.pill },
   planAction: { ...type.caption, color: c.brandText, fontWeight: '700' },
   sceneShelfHeading: { width: '100%', gap: spacing.xs, marginTop: spacing.lg },
   sceneShelfTitle: { ...type.title, maxWidth: 320, textAlign: 'left' },
-  sceneCard: { width: '100%', minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
+  sceneCard: { width: '100%', minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md }, // Scene row height floor; the row is the control.
   sceneTitle: { ...type.bodyLarge, color: c.ink, fontFamily: 'Georgia', fontWeight: '700' },
 }));

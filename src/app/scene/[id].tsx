@@ -876,14 +876,14 @@ const useStyles = makeStyles((c) => ({
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.xs },
   sceneTitle: { ...type.title, flexShrink: 1, color: c.ink },
   hudRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md },
+  hud: { minHeight: 28, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, borderRadius: radius.pill, backgroundColor: c.paperRaised, paddingHorizontal: spacing.md }, // Score readout, not a control.
   hudText: { ...type.caption, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'], fontWeight: '600' },
   resumeNotice: { ...type.caption, color: c.brandText, textAlign: 'left', fontWeight: '600' },
   resumeNoticeQuiet: { ...type.caption, color: c.muted, textAlign: 'left' },
   // Asha's face sits at the top of her bubble; the tightened top-left corner reads as a chat tail.
   ashaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   ashaRowLarge: { flexDirection: 'column', alignItems: 'stretch' },
-  asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  asha: { width: 40, height: 40, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft }, // Asha's small portrait in the scene header.
   bubble: { minWidth: 0, flex: 1, maxWidth: 300, backgroundColor: c.paperRaised, borderRadius: radius.xl, borderTopLeftRadius: 6, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.xs },
   bubbleLarge: { alignSelf: 'stretch', flex: 0, maxWidth: '100%' },
   speakerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
@@ -893,7 +893,7 @@ const useStyles = makeStyles((c) => ({
   npcLarge: {},
   npcLatin: { ...type.label, fontFamily: 'System', color: c.brandText },
   translation: { ...type.bodyLarge, color: c.muted },
-  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
+  speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md }, // Compact replay pill; hitSlop 4 widens the tap area.
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },
@@ -911,7 +911,7 @@ const useStyles = makeStyles((c) => ({
   hintButtonText: { ...type.caption, color: c.ink, fontWeight: '600' },
   hintButtonTextActive: { color: c.white },
   choices: { gap: spacing.sm },
-  choice: { minHeight: 64, backgroundColor: c.paperRaised, borderColor: c.lineStrong, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  choice: { minHeight: 64, backgroundColor: c.paperRaised, borderColor: c.lineStrong, borderWidth: 1.5, borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }, // Answer choice height, above the 44pt touch target.
   choiceLarge: { alignItems: 'stretch', flexDirection: 'column' },
   choiceCorrect: { borderColor: c.forest, backgroundColor: c.forest },
   choiceWrong: { borderColor: c.danger, backgroundColor: c.dangerSoft },
@@ -934,14 +934,14 @@ const useStyles = makeStyles((c) => ({
   nameStepScroll: { flex: 1 },
   nameStepFooter: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   nameStepBody: { flex: 1, justifyContent: 'center', gap: spacing.md, paddingVertical: spacing.xl },
-  nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft },
+  nameStepAsha: { width: 64, height: 64, borderRadius: radius.pill, borderColor: c.gold, borderWidth: 2, backgroundColor: c.brandSoft }, // Asha's portrait on the name step.
   nameStepTitle: { ...type.display, color: c.ink },
   nameStepBody2: { ...type.body, color: c.muted },
   nameStepNote: { ...type.caption, color: c.muted },
   nameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   nameRowText: { ...type.caption, flexShrink: 1, color: c.muted, fontWeight: '600' },
   nameRowLink: { ...type.caption, color: c.brandText, fontWeight: '700' },
-  nameInput: { ...type.headline, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink },
+  nameInput: { ...type.headline, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.inputBorder, paddingHorizontal: spacing.md, color: c.ink }, // Text field height, above the 44pt touch target.
   hintBody: { ...type.caption, color: c.muted },
   result: { borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.forestSoft, padding: spacing.lg, gap: spacing.lg },
   resultWrong: { backgroundColor: c.dangerSoft },
@@ -957,7 +957,7 @@ const useStyles = makeStyles((c) => ({
   resultHindi: { ...type.headline, color: c.ink, fontWeight: '600' },
   resultHindiScript: hindiType(20),
   answerActions: { gap: spacing.sm },
-  tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm }, // Control height, above the 44pt touch target.
   tryAgainText: { ...type.label, color: c.brandText },
   nextButton: { ...buttons.primary, width: '100%', alignSelf: 'stretch' },
   nextText: buttons.primaryText,
@@ -979,7 +979,7 @@ const useStyles = makeStyles((c) => ({
   wordTokenHindi: hindiType(17),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
-  finishBadge: { width: 74, height: 74, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' },
+  finishBadge: { width: 74, height: 74, borderRadius: radius.pill, backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }, // Decorative finish badge.
   finishHeading: { alignItems: 'stretch', gap: spacing.xs },
   finishHindi: { ...type.display, color: c.brandDark, textAlign: 'center' },
   finishHindiScript: hindiType(28),
@@ -990,7 +990,7 @@ const useStyles = makeStyles((c) => ({
   finishStat: { minWidth: 96, flexGrow: 1, flexBasis: 96, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, alignItems: 'center', gap: spacing.xs },
   finishValue: { ...type.title, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
   finishLabel: { ...type.caption, color: c.muted, textAlign: 'center' },
-  secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  secondaryButton: { minHeight: 52, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.line, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' }, // Matches the 52pt primary button.
   secondaryText: { ...type.label, color: c.ink },
   tertiaryButton: { minHeight: layout.touchTarget, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
   tertiaryText: { ...type.label, color: c.brandText },

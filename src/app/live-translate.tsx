@@ -390,7 +390,7 @@ const useStyles = makeStyles((c) => ({
   noteRowText: { ...type.body, flex: 1, color: c.ink },
   actions: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.gutter, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: c.nightLine, backgroundColor: c.night },
   primaryAction: { flex: 1, borderRadius: radius.pill },
-  secondaryAction: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, borderRadius: radius.pill, borderWidth: 1, borderColor: c.nightLine },
+  secondaryAction: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.xl, borderRadius: radius.pill, borderWidth: 1, borderColor: c.nightLine }, // Matches the 52pt primary button beside it.
   secondaryActionText: { ...type.label, color: c.white },
   disabled: { opacity: 0.5 },
 }));

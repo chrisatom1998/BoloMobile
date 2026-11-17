@@ -228,7 +228,7 @@ const useStyles = makeStyles((c) => ({
   empty: { alignItems: 'flex-start' },
   summary: { gap: spacing.sm },
   badges: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  badge: { minHeight: 28, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm },
+  badge: { minHeight: 28, justifyContent: 'center', borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.sm }, // Status badge: a readout, not a control.
   badgeInterrupted: { backgroundColor: c.goldSoft },
   badgeText: { ...type.caption, color: c.brandText, fontWeight: '700' },
   badgeTextInterrupted: { color: c.goldText },
@@ -248,7 +248,7 @@ const useStyles = makeStyles((c) => ({
   rowTextHindi: { ...hindiType(17) },
   reports: { gap: spacing.sm },
   footnote: { ...type.caption, color: c.muted },
-  clearButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
+  clearButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg }, // Control height, above the 44pt touch target.
   clearText: { ...type.label, color: c.danger, fontWeight: '700' },
   clearError: { ...type.caption, color: c.danger },
   disabled: { opacity: 0.5 },

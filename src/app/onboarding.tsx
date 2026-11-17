@@ -249,7 +249,7 @@ const useStyles = makeStyles((c) => ({
   stepLabel: { ...type.eyebrow, color: c.brandText },
   cancelButton: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.sm },
   cancelText: { ...type.label, color: c.ink },
-  cancelSpacer: { width: 64 },
+  cancelSpacer: { width: 64 }, // Holds the Cancel button's place when it is hidden.
   body: { flex: 1, justifyContent: 'center' },
   stack: { gap: spacing.md },
   heading: { ...type.display, color: c.ink },
@@ -271,12 +271,12 @@ const useStyles = makeStyles((c) => ({
     borderWidth: 1.5,
     flexDirection: 'row',
     gap: spacing.md,
-    minHeight: 56,
+    minHeight: 56, // Choice row height, above the 44pt touch target.
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   choiceSelected: { borderColor: c.ink, borderWidth: 2 },
-  mark: { alignItems: 'center', justifyContent: 'center', borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 22, width: 22 },
+  mark: { alignItems: 'center', justifyContent: 'center', borderColor: c.lineStrong, borderRadius: radius.pill, borderWidth: 1.5, height: 22, width: 22 }, // Radio mark inside the choice row.
   markSelected: { backgroundColor: c.ink, borderColor: c.ink },
   markCheck: { ...type.caption, color: c.white, fontWeight: '700' },
   choiceCopy: { flex: 1, gap: spacing.xs, minWidth: 0 },
@@ -284,7 +284,7 @@ const useStyles = makeStyles((c) => ({
   choiceHindi: { ...hindiType(20) },
   choiceDetail: { ...type.caption, color: c.muted },
   ashaRow: { alignItems: 'center', flexDirection: 'row', gap: spacing.md },
-  asha: { backgroundColor: c.brandSoft, borderColor: c.gold, borderRadius: radius.pill, borderWidth: 2, height: 72, width: 72 },
+  asha: { backgroundColor: c.brandSoft, borderColor: c.gold, borderRadius: radius.pill, borderWidth: 2, height: 72, width: 72 }, // Asha's portrait diameter on onboarding.
   ashaCopy: { flex: 1, gap: spacing.sm, minWidth: 0 },
   continueButton: buttons.primary,
   continueDisabled: { opacity: 0.45 },

@@ -212,7 +212,7 @@ const useStyles = makeStyles((c) => ({
   content: { gap: spacing.lg, padding: spacing.lg, paddingBottom: spacing.xxl },
   sourceCard: { gap: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.line, borderWidth: 1, backgroundColor: c.paperRaised, padding: spacing.lg },
   excerptEditor: { gap: spacing.sm },
-  excerptInput: { ...type.body, minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.md, color: c.ink, padding: spacing.sm },
+  excerptInput: { ...type.body, minHeight: 120, maxHeight: 240, borderWidth: 1, borderColor: c.inputBorder, borderRadius: radius.md, color: c.ink, padding: spacing.sm }, // Multi-line field floor; grows to its maxHeight.
   sourceLabel: { ...type.eyebrow, color: c.brandText },
   sourcePhrase: { ...type.title, color: c.ink },
   sourcePhraseHindi: hindiType(28),
@@ -220,7 +220,7 @@ const useStyles = makeStyles((c) => ({
   tray: { gap: spacing.sm },
   trayLabel: { ...type.label, color: c.ink, fontWeight: '700' },
   tokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  token: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  token: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, // Control height, above the 44pt touch target.
   tokenSelected: { backgroundColor: c.brand },
   tokenText: { ...type.label, color: c.brandText, fontWeight: '700' },
   tokenHindi: hindiType(20),

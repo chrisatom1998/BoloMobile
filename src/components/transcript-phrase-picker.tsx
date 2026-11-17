@@ -209,13 +209,13 @@ const useStyles = makeStyles((c) => ({
   instructions: { ...type.body, color: c.muted },
   fieldGroup: { gap: spacing.sm },
   label: { ...type.caption, color: c.ink, fontWeight: '700' },
-  input: { ...type.body, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.inputBorder, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
-  sourceInput: { minHeight: 112, textAlignVertical: 'top' },
+  input: { ...type.body, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.inputBorder, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md }, // Text field height, above the 44pt touch target.
+  sourceInput: { minHeight: 112, textAlignVertical: 'top' }, // Multi-line source field floor.
   prepareButton: buttons.primary,
   prepareButtonText: buttons.primaryText,
   hint: { ...type.caption, color: c.muted },
   error: { ...type.caption, color: c.danger },
-  saveButton: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  saveButton: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg }, // Control height, above the 44pt touch target.
   saveButtonText: { ...type.label, color: c.white, fontWeight: '700' },
   disabled: { opacity: 0.45 },
 }));

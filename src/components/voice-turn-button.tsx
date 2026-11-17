@@ -272,7 +272,7 @@ export function VoiceTurnButton({ disabled = false, idleLabel = 'Speak', onActiv
 const useStyles = makeStyles((c) => ({
   wrapper: { gap: spacing.sm },
   button: {
-    minHeight: 50,
+    minHeight: 50, // Control height, above the 44pt touch target.
     borderRadius: radius.pill,
     borderCurve: 'continuous',
     backgroundColor: c.brand,

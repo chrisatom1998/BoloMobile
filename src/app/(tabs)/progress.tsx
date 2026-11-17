@@ -240,11 +240,11 @@ export const createProgressStyles = (c: ThemeColors) => {
   weekMeta: { ...type.caption, color: c.brandSoft },
   weekTotal: { ...type.display, color: c.white, fontVariant: ['lining-nums', 'tabular-nums'], textAlign: 'right' },
   weekTotalUnit: { ...type.label, color: c.brandSoft },
-  chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm }, // Chart height floor.
   barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
   barValue: { ...type.caption, color: c.brandSoft, fontVariant: ['lining-nums', 'tabular-nums'] },
   barValueToday: { color: c.white, fontWeight: '700' },
-  barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
+  barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' }, // Bar track floor and width cap.
   bar: { width: '100%', minHeight: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
   // Zero-minute days keep a 4 pt stub so all seven days always show.
   barEmpty: { height: spacing.xs, minHeight: spacing.xs, borderRadius: radius.pill, backgroundColor: c.track },
@@ -276,7 +276,7 @@ export const createProgressStyles = (c: ThemeColors) => {
   planCopy: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
   planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },
   planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
-  planTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.track },
+  planTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.track }, // Progress bar thickness.
   planFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
   planFillComplete: { backgroundColor: c.forest },
   } satisfies NamedStyles;

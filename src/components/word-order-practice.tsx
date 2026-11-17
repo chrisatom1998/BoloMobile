@@ -177,13 +177,13 @@ export function WordOrderPractice({ disabled = false, scriptPreference = 'devana
 const useStyles = makeStyles((c) => ({
   container: { gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.brandSoft, padding: spacing.lg },
   instructions: { ...type.label, color: c.brandText, fontWeight: '700' },
-  tray: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' },
+  tray: { minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.paper, borderWidth: 1, borderColor: c.line, padding: spacing.md, flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, alignItems: 'center' }, // Empty-tray floor, as tall as a text field.
   trayPlaceholder: { ...type.caption, color: c.muted, fontStyle: 'italic' },
   trayToken: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.pill, backgroundColor: c.night },
   trayTokenText: { ...type.label, color: c.white, fontWeight: '700' },
   trayTokenHindi: hindiType(17),
   tileRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' },
+  tile: { minHeight: 48, minWidth: 60, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderWidth: 1, borderColor: c.brand, alignItems: 'center', justifyContent: 'center' }, // Word tile height, above the 44pt touch target.
   tileText: { ...type.label, color: c.brandText, fontWeight: '700' },
   tileHindi: hindiType(17),
   tileUsed: { backgroundColor: c.background, borderStyle: 'dashed', opacity: 0.5 },
