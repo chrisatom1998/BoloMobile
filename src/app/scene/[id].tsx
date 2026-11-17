@@ -863,7 +863,7 @@ function FadingNotice({ children, style }: { children: string; style: StyleProp<
 }
 
 const useStyles = makeStyles((c) => ({
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 0, gap: spacing.lg },
+  content: { paddingHorizontal: spacing.gutter, paddingTop: spacing.sm, paddingBottom: 0, gap: spacing.lg },
   center: { flex: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   header: { gap: spacing.md },
   progressHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

@@ -200,8 +200,8 @@ const useStyles = makeStyles((c) => ({
   compactButton: { alignSelf: 'flex-start', minHeight: layout.touchTarget, justifyContent: 'center' },
   compactButtonText: { ...type.label, color: c.brandText, fontWeight: '700' },
   sheetScreen: { flex: 1, backgroundColor: c.background },
-  sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.gutter },
   sheetClose: { minHeight: layout.touchTarget, justifyContent: 'center', paddingHorizontal: spacing.xs },
   sheetCloseText: buttons.quietText,
-  sheetContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  sheetContent: { paddingHorizontal: spacing.gutter, paddingBottom: spacing.xxl },
 }));

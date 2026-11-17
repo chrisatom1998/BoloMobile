@@ -184,7 +184,7 @@ export default function PhrasesScreen() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={[
           styles.content,
-          Platform.OS === 'android' && { paddingTop: insets.top + 18, paddingBottom: insets.bottom + spacing.xxl },
+          Platform.OS === 'android' && { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.xxl },
         ]}
         data={visible}
         keyboardDismissMode="on-drag"

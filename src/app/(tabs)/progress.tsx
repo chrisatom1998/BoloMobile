@@ -222,7 +222,7 @@ export default function ProgressScreen() {
 export const createProgressStyles = (c: ThemeColors) => {
   const button = createButtonStyles(c);
   return {
-  content: { alignItems: 'center', padding: spacing.gutter, paddingTop: spacing.lg, paddingBottom: 120, gap: spacing.lg },
+  content: { alignItems: 'center', padding: spacing.gutter, paddingTop: spacing.lg, paddingBottom: layout.progressEndClearance, gap: spacing.lg },
   pageHeading: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingTop: spacing.sm },
   pageHeadingLarge: { flexDirection: 'column', alignItems: 'stretch' },
   pageHeadingCopy: { minWidth: 0, flex: 1, gap: spacing.xs },
@@ -233,7 +233,7 @@ export const createProgressStyles = (c: ThemeColors) => {
   shareButton: { width: layout.touchTarget, height: layout.touchTarget, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: spacing.gutter, gap: spacing.lg },
   // Tucked into the top-right corner, small and faint, so it never sits behind the bars.
-  weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },
+  weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark }, // Offsets trim the glyph's own side bearing and line-height slack.
   weekHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   weekHeadingCopy: { minWidth: 0, flexShrink: 1, gap: spacing.xs, paddingTop: spacing.sm },
   weekEyebrow: { ...type.eyebrow, color: c.brandSoft },

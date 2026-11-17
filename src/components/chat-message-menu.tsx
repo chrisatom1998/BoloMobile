@@ -99,7 +99,7 @@ const useStyles = makeStyles((c) => ({
   },
   sheetWeb: { alignSelf: 'center', width: '100%', maxWidth: 480 },
   title: { ...type.caption, color: c.muted, marginBottom: spacing.sm, fontWeight: '700' },
-  item: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.background, gap: 2 },
+  item: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.background, gap: spacing.xs },
   itemDisabled: { opacity: 0.45 },
   itemLabel: { ...type.label, color: c.ink },
   itemDestructive: { color: c.danger },

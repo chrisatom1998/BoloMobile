@@ -143,6 +143,8 @@ export const layout = {
    * Today's content starts below its bottom edge on web only; native tabs sit at the bottom and need no inset.
    */
   webTabBarInset: 64,
+  /** Extra space under the last Progress card so it scrolls well clear of the tab bar. `audit-screen-regressions` requires at least 100. */
+  progressEndClearance: 120,
   /** Status pill on the Today hero (live sessions only): a readout, not a control, so it sits below the touch target. */
   statusPillMinHeight: 32,
   /** Step marker on the Today steps list. */
