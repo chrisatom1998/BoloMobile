@@ -98,7 +98,7 @@ export function AiConsentGate({
   const notice = (
     <View style={styles.card}>
       <View style={styles.titleRow}>
-        <ShieldCheck color={colors.forest} size={20} strokeWidth={2} />
+        <ShieldCheck color={colors.brand} size={20} strokeWidth={2} />
         <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       </View>
       <View style={styles.summary}>

@@ -384,7 +384,7 @@ export default function SettingsScreen() {
 
       <View style={styles.card}>
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-          <View style={styles.icon}><Sparkles color={colors.forest} size={22} /></View>
+          <View style={styles.icon}><Sparkles color={colors.brand} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Motion</Text><Text style={styles.body}>Gentle movement, or almost none</Text></View>
         </View>
         <Text style={styles.choiceLabel}>Animation style</Text>
@@ -434,7 +434,7 @@ export default function SettingsScreen() {
       {aiConsent ? (
         <View style={styles.card}>
           <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-            <View style={styles.icon}><ShieldCheck color={colors.forest} size={22} /></View>
+            <View style={styles.icon}><ShieldCheck color={colors.brand} size={22} /></View>
             <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>AI coaching consent</Text><Text style={styles.body}>Enabled for the current privacy notice</Text></View>
           </View>
           <Text style={styles.detail}>After consent, Listen text, typed messages, active live voice turns, and pronunciation recordings are processed by Bolo&apos;s backend and OpenAI for AI speech, transcription, or coaching.</Text>
@@ -476,7 +476,7 @@ export default function SettingsScreen() {
 
       <View style={styles.card} testID="settings-progress-backup">
         <View style={[styles.row, largeTextLayout && styles.rowLarge]}>
-          <View style={styles.icon}><ArchiveRestore color={colors.forest} size={22} /></View>
+          <View style={styles.icon}><ArchiveRestore color={colors.brand} size={22} /></View>
           <View style={[styles.copy, largeTextLayout && styles.copyLarge]}><Text accessibilityRole="header" style={styles.title}>Progress backup</Text><Text style={styles.body}>Keep your progress when you change phones</Text></View>
         </View>
         <Text style={styles.detail}>Export saves your plan, saved phrases, reviews, lesson progress, streaks, and reminder time to a file you choose where to keep. It does not include your random app identifier, AI consent choice, or Asha chat history. The file is not encrypted.</Text>
@@ -491,7 +491,7 @@ export default function SettingsScreen() {
             style={[styles.secondaryButton, styles.backupButton, backupBusy !== null && styles.disabled]}
             testID="settings-export-progress"
           >
-            <FileDown color={colors.forestText} size={18} /><Text style={[styles.secondaryText, styles.backupText]}>{backupBusy === 'export' ? 'Preparing…' : 'Export progress'}</Text>
+            <FileDown color={colors.ink} size={18} /><Text style={[styles.secondaryText, styles.backupText]}>{backupBusy === 'export' ? 'Preparing…' : 'Export progress'}</Text>
           </Pressable>
           <Pressable
             accessibilityHint="Choose a backup file. You will confirm before progress is replaced."
@@ -503,7 +503,7 @@ export default function SettingsScreen() {
             style={[styles.secondaryButton, styles.backupButton, backupBusy !== null && styles.disabled]}
             testID="settings-restore-progress"
           >
-            <ArchiveRestore color={colors.forestText} size={18} /><Text style={[styles.secondaryText, styles.backupText]}>{backupBusy === 'restore' ? 'Restoring…' : 'Restore from backup'}</Text>
+            <ArchiveRestore color={colors.ink} size={18} /><Text style={[styles.secondaryText, styles.backupText]}>{backupBusy === 'restore' ? 'Restoring…' : 'Restore from backup'}</Text>
           </Pressable>
         </View>
       </View>

@@ -286,7 +286,8 @@ const useStyles = makeStyles((c) => ({
   recording: { backgroundColor: c.neutralSurface },
   secondary: { ...buttons.secondary, borderRadius: radius.md },
   labelSecondary: buttons.secondaryText,
-  working: { backgroundColor: c.forestDark },
+  // Starting or waiting on Asha is not a success state, so it stays in the rust family.
+  working: { backgroundColor: c.brandDark },
   disabled: { opacity: 0.5 },
   label: { ...type.label, color: c.white, fontWeight: '700' },
   error: { ...type.caption, color: c.danger },
