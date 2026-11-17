@@ -236,7 +236,7 @@ export const createProgressStyles = (c: ThemeColors) => {
   weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },
   weekHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   weekHeadingCopy: { minWidth: 0, flexShrink: 1, gap: spacing.xs, paddingTop: spacing.sm },
-  weekEyebrow: { ...type.eyebrow, color: c.brandSoft },
+  weekEyebrow: { ...type.eyebrow, color: c.brandSoft, fontVariant: numeralVariant },
   weekMeta: { ...type.caption, color: c.brandSoft, fontVariant: numeralVariant },
   weekTotal: { ...type.display, color: c.white, fontVariant: numeralVariant, textAlign: 'right' },
   weekTotalUnit: { ...type.label, color: c.brandSoft },

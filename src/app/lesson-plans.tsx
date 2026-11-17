@@ -191,7 +191,7 @@ function PlanLessons({ plan, router, sceneProgress }: { plan: LessonPlan; router
       )}
       <View style={[styles.detailHeading, largeTextLayout && styles.headingLarge]} testID="lesson-plan-detail-heading">
         <View style={[styles.headingCopy, largeTextLayout && styles.headingCopyLarge]}>
-          <JournalKicker>{`Plan ${String(plan.order).padStart(2, '0')} · Guided curriculum`}</JournalKicker>
+          <JournalKicker style={styles.detailKicker}>{`Plan ${String(plan.order).padStart(2, '0')} · Guided curriculum`}</JournalKicker>
           <JournalDisplay style={[styles.detailTitle, largeTextLayout && styles.detailTitleLarge]}>{plan.title}</JournalDisplay>
           <Text style={[styles.intro, largeTextLayout && styles.introLarge]}>{plan.subtitle}</Text>
         </View>
@@ -254,6 +254,7 @@ const useStyles = makeStyles((c) => ({
   headingCopyLarge: { flex: 0, width: '100%' },
   title: { ...type.display, fontVariant: numeralVariant, textAlign: 'left' },
   titleLarge: { maxWidth: '100%' },
+  detailKicker: { fontVariant: numeralVariant },
   detailTitle: { ...type.display, textAlign: 'left' },
   detailTitleLarge: { maxWidth: '100%' },
   intro: { ...type.caption, maxWidth: 310, color: c.muted },
@@ -265,7 +266,7 @@ const useStyles = makeStyles((c) => ({
   detailSummaryTopline: { width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   detailSummaryLabel: { ...type.label, color: c.ink, fontVariant: numeralVariant, fontWeight: '700' },
   detailSummaryPercent: { ...type.label, color: c.brandText, fontVariant: numeralVariant, fontWeight: '700' },
-  detailCue: { ...type.caption, color: c.muted },
+  detailCue: { ...type.caption, color: c.muted, fontVariant: numeralVariant },
   lessons: { width: '100%', gap: spacing.sm },
   lessonCard: { width: '100%', minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, padding: spacing.md },
   lessonCardCurrent: { backgroundColor: c.brandSoft, borderLeftWidth: 4, borderLeftColor: c.brand },
