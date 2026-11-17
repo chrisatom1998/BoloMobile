@@ -4,6 +4,12 @@ appId: com.bolo.hindi
 # right after today-largest-text-screenshots.yaml, so the app is already at
 # that size. Every step is optional or a screenshot, so the smoke flow passes
 # either way.
+# The tab bar is minimized after the Today scroll at this size, so open the
+# Asha tab by its route instead of tapping the tab.
+- openLink: bolo://live
+- tapOn:
+    text: "Open"
+    optional: true
 - tapOn:
     text: "Asha"
     optional: true
