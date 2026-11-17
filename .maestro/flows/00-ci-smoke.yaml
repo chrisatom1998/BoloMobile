@@ -90,5 +90,3 @@ tags:
 - runFlow: ../subflows/today-largest-text-screenshots.yaml
 # PR screenshots only: the Asha tab at the same largest text size.
 - runFlow: ../subflows/design-asha-largest-text-screenshots.yaml
-# ONE-TIME (#175, reverted after its run): one real typed message to Asha for screenshots.
-- runFlow: ../subflows/design-asha-chat-screenshots.yaml
