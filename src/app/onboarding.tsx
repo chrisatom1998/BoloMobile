@@ -254,7 +254,7 @@ const useStyles = makeStyles((c) => ({
   stack: { gap: spacing.md },
   heading: { ...type.display, color: c.ink },
   subheading: { ...type.title, color: c.ink, marginTop: spacing.sm },
-  hindi: { ...hindiType(56), color: c.ink },
+  hindi: { ...hindiType(56), color: c.ink },  // Exception to the type scale: decorative 56pt showcase word.
   latin: { ...type.bodyLarge, color: c.brandText },
   prompt: { ...type.label, color: c.ink, marginTop: spacing.sm, fontWeight: '700' },
   hearButton: { ...buttons.secondary, alignSelf: 'flex-start', minHeight: 44 },
