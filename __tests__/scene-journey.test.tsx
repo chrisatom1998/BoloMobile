@@ -70,7 +70,10 @@ jest.mock('lucide-react-native', () => ({
   Heart: () => null,
   RotateCcw: () => null,
   Star: () => null,
+  Volume1: () => null,
   Volume2: () => null,
+  ChevronDown: () => null,
+  ChevronUp: () => null,
   X: () => null,
 }));
 
@@ -217,6 +220,12 @@ describe('SceneScreen primary journey', () => {
     });
     expect(view.getByTestId('scene-completion-scroll')).toBeTruthy();
     expect(view.queryByTestId('scene-scroll')).toBeNull();
+    // The missed phrase is shown first; the one answered right stays folded away.
+    const practiced = within(view.getByTestId('scene-completion-phrases'));
+    expect(practiced.getByText('Worth another listen')).toBeTruthy();
+    expect(practiced.getByText('एक चाय दीजिए।')).toBeTruthy();
+    expect(practiced.getByRole('button', { name: 'Show the other phrase' })).toBeTruthy();
+    expect(practiced.getAllByText('Listen')).toHaveLength(1);
     expect(view.getByText('Scene complete')).toBeTruthy();
     const completion = view.getByTestId('scene-completion-motion');
     expect(within(completion).getByTestId('scene-completion-headline').props.accessibilityLanguage).toBe('hi-IN');
@@ -248,9 +257,11 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
 
     const phrases = within(view.getByTestId('scene-completion-phrases'));
-    expect(phrases.getByText('The 2 phrases you practiced')).toBeTruthy();
+    // Nothing was missed, so the phrases stay folded away until asked for.
+    expect(phrases.queryByText('Worth another listen')).toBeNull();
+    expect(phrases.queryByText(firstTarget.hi)).toBeNull();
+    await fireEvent.press(phrases.getByRole('button', { name: 'Show the 2 phrases you practiced' }));
     expect(phrases.getByText(firstTarget.hi)).toBeTruthy();
-    expect(phrases.queryByText(/Missed once/)).toBeNull();
     await fireEvent.press(phrases.getByLabelText(`Hear ${firstTarget.latin}`));
     expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi);
     await fireEvent.press(phrases.getByLabelText(`Hear ${firstTarget.latin} slowly`));
@@ -446,14 +457,12 @@ describe('SceneScreen primary journey', () => {
     expect(recoveryActions.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(recoveryActions.getByRole('button', { name: 'Continue' })).toBeTruthy();
     const incorrectTestIds = collectTestIds(view.toJSON());
+    // The actions are pinned under the scrolling lesson, so they come after everything inside it.
     expect(incorrectTestIds.indexOf('scene-feedback'))
-      .toBeLessThan(incorrectTestIds.indexOf('scene-answer-actions'));
-    expect(incorrectTestIds.indexOf('scene-answer-actions'))
       .toBeLessThan(incorrectTestIds.indexOf('scene-save'));
-    expect(incorrectTestIds.indexOf('scene-answer-actions'))
-      .toBeLessThan(incorrectTestIds.indexOf('scene-words'));
-    expect(incorrectTestIds.indexOf('scene-answer-actions'))
-      .toBeLessThan(incorrectTestIds.indexOf('scene-pronunciation'));
+    expect(incorrectTestIds.indexOf('scene-pronunciation'))
+      .toBeLessThan(incorrectTestIds.indexOf('scene-answer-actions'));
+    expect(within(view.getByTestId('scene-scroll')).queryByTestId('scene-answer-actions')).toBeNull();
 
     await fireEvent.press(view.getByRole('button', { name: 'Try again' }));
     expect(view.queryByTestId('scene-word-order-solution')).toBeNull();
@@ -510,21 +519,31 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByTestId('scene-result-feedback').props.children).toBe(wrong.feedback);
   });
 
-  it('scrolls recovery actions into view once without animation for reduced motion', async () => {
+  it('pins the answer actions under the lesson and scrolls the result into view once without animation for reduced motion', async () => {
     mockAppState.motionPreference = 'reduced';
     const view = await render(<SceneScreen />);
-    await fireEvent(view.getByTestId('scene-scroll'), 'layout', {
-      nativeEvent: { layout: { height: 600, width: 390, x: 0, y: 0 } },
+    await fireEvent(view.getByTestId('scene-screen'), 'layout', {
+      nativeEvent: { layout: { height: 712, width: 390, x: 0, y: 0 } },
+    });
+    await fireEvent(view.getByTestId('scene-sheet'), 'layout', {
+      nativeEvent: { layout: { height: 700, width: 390, x: 0, y: 300 } },
     });
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0, 1)));
     sceneScrollToMock.mockClear();
 
+    // The result alone is not enough: the pinned bar has to be measured first, because it shrinks the visible area.
+    const feedback = { nativeEvent: { layout: { height: 112, width: 358, x: 16, y: 640 } } };
+    await fireEvent(view.getByTestId('scene-feedback'), 'layout', feedback);
+    expect(sceneScrollToMock).not.toHaveBeenCalled();
     const actions = view.getByTestId('scene-answer-actions');
-    const layout = { nativeEvent: { layout: { height: 112, width: 358, x: 16, y: 940 } } };
-    await fireEvent(actions, 'layout', layout);
-    await fireEvent(actions, 'layout', layout);
+    expect(within(view.getByTestId('scene-scroll')).queryByTestId('scene-answer-actions')).toBeNull();
+    const bar = { nativeEvent: { layout: { height: 112, width: 390, x: 0, y: 600 } } };
+    await fireEvent(actions, 'layout', bar);
+    await fireEvent(actions, 'layout', bar);
+    await fireEvent(view.getByTestId('scene-feedback'), 'layout', feedback);
 
     expect(sceneScrollToMock).toHaveBeenCalledTimes(1);
+    // 300 (sheet) + 640 + 112 (result) + 16 (breathing room) - (712 - 112 visible) = 468
     expect(sceneScrollToMock).toHaveBeenCalledWith({ animated: false, y: 468 });
   });
 
@@ -602,10 +621,10 @@ describe('SceneScreen primary journey', () => {
       width: '100%',
     }));
     const testIds = collectTestIds(view.toJSON());
-    expect(testIds.indexOf('scene-feedback')).toBeLessThan(testIds.indexOf('scene-answer-actions'));
-    expect(testIds.indexOf('scene-answer-actions')).toBeLessThan(testIds.indexOf('scene-save'));
+    expect(testIds.indexOf('scene-feedback')).toBeLessThan(testIds.indexOf('scene-save'));
     expect(testIds.indexOf('scene-save')).toBeLessThan(testIds.indexOf('scene-words'));
     expect(testIds.indexOf('scene-words')).toBeLessThan(testIds.indexOf('scene-pronunciation'));
+    expect(testIds.indexOf('scene-pronunciation')).toBeLessThan(testIds.indexOf('scene-answer-actions'));
   });
 
   it('shows Devanagari and Romanized Hindi before a choice and reveals English for every option once the answer is shown', async () => {

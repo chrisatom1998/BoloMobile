@@ -1,7 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
+import { Bookmark, Check, ChevronDown, ChevronRight, ChevronUp, RotateCcw, Star, Volume1, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -124,6 +124,8 @@ function SceneScreen() {
   const [missedBeats, setMissedBeats] = useState<number[]>([]);
   const [weakPhrases, setWeakPhrases] = useState<string[]>(() => initialAttempt?.weakPhrases ?? []);
   const [review, setReview] = useState<{ queue: number[]; position: number } | null>(null);
+  // The finish screen leads with missed phrases and keeps the rest folded until asked for.
+  const [showAllPhrases, setShowAllPhrases] = useState(false);
 
   const [wordSheet, setWordSheet] = useState<{ word: string; phrase: string } | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
@@ -131,6 +133,9 @@ function SceneScreen() {
   const closingWordSessionRef = useRef(0);
   const sceneScrollRef = useRef<ScrollView>(null);
   const sceneViewportHeightRef = useRef(0);
+  const sheetYRef = useRef(0);
+  const feedbackRectRef = useRef<{ y: number; height: number } | null>(null);
+  const actionBarHeightRef = useRef<number | null>(null);
   const sceneScrollYRef = useRef(0);
   const pendingResolutionScrollRef = useRef(false);
   const pickedRef = useRef<number | null>(null);
@@ -264,6 +269,23 @@ function SceneScreen() {
     else void speak(text, undefined, playbackRate);
   }
 
+  /**
+   * Continue is pinned under the lesson, so after an answer the scroll only has to bring the result into view.
+   * It waits for both the result and the pinned bar to be measured, because the bar shrinks the visible area.
+   */
+  function revealFeedback() {
+    if (!pendingResolutionScrollRef.current) return;
+    const rect = feedbackRectRef.current;
+    const barHeight = actionBarHeightRef.current;
+    const viewportHeight = sceneViewportHeightRef.current - (barHeight ?? 0);
+    if (!rect || barHeight === null || viewportHeight <= 0) return;
+    pendingResolutionScrollRef.current = false;
+    const nextScrollY = Math.max(0, sheetYRef.current + rect.y + rect.height + spacing.lg - viewportHeight);
+    if (nextScrollY <= sceneScrollYRef.current) return;
+    sceneScrollYRef.current = nextScrollY;
+    sceneScrollRef.current?.scrollTo({ animated: !reducedMotion, y: nextScrollY });
+  }
+
   /** One turn per missed phrase: the turn it was missed on, else the first turn that practices it. */
   function buildReviewQueue() {
     const queue: number[] = [];
@@ -352,6 +374,8 @@ function SceneScreen() {
   function tryAgain() {
     if ((effectiveMode !== 'choice' && effectiveMode !== 'wordOrder') || resolution !== 'incorrect' || answerShown || pronunciationBusy) return;
     pendingResolutionScrollRef.current = false;
+    feedbackRectRef.current = null;
+    actionBarHeightRef.current = null;
     pickedRef.current = null;
     setPicked(null);
     setResolution(null);
@@ -365,6 +389,8 @@ function SceneScreen() {
     if (advancedTurnRef.current === turnKey) return;
     advancedTurnRef.current = turnKey;
     pendingResolutionScrollRef.current = false;
+    feedbackRectRef.current = null;
+    actionBarHeightRef.current = null;
     void stopSpeaking();
     clearAudioError();
     const onLastBeat = !review && beatIndex === activeScene.beats.length - 1;
@@ -429,6 +455,7 @@ function SceneScreen() {
     setMissedBeats([]);
     setWeakPhrases([]);
     setReview(null);
+    setShowAllPhrases(false);
     attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
     elapsedBeforeResumeRef.current = 0;
     progressBeatRef.current = 0;
@@ -472,6 +499,18 @@ function SceneScreen() {
     const practicedPhrases = activeScene.beats
       .flatMap((practiced) => practiced.choices.filter((choice) => choice.correct))
       .filter((phrase, index, all) => all.findIndex((other) => other.hi === phrase.hi) === index);
+    const missedPhrases = practicedPhrases.filter((phrase) => weakPhrases.includes(phrase.hi));
+    const otherPhrases = practicedPhrases.filter((phrase) => !weakPhrases.includes(phrase.hi));
+    const phraseRow = (phrase: (typeof practicedPhrases)[number]) => (
+      <View key={phrase.hi} style={styles.learnedRow}>
+        <View style={styles.learnedCopy}>
+          {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.learnedHindi}>{phrase.hi}</Text> : null}
+          {scriptPreference !== 'devanagari' ? <Text style={scriptPreference === 'latin' ? styles.learnedLatinOnly : styles.learnedLatin}>{phrase.latin}</Text> : null}
+          <Text style={styles.learnedMeaning}>{phrase.en}</Text>
+        </View>
+        <PhraseAudioButtons disabled={!aiConsent && !hasOfflineSpeech(phrase.hi)} label={phrase.latin} onPlay={(rate) => play(phrase.hi, rate)} slowRate={slowRate} />
+      </View>
+    );
     return (
       <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
@@ -505,18 +544,17 @@ function SceneScreen() {
         ) : null}
         <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
         <View style={styles.learned} testID="scene-completion-phrases">
-          <Text accessibilityRole="header" style={sharedStyles.eyebrow}>{practicedPhrases.length === 1 ? 'The phrase you practiced' : `The ${practicedPhrases.length} phrases you practiced`}</Text>
-          {practicedPhrases.map((phrase) => (
-            <View key={phrase.hi} style={styles.learnedRow}>
-              <View style={styles.learnedCopy}>
-                {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.learnedHindi}>{phrase.hi}</Text> : null}
-                {scriptPreference !== 'devanagari' ? <Text style={scriptPreference === 'latin' ? styles.learnedLatinOnly : styles.learnedLatin}>{phrase.latin}</Text> : null}
-                <Text style={styles.learnedMeaning}>{phrase.en}</Text>
-                {weakPhrases.includes(phrase.hi) ? <Text style={styles.learnedMissed}>Missed once · worth another listen</Text> : null}
-              </View>
-              <PhraseAudioButtons disabled={!aiConsent && !hasOfflineSpeech(phrase.hi)} label={phrase.latin} onPlay={(rate) => play(phrase.hi, rate)} slowRate={slowRate} />
-            </View>
-          ))}
+          {missedPhrases.length ? <Text accessibilityRole="header" style={sharedStyles.eyebrow}>Worth another listen</Text> : null}
+          {missedPhrases.map(phraseRow)}
+          {otherPhrases.length ? (
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAllPhrases }} onPress={() => { hapticSelect(); setShowAllPhrases((shown) => !shown); }} style={styles.learnedToggle} testID="scene-completion-phrases-toggle">
+              <Text style={styles.learnedToggleText}>{missedPhrases.length
+                ? `${showAllPhrases ? 'Hide' : 'Show'} the other ${otherPhrases.length === 1 ? 'phrase' : `${otherPhrases.length} phrases`}`
+                : `${showAllPhrases ? 'Hide' : 'Show'} the ${otherPhrases.length === 1 ? 'phrase' : `${otherPhrases.length} phrases`} you practiced`}</Text>
+              {showAllPhrases ? <ChevronUp color={colors.ink} size={18} /> : <ChevronDown color={colors.ink} size={18} />}
+            </Pressable>
+          ) : null}
+          {showAllPhrases ? otherPhrases.map(phraseRow) : null}
         </View>
         <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
@@ -599,22 +637,14 @@ function SceneScreen() {
     );
   }
 
-  const recoveryActionsFirst = resolution === 'incorrect'
-    && (effectiveMode === 'choice' || effectiveMode === 'wordOrder');
+  // Try again, Show answer and Continue sit in a bar pinned under the lesson, so they are never scrolled out of reach.
   const answerActions = resolution !== null ? (
     <View
       onLayout={(event) => {
-        if (!pendingResolutionScrollRef.current) return;
-        const viewportHeight = sceneViewportHeightRef.current;
-        if (viewportHeight <= 0) return;
-        const { height, y } = event.nativeEvent.layout;
-        const nextScrollY = Math.max(0, y + height + spacing.lg - viewportHeight);
-        pendingResolutionScrollRef.current = false;
-        if (nextScrollY <= sceneScrollYRef.current) return;
-        sceneScrollYRef.current = nextScrollY;
-        sceneScrollRef.current?.scrollTo({ animated: !reducedMotion, y: nextScrollY });
+        actionBarHeightRef.current = event.nativeEvent.layout.height;
+        revealFeedback();
       }}
-      style={styles.answerActions}
+      style={[styles.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}
       testID="scene-answer-actions"
     >
       {resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') && !answerShown ? (
@@ -644,15 +674,20 @@ function SceneScreen() {
   ) : null;
 
   return (
-    <ScrollView
+    <View
       key="scene-run"
-      ref={sceneScrollRef}
-      contentInsetAdjustmentBehavior="never"
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm }]}
-      keyboardShouldPersistTaps="handled"
       onLayout={(event) => {
         sceneViewportHeightRef.current = event.nativeEvent.layout.height;
+        revealFeedback();
       }}
+      style={sharedStyles.screen}
+      testID="scene-screen"
+    >
+    <ScrollView
+      ref={sceneScrollRef}
+      contentInsetAdjustmentBehavior="never"
+      contentContainerStyle={[styles.content, styles.contentGrow, { paddingTop: insets.top + spacing.sm }]}
+      keyboardShouldPersistTaps="handled"
       onScroll={(event) => {
         sceneScrollYRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
       }}
@@ -724,6 +759,7 @@ function SceneScreen() {
               style={[styles.speaker, styles.speakerQuiet, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
               testID="scene-listen-slow"
             >
+              <Volume1 color={colors.brandText} size={16} />
               <Text style={styles.speakerText}>Slow</Text>
             </Pressable>
             <Pressable
@@ -775,7 +811,11 @@ function SceneScreen() {
       ) : null}
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
-      <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
+      <View
+        onLayout={(event) => { sheetYRef.current = event.nativeEvent.layout.y; }}
+        style={[styles.sheet, styles.sheetGrow, { paddingBottom: resolution !== null ? spacing.xl : Math.max(34, insets.bottom + spacing.md) }]}
+        testID="scene-sheet"
+      >
         {currentUsesName && resolution === null && practiceName.trim() ? (
           <View style={styles.nameRow}>
             <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
@@ -856,7 +896,13 @@ function SceneScreen() {
         )}
 
         {resolution !== null ? (
-          <View testID="scene-feedback">
+          <View
+            onLayout={(event) => {
+              feedbackRectRef.current = { y: event.nativeEvent.layout.y, height: event.nativeEvent.layout.height };
+              revealFeedback();
+            }}
+            testID="scene-feedback"
+          >
             <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${turnKey}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
               <View style={styles.resultCopy}>
                 <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{resultTitle(correct)}</Text>
@@ -873,8 +919,6 @@ function SceneScreen() {
             </MotionReveal>
           </View>
         ) : null}
-
-        {recoveryActionsFirst ? answerActions : null}
 
         {answerVisible ? (
           <>
@@ -918,10 +962,11 @@ function SceneScreen() {
             <PronunciationRecorder key={`${activeScene.id}-${turnKey}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
           </View>
         ) : null}
-        {!recoveryActionsFirst ? answerActions : null}
       </View>
       <WordDefinitionSheet clientId={clientId} initialWord={wordSheet?.word ?? null} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordSheet?.phrase ?? target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && wordSheet !== null} />
     </ScrollView>
+    {answerActions}
+    </View>
   );
 }
 
@@ -936,6 +981,7 @@ function PhraseAudioButtons({ disabled, label, onPlay, slowRate, testID }: { dis
         <Text style={styles.speakerText}>Listen</Text>
       </Pressable>
       <Pressable accessibilityLabel={`Hear ${label} slowly`} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => onPlay(slowRate)} style={[styles.speaker, styles.speakerQuiet, disabled && styles.disabled]}>
+        <Volume1 color={colors.brandText} size={16} />
         <Text style={styles.speakerText}>Slow</Text>
       </Pressable>
     </View>
@@ -988,7 +1034,8 @@ const useStyles = makeStyles((c) => ({
   translation: { ...type.bodyLarge, color: c.muted },
   speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
   speakerButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  speakerQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.line },
+  // Slow is Listen's lighter twin: same pill and icon family, outlined in Listen's fill colour instead of filled.
+  speakerQuiet: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.brandSoft },
   phraseAudio: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   learned: { gap: spacing.sm },
   learnedRow: { backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
@@ -997,7 +1044,8 @@ const useStyles = makeStyles((c) => ({
   learnedLatin: { ...type.caption, color: c.brandText },
   learnedLatinOnly: { ...type.headline, color: c.ink, fontWeight: '600' },
   learnedMeaning: { ...type.body, color: c.muted },
-  learnedMissed: { ...type.caption, color: c.brandText, fontWeight: '600' },
+  learnedToggle: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
+  learnedToggleText: { ...type.label, color: c.ink, flexShrink: 1 },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },
@@ -1060,7 +1108,9 @@ const useStyles = makeStyles((c) => ({
   wordOrderSolutionLatin: { ...type.label, color: c.brandText },
   resultHindi: { ...type.headline, color: c.ink, fontWeight: '600' },
   resultHindiScript: hindiType(20),
-  answerActions: { gap: spacing.sm },
+  actionBar: { gap: spacing.sm, backgroundColor: c.paperRaised, borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: spacing.gutter, paddingTop: spacing.md },
+  contentGrow: { flexGrow: 1 },
+  sheetGrow: { flexGrow: 1 },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   tryAgainText: { ...type.label, color: c.brandText },
   nextButton: { ...buttons.primary, width: '100%', alignSelf: 'stretch' },
