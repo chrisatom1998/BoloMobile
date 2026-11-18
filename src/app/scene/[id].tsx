@@ -120,6 +120,10 @@ function SceneScreen() {
   // A first wrong pick keeps the right answer hidden so "Try again" means something.
   const [answerShown, setAnswerShown] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
+  // Phrases missed on the first try come back once, after the last turn, before the lesson finishes.
+  const [missedBeats, setMissedBeats] = useState<number[]>([]);
+  const [weakPhrases, setWeakPhrases] = useState<string[]>(() => initialAttempt?.weakPhrases ?? []);
+  const [review, setReview] = useState<{ queue: number[]; position: number } | null>(null);
 
   const [wordSheet, setWordSheet] = useState<{ word: string; phrase: string } | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
@@ -130,7 +134,7 @@ function SceneScreen() {
   const sceneScrollYRef = useRef(0);
   const pendingResolutionScrollRef = useRef(false);
   const pickedRef = useRef<number | null>(null);
-  const advancedBeatRef = useRef<number | null>(null);
+  const advancedTurnRef = useRef<string | null>(null);
   const autoPlayedBeatRef = useRef<string | null>(null);
 
   const sceneExists = Boolean(sourceScene);
@@ -158,7 +162,7 @@ function SceneScreen() {
       ? `${currentBeat.npc}\n${currentBeat.translation}`
       : currentBeat.npc
     : undefined;
-  const autoPlayKey = scene && npcLine !== undefined ? `${scene.id}:${beatIndex}` : null;
+  const autoPlayKey = scene && npcLine !== undefined ? `${scene.id}:${beatIndex}${review ? `:review-${review.position}` : ''}` : null;
   const effectiveMode = useMemo<BeatMode>(() => {
     const declaredMode = currentBeat?.mode ?? 'choice';
     if (declaredMode === 'wordOrder' && currentTarget && !isWordOrderPracticeable(currentTarget.hi)) {
@@ -203,6 +207,8 @@ function SceneScreen() {
   const activeScene = scene;
   const beat = currentBeat;
   const target = currentTarget;
+  const turnKey = review ? `review-${review.position}` : `run-${beatIndex}`;
+  const slowRate = 0.72;
   const openWordSheet = (word: string) => {
     wordSheetSessionRef.current += 1;
     setWordSheet({ word, phrase: target.hi });
@@ -252,12 +258,30 @@ function SceneScreen() {
       : buildAlternateFeedback({ en: target.en, latin: target.latin })
     : '';
 
-  function play(text: string) {
+  function play(text: string, playbackRate = 1) {
     if ((!aiConsent && !hasOfflineSpeech(text)) || pronunciationBusy) return;
-    void speak(text);
+    if (playbackRate === 1) void speak(text);
+    else void speak(text, undefined, playbackRate);
+  }
+
+  /** One turn per missed phrase: the turn it was missed on, else the first turn that practices it. */
+  function buildReviewQueue() {
+    const queue: number[] = [];
+    const queued = new Set<string>();
+    const add = (index: number) => {
+      const hi = activeScene.beats[index]?.choices.find((choice) => choice.correct)?.hi;
+      if (!hi || queued.has(hi) || !weakPhrases.includes(hi)) return;
+      queued.add(hi);
+      queue.push(index);
+    };
+    missedBeats.forEach(add);
+    activeScene.beats.forEach((_, index) => add(index));
+    return queue;
   }
 
   function recordAnswer(isCorrect: boolean) {
+    // Review turns are extra practice: they never change the first-try score.
+    if (review) return;
     if (attemptRef.current.answeredBeatIndex === beatIndex) return;
     touchTimer();
     if (currentUsesName) updateLearnerProfile?.({ displayName: practiceName.trim() });
@@ -268,6 +292,8 @@ function SceneScreen() {
     attemptRef.current = attempt;
     setCorrectCount(attempt.correct);
     setAnswerCount(attempt.total);
+    setWeakPhrases(attempt.weakPhrases);
+    if (!isCorrect) setMissedBeats((previous) => [...previous, beatIndex]);
     checkpointScene?.(activeScene.id, beatIndex, attempt);
   }
 
@@ -333,12 +359,15 @@ function SceneScreen() {
   }
 
   function next() {
-    if (advancedBeatRef.current === beatIndex) return;
-    advancedBeatRef.current = beatIndex;
+    if (advancedTurnRef.current === turnKey) return;
+    advancedTurnRef.current = turnKey;
     pendingResolutionScrollRef.current = false;
     void stopSpeaking();
     clearAudioError();
-    if (beatIndex === activeScene.beats.length - 1) {
+    const onLastBeat = !review && beatIndex === activeScene.beats.length - 1;
+    const queue = review ? review.queue : onLastBeat ? buildReviewQueue() : [];
+    const reviewPosition = review ? review.position + 1 : 0;
+    if (review ? reviewPosition >= queue.length : onLastBeat && queue.length === 0) {
       completedRef.current = true;
       const completions = Object.values(sceneProgress ?? {}).reduce((sum, progress) => sum + (progress.completions ?? 0), 0);
       if (completions === 0 && reminder.enabled !== true && reminder.offerAnswered !== true) {
@@ -357,9 +386,15 @@ function SceneScreen() {
       return;
     }
     hapticSelect();
-    progressBeatRef.current = beatIndex + 1;
-    checkpointScene?.(activeScene.id, beatIndex + 1, { ...attemptRef.current, seconds: elapsedBeforeResumeRef.current + elapsedSeconds() });
-    setBeatIndex((value) => value + 1);
+    if (review || onLastBeat) {
+      // The saved checkpoint stays on the last turn, so leaving mid-review resumes there with the score intact.
+      setReview({ queue, position: reviewPosition });
+      setBeatIndex(queue[reviewPosition]!);
+    } else {
+      progressBeatRef.current = beatIndex + 1;
+      checkpointScene?.(activeScene.id, beatIndex + 1, { ...attemptRef.current, seconds: elapsedBeforeResumeRef.current + elapsedSeconds() });
+      setBeatIndex((value) => value + 1);
+    }
     pickedRef.current = null;
     setPicked(null);
     setResolution(null);
@@ -388,12 +423,15 @@ function SceneScreen() {
     closeWordSheet();
     setCorrectCount(0);
     setAnswerCount(0);
+    setMissedBeats([]);
+    setWeakPhrases([]);
+    setReview(null);
     attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
     elapsedBeforeResumeRef.current = 0;
     progressBeatRef.current = 0;
     completedRef.current = false;
     checkpointScene?.(activeScene.id, 0, attemptRef.current);
-    advancedBeatRef.current = null;
+    advancedTurnRef.current = null;
     pendingResolutionScrollRef.current = false;
     setDone(false);
     setChoiceNonce((value) => value + 1);
@@ -428,6 +466,9 @@ function SceneScreen() {
       : 'Back to Today';
 
   if (done) {
+    const practicedPhrases = activeScene.beats
+      .flatMap((practiced) => practiced.choices.filter((choice) => choice.correct))
+      .filter((phrase, index, all) => all.findIndex((other) => other.hi === phrase.hi) === index);
     return (
       <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
@@ -460,6 +501,20 @@ function SceneScreen() {
           />
         ) : null}
         <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
+        <View style={styles.learned} testID="scene-completion-phrases">
+          <Text accessibilityRole="header" style={sharedStyles.eyebrow}>{practicedPhrases.length === 1 ? 'The phrase you practiced' : `The ${practicedPhrases.length} phrases you practiced`}</Text>
+          {practicedPhrases.map((phrase) => (
+            <View key={phrase.hi} style={styles.learnedRow}>
+              <View style={styles.learnedCopy}>
+                {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.learnedHindi}>{phrase.hi}</Text> : null}
+                {scriptPreference !== 'devanagari' ? <Text style={scriptPreference === 'latin' ? styles.learnedLatinOnly : styles.learnedLatin}>{phrase.latin}</Text> : null}
+                <Text style={styles.learnedMeaning}>{phrase.en}</Text>
+                {weakPhrases.includes(phrase.hi) ? <Text style={styles.learnedMissed}>Missed once · worth another listen</Text> : null}
+              </View>
+              <PhraseAudioButtons disabled={!aiConsent && !hasOfflineSpeech(phrase.hi)} label={phrase.latin} onPlay={(rate) => play(phrase.hi, rate)} slowRate={slowRate} />
+            </View>
+          ))}
+        </View>
         <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
           <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={styles.tertiaryButton} testID="scene-completion-tertiary">
@@ -578,7 +633,7 @@ function SceneScreen() {
         </Pressable>
       ) : (
         <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
-          <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
+          <Text style={styles.nextText}>{(review ? review.position === review.queue.length - 1 : beatIndex === activeScene.beats.length - 1 && buildReviewQueue().length === 0) ? 'Finish' : 'Continue'}</Text>
           <ChevronRight color={colors.white} size={18} />
         </Pressable>
       )}
@@ -618,11 +673,11 @@ function SceneScreen() {
           </Pressable>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.beatSegments}>
             {activeScene.beats.map((_, index) => {
-              const filled = index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
+              const filled = review !== null || index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
               return <View key={index} style={[styles.beatSegment, filled && styles.beatSegmentFilled]} testID={`scene-beat-segment-${index}`} />;
             })}
           </View>
-          <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
+          <Text style={styles.turn}>{review ? `Review ${review.position + 1} of ${review.queue.length}` : `Turn ${beatIndex + 1} of ${activeScene.beats.length}`}</Text>
         </View>
         {/* Title and tally share one row so Asha's line and the answer fit on screen without scrolling. */}
         <View style={styles.titleRow}>
@@ -633,6 +688,7 @@ function SceneScreen() {
         </View>
       </View>
 
+      {review ? <Text style={styles.resumeNotice} testID="scene-review-note">One more time: {review.queue.length === 1 ? 'the phrase' : 'the phrases'} you missed.</Text> : null}
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
       {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <FadingNotice style={styles.resumeNoticeQuiet}>Picking up where you left off.</FadingNotice> : null}
@@ -654,6 +710,19 @@ function SceneScreen() {
         <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
           <View style={styles.speakerRow}>
             <Text style={styles.speakerName}>Asha</Text>
+            <View style={styles.speakerButtons}>
+            <Pressable
+              accessibilityLabel="Hear Asha slowly"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
+              disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
+              hitSlop={4}
+              onPress={() => play(beat.npc, slowRate)}
+              style={[styles.speaker, styles.speakerQuiet, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
+              testID="scene-listen-slow"
+            >
+              <Text style={styles.speakerText}>Slow</Text>
+            </Pressable>
             <Pressable
               accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
                 ? 'Agree to connected AI processing to enable this voice.'
@@ -673,6 +742,7 @@ function SceneScreen() {
               <Volume2 color={colors.brandText} size={16} />
               <Text style={styles.speakerText}>Listen</Text>
             </Pressable>
+            </View>
           </View>
           {englishFirstSetup ? (
             <>
@@ -764,7 +834,7 @@ function SceneScreen() {
           <WordOrderPractice
             scriptPreference={scriptPreference}
             disabled={pronunciationBusy || resolution !== null || needsName}
-            key={`word-order-${activeScene.id}-${beatIndex}-${target.hi}-${wordOrderRetryNonce}`}
+            key={`word-order-${activeScene.id}-${turnKey}-${target.hi}-${wordOrderRetryNonce}`}
             onResolve={handleAlternateResult}
             showInstructions={false}
             targetHi={target.hi}
@@ -774,7 +844,7 @@ function SceneScreen() {
           <RecallRevealPractice
             scriptPreference={scriptPreference}
             disabled={pronunciationBusy || resolution !== null || needsName}
-            key={`recall-reveal-${activeScene.id}-${beatIndex}-${target.hi}`}
+            key={`recall-reveal-${activeScene.id}-${turnKey}-${target.hi}`}
             onResolve={handleAlternateResult}
             targetEn={target.en}
             targetHi={target.hi}
@@ -784,7 +854,7 @@ function SceneScreen() {
 
         {resolution !== null ? (
           <View testID="scene-feedback">
-            <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
+            <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${turnKey}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
               <View style={styles.resultCopy}>
                 <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{resultTitle(correct)}</Text>
                 {englishMistakeFeedback ? <Text style={[styles.resultBody, styles.resultWrongText]} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
@@ -807,7 +877,10 @@ function SceneScreen() {
           <>
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
-                <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+                <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}>
+                  <Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text>
+                  <PhraseAudioButtons disabled={(!aiConsent && !hasOfflineSpeech(target.hi)) || pronunciationBusy} label="the answer" onPlay={(rate) => play(target.hi, rate)} slowRate={slowRate} testID="scene-answer-audio" />
+                </View>
                 <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={toggleSavedPhrase} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
                   <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
                 </Pressable>
@@ -839,13 +912,30 @@ function SceneScreen() {
 
         {aiConsent && !needsName && answerVisible ? (
           <View testID="scene-pronunciation">
-            <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
+            <PronunciationRecorder key={`${activeScene.id}-${turnKey}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
           </View>
         ) : null}
         {!recoveryActionsFirst ? answerActions : null}
       </View>
       <WordDefinitionSheet clientId={clientId} initialWord={wordSheet?.word ?? null} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordSheet?.phrase ?? target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && wordSheet !== null} />
     </ScrollView>
+  );
+}
+
+/** Listen and Slow for one Hindi phrase, so a learner can hear it at full speed and then pick the sounds apart. */
+function PhraseAudioButtons({ disabled, label, onPlay, slowRate, testID }: { disabled: boolean; label: string; onPlay: (playbackRate: number) => void; slowRate: number; testID?: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  return (
+    <View style={styles.phraseAudio} testID={testID}>
+      <Pressable accessibilityLabel={`Hear ${label}`} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => onPlay(1)} style={[styles.speaker, disabled && styles.disabled]}>
+        <Volume2 color={colors.brandText} size={16} />
+        <Text style={styles.speakerText}>Listen</Text>
+      </Pressable>
+      <Pressable accessibilityLabel={`Hear ${label} slowly`} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => onPlay(slowRate)} style={[styles.speaker, styles.speakerQuiet, disabled && styles.disabled]}>
+        <Text style={styles.speakerText}>Slow</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -894,6 +984,17 @@ const useStyles = makeStyles((c) => ({
   npcLatin: { ...type.label, fontFamily: 'System', color: c.brandText },
   translation: { ...type.bodyLarge, color: c.muted },
   speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
+  speakerButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  speakerQuiet: { backgroundColor: 'transparent', borderWidth: 1, borderColor: c.line },
+  phraseAudio: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  learned: { gap: spacing.sm },
+  learnedRow: { backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
+  learnedCopy: { gap: spacing.xs },
+  learnedHindi: { ...hindiType(20), color: c.ink },
+  learnedLatin: { ...type.caption, color: c.brandText },
+  learnedLatinOnly: { ...type.headline, color: c.ink, fontWeight: '600' },
+  learnedMeaning: { ...type.body, color: c.muted },
+  learnedMissed: { ...type.caption, color: c.brandText, fontWeight: '600' },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },

@@ -192,6 +192,16 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('Natural choice!')).toBeTruthy();
     expect(view.queryByText('50')).toBeNull();
 
+    // The missed phrase comes back once before the lesson finishes, without changing the first-try score.
+    expect(view.queryByRole('button', { name: 'Finish' })).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    expect(mockMarkSceneComplete).not.toHaveBeenCalled();
+    expect(view.getByText('Review 1 of 1')).toBeTruthy();
+    expect(view.getByTestId('scene-review-note')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    expect(view.getByText('Natural choice!')).toBeTruthy();
+    expect(view.getByText('1 correct')).toBeTruthy();
+
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42, {
@@ -219,6 +229,28 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  it('plays the answer slowly and lists the practiced phrases with audio on the finish screen', async () => {
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText('Hear Asha slowly'));
+    expect(speakTextMock).toHaveBeenLastCalledWith(getScene('chai')!.beats[0]!.npc, undefined, 0.72);
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    const firstTarget = getScene('chai')!.beats[0]!.choices.find((choice) => choice.correct)!;
+    await fireEvent.press(view.getByLabelText('Hear the answer slowly'));
+    expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi, undefined, 0.72);
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+
+    const phrases = within(view.getByTestId('scene-completion-phrases'));
+    expect(phrases.getByText('The 2 phrases you practiced')).toBeTruthy();
+    expect(phrases.getByText(firstTarget.hi)).toBeTruthy();
+    expect(phrases.queryByText(/Missed once/)).toBeNull();
+    await fireEvent.press(phrases.getByLabelText(`Hear ${firstTarget.latin}`));
+    expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi);
+    await fireEvent.press(phrases.getByLabelText(`Hear ${firstTarget.latin} slowly`));
+    expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi, undefined, 0.72);
   });
 
   async function finishChaiLesson() {
@@ -352,6 +384,11 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(recallView.getByLabelText('Reveal the Hindi answer'));
     await fireEvent.press(recallView.getByLabelText('Needs work'));
     expect(recallView.getByText('Keep practicing this phrase.')).toBeTruthy();
+    // The missed recall turn is asked once more, as the same kind of practice.
+    await fireEvent.press(recallView.getByRole('button', { name: 'Continue' }));
+    expect(recallView.getByText('Review 1 of 1')).toBeTruthy();
+    await fireEvent.press(recallView.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(recallView.getByLabelText('Needs work'));
     await fireEvent.press(recallView.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, {
       attemptId: expect.any(String),
@@ -903,6 +940,10 @@ describe('lesson audit regressions', () => {
     mockElapsedSeconds.mockReturnValue(7);
     const final = await render(<SceneScreen />);
     expect(final.getByText('Turn 2 of 2')).toBeTruthy();
+    await fireEvent.press(final.getByTestId('scene-choice-0'));
+    await fireEvent.press(final.getByTestId('scene-continue'));
+    // The phrase missed before the reloads still comes back for one review turn.
+    expect(final.getByText('Review 1 of 1')).toBeTruthy();
     await fireEvent.press(final.getByTestId('scene-choice-0'));
     await fireEvent.press(final.getByTestId('scene-continue'));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 27, {
