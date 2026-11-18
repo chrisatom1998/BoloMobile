@@ -14,6 +14,7 @@ const mockRouterBack = jest.fn();
 const mockRouterCanGoBack = jest.fn(() => true);
 const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetTimer = jest.fn();
+const mockTouchTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
 const mockMarkSceneComplete = jest.fn();
 const mockSetReminder = jest.fn(async () => true);
@@ -86,7 +87,7 @@ jest.mock('@/components/word-definition-sheet', () => ({
 }));
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer , touch: jest.fn() }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer, touch: mockTouchTimer }),
 }));
 
 jest.mock('@/lib/speech', () => ({
@@ -198,7 +199,10 @@ describe('SceneScreen primary journey', () => {
     expect(mockMarkSceneComplete).not.toHaveBeenCalled();
     expect(view.getByText('Review 1 of 1')).toBeTruthy();
     expect(view.getByTestId('scene-review-note')).toBeTruthy();
+    mockTouchTimer.mockClear();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    // Review answers are not scored, but they keep the active-time timer running.
+    expect(mockTouchTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Natural choice!')).toBeTruthy();
     expect(view.getByText('1 correct')).toBeTruthy();
 

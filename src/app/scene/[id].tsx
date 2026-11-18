@@ -280,8 +280,11 @@ function SceneScreen() {
   }
 
   function recordAnswer(isCorrect: boolean) {
-    // Review turns are extra practice: they never change the first-try score.
-    if (review) return;
+    // Review turns are extra practice: they never change the first-try score, but they still count as active time.
+    if (review) {
+      touchTimer();
+      return;
+    }
     if (attemptRef.current.answeredBeatIndex === beatIndex) return;
     touchTimer();
     if (currentUsesName) updateLearnerProfile?.({ displayName: practiceName.trim() });
