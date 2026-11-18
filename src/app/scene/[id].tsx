@@ -638,6 +638,8 @@ function SceneScreen() {
   }
 
   // Try again, Show answer and Continue sit in a bar pinned under the lesson, so they are never scrolled out of reach.
+  // The bar stays one row tall: two actions share the row, and their labels stop growing past 1.3x so they fit at large text.
+  const tryAgainOffered = resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') && !answerShown;
   const answerActions = resolution !== null ? (
     <View
       onLayout={(event) => {
@@ -647,26 +649,26 @@ function SceneScreen() {
       style={[styles.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}
       testID="scene-answer-actions"
     >
-      {resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') && !answerShown ? (
+      {tryAgainOffered ? (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: pronunciationBusy }}
           disabled={pronunciationBusy}
           onPress={tryAgain}
-          style={[styles.tryAgainButton, pronunciationBusy && styles.disabled]}
+          style={[styles.tryAgainButton, styles.actionBarShared, pronunciationBusy && styles.disabled]}
           testID="scene-try-again"
         >
           <RotateCcw color={colors.brand} size={19} />
-          <Text style={styles.tryAgainText}>Try again</Text>
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.tryAgainText}>Try again</Text>
         </Pressable>
       ) : null}
       {choiceAnswerHidden ? (
-        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); setAnswerShown(true); }} style={styles.secondaryButton} testID="scene-show-answer">
-          <Text style={styles.secondaryText}>Show answer</Text>
+        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); setAnswerShown(true); }} style={[styles.secondaryButton, styles.actionBarShared]} testID="scene-show-answer">
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.secondaryText}>Show answer</Text>
         </Pressable>
       ) : (
-        <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
-          <Text style={styles.nextText}>{(review ? review.position === review.queue.length - 1 : beatIndex === activeScene.beats.length - 1 && buildReviewQueue().length === 0) ? 'Finish' : 'Continue'}</Text>
+        <Pressable accessibilityRole="button" onPress={next} style={tryAgainOffered ? [styles.nextButton, styles.actionBarShared] : styles.nextButton} testID="scene-continue">
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.nextText}>{(review ? review.position === review.queue.length - 1 : beatIndex === activeScene.beats.length - 1 && buildReviewQueue().length === 0) ? 'Finish' : 'Continue'}</Text>
           <ChevronRight color={colors.white} size={18} />
         </Pressable>
       )}
@@ -710,8 +712,10 @@ function SceneScreen() {
             <X color={colors.ink} size={18} strokeWidth={2.2} />
           </Pressable>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.beatSegments}>
-            {activeScene.beats.map((_, index) => {
-              const filled = review !== null || index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
+            {/* During review the dots count the review turns, so the bar shows what is left instead of looking finished. */}
+            {(review ? review.queue : activeScene.beats).map((_, index) => {
+              const position = review ? review.position : beatIndex;
+              const filled = index < position || (index === position && (resolution !== null || alreadyResolvedIncorrect));
               return <View key={index} style={[styles.beatSegment, filled && styles.beatSegmentFilled]} testID={`scene-beat-segment-${index}`} />;
             })}
           </View>
@@ -1034,8 +1038,8 @@ const useStyles = makeStyles((c) => ({
   translation: { ...type.bodyLarge, color: c.muted },
   speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
   speakerButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Slow is Listen's lighter twin: same pill and icon family, outlined in Listen's fill colour instead of filled.
-  speakerQuiet: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.brandSoft },
+  // Slow is Listen's lighter twin: same pill and icon family, outlined in rust instead of filled so it still reads on cream.
+  speakerQuiet: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.brand },
   phraseAudio: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   learned: { gap: spacing.sm },
   learnedRow: { backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
@@ -1044,7 +1048,7 @@ const useStyles = makeStyles((c) => ({
   learnedLatin: { ...type.caption, color: c.brandText },
   learnedLatinOnly: { ...type.headline, color: c.ink, fontWeight: '600' },
   learnedMeaning: { ...type.body, color: c.muted },
-  learnedToggle: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
+  learnedToggle: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
   learnedToggleText: { ...type.label, color: c.ink, flexShrink: 1 },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
@@ -1108,7 +1112,8 @@ const useStyles = makeStyles((c) => ({
   wordOrderSolutionLatin: { ...type.label, color: c.brandText },
   resultHindi: { ...type.headline, color: c.ink, fontWeight: '600' },
   resultHindiScript: hindiType(20),
-  actionBar: { gap: spacing.sm, backgroundColor: c.paperRaised, borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: spacing.gutter, paddingTop: spacing.md },
+  actionBarShared: { flex: 1, width: 'auto', minWidth: 0, minHeight: 52, paddingHorizontal: spacing.md },
+  actionBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: c.paperRaised, borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: spacing.gutter, paddingTop: spacing.md },
   contentGrow: { flexGrow: 1 },
   sheetGrow: { flexGrow: 1 },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },

@@ -202,10 +202,15 @@ describe('SceneScreen primary journey', () => {
     expect(mockMarkSceneComplete).not.toHaveBeenCalled();
     expect(view.getByText('Review 1 of 1')).toBeTruthy();
     expect(view.getByTestId('scene-review-note')).toBeTruthy();
+    // The dots now count review turns, and the one in progress is not filled until it is answered.
+    const reviewDot = () => StyleSheet.flatten(view.getByTestId('scene-beat-segment-0', { includeHiddenElements: true }).props.style).backgroundColor;
+    expect(view.queryByTestId('scene-beat-segment-1', { includeHiddenElements: true })).toBeNull();
+    const openDot = reviewDot();
     mockTouchTimer.mockClear();
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
     // Review answers are not scored, but they keep the active-time timer running.
     expect(mockTouchTimer).toHaveBeenCalledTimes(1);
+    expect(reviewDot()).not.toBe(openDot);
     expect(view.getByText('Natural choice!')).toBeTruthy();
     expect(view.getByText('1 correct')).toBeTruthy();
 
