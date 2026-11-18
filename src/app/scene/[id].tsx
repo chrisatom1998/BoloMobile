@@ -1134,7 +1134,8 @@ const useStyles = makeStyles((c) => ({
   wordTrayHint: { ...type.caption, color: c.muted },
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600' },
+  // Centred so the Hindi word sits over the middle of its romanized line, not flush left.
+  wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600', textAlign: 'center' },
   wordTokenHindi: hindiType(17),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },
