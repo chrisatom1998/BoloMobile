@@ -26,7 +26,7 @@ jest.mock('@react-native-async-storage/async-storage', () => {
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: jest.fn() }));
 jest.mock('@/lib/observability', () => ({ clearObservability: jest.fn(async () => undefined), observe: jest.fn() }));
 
-import { MAX_SAVED_PHRASES, storageKeys } from '../src/lib/storage';
+import { dateKey, MAX_SAVED_PHRASES, nextDate, storageKeys } from '../src/lib/storage';
 import { AppStateProvider, useAppState } from '../src/state/app-state';
 
 const asyncStorage = jest.requireMock('@react-native-async-storage/async-storage').default as {
@@ -121,6 +121,24 @@ describe('saved phrase cap', () => {
     expect(result).toBe('failed');
     expect(latestState.phrases.some((phrase) => phrase.hi === 'नया वाक्य')).toBe(false);
     warning.mockRestore();
+    await view.unmount();
+  });
+
+  it('schedules a deduplicated lesson review and preserves an existing phrase’s history', async () => {
+    const { phrases, view } = await renderFullCollection();
+    const existing = phrases[1]!;
+    const addition = savedPhrase(MAX_SAVED_PHRASES);
+    const tomorrow = nextDate(dateKey());
+    await act(async () => {
+      expect(await latestState.scheduleLessonReview([existing, addition])).toBe('full');
+      expect(latestState.phraseReviews[existing.hi]).toEqual(review(1));
+      await latestState.togglePhrase(phrases[0]!);
+      expect(await latestState.scheduleLessonReview([existing, addition, existing])).toBe('scheduled');
+    });
+    expect(latestState.phrases).toHaveLength(MAX_SAVED_PHRASES);
+    expect(latestState.phrases.at(-1)).toEqual(addition);
+    expect(latestState.phraseReviews[existing.hi]).toEqual({ ...review(1), dueAt: tomorrow });
+    expect(latestState.phraseReviews[addition.hi]).toMatchObject({ mastery: 0, dueAt: tomorrow });
     await view.unmount();
   });
 });

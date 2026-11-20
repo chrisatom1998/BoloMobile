@@ -22,6 +22,7 @@ const mockGetNotificationPermissions = jest.fn();
 const mockRequestNotificationPermissions = jest.fn();
 const mockScheduleNotification = jest.fn();
 const mockTogglePhrase = jest.fn(async (..._args: unknown[]) => 'saved' as 'saved' | 'removed' | 'full' | 'failed');
+const mockScheduleLessonReview = jest.fn(async (..._args: unknown[]) => 'scheduled');
 const mockWordDefinitionSheet = jest.fn((_props: unknown) => null);
 const mockAppState = {
   aiConsent: true,
@@ -36,6 +37,7 @@ const mockAppState = {
   sceneProgress: {} as Record<string, { attempt?: SceneAttempt; completions?: number; lastBeatIndex: number }>,
   setReminder: mockSetReminder,
   togglePhrase: mockTogglePhrase,
+  scheduleLessonReview: mockScheduleLessonReview,
 };
 
 jest.mock('expo-notifications', () => ({
@@ -722,13 +724,14 @@ describe('SceneScreen primary journey', () => {
     expect(finalTarget).toBeTruthy();
     const view = await render(<SceneScreen />);
 
-    await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(finalTarget!)));
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Got it'));
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     const completionTestIds = collectTestIds(view.toJSON());
     expect(completionTestIds.indexOf('scene-completion-primary')).toBeLessThan(completionTestIds.indexOf('scene-completion-secondary'));
     expect(completionTestIds.indexOf('scene-completion-secondary')).toBeLessThan(completionTestIds.indexOf('scene-completion-tertiary'));
     const backToToday = view.getByRole('button', { name: 'Back to Today' });
-    expect(backToToday.props.style).toEqual(expect.objectContaining({ minHeight: 44 }));
+    expect(StyleSheet.flatten(backToToday.props.style)).toMatchObject({ minHeight: 44 });
     await fireEvent.press(backToToday);
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
     await fireEvent.press(view.getByRole('button', { name: 'Next lesson' }));
@@ -737,6 +740,46 @@ describe('SceneScreen primary journey', () => {
       pathname: '/scene/[id]',
       params: { id: 'plan-essentials-02' },
     });
+  });
+
+  it('models the pilot phrase and handles unaided recall, missed reviews and roleplay offline', async () => {
+    mockSceneId = 'plan-essentials-01';
+    mockAppState.aiConsent = false;
+    const intro = await render(<SceneScreen />);
+    expect(intro.getByText('Greet someone politely in Hindi.')).toBeTruthy();
+    await fireEvent.press(intro.getByRole('button', { name: 'Hear the example' }));
+    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते।');
+    await intro.unmount();
+
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
+    const view = await render(<SceneScreen />);
+    expect(view.getByText('Your friend introduces you to their grandmother.')).toBeTruthy();
+    expect(view.queryByTestId('scene-choices')).toBeNull();
+    expect(view.queryByText('नमस्ते।')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Needs work'));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ weakPhrases: ['नमस्ते।'] }));
+
+    await fireEvent.press(view.getByRole('button', { name: 'Retry missed phrases' }));
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Got it'));
+    expect(view.getByText('You retried every missed phrase.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Back to lesson summary' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
+    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: 'नमस्ते।' })]));
+    expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Roleplay with Asha' }));
+    expect(view.getByText('Asha · Turn 1 of 2')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show a reply' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Next turn' }));
+    expect(view.getByText('Asha · Turn 2 of 2')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show a reply' }));
+    expect(view.getByText('I am well.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Finish roleplay' }));
+    expect(view.getByText('Conversation complete.')).toBeTruthy();
+    expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
   });
 
   it('returns the final guided lesson to its completed plan', async () => {
@@ -838,7 +881,7 @@ describe('SceneScreen primary journey', () => {
   });
 
   it('leads guided starter lessons with English and keeps their Hindi narration behind Listen', async () => {
-    mockSceneId = 'plan-essentials-01';
+    mockSceneId = 'plan-essentials-03';
     const beat = getScene(mockSceneId)!.beats[0]!;
     const view = await render(<SceneScreen />);
     expect(view.getByText(beat.translation)).toBeTruthy();
@@ -999,6 +1042,7 @@ describe('lesson audit regressions', () => {
     expect(mockAppState.updateLearnerProfile).toHaveBeenCalledWith({ displayName: 'Chris' });
     expect(view.queryByTestId('scene-name-step')).toBeNull();
     expect(view.getByText('Practicing as Chris')).toBeTruthy();
+    expect(view.getByText('Introduce yourself by name in Hindi.')).toBeTruthy();
     for (const index of [0, 1, 2, 3]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     await fireEvent.press(view.getByTestId('scene-word-order-check'));
     await fireEvent.press(view.getByLabelText('Save phrase'));
