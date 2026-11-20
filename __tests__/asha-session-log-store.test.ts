@@ -339,6 +339,8 @@ describe('Asha session log store', () => {
     const olderRecords = Array.from({ length: MAX_ASHA_SESSIONS }, (_, index) => ({ ...endedRecord, id: `old-${index}`, startedAt: `2026-10-2${index + 1}T09:00:00.000Z` }));
 
     it('keeps the index and every older session when the first write of a new session fails, and publishes once a later write succeeds', async () => {
+      // The seeded sessions are dated October 2026; pin only the clock so they stay inside the retention window.
+      jest.useFakeTimers({ now: new Date('2026-10-31T12:00:00.000Z'), doNotFake: ['setTimeout', 'setInterval', 'setImmediate', 'nextTick', 'queueMicrotask'] });
       olderRecords.forEach((record) => seed(record));
       const store = loadStore();
       await store.ensureAshaSessionLogLoaded();
