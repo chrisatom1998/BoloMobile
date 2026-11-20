@@ -14,6 +14,7 @@ const mockRouterBack = jest.fn();
 const mockRouterCanGoBack = jest.fn(() => true);
 const mockElapsedSeconds = jest.fn(() => 42);
 const mockResetTimer = jest.fn();
+const mockTouchTimer = jest.fn();
 const mockCheckpointScene = jest.fn();
 const mockMarkSceneComplete = jest.fn();
 const mockSetReminder = jest.fn(async () => true);
@@ -71,7 +72,10 @@ jest.mock('lucide-react-native', () => ({
   Heart: () => null,
   RotateCcw: () => null,
   Star: () => null,
+  Volume1: () => null,
   Volume2: () => null,
+  ChevronDown: () => null,
+  ChevronUp: () => null,
   X: () => null,
 }));
 
@@ -88,7 +92,7 @@ jest.mock('@/components/word-definition-sheet', () => ({
 }));
 
 jest.mock('@/hooks/use-foreground-timer', () => ({
-  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer , touch: jest.fn() }),
+  useForegroundTimer: () => ({ elapsedSeconds: mockElapsedSeconds, reset: mockResetTimer, touch: mockTouchTimer }),
 }));
 
 jest.mock('@/lib/speech', () => ({
@@ -194,6 +198,24 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('Natural choice!')).toBeTruthy();
     expect(view.queryByText('50')).toBeNull();
 
+    // The missed phrase comes back once before the lesson finishes, without changing the first-try score.
+    expect(view.queryByRole('button', { name: 'Finish' })).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    expect(mockMarkSceneComplete).not.toHaveBeenCalled();
+    expect(view.getByText('Review 1 of 1')).toBeTruthy();
+    expect(view.getByTestId('scene-review-note')).toBeTruthy();
+    // The dots now count review turns, and the one in progress is not filled until it is answered.
+    const reviewDot = () => StyleSheet.flatten(view.getByTestId('scene-beat-segment-0', { includeHiddenElements: true }).props.style).backgroundColor;
+    expect(view.queryByTestId('scene-beat-segment-1', { includeHiddenElements: true })).toBeNull();
+    const openDot = reviewDot();
+    mockTouchTimer.mockClear();
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    // Review answers are not scored, but they keep the active-time timer running.
+    expect(mockTouchTimer).toHaveBeenCalledTimes(1);
+    expect(reviewDot()).not.toBe(openDot);
+    expect(view.getByText('Natural choice!')).toBeTruthy();
+    expect(view.getByText('1 correct')).toBeTruthy();
+
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 42, {
@@ -205,6 +227,12 @@ describe('SceneScreen primary journey', () => {
     });
     expect(view.getByTestId('scene-completion-scroll')).toBeTruthy();
     expect(view.queryByTestId('scene-scroll')).toBeNull();
+    // The missed phrase is shown first; the one answered right stays folded away.
+    const practiced = within(view.getByTestId('scene-completion-phrases'));
+    expect(practiced.getByText('Worth another listen')).toBeTruthy();
+    expect(practiced.getByText('एक चाय दीजिए।')).toBeTruthy();
+    expect(practiced.getByRole('button', { name: 'Show the other phrase' })).toBeTruthy();
+    expect(practiced.getAllByText('Listen')).toHaveLength(1);
     expect(view.getByText('Scene complete')).toBeTruthy();
     const completion = view.getByTestId('scene-completion-motion');
     expect(within(completion).getByTestId('scene-completion-headline').props.accessibilityLanguage).toBe('hi-IN');
@@ -221,6 +249,30 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Practice again' }));
     expect(mockResetTimer).toHaveBeenCalledTimes(1);
     expect(view.getByText('Turn 1 of 2')).toBeTruthy();
+  });
+
+  it('plays the answer slowly and lists the practiced phrases with audio on the finish screen', async () => {
+    const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByLabelText('Hear Asha slowly'));
+    expect(speakTextMock).toHaveBeenLastCalledWith(getScene('chai')!.beats[0]!.npc, undefined, 0.72);
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0)));
+    const firstTarget = getScene('chai')!.beats[0]!.choices.find((choice) => choice.correct)!;
+    await fireEvent.press(view.getByLabelText('Hear the answer slowly'));
+    expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi, undefined, 0.72);
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    await fireEvent.press(view.getByLabelText(choiceLabel('chai', 1)));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+
+    const phrases = within(view.getByTestId('scene-completion-phrases'));
+    // Nothing was missed, so the phrases stay folded away until asked for.
+    expect(phrases.queryByText('Worth another listen')).toBeNull();
+    expect(phrases.queryByText(firstTarget.hi)).toBeNull();
+    await fireEvent.press(phrases.getByRole('button', { name: 'Show the 2 phrases you practiced' }));
+    expect(phrases.getByText(firstTarget.hi)).toBeTruthy();
+    await fireEvent.press(phrases.getByLabelText(`Hear ${firstTarget.latin}`));
+    expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi);
+    await fireEvent.press(phrases.getByLabelText(`Hear ${firstTarget.latin} slowly`));
+    expect(speakTextMock).toHaveBeenLastCalledWith(firstTarget.hi, undefined, 0.72);
   });
 
   async function finishChaiLesson() {
@@ -354,6 +406,11 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(recallView.getByLabelText('Reveal the Hindi answer'));
     await fireEvent.press(recallView.getByLabelText('Needs work'));
     expect(recallView.getByText('Keep practicing this phrase.')).toBeTruthy();
+    // The missed recall turn is asked once more, as the same kind of practice.
+    await fireEvent.press(recallView.getByRole('button', { name: 'Continue' }));
+    expect(recallView.getByText('Review 1 of 1')).toBeTruthy();
+    await fireEvent.press(recallView.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(recallView.getByLabelText('Needs work'));
     await fireEvent.press(recallView.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, {
       attemptId: expect.any(String),
@@ -407,14 +464,12 @@ describe('SceneScreen primary journey', () => {
     expect(recoveryActions.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(recoveryActions.getByRole('button', { name: 'Continue' })).toBeTruthy();
     const incorrectTestIds = collectTestIds(view.toJSON());
+    // The actions are pinned under the scrolling lesson, so they come after everything inside it.
     expect(incorrectTestIds.indexOf('scene-feedback'))
-      .toBeLessThan(incorrectTestIds.indexOf('scene-answer-actions'));
-    expect(incorrectTestIds.indexOf('scene-answer-actions'))
       .toBeLessThan(incorrectTestIds.indexOf('scene-save'));
-    expect(incorrectTestIds.indexOf('scene-answer-actions'))
-      .toBeLessThan(incorrectTestIds.indexOf('scene-words'));
-    expect(incorrectTestIds.indexOf('scene-answer-actions'))
-      .toBeLessThan(incorrectTestIds.indexOf('scene-pronunciation'));
+    expect(incorrectTestIds.indexOf('scene-pronunciation'))
+      .toBeLessThan(incorrectTestIds.indexOf('scene-answer-actions'));
+    expect(within(view.getByTestId('scene-scroll')).queryByTestId('scene-answer-actions')).toBeNull();
 
     await fireEvent.press(view.getByRole('button', { name: 'Try again' }));
     expect(view.queryByTestId('scene-word-order-solution')).toBeNull();
@@ -471,21 +526,31 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByTestId('scene-result-feedback').props.children).toBe(wrong.feedback);
   });
 
-  it('scrolls recovery actions into view once without animation for reduced motion', async () => {
+  it('pins the answer actions under the lesson and scrolls the result into view once without animation for reduced motion', async () => {
     mockAppState.motionPreference = 'reduced';
     const view = await render(<SceneScreen />);
-    await fireEvent(view.getByTestId('scene-scroll'), 'layout', {
-      nativeEvent: { layout: { height: 600, width: 390, x: 0, y: 0 } },
+    await fireEvent(view.getByTestId('scene-screen'), 'layout', {
+      nativeEvent: { layout: { height: 712, width: 390, x: 0, y: 0 } },
+    });
+    await fireEvent(view.getByTestId('scene-sheet'), 'layout', {
+      nativeEvent: { layout: { height: 700, width: 390, x: 0, y: 300 } },
     });
     await fireEvent.press(view.getByLabelText(choiceLabel('chai', 0, 1)));
     sceneScrollToMock.mockClear();
 
+    // The result alone is not enough: the pinned bar has to be measured first, because it shrinks the visible area.
+    const feedback = { nativeEvent: { layout: { height: 112, width: 358, x: 16, y: 640 } } };
+    await fireEvent(view.getByTestId('scene-feedback'), 'layout', feedback);
+    expect(sceneScrollToMock).not.toHaveBeenCalled();
     const actions = view.getByTestId('scene-answer-actions');
-    const layout = { nativeEvent: { layout: { height: 112, width: 358, x: 16, y: 940 } } };
-    await fireEvent(actions, 'layout', layout);
-    await fireEvent(actions, 'layout', layout);
+    expect(within(view.getByTestId('scene-scroll')).queryByTestId('scene-answer-actions')).toBeNull();
+    const bar = { nativeEvent: { layout: { height: 112, width: 390, x: 0, y: 600 } } };
+    await fireEvent(actions, 'layout', bar);
+    await fireEvent(actions, 'layout', bar);
+    await fireEvent(view.getByTestId('scene-feedback'), 'layout', feedback);
 
     expect(sceneScrollToMock).toHaveBeenCalledTimes(1);
+    // 300 (sheet) + 640 + 112 (result) + 16 (breathing room) - (712 - 112 visible) = 468
     expect(sceneScrollToMock).toHaveBeenCalledWith({ animated: false, y: 468 });
   });
 
@@ -563,10 +628,10 @@ describe('SceneScreen primary journey', () => {
       width: '100%',
     }));
     const testIds = collectTestIds(view.toJSON());
-    expect(testIds.indexOf('scene-feedback')).toBeLessThan(testIds.indexOf('scene-answer-actions'));
-    expect(testIds.indexOf('scene-answer-actions')).toBeLessThan(testIds.indexOf('scene-save'));
+    expect(testIds.indexOf('scene-feedback')).toBeLessThan(testIds.indexOf('scene-save'));
     expect(testIds.indexOf('scene-save')).toBeLessThan(testIds.indexOf('scene-words'));
     expect(testIds.indexOf('scene-words')).toBeLessThan(testIds.indexOf('scene-pronunciation'));
+    expect(testIds.indexOf('scene-pronunciation')).toBeLessThan(testIds.indexOf('scene-answer-actions'));
   });
 
   it('shows Devanagari and Romanized Hindi before a choice and reveals English for every option once the answer is shown', async () => {
@@ -747,6 +812,8 @@ describe('SceneScreen primary journey', () => {
     mockAppState.aiConsent = false;
     const intro = await render(<SceneScreen />);
     expect(intro.getByText('Greet someone politely in Hindi.')).toBeTruthy();
+    expect(intro.getByTestId('scene-asha-row')).toBeTruthy();
+    expect(intro.getByLabelText('Hear Asha')).toBeTruthy();
     await fireEvent.press(intro.getByRole('button', { name: 'Hear the example' }));
     expect(speakTextMock).toHaveBeenCalledWith('नमस्ते।');
     await intro.unmount();
@@ -754,18 +821,21 @@ describe('SceneScreen primary journey', () => {
     mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
     const view = await render(<SceneScreen />);
     expect(view.getByText('Your friend introduces you to their grandmother.')).toBeTruthy();
+    // Asha's portrait and Listen button stay on the last beat.
+    expect(view.getByTestId('scene-asha-row')).toBeTruthy();
+    expect(view.getByLabelText('Hear Asha')).toBeTruthy();
     expect(view.queryByTestId('scene-choices')).toBeNull();
     expect(view.queryByText('नमस्ते।')).toBeNull();
     await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
     await fireEvent.press(view.getByLabelText('Needs work'));
+    // The missed phrase comes back once through the normal re-ask, so the recap has no second retry button.
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    expect(view.getByText('Review 1 of 1')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Needs work'));
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ weakPhrases: ['नमस्ते।'] }));
-
-    await fireEvent.press(view.getByRole('button', { name: 'Retry missed phrases' }));
-    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
-    await fireEvent.press(view.getByLabelText('Got it'));
-    expect(view.getByText('You retried every missed phrase.')).toBeTruthy();
-    await fireEvent.press(view.getByRole('button', { name: 'Back to lesson summary' }));
+    expect(view.queryByRole('button', { name: 'Retry missed phrases' })).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
     expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: 'नमस्ते।' })]));
     expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
@@ -780,6 +850,17 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Finish roleplay' }));
     expect(view.getByText('Conversation complete.')).toBeTruthy();
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the learner\u2019s own name in the lesson 2 example', async () => {
+    mockSceneId = 'plan-essentials-02';
+    mockAppState.aiConsent = true;
+    mockAppState.learnerProfile = { scriptPreference: 'latin', displayName: 'Priya' };
+    const named = await render(<SceneScreen />);
+    expect(named.getByText('Mera naam Priya hai.')).toBeTruthy();
+    expect(named.queryByText(/Chris/)).toBeNull();
+    await named.unmount();
+
   });
 
   it('returns the final guided lesson to its completed plan', async () => {
@@ -946,6 +1027,10 @@ describe('lesson audit regressions', () => {
     mockElapsedSeconds.mockReturnValue(7);
     const final = await render(<SceneScreen />);
     expect(final.getByText('Turn 2 of 2')).toBeTruthy();
+    await fireEvent.press(final.getByTestId('scene-choice-0'));
+    await fireEvent.press(final.getByTestId('scene-continue'));
+    // The phrase missed before the reloads still comes back for one review turn.
+    expect(final.getByText('Review 1 of 1')).toBeTruthy();
     await fireEvent.press(final.getByTestId('scene-choice-0'));
     await fireEvent.press(final.getByTestId('scene-continue'));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith('chai', 27, {

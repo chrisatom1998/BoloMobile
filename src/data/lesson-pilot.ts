@@ -42,7 +42,7 @@ const pilotLessons: Partial<Record<string, LessonPilot>> = {
     takeaway: 'You practiced introducing yourself by name in Hindi.',
     recallSituation: 'You arrive at a class and the teacher asks your name.',
     recallPrompt: 'Introduce yourself in Hindi.',
-    model: { hi: 'मेरा नाम क्रिस है।', latin: 'Mera naam Chris hai.', en: 'My name is Chris.' },
+    model: { hi: 'मेरा नाम ... है।', latin: 'Mera naam ... hai.', en: 'My name is ...' },
     roleplay: {
       setting: 'It’s your first day in class. Asha is the teacher.',
       turns: [
@@ -55,4 +55,11 @@ const pilotLessons: Partial<Record<string, LessonPilot>> = {
 
 export function getLessonPilot(sceneId: string) {
   return pilotLessons[sceneId];
+}
+
+/** Fills the example with the learner's own name, or a neutral stand-in when none is saved. Names stay as typed. */
+export function personalizeModel(model: SavedPhrase, name?: string): SavedPhrase {
+  const filled = name?.trim() || 'Sam';
+  const fill = (text: string) => text.replace(/\.\.\.|…/gu, () => filled);
+  return { hi: fill(model.hi), latin: fill(model.latin), en: fill(model.en) };
 }

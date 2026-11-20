@@ -1,7 +1,7 @@
 import { randomUUID } from 'expo-crypto';
 import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Bookmark, Check, ChevronRight, RotateCcw, Star, Volume2, X } from 'lucide-react-native';
+import { Bookmark, Check, ChevronDown, ChevronRight, ChevronUp, RotateCcw, Star, Volume1, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -122,6 +122,12 @@ function SceneScreen() {
   // A first wrong pick keeps the right answer hidden so "Try again" means something.
   const [answerShown, setAnswerShown] = useState(false);
   const [pronunciationBusy, setPronunciationBusy] = useState(false);
+  // Phrases missed on the first try come back once, after the last turn, before the lesson finishes.
+  const [missedBeats, setMissedBeats] = useState<number[]>([]);
+  const [weakPhrases, setWeakPhrases] = useState<string[]>(() => initialAttempt?.weakPhrases ?? []);
+  const [review, setReview] = useState<{ queue: number[]; position: number } | null>(null);
+  // The finish screen leads with missed phrases and keeps the rest folded until asked for.
+  const [showAllPhrases, setShowAllPhrases] = useState(false);
 
   const [wordSheet, setWordSheet] = useState<{ word: string; phrase: string } | null>(null);
   const [wordSheetVisible, setWordSheetVisible] = useState(false);
@@ -129,10 +135,13 @@ function SceneScreen() {
   const closingWordSessionRef = useRef(0);
   const sceneScrollRef = useRef<ScrollView>(null);
   const sceneViewportHeightRef = useRef(0);
+  const sheetYRef = useRef(0);
+  const feedbackRectRef = useRef<{ y: number; height: number } | null>(null);
+  const actionBarHeightRef = useRef<number | null>(null);
   const sceneScrollYRef = useRef(0);
   const pendingResolutionScrollRef = useRef(false);
   const pickedRef = useRef<number | null>(null);
-  const advancedBeatRef = useRef<number | null>(null);
+  const advancedTurnRef = useRef<string | null>(null);
   const autoPlayedBeatRef = useRef<string | null>(null);
 
   const sceneExists = Boolean(sourceScene);
@@ -161,7 +170,7 @@ function SceneScreen() {
       ? `${currentBeat.npc}\n${currentBeat.translation}`
       : currentBeat.npc
     : undefined;
-  const autoPlayKey = scene && npcLine !== undefined ? `${scene.id}:${beatIndex}` : null;
+  const autoPlayKey = scene && npcLine !== undefined ? `${scene.id}:${beatIndex}${review ? `:review-${review.position}` : ''}` : null;
   const effectiveMode = useMemo<BeatMode>(() => {
     const declaredMode = currentBeat?.mode ?? 'choice';
     if (declaredMode === 'wordOrder' && currentTarget && !isWordOrderPracticeable(currentTarget.hi)) {
@@ -208,6 +217,8 @@ function SceneScreen() {
   const activeScene = scene;
   const beat = currentBeat;
   const target = currentTarget;
+  const turnKey = review ? `review-${review.position}` : `run-${beatIndex}`;
+  const slowRate = 0.72;
   const openWordSheet = (word: string) => {
     wordSheetSessionRef.current += 1;
     setWordSheet({ word, phrase: target.hi });
@@ -257,12 +268,50 @@ function SceneScreen() {
       : buildAlternateFeedback({ en: target.en, latin: target.latin })
     : '';
 
-  function play(text: string) {
+  function play(text: string, playbackRate = 1) {
     if ((!aiConsent && !hasOfflineSpeech(text)) || pronunciationBusy) return;
-    void speak(text);
+    if (playbackRate === 1) void speak(text);
+    else void speak(text, undefined, playbackRate);
+  }
+
+  /**
+   * Continue is pinned under the lesson, so after an answer the scroll only has to bring the result into view.
+   * It waits for both the result and the pinned bar to be measured, because the bar shrinks the visible area.
+   */
+  function revealFeedback() {
+    if (!pendingResolutionScrollRef.current) return;
+    const rect = feedbackRectRef.current;
+    const barHeight = actionBarHeightRef.current;
+    const viewportHeight = sceneViewportHeightRef.current - (barHeight ?? 0);
+    if (!rect || barHeight === null || viewportHeight <= 0) return;
+    pendingResolutionScrollRef.current = false;
+    const nextScrollY = Math.max(0, sheetYRef.current + rect.y + rect.height + spacing.lg - viewportHeight);
+    if (nextScrollY <= sceneScrollYRef.current) return;
+    sceneScrollYRef.current = nextScrollY;
+    sceneScrollRef.current?.scrollTo({ animated: !reducedMotion, y: nextScrollY });
+  }
+
+  /** One turn per missed phrase: the turn it was missed on, else the first turn that practices it. */
+  function buildReviewQueue() {
+    const queue: number[] = [];
+    const queued = new Set<string>();
+    const add = (index: number) => {
+      const hi = activeScene.beats[index]?.choices.find((choice) => choice.correct)?.hi;
+      if (!hi || queued.has(hi) || !weakPhrases.includes(hi)) return;
+      queued.add(hi);
+      queue.push(index);
+    };
+    missedBeats.forEach(add);
+    activeScene.beats.forEach((_, index) => add(index));
+    return queue;
   }
 
   function recordAnswer(isCorrect: boolean) {
+    // Review turns are extra practice: they never change the first-try score, but they still count as active time.
+    if (review) {
+      touchTimer();
+      return;
+    }
     if (attemptRef.current.answeredBeatIndex === beatIndex) return;
     if (pilotRecall) observe(isCorrect ? 'pilot_recall_remembered' : 'pilot_recall_needs_work');
     touchTimer();
@@ -274,6 +323,8 @@ function SceneScreen() {
     attemptRef.current = attempt;
     setCorrectCount(attempt.correct);
     setAnswerCount(attempt.total);
+    setWeakPhrases(attempt.weakPhrases);
+    if (!isCorrect) setMissedBeats((previous) => [...previous, beatIndex]);
     checkpointScene?.(activeScene.id, beatIndex, attempt);
   }
 
@@ -329,6 +380,8 @@ function SceneScreen() {
   function tryAgain() {
     if ((effectiveMode !== 'choice' && effectiveMode !== 'wordOrder') || resolution !== 'incorrect' || answerShown || pronunciationBusy) return;
     pendingResolutionScrollRef.current = false;
+    feedbackRectRef.current = null;
+    actionBarHeightRef.current = null;
     pickedRef.current = null;
     setPicked(null);
     setResolution(null);
@@ -339,12 +392,17 @@ function SceneScreen() {
   }
 
   function next() {
-    if (advancedBeatRef.current === beatIndex) return;
-    advancedBeatRef.current = beatIndex;
+    if (advancedTurnRef.current === turnKey) return;
+    advancedTurnRef.current = turnKey;
     pendingResolutionScrollRef.current = false;
+    feedbackRectRef.current = null;
+    actionBarHeightRef.current = null;
     void stopSpeaking();
     clearAudioError();
-    if (beatIndex === activeScene.beats.length - 1) {
+    const onLastBeat = !review && beatIndex === activeScene.beats.length - 1;
+    const queue = review ? review.queue : onLastBeat ? buildReviewQueue() : [];
+    const reviewPosition = review ? review.position + 1 : 0;
+    if (review ? reviewPosition >= queue.length : onLastBeat && queue.length === 0) {
       completedRef.current = true;
       const completions = Object.values(sceneProgress ?? {}).reduce((sum, progress) => sum + (progress.completions ?? 0), 0);
       if (completions === 0 && reminder.enabled !== true && reminder.offerAnswered !== true) {
@@ -361,9 +419,15 @@ function SceneScreen() {
       return;
     }
     hapticSelect();
-    progressBeatRef.current = beatIndex + 1;
-    checkpointScene?.(activeScene.id, beatIndex + 1, { ...attemptRef.current, seconds: elapsedBeforeResumeRef.current + elapsedSeconds() });
-    setBeatIndex((value) => value + 1);
+    if (review || onLastBeat) {
+      // The saved checkpoint stays on the last turn, so leaving mid-review resumes there with the score intact.
+      setReview({ queue, position: reviewPosition });
+      setBeatIndex(queue[reviewPosition]!);
+    } else {
+      progressBeatRef.current = beatIndex + 1;
+      checkpointScene?.(activeScene.id, beatIndex + 1, { ...attemptRef.current, seconds: elapsedBeforeResumeRef.current + elapsedSeconds() });
+      setBeatIndex((value) => value + 1);
+    }
     pickedRef.current = null;
     setPicked(null);
     setResolution(null);
@@ -392,12 +456,16 @@ function SceneScreen() {
     closeWordSheet();
     setCorrectCount(0);
     setAnswerCount(0);
+    setMissedBeats([]);
+    setWeakPhrases([]);
+    setReview(null);
+    setShowAllPhrases(false);
     attemptRef.current = { id: randomUUID(), score: 0, correct: 0, total: 0, weakPhrases: [], seconds: 0, answeredBeatIndex: null };
     elapsedBeforeResumeRef.current = 0;
     progressBeatRef.current = 0;
     completedRef.current = false;
     checkpointScene?.(activeScene.id, 0, attemptRef.current);
-    advancedBeatRef.current = null;
+    advancedTurnRef.current = null;
     pendingResolutionScrollRef.current = false;
     setCompletion(null);
     setChoiceNonce((value) => value + 1);
@@ -433,10 +501,22 @@ function SceneScreen() {
       : 'Back to Today';
 
   if (completion) {
-    const missedPhrases = new Set(completion.weakPhrases);
-    const missedTargets = pilot ? [...new Map(activeScene.beats.flatMap(({ choices }) => choices
-      .filter((choice) => choice.correct && missedPhrases.has(choice.hi))
-      .map(({ hi, latin, en }) => [hi, { hi, latin, en }] as const))).values()] : [];
+    const practicedPhrases = activeScene.beats
+      .flatMap((practiced) => practiced.choices.filter((choice) => choice.correct))
+      .filter((phrase, index, all) => all.findIndex((other) => other.hi === phrase.hi) === index);
+    const missedPhrases = practicedPhrases.filter((phrase) => weakPhrases.includes(phrase.hi));
+    const otherPhrases = practicedPhrases.filter((phrase) => !weakPhrases.includes(phrase.hi));
+    const phraseRow = (phrase: (typeof practicedPhrases)[number]) => (
+      <View key={phrase.hi} style={styles.learnedRow}>
+        <View style={styles.learnedCopy}>
+          {scriptPreference !== 'latin' ? <Text accessibilityLanguage="hi-IN" style={styles.learnedHindi}>{phrase.hi}</Text> : null}
+          {scriptPreference !== 'devanagari' ? <Text style={scriptPreference === 'latin' ? styles.learnedLatinOnly : styles.learnedLatin}>{phrase.latin}</Text> : null}
+          <Text style={styles.learnedMeaning}>{phrase.en}</Text>
+        </View>
+        <PhraseAudioButtons disabled={!aiConsent && !hasOfflineSpeech(phrase.hi)} label={phrase.latin} onPlay={(rate) => play(phrase.hi, rate)} slowRate={slowRate} />
+      </View>
+    );
+    const missedTargets = pilot ? missedPhrases.map(({ hi, latin, en }) => ({ hi, latin, en })) : [];
     return (
       <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
@@ -483,6 +563,19 @@ function SceneScreen() {
             target={{ hi: pilotTarget.hi, latin: pilotTarget.latin, en: pilotTarget.en }}
           />
         ) : null}
+        <View style={styles.learned} testID="scene-completion-phrases">
+          {missedPhrases.length ? <Text accessibilityRole="header" style={sharedStyles.eyebrow}>Worth another listen</Text> : null}
+          {missedPhrases.map(phraseRow)}
+          {otherPhrases.length ? (
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: showAllPhrases }} onPress={() => { hapticSelect(); setShowAllPhrases((shown) => !shown); }} style={styles.learnedToggle} testID="scene-completion-phrases-toggle">
+              <Text style={styles.learnedToggleText}>{missedPhrases.length
+                ? `${showAllPhrases ? 'Hide' : 'Show'} the other ${otherPhrases.length === 1 ? 'phrase' : `${otherPhrases.length} phrases`}`
+                : `${showAllPhrases ? 'Hide' : 'Show'} the ${otherPhrases.length === 1 ? 'phrase' : `${otherPhrases.length} phrases`} you practiced`}</Text>
+              {showAllPhrases ? <ChevronUp color={colors.ink} size={18} /> : <ChevronDown color={colors.ink} size={18} />}
+            </Pressable>
+          ) : null}
+          {showAllPhrases ? otherPhrases.map(phraseRow) : null}
+        </View>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: pronunciationBusy }} disabled={pronunciationBusy} onPress={replay} style={[styles.secondaryButton, pronunciationBusy && styles.disabled]} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
           <Pressable accessibilityRole="button" accessibilityState={{ disabled: pronunciationBusy }} disabled={pronunciationBusy} onPress={() => router.replace('/')} style={[styles.tertiaryButton, pronunciationBusy && styles.disabled]} testID="scene-completion-tertiary">
@@ -564,44 +657,38 @@ function SceneScreen() {
     );
   }
 
-  const recoveryActionsFirst = resolution === 'incorrect'
-    && (effectiveMode === 'choice' || effectiveMode === 'wordOrder');
+  // Try again, Show answer and Continue sit in a bar pinned under the lesson, so they are never scrolled out of reach.
+  // The bar stays one row tall: two actions share the row, and their labels stop growing past 1.3x so they fit at large text.
+  const tryAgainOffered = resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') && !answerShown;
   const answerActions = resolution !== null ? (
     <View
       onLayout={(event) => {
-        if (!pendingResolutionScrollRef.current) return;
-        const viewportHeight = sceneViewportHeightRef.current;
-        if (viewportHeight <= 0) return;
-        const { height, y } = event.nativeEvent.layout;
-        const nextScrollY = Math.max(0, y + height + spacing.lg - viewportHeight);
-        pendingResolutionScrollRef.current = false;
-        if (nextScrollY <= sceneScrollYRef.current) return;
-        sceneScrollYRef.current = nextScrollY;
-        sceneScrollRef.current?.scrollTo({ animated: !reducedMotion, y: nextScrollY });
+        actionBarHeightRef.current = event.nativeEvent.layout.height;
+        revealFeedback();
       }}
-      style={styles.answerActions}
+      style={[styles.actionBar, { paddingBottom: Math.max(spacing.md, insets.bottom) }]}
       testID="scene-answer-actions"
     >
-      {resolution === 'incorrect' && (effectiveMode === 'choice' || effectiveMode === 'wordOrder') && !answerShown ? (
+      {tryAgainOffered ? (
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: pronunciationBusy }}
           disabled={pronunciationBusy}
           onPress={tryAgain}
-          style={[styles.tryAgainButton, pronunciationBusy && styles.disabled]}
+          style={[styles.tryAgainButton, styles.actionBarShared, pronunciationBusy && styles.disabled]}
           testID="scene-try-again"
         >
           <RotateCcw color={colors.brand} size={19} />
-          <Text style={styles.tryAgainText}>Try again</Text>
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.tryAgainText}>Try again</Text>
         </Pressable>
       ) : null}
       {choiceAnswerHidden ? (
-        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); setAnswerShown(true); }} style={styles.secondaryButton} testID="scene-show-answer">
-          <Text style={styles.secondaryText}>Show answer</Text>
+        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); setAnswerShown(true); }} style={[styles.secondaryButton, styles.actionBarShared]} testID="scene-show-answer">
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.secondaryText}>Show answer</Text>
         </Pressable>
       ) : (
-        <Pressable accessibilityRole="button" onPress={next} style={styles.nextButton} testID="scene-continue">
-          <Text style={styles.nextText}>{beatIndex === activeScene.beats.length - 1 ? 'Finish' : 'Continue'}</Text>
+        <Pressable accessibilityRole="button" onPress={next} style={tryAgainOffered ? [styles.nextButton, styles.actionBarShared] : styles.nextButton} testID="scene-continue">
+          <Text maxFontSizeMultiplier={1.3} numberOfLines={1} style={styles.nextText}>{(review ? review.position === review.queue.length - 1 : beatIndex === activeScene.beats.length - 1 && buildReviewQueue().length === 0) ? 'Finish' : 'Continue'}</Text>
           <ChevronRight color={colors.white} size={18} />
         </Pressable>
       )}
@@ -609,15 +696,20 @@ function SceneScreen() {
   ) : null;
 
   return (
-    <ScrollView
+    <View
       key="scene-run"
-      ref={sceneScrollRef}
-      contentInsetAdjustmentBehavior="never"
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.sm }]}
-      keyboardShouldPersistTaps="handled"
       onLayout={(event) => {
         sceneViewportHeightRef.current = event.nativeEvent.layout.height;
+        revealFeedback();
       }}
+      style={sharedStyles.screen}
+      testID="scene-screen"
+    >
+    <ScrollView
+      ref={sceneScrollRef}
+      contentInsetAdjustmentBehavior="never"
+      contentContainerStyle={[styles.content, styles.contentGrow, { paddingTop: insets.top + spacing.sm }]}
+      keyboardShouldPersistTaps="handled"
       onScroll={(event) => {
         sceneScrollYRef.current = Math.max(0, event.nativeEvent.contentOffset.y);
       }}
@@ -640,12 +732,14 @@ function SceneScreen() {
             <X color={colors.ink} size={18} strokeWidth={2.2} />
           </Pressable>
           <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.beatSegments}>
-            {activeScene.beats.map((_, index) => {
-              const filled = index < beatIndex || (index === beatIndex && (resolution !== null || alreadyResolvedIncorrect));
+            {/* During review the dots count the review turns, so the bar shows what is left instead of looking finished. */}
+            {(review ? review.queue : activeScene.beats).map((_, index) => {
+              const position = review ? review.position : beatIndex;
+              const filled = index < position || (index === position && (resolution !== null || alreadyResolvedIncorrect));
               return <View key={index} style={[styles.beatSegment, filled && styles.beatSegmentFilled]} testID={`scene-beat-segment-${index}`} />;
             })}
           </View>
-          <Text style={styles.turn}>Turn {beatIndex + 1} of {activeScene.beats.length}</Text>
+          <Text style={styles.turn}>{review ? `Review ${review.position + 1} of ${review.queue.length}` : `Turn ${beatIndex + 1} of ${activeScene.beats.length}`}</Text>
         </View>
         {/* Title and tally share one row so Asha's line and the answer fit on screen without scrolling. */}
         <View style={styles.titleRow}>
@@ -656,6 +750,7 @@ function SceneScreen() {
         </View>
       </View>
 
+      {review ? <Text style={styles.resumeNotice} testID="scene-review-note">One more time: {review.queue.length === 1 ? 'the phrase' : 'the phrases'} you missed.</Text> : null}
       {incompatibleCheckpoint ? <Text style={styles.resumeNotice}>This saved lesson no longer matches its turns. Start again at turn 1 so your results stay accurate.</Text> : null}
       {legacyCheckpoint ? <Text style={styles.resumeNotice}>This older saved lesson has no answer history. Start again at turn 1 so your lesson results are complete.</Text> : null}
       {initialBeatIndex > 0 && beatIndex === initialBeatIndex && resolution === null ? <FadingNotice style={styles.resumeNoticeQuiet}>Picking up where you left off.</FadingNotice> : null}
@@ -673,55 +768,67 @@ function SceneScreen() {
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
       {pilot && pilotIntro && resolution === null ? (
-        <LessonPilotModel pilot={pilot} target={target} script={scriptPreference} onPlay={play} />
+        <LessonPilotModel pilot={pilot} target={target} script={scriptPreference} onPlay={play} name={practiceName.trim()} />
       ) : null}
-      {pilot && (pilotIntro || pilotRecall) ? (
-        <Text style={styles.setupEnglish}>{pilotRecall ? pilot.recallSituation : beat.translation}</Text>
-      ) : (
-        <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
-          <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
-          <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
-            <View style={styles.speakerRow}>
-              <Text style={styles.speakerName}>Asha</Text>
-              <Pressable
-                accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
-                  ? 'Agree to connected AI processing to enable this voice.'
-                  : pronunciationBusy
-                    ? 'Finish pronunciation practice before playing another voice.'
-                    : aiConsent
-                      ? 'Plays the Hindi situation, then its English translation.'
-                      : 'Plays bundled Hindi lesson audio offline.'}
-                accessibilityLabel="Hear Asha"
-                accessibilityRole="button"
-                accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
-                disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
-                hitSlop={4}
-                onPress={() => play(situationPromptSpeech ?? beat.npc)}
-                style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
-              >
-                <Volume2 color={colors.brandText} size={16} />
-                <Text style={styles.speakerText}>Listen</Text>
-              </Pressable>
+      <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
+        <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
+        <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
+          <View style={styles.speakerRow}>
+            <Text style={styles.speakerName}>Asha</Text>
+            <View style={styles.speakerButtons}>
+            <Pressable
+              accessibilityLabel="Hear Asha slowly"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
+              disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
+              hitSlop={4}
+              onPress={() => play(beat.npc, slowRate)}
+              style={[styles.speaker, styles.speakerQuiet, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
+              testID="scene-listen-slow"
+            >
+              <Volume1 color={colors.brandText} size={16} />
+              <Text style={styles.speakerText}>Slow</Text>
+            </Pressable>
+            <Pressable
+              accessibilityHint={!aiConsent && !hasOfflineSpeech(beat.npc)
+                ? 'Agree to connected AI processing to enable this voice.'
+                : pronunciationBusy
+                  ? 'Finish pronunciation practice before playing another voice.'
+                  : aiConsent
+                    ? 'Plays the Hindi situation, then its English translation.'
+                    : 'Plays bundled Hindi lesson audio offline.'}
+              accessibilityLabel="Hear Asha"
+              accessibilityRole="button"
+              accessibilityState={{ disabled: (!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy }}
+              disabled={(!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy}
+              hitSlop={4}
+              onPress={() => play(situationPromptSpeech ?? beat.npc)}
+              style={[styles.speaker, largeTextLayout && styles.speakerLarge, ((!aiConsent && !hasOfflineSpeech(beat.npc)) || pronunciationBusy) && styles.disabled]}
+            >
+              <Volume2 color={colors.brandText} size={16} />
+              <Text style={styles.speakerText}>Listen</Text>
+            </Pressable>
             </View>
-            {englishFirstSetup ? (
-              <>
-                {/* Starter and Beginner lessons lead with the moment in English; the Hindi stays one tap of Listen away. */}
-                <Text style={[styles.setupEnglish, largeTextLayout && styles.npcLarge]}>{beat.translation}</Text>
-                <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.setupHindi, scriptPreference !== 'latin' && styles.setupHindiScript]}>{scriptPreference === 'both'
-                  ? <>{beat.npc}{'\n'}<Text style={styles.setupHindi}>{romanizeDevanagari(beat.npc)}</Text></>
-                  : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
-              </>
-            ) : (
-              <>
-                <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, scriptPreference !== 'latin' && styles.npcHindi, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
-                  ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
-                  : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
-                <Text style={styles.translation}>{beat.translation}</Text>
-              </>
-            )}
+          </View>
+          {englishFirstSetup ? (
+            <>
+              {/* Starter and Beginner lessons lead with the moment in English; the Hindi stays one tap of Listen away. */}
+              <Text style={[styles.setupEnglish, largeTextLayout && styles.npcLarge]}>{beat.translation}</Text>
+              <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.setupHindi, scriptPreference !== 'latin' && styles.setupHindiScript]}>{scriptPreference === 'both'
+                ? <>{beat.npc}{'\n'}<Text style={styles.setupHindi}>{romanizeDevanagari(beat.npc)}</Text></>
+                : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
+            </>
+          ) : (
+            <>
+              <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.npc, scriptPreference !== 'latin' && styles.npcHindi, largeTextLayout && styles.npcLarge]}>{scriptPreference === 'both'
+                ? <>{beat.npc}{'\n'}<Text style={styles.npcLatin}>{romanizeDevanagari(beat.npc)}</Text></>
+                : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
+              <Text style={styles.translation}>{beat.translation}</Text>
+            </>
+          )}
         </View>
       </View>
-      )}
+      {pilot && pilotRecall ? <Text style={styles.setupEnglish}>{pilot.recallSituation}</Text> : null}
 
       {picked !== null && beat.choices[picked] ? (
         <View style={styles.learnerRow}>
@@ -732,7 +839,11 @@ function SceneScreen() {
       ) : null}
 
       {/* The tray draws under the home indicator / Android gesture bar, so it adds the bottom inset itself. */}
-      <View style={[styles.sheet, { paddingBottom: Math.max(34, insets.bottom + spacing.md) }]}>
+      <View
+        onLayout={(event) => { sheetYRef.current = event.nativeEvent.layout.y; }}
+        style={[styles.sheet, styles.sheetGrow, { paddingBottom: resolution !== null ? spacing.xl : Math.max(34, insets.bottom + spacing.md) }]}
+        testID="scene-sheet"
+      >
         {currentUsesName && resolution === null && practiceName.trim() ? (
           <View style={styles.nameRow}>
             <Text numberOfLines={1} style={styles.nameRowText}>Practicing as {practiceName.trim()}</Text>
@@ -794,7 +905,7 @@ function SceneScreen() {
           <WordOrderPractice
             scriptPreference={scriptPreference}
             disabled={pronunciationBusy || resolution !== null || needsName}
-            key={`word-order-${activeScene.id}-${beatIndex}-${target.hi}-${wordOrderRetryNonce}`}
+            key={`word-order-${activeScene.id}-${turnKey}-${target.hi}-${wordOrderRetryNonce}`}
             onResolve={handleAlternateResult}
             showInstructions={false}
             targetHi={target.hi}
@@ -804,7 +915,7 @@ function SceneScreen() {
           <RecallRevealPractice
             scriptPreference={scriptPreference}
             disabled={pronunciationBusy || resolution !== null || needsName}
-            key={`recall-reveal-${activeScene.id}-${beatIndex}-${target.hi}`}
+            key={`recall-reveal-${activeScene.id}-${turnKey}-${target.hi}`}
             onResolve={handleAlternateResult}
             targetEn={target.en}
             targetHi={target.hi}
@@ -813,8 +924,14 @@ function SceneScreen() {
         )}
 
         {resolution !== null ? (
-          <View testID="scene-feedback">
-            <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${beatIndex}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
+          <View
+            onLayout={(event) => {
+              feedbackRectRef.current = { y: event.nativeEvent.layout.y, height: event.nativeEvent.layout.height };
+              revealFeedback();
+            }}
+            testID="scene-feedback"
+          >
+            <MotionReveal mode={motionMode} motionKey={`${activeScene.id}-${turnKey}-${resolution}`} style={[styles.result, resolution === 'incorrect' && styles.resultWrong, largeTextLayout && styles.resultLarge]} testID="scene-result">
               <View style={styles.resultCopy}>
                 <Text style={[styles.resultTitle, resolution === 'incorrect' && styles.resultWrongText]}>{resultTitle(correct)}</Text>
                 {englishMistakeFeedback ? <Text style={[styles.resultBody, styles.resultWrongText]} testID="scene-result-feedback">{englishMistakeFeedback}</Text> : null}
@@ -831,13 +948,14 @@ function SceneScreen() {
           </View>
         ) : null}
 
-        {recoveryActionsFirst ? answerActions : null}
-
         {answerVisible ? (
           <>
             <View testID="scene-save">
               <View style={[styles.saveRow, largeTextLayout && styles.saveRowLarge]} testID="scene-save-row">
-                <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}><Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text></View>
+                <View style={[styles.saveCopy, largeTextLayout && styles.saveCopyLarge]}>
+                  <Text style={styles.saveTitle}>Keep the natural answer</Text><Text style={styles.saveMeaning}>{target.en}</Text>
+                  <PhraseAudioButtons disabled={(!aiConsent && !hasOfflineSpeech(target.hi)) || pronunciationBusy} label="the answer" onPlay={(rate) => play(target.hi, rate)} slowRate={slowRate} testID="scene-answer-audio" />
+                </View>
                 <Pressable accessibilityLabel={saved ? 'Remove saved phrase' : 'Save phrase'} accessibilityRole="button" accessibilityState={{ selected: saved }} onPress={toggleSavedPhrase} style={[styles.saveButton, largeTextLayout && styles.saveButtonLarge, saved && styles.saveButtonActive]}>
                   <Bookmark color={saved ? colors.white : colors.ink} fill={saved ? colors.white : 'transparent'} size={19} />
                 </Pressable>
@@ -869,13 +987,32 @@ function SceneScreen() {
 
         {aiConsent && !needsName && answerVisible ? (
           <View testID="scene-pronunciation">
-            <PronunciationRecorder key={`${activeScene.id}-${beatIndex}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
+            <PronunciationRecorder key={`${activeScene.id}-${turnKey}-${target.hi}`} lessonTitle={activeScene.title} onActivityChange={setPronunciationBusy} target={target} />
           </View>
         ) : null}
-        {!recoveryActionsFirst ? answerActions : null}
       </View>
       <WordDefinitionSheet clientId={clientId} initialWord={wordSheet?.word ?? null} onClose={closeWordSheet} onDismissed={finishWordSheet} phrase={wordSheet?.phrase ?? target.hi} reducedMotion={reducedMotion} scriptPreference={learnerProfile?.scriptPreference ?? 'both'} visible={wordSheetVisible && wordSheet !== null} />
     </ScrollView>
+    {answerActions}
+    </View>
+  );
+}
+
+/** Listen and Slow for one Hindi phrase, so a learner can hear it at full speed and then pick the sounds apart. */
+function PhraseAudioButtons({ disabled, label, onPlay, slowRate, testID }: { disabled: boolean; label: string; onPlay: (playbackRate: number) => void; slowRate: number; testID?: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  return (
+    <View style={styles.phraseAudio} testID={testID}>
+      <Pressable accessibilityLabel={`Hear ${label}`} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => onPlay(1)} style={[styles.speaker, disabled && styles.disabled]}>
+        <Volume2 color={colors.brandText} size={16} />
+        <Text style={styles.speakerText}>Listen</Text>
+      </Pressable>
+      <Pressable accessibilityLabel={`Hear ${label} slowly`} accessibilityRole="button" accessibilityState={{ disabled }} disabled={disabled} hitSlop={4} onPress={() => onPlay(slowRate)} style={[styles.speaker, styles.speakerQuiet, disabled && styles.disabled]}>
+        <Volume1 color={colors.brandText} size={16} />
+        <Text style={styles.speakerText}>Slow</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -924,6 +1061,19 @@ const useStyles = makeStyles((c) => ({
   npcLatin: { ...type.label, fontFamily: 'System', color: c.brandText },
   translation: { ...type.bodyLarge, color: c.muted },
   speaker: { minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.pill, backgroundColor: c.brandSoft, paddingHorizontal: spacing.md },
+  speakerButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Slow is Listen's lighter twin: same pill and icon family, outlined in rust instead of filled so it still reads on cream.
+  speakerQuiet: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.brand },
+  phraseAudio: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  learned: { gap: spacing.sm },
+  learnedRow: { backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.sm },
+  learnedCopy: { gap: spacing.xs },
+  learnedHindi: { ...hindiType(20), color: c.ink },
+  learnedLatin: { ...type.caption, color: c.brandText },
+  learnedLatinOnly: { ...type.headline, color: c.ink, fontWeight: '600' },
+  learnedMeaning: { ...type.body, color: c.muted },
+  learnedToggle: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
+  learnedToggleText: { ...type.label, color: c.ink, flexShrink: 1 },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   learnerRow: { alignItems: 'flex-end' },
@@ -986,7 +1136,10 @@ const useStyles = makeStyles((c) => ({
   wordOrderSolutionLatin: { ...type.label, color: c.brandText },
   resultHindi: { ...type.headline, color: c.ink, fontWeight: '600' },
   resultHindiScript: hindiType(20),
-  answerActions: { gap: spacing.sm },
+  actionBarShared: { flex: 1, width: 'auto', minWidth: 0, minHeight: 52, paddingHorizontal: spacing.md },
+  actionBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: c.paperRaised, borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: spacing.gutter, paddingTop: spacing.md },
+  contentGrow: { flexGrow: 1 },
+  sheetGrow: { flexGrow: 1 },
   tryAgainButton: { width: '100%', minHeight: 48, alignSelf: 'stretch', borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.brand, borderWidth: 1.5, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   tryAgainText: { ...type.label, color: c.brandText },
   nextButton: { ...buttons.primary, width: '100%', alignSelf: 'stretch' },
@@ -1005,7 +1158,8 @@ const useStyles = makeStyles((c) => ({
   wordTrayHint: { ...type.caption, color: c.muted },
   wordTokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   wordToken: { minHeight: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600' },
+  // Centred so the Hindi word sits over the middle of its romanized line, not flush left.
+  wordTokenText: { ...type.bodyLarge, color: c.brandText, fontFamily: displayFont, fontWeight: '600', textAlign: 'center' },
   wordTokenHindi: hindiType(17),
   finish: { padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg, alignItems: 'stretch' },
   finishIntro: { alignItems: 'stretch', gap: spacing.lg },

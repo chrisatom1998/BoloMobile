@@ -3,9 +3,8 @@ import { useState } from 'react';
 import { AccessibilityInfo, Platform, Text, View } from 'react-native';
 
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
-import { RecallRevealPractice } from '@/components/recall-reveal-practice';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
-import type { LessonPilot } from '@/data/lesson-pilot';
+import { personalizeModel, type LessonPilot } from '@/data/lesson-pilot';
 import { lessonHindiLabel } from '@/lib/lesson-display';
 import { hasOfflineSpeech } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
@@ -41,15 +40,17 @@ type PracticeProps = {
   onPlay: (text: string) => void;
 };
 
-export function LessonPilotModel({ pilot, target, script, onPlay }: PracticeProps) {
+export function LessonPilotModel({ pilot, target, script, onPlay, name }: PracticeProps & { name?: string }) {
   const styles = useStyles();
-  const model = pilot.model ?? target;
+  const { aiConsent } = useAppState();
+  const model = pilot.model ? personalizeModel(pilot.model, name) : target;
+  const noAudio = !aiConsent && !hasOfflineSpeech(model.hi);
   return (
     <View style={styles.panel} testID="lesson-pilot-model">
       <Text accessibilityRole="header" style={styles.title}>{pilot.goal}</Text>
       <PhraseText phrase={model} script={script} />
-      {pilot.model ? <Text style={styles.body}>Use your own name when you practice.</Text> : null}
-      <Listen label="Hear the example" phrase={model.hi} onPlay={onPlay} />
+      {pilot.model && !name ? <Text style={styles.body}>Use your own name when you practice.</Text> : null}
+      <Listen label="Hear the example" phrase={model.hi} onPlay={onPlay} disabled={noAudio} />
     </View>
   );
 }
@@ -65,19 +66,16 @@ export function LessonPilotRecap({
 }) {
   const styles = useStyles();
   const { aiConsent, scheduleLessonReview } = useAppState();
-  const [practice, setPractice] = useState<'retry' | 'roleplay' | null>(null);
-  const [retryIndex, setRetryIndex] = useState(0);
+  const [practice, setPractice] = useState<'roleplay' | null>(null);
   const [turnIndex, setTurnIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [schedule, setSchedule] = useState<'idle' | 'saving' | 'scheduled' | 'full' | 'failed'>('idle');
   const turn = pilot.roleplay.turns[turnIndex];
   const answer = turn?.answer === 'lesson' ? target : turn?.answer;
-  const retry = missed[retryIndex];
 
-  function start(kind: 'retry' | 'roleplay') {
+  function start(kind: 'roleplay') {
     onStopAudio();
     setPractice(kind);
-    setRetryIndex(0);
     setTurnIndex(0);
     setRevealed(false);
   }
@@ -111,11 +109,6 @@ export function LessonPilotRecap({
           <Pressable accessibilityRole="button" onPress={() => start('roleplay')} style={buttons.secondary}>
             <Text style={buttons.secondaryText}>Roleplay with Asha</Text>
           </Pressable>
-          {missed.length ? (
-            <Pressable accessibilityRole="button" onPress={() => start('retry')} style={buttons.secondary}>
-              <Text style={buttons.secondaryText}>Retry missed phrases</Text>
-            </Pressable>
-          ) : null}
           {schedule === 'scheduled' ? (
             <Text accessibilityLiveRegion="polite" style={styles.body}>Saved in Review for tomorrow or sooner.</Text>
           ) : (
@@ -126,11 +119,6 @@ export function LessonPilotRecap({
           {schedule === 'full' ? <Text accessibilityRole="alert" style={styles.body}>Your phrasebook is full. Remove a phrase to make room, then try again.</Text> : null}
           {schedule === 'failed' ? <Text accessibilityRole="alert" style={styles.body}>Couldn’t save this review. Try again.</Text> : null}
         </>
-      ) : null}
-      {practice === 'retry' ? (
-        retry ? (
-          <RecallRevealPractice key={retry.hi} scriptPreference={script} targetHi={retry.hi} targetLatin={retry.latin} targetEn={retry.en} onResolve={() => setRetryIndex(retryIndex + 1)} />
-        ) : <Text accessibilityLiveRegion="polite" style={styles.body}>You retried every missed phrase.</Text>
       ) : null}
       {practice === 'roleplay' ? (
         turn && answer ? (

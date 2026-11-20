@@ -117,7 +117,8 @@ describe('chat history provider persistence', () => {
 
     await fireEvent.press(restored.getByLabelText('Clear chat history'));
     await waitFor(() => expect(restored.getByTestId('history').props.children).toBe('empty'));
-    expect(await storedChat()).toEqual([]);
+    // The screen empties before the encrypted write lands, so wait for storage like the append check above does.
+    await waitFor(async () => expect(await storedChat()).toEqual([]));
     expect(asyncStorage.__store.get(storageKeys.clientId)).toBe('client-12345678');
 
     await restored.unmount();
