@@ -35,7 +35,7 @@ import { shuffleChoices } from '@/lib/shuffle-choices';
 import { trimTerminalPunctuation } from '@/lib/text';
 import { DEFAULT_MOTION_PREFERENCE, defaultReminderSettings, SAVED_PHRASES_FULL_MESSAGE, SAVED_PHRASES_FULL_TITLE } from '@/lib/storage';
 import { useAppState } from '@/state/app-state';
-import { displayFont, hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
+import { displayFont, hindiType, makeStyles, radius, shadows, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export { RouteErrorBoundary as ErrorBoundary } from '@/components/app-error-boundary';
 
@@ -1058,7 +1058,7 @@ const useStyles = makeStyles((c) => ({
   learnerTextHindi: hindiType(20),
   disabled: { opacity: 0.4 },
   audioError: { ...type.caption, color: c.danger },
-  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, boxShadow: '0 -8px 24px rgba(23, 37, 35, 0.06)' },
+  sheet: { marginHorizontal: -spacing.lg, marginTop: spacing.xs, backgroundColor: c.paperRaised, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, borderCurve: 'continuous', paddingHorizontal: spacing.gutter, paddingTop: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md, boxShadow: shadows.sheet },
   answerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   answerHeaderLarge: { flexDirection: 'column', alignItems: 'stretch' },
   answerTitle: { ...type.bodyLarge, minWidth: 0, flex: 1, color: c.ink, fontFamily: displayFont, fontWeight: '600' },

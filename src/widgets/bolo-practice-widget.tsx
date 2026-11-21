@@ -10,7 +10,8 @@ export type BoloPracticeWidgetProps = {
 
 function BoloPracticeWidget(props: BoloPracticeWidgetProps, environment: WidgetEnvironment) {
   'widget';
-  // Widget code runs in a separate native runtime and cannot import theme tokens; these mirror ink, heroSubtle, muted and brand.
+  // Widget code runs in a separate native runtime and cannot import theme tokens, so its three colours are literals:
+  // foreground mirrors white / ink, muted mirrors heroSubtle / muted, and '#AC4828' is the widget's rust mark (near `brand`).
   const foreground = environment.colorScheme === 'dark' ? '#FFFFFF' : '#172523';
   const muted = environment.colorScheme === 'dark' ? '#BFC9C6' : '#535D5A';
   return (
