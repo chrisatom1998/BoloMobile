@@ -109,7 +109,7 @@ import SceneScreen from '../src/app/scene/[id]';
 import { wordOrderTokens } from '../src/components/practice-mode';
 import { getScene, scenes } from '../src/data/scenes';
 import * as shuffleChoiceModule from '../src/lib/shuffle-choices';
-import { speakText, stopSpeaking } from '../src/lib/speech';
+import { hasOfflineSpeech, speakText, stopSpeaking } from '../src/lib/speech';
 
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
@@ -859,6 +859,14 @@ describe('SceneScreen primary journey', () => {
     const named = await render(<SceneScreen />);
     expect(named.getByText('Mera naam Priya hai.')).toBeTruthy();
     expect(named.queryByText(/Chris/)).toBeNull();
+    // No bundled recording exists for a typed name, so the example plays the bundled sample offline.
+    mockAppState.aiConsent = false;
+    (hasOfflineSpeech as jest.Mock).mockImplementation((text: string) => text === 'मेरा नाम क्रिस है।');
+    await named.rerender(<SceneScreen />);
+    await fireEvent.press(named.getByRole('button', { name: 'Hear the example' }));
+    expect(speakTextMock).toHaveBeenLastCalledWith('मेरा नाम क्रिस है।');
+    expect(named.getByText('The recording uses a sample name.')).toBeTruthy();
+    (hasOfflineSpeech as jest.Mock).mockImplementation(() => true);
     await named.unmount();
 
   });

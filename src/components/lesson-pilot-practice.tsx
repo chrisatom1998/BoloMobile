@@ -44,13 +44,18 @@ export function LessonPilotModel({ pilot, target, script, onPlay, name }: Practi
   const styles = useStyles();
   const { aiConsent } = useAppState();
   const model = pilot.model ? personalizeModel(pilot.model, name) : target;
-  const noAudio = !aiConsent && !hasOfflineSpeech(model.hi);
+  // A typed name has no bundled recording. Keep the name on screen and play the bundled example instead.
+  const playable = aiConsent || hasOfflineSpeech(model.hi);
+  const audio = playable ? model.hi : pilot.modelAudioFallback ?? model.hi;
+  const usesSampleAudio = !playable && audio !== model.hi;
+  const noAudio = !aiConsent && !hasOfflineSpeech(audio);
   return (
     <View style={styles.panel} testID="lesson-pilot-model">
       <Text accessibilityRole="header" style={styles.title}>{pilot.goal}</Text>
       <PhraseText phrase={model} script={script} />
       {pilot.model && !name ? <Text style={styles.body}>Use your own name when you practice.</Text> : null}
-      <Listen label="Hear the example" phrase={model.hi} onPlay={onPlay} disabled={noAudio} />
+      <Listen label="Hear the example" phrase={audio} onPlay={onPlay} disabled={noAudio} />
+      {usesSampleAudio ? <Text style={styles.body}>The recording uses a sample name.</Text> : null}
     </View>
   );
 }

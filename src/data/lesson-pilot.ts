@@ -6,6 +6,8 @@ export type LessonPilot = {
   recallSituation: string;
   recallPrompt: string;
   model?: SavedPhrase;
+  /** Bundled example audio to play when the personalized line has no offline audio. */
+  modelAudioFallback?: string;
   roleplay: {
     setting: string;
     turns: readonly [RoleplayTurn, RoleplayTurn];
@@ -43,6 +45,7 @@ const pilotLessons: Partial<Record<string, LessonPilot>> = {
     recallSituation: 'You arrive at a class and the teacher asks your name.',
     recallPrompt: 'Introduce yourself in Hindi.',
     model: { hi: 'मेरा नाम ... है।', latin: 'Mera naam ... hai.', en: 'My name is ...' },
+    modelAudioFallback: 'मेरा नाम क्रिस है।',
     roleplay: {
       setting: 'It’s your first day in class. Asha is the teacher.',
       turns: [
