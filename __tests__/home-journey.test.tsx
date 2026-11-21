@@ -681,6 +681,15 @@ describe('HomeScreen primary journey', () => {
     });
   });
 
+  it('shows a See all lessons button even while the next-lesson card is collapsed', async () => {
+    const view = await render(<HomeScreen />);
+
+    await fireEvent.press(view.getByTestId('today-all-lessons'));
+
+    expect(view.getByText('See all lessons')).toBeTruthy();
+    expect(mockRouterPush).toHaveBeenCalledWith('/lesson-plans');
+  });
+
   it('routes the streak, the current plan, and the full catalog', async () => {
     const view = await renderExpanded();
 

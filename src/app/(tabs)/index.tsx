@@ -478,6 +478,11 @@ export default function HomeScreen() {
           </View>
         ) : null}
       </View>
+
+      {/* Always visible, so every lesson is one tap away without opening the card above. */}
+      <PressableFeedback accessibilityHint="Opens the list of lesson plans and their lessons" accessibilityLabel="See all lessons" accessibilityRole="button" onPress={() => router.push('/lesson-plans' as Href)} style={styles.allLessons} testID="today-all-lessons">
+        <Text style={styles.allLessonsText}>See all lessons</Text>
+      </PressableFeedback>
     </View>
   );
 
@@ -588,6 +593,8 @@ const useStyles = makeStyles((c) => {
   pathTitle: { ...type.headline },
   allPlans: button.quiet,
   allPlansText: button.quietText,
+  allLessons: { ...button.secondary, alignSelf: 'stretch' },
+  allLessonsText: button.secondaryText,
   // A hairline, not a card inside the card.
   planRow: { width: '100%', minHeight: 48, gap: spacing.md, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.md },
   planCopy: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
