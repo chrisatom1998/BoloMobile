@@ -21,7 +21,7 @@ export function VoiceHero({
   heroContentWidth,
   largeTextLayout,
   liveConfigError,
-  lastSessionButton,
+  chatHistoryButton,
   microphonePhase,
   motionMode,
   realtimeStatus,
@@ -79,7 +79,7 @@ export function VoiceHero({
                     <Text style={styles.talkButtonText}>{ashaInviteAction}</Text>
                   </Pressable>
                   )}
-                  {lastSessionButton}
+                  {chatHistoryButton}
                 </View>
               ) : null}
               {aiConsent ? <View style={[styles.liveControls, restingVoiceLayout && styles.liveControlsResting]} testID="live-voice-controls">

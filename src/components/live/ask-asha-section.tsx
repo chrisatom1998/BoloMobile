@@ -1,4 +1,4 @@
-import { Trash2 } from 'lucide-react-native';
+import { SquarePen, Trash2 } from 'lucide-react-native';
 import { Text, View } from 'react-native';
 
 import type { LiveScreenViewProps } from '@/components/live/live-screen-types';
@@ -15,14 +15,15 @@ export function AskAshaSection({
   confirmClearChat,
   discardReport,
   headerCollapsed,
-  lastSessionButton,
+  chatHistoryButton,
   restingVoiceLayout,
   retryReport,
+  startNewChat,
   styles,
   unassociatedReports,
 }: LiveScreenViewProps) {
   return aiConsent ? <View style={[styles.askSection, compactVoiceLayout && styles.askSectionCompact, (restingVoiceLayout || accessibilityCompact) && styles.askSectionResting]} testID="ask-asha-sheet">
-                {/* Title on its own row, then the controls. A shared row let the title paint over Last session. */}
+                {/* Title on its own row, then the controls. A shared row let the title paint over the buttons. */}
                 <View style={styles.askHeading} testID="ask-asha-heading-block">
                   {headerCollapsed ? null : (
                     <View style={[styles.askHeadingCopy, compactVoiceLayout && styles.askHeadingCopyCompact]} testID="ask-asha-heading">
@@ -45,7 +46,21 @@ export function AskAshaSection({
                         <Text style={styles.secondaryActionText}>Clear chat</Text>
                       </Pressable>
                     ) : null}
-                    <View style={styles.lastSessionSlot}>{lastSessionButton}</View>
+                    {chatHistory.length > 0 ? (
+                      <Pressable
+                        accessibilityHint="Saves this chat to Chat history and starts an empty one."
+                        accessibilityLabel="Start a new chat with Asha"
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: clearChatDisabled }}
+                        disabled={clearChatDisabled}
+                        onPress={() => void startNewChat()}
+                        style={[styles.clearChatButton, clearChatDisabled && styles.disabled]}
+                      >
+                        <SquarePen color={colors.gold} size={17} />
+                        <Text style={styles.secondaryActionText}>New chat</Text>
+                      </Pressable>
+                    ) : null}
+                    <View style={[styles.chatHistorySlot, chatHistory.length > 0 && styles.chatHistorySlotInRow]} testID="ask-asha-history-slot">{chatHistoryButton}</View>
                   </View>
                 </View>
                 {unassociatedReports.length ? (

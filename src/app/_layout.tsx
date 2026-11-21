@@ -87,6 +87,7 @@ function AppNavigator() {
           <Stack.Screen name="settings" options={{ title: 'Settings', headerLargeTitle: true }} />
           <Stack.Screen name="diagnostics" options={{ title: 'Private diagnostics' }} />
           <Stack.Screen name="privacy" options={{ title: 'Privacy & data use' }} />
+          <Stack.Screen name="chat-history" options={{ title: 'Chat history' }} />
           <Stack.Screen name="last-session" options={{ title: 'Last session' }} />
           <Stack.Screen name="live-translate" options={{ headerShown: false }} />
           <Stack.Screen name="scene/[id]" options={{ title: 'Lesson' }} />

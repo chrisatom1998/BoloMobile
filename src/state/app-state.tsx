@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
+import { deleteAllAshaChats } from '@/lib/asha-chat-archive-store';
 import { deleteAllAshaSessions, endLiveCallForDataDeletion, startAshaSessionRetention } from '@/lib/asha-session-log-store';
 import { isSensitiveEnvelope, revealSensitiveValue, sealSensitiveValue } from '@/lib/sensitive-storage';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
@@ -80,7 +81,8 @@ type AppActions = {
   reviewPhrase: (hi: string, remembered: boolean) => void;
   markLiveTurn: (seconds?: number) => void;
   addPracticeSeconds: (seconds: number) => void;
-  appendChatMessages: (messages: ChatMessage[]) => void;
+  /** Resolves true only once the added messages are stored on this device. */
+  appendChatMessages: (messages: ChatMessage[]) => Promise<boolean>;
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
   /** Resolves true only once the cleared history is stored on this device. */
   clearChatHistory: () => Promise<boolean>;
@@ -505,11 +507,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [commit]);
 
   const appendChatMessages = useCallback((messages: ChatMessage[]) => {
-    if (messages.length === 0) return;
-    commit((current) => {
+    if (messages.length === 0) return Promise.resolve(false);
+    let added = false;
+    return commit((current) => {
       const chatHistory = appendChatHistory(current.chatHistory, messages);
-      return chatHistory === current.chatHistory ? current : { ...current, chatHistory };
-    }, ['chatHistory']);
+      added = chatHistory !== current.chatHistory;
+      return added ? { ...current, chatHistory } : current;
+    }, ['chatHistory']).then((stored) => stored && added);
   }, [commit]);
 
   const replaceLiveChatSnapshot = useCallback((previousIds: string[], messages: ChatMessage[]) => {
@@ -597,7 +601,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     // any await or identifier rotation. Late rows, tool callbacks, and queued
     // writes from before this point are discarded; stale flush loops stop.
     endLiveCallForDataDeletion();
-    const sessionDeletion = deleteAllAshaSessions().then(() => true, (error: unknown) => {
+    // Chat history holds the same conversations, so it goes with the session log.
+    const sessionDeletion = Promise.all([deleteAllAshaSessions(), deleteAllAshaChats()]).then(() => true, (error: unknown) => {
       console.warn('Bolo could not clear the Asha session log.', error);
       return false;
     });

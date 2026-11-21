@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { QueuedReportRow } from '@/components/queued-report-row';
+import { SavedTranscriptRows } from '@/components/saved-transcript-rows';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { showAppAlert } from '@/lib/app-alert';
+import { deleteAllAshaChats } from '@/lib/asha-chat-archive-store';
 import { ashaSessionDurationMs, latestAshaSession, type AshaSessionEndReason, type AshaSessionRecord } from '@/lib/asha-session-log';
 import { clearAshaSessionContent, useAshaSessionLog } from '@/lib/asha-session-log-store';
 import { syncOutbox, useSyncOutbox } from '@/lib/sync-outbox';
@@ -56,8 +58,6 @@ export function sessionStateLabel(record: AshaSessionRecord) {
   return record.state === 'interrupted' ? 'Interrupted' : record.state === 'active' ? 'In progress' : 'Completed';
 }
 
-const hasDevanagari = (text: string) => /[ऀ-ॿ]/u.test(text);
-
 export default function LastSessionScreen() {
   const router = useRouter();
   const styles = useStyles();
@@ -95,8 +95,12 @@ export default function LastSessionScreen() {
     setClearing(true);
     setClearError('');
     // The same all-chat explicit deletion as the Asha screen: current chat and every
-    // saved session's rows and tool content go; queued reports and their retries stay.
-    const cleared = await Promise.all([clearChatHistory(), clearAshaSessionContent().then(() => true, () => false)]).then((results) => results.every(Boolean));
+    // saved session's rows and tool content go, and so does Chat history; queued reports and their retries stay.
+    const cleared = await Promise.all([
+      clearChatHistory(),
+      clearAshaSessionContent().then(() => true, () => false),
+      deleteAllAshaChats().then(() => true, () => false),
+    ]).then((results) => results.every(Boolean));
     if (!mountedRef.current) return;
     setClearing(false);
     if (!cleared) setClearError('The chat could not be cleared. Please try again.');
@@ -177,22 +181,7 @@ export default function LastSessionScreen() {
         <View accessibilityLabel={`Transcript, ${plural(latest.rows.length, 'line')}, read only`} style={styles.transcript} testID="last-session-transcript">
           <Text accessibilityRole="header" style={styles.transcriptTitle}>Transcript</Text>
           {latest.rows.length === 0 ? <Text style={sharedStyles.body}>No captions were saved for this session.</Text> : null}
-          {latest.rows.map((row) => {
-            const isYou = row.speaker === 'you';
-            const hindi = hasDevanagari(row.text);
-            return (
-              <View
-                accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${row.text}`}
-                accessibilityLanguage={hindi ? 'hi-IN' : undefined}
-                accessible
-                key={row.id}
-                style={[styles.row, isYou ? styles.rowYou : styles.rowAsha]}
-              >
-                <Text style={[styles.speaker, isYou && styles.speakerYou]}>{isYou ? 'You' : 'Asha'}</Text>
-                <Text style={[styles.rowText, isYou && styles.rowTextYou, hindi && styles.rowTextHindi]}>{row.text}</Text>
-              </View>
-            );
-          })}
+          <SavedTranscriptRows rows={latest.rows} />
         </View>
       )}
 
@@ -238,14 +227,6 @@ const useStyles = makeStyles((c) => ({
   transcript: { gap: spacing.sm },
   clearedCard: { gap: spacing.xs },
   transcriptTitle: { ...type.label, color: c.ink, fontWeight: '700' },
-  row: { maxWidth: '92%', borderRadius: radius.lg, borderCurve: 'continuous', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
-  rowAsha: { alignSelf: 'flex-start', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1 },
-  rowYou: { alignSelf: 'flex-end', backgroundColor: c.night },
-  speaker: { ...type.caption, color: c.brandText, fontWeight: '700' },
-  speakerYou: { color: c.gold },
-  rowText: { ...type.body, color: c.ink },
-  rowTextYou: { color: c.white },
-  rowTextHindi: { ...hindiType(17) },
   reports: { gap: spacing.sm },
   footnote: { ...type.caption, color: c.muted },
   clearButton: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: radius.pill, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },

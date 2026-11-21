@@ -444,6 +444,41 @@ describe('Asha session log store', () => {
     });
   });
 
+  describe('deleting one past chat', () => {
+    it('clears only the saved session that holds those transcript rows, and never the call in progress', async () => {
+      const store = loadStore();
+      await store.ensureAshaSessionLogLoaded();
+      await runSession(store, 'session-1', '2026-10-31T10:00:00.000Z');
+      await runSession(store, 'session-2', '2026-10-31T11:00:00.000Z');
+      store.logAshaSessionEvent({ type: 'starting' }, 'en', { id: 'session-3', at: '2026-10-31T12:00:00.000Z' });
+      store.logAshaSessionSnapshot([row('live-session-3-0', 'you', 'Still talking')]);
+      await flush();
+
+      await store.clearAshaSessionContentForRows(['live-session-1-0', 'live-session-3-0', 'you-123']);
+      expect(storedRecord('session-1')).toMatchObject({ rows: [], savedPhrases: [], state: 'ended' });
+      expect(storedRecord('session-1')?.contentClearedAt).toEqual(expect.any(String));
+      expect(storedRecord('session-2')?.rows).toHaveLength(1);
+      expect(storedRecord('session-2')?.contentClearedAt).toBeUndefined();
+      expect(store.getAshaSessions().find((session) => session.id === 'session-3')?.rows).toHaveLength(1);
+
+      // Nothing matches: nothing is written.
+      asyncStorage.setItem.mockClear();
+      await store.clearAshaSessionContentForRows(['you-123']);
+      await store.clearAshaSessionContentForRows([]);
+      expect(asyncStorage.setItem).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the cleared session cannot be written', async () => {
+      const warning = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const store = loadStore();
+      await store.ensureAshaSessionLogLoaded();
+      await runSession(store, 'session-1', '2026-10-31T10:00:00.000Z');
+      asyncStorage.setItem.mockRejectedValueOnce(new Error('disk full'));
+      await expect(store.clearAshaSessionContentForRows(['live-session-1-0'])).rejects.toThrow('disk full');
+      warning.mockRestore();
+    });
+  });
+
   describe('Delete Bolo data', () => {
     it('forgets every session synchronously, then removes the index and all per-session keys including orphans', async () => {
       seed(endedRecord);
