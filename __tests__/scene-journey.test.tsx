@@ -427,21 +427,66 @@ describe('SceneScreen primary journey', () => {
   });
 
   it('falls back to choice instructions for a one-token word-order target', async () => {
+    // No bundled lesson asks for word order on a one-word phrase any more, so make one for this check.
     mockSceneId = 'plan-essentials-01';
-    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(4) };
-    const beat = getScene(mockSceneId)!.beats[4]!;
-    const target = beat.choices.find((choice) => choice.correct)!;
+    const beat = getScene(mockSceneId)!.beats[0]!;
+    const originalMode = beat.mode;
+    beat.mode = 'wordOrder';
+    try {
+      const target = beat.choices.find((choice) => choice.correct)!;
+      const view = await render(<SceneScreen />);
+
+      expect(view.getByTestId('scene-choices')).toBeTruthy();
+      expect(view.queryByTestId('scene-word-order')).toBeNull();
+      expect(view.getByText(`Choose the Hindi response that means “${target.en}”`)).toBeTruthy();
+      expect(view.queryByText(beat.prompt)).toBeNull();
+
+      await fireEvent.press(view.getByLabelText('Show Asha’s hint'));
+      expect(view.getByText(`Look for “${target.latin},” the Hindi response for “${target.en}”`)).toBeTruthy();
+      expect(view.queryByText(beat.tip)).toBeNull();
+      await view.unmount();
+    } finally {
+      beat.mode = originalMode;
+    }
+  });
+
+  it('runs the opening lesson as hear it, say it back, use it without the microphone', async () => {
+    mockSceneId = 'plan-essentials-01';
+    mockAppState.aiConsent = false;
+    const scene = getScene(mockSceneId)!;
+    const target = scene.beats[0]!.choices.find((choice) => choice.correct)!;
     const view = await render(<SceneScreen />);
 
-    expect(beat.mode).toBe('wordOrder');
-    expect(view.getByTestId('scene-choices')).toBeTruthy();
-    expect(view.queryByTestId('scene-word-order')).toBeNull();
-    expect(view.getByText(`Choose the Hindi response that means “${target.en}”`)).toBeTruthy();
-    expect(view.queryByText(beat.prompt)).toBeNull();
+    // Hear it: Asha's greeting plays as the turn opens, and its text stays hidden until answered.
+    expect(view.getByText('Turn 1 of 3')).toBeTruthy();
+    await act(async () => { await Promise.resolve(); });
+    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते।');
+    expect(view.getByText('Asha greets you with a smile.')).toBeTruthy();
+    expect(within(view.getByTestId('scene-asha-bubble')).queryByText(/नमस्ते/u)).toBeNull();
+    await fireEvent.press(view.getByLabelText(choiceAccessibilityLabel(target)));
+    expect(within(view.getByTestId('scene-asha-bubble')).getByText(/नमस्ते/u)).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
 
-    await fireEvent.press(view.getByLabelText('Show Asha’s hint'));
-    expect(view.getByText(`Look for “${target.latin},” the Hindi response for “${target.en}”`)).toBeTruthy();
-    expect(view.queryByText(beat.tip)).toBeNull();
+    // Say it back: the phrase is on screen with Listen and Slow, and the learner confirms it themselves.
+    expect(view.getByText('Say it back: greet Asha out loud.')).toBeTruthy();
+    expect(view.getByTestId('scene-say-aloud')).toBeTruthy();
+    expect(view.queryByTestId('scene-choices')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Hear the phrase slowly'));
+    await fireEvent.press(view.getByLabelText('I said it'));
+    expect(view.getByText('Nicely said!')).toBeTruthy();
+    expect(view.queryByTestId('scene-pronunciation')).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+
+    // Use it: a new moment, recalled without a list to pick from.
+    expect(view.getByText('Turn 3 of 3')).toBeTruthy();
+    expect(view.getByText('Say the Hindi out loud from memory, then tap Reveal to check yourself.')).toBeTruthy();
+    expect(view.getByText(scene.beats[2]!.translation)).toBeTruthy();
+    expect(view.queryByTestId('scene-choices')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Got it'));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ correct: 3, total: 3, weakPhrases: [] }));
+    expect(view.getByText('3/3')).toBeTruthy();
   });
 
   it('reveals natural word order across a no-score retry', async () => {
@@ -789,9 +834,7 @@ describe('SceneScreen primary journey', () => {
 
   it('continues from a completed guided lesson to its next sibling', async () => {
     mockSceneId = 'plan-essentials-01';
-    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
-    const finalTarget = getScene(mockSceneId)?.beats[9]?.choices.find((choice) => choice.correct);
-    expect(finalTarget).toBeTruthy();
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(2) };
     const view = await render(<SceneScreen />);
 
     await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));

@@ -41,7 +41,7 @@ tags:
     centerElement: true
     timeout: 20000
 - tapOn: "A warm hello, lesson 1 of 10, Next lesson"
-- assertVisible: "Turn 1 of 10"
+- assertVisible: "Turn 1 of 3"
 - scrollUntilVisible:
     element:
       text: "Hear Asha"

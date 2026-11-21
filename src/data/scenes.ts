@@ -10,7 +10,7 @@ export type Choice = {
   /** Plain-English correction shown after an incorrect answer. */
   feedback?: string;
 };
-export type BeatMode = 'choice' | 'wordOrder' | 'recallReveal';
+export type BeatMode = 'choice' | 'wordOrder' | 'recallReveal' | 'sayAloud';
 export type Beat = {
   npc: string;
   translation: string;
@@ -19,6 +19,13 @@ export type Beat = {
   tip: string;
   /** Omitted on hand-authored scenes, which keep the original choice interaction. */
   mode?: BeatMode;
+  /**
+   * Asha's line is the phrase being taught, so it plays as the turn opens even in English-first
+   * lessons, and a choice turn keeps its text hidden until the learner has answered by ear.
+   */
+  hearFirst?: boolean;
+  /** A recall turn that asks for the phrase out loud instead of silently. Still no microphone. */
+  recallAloud?: boolean;
 };
 
 export const sceneCategories = ['All', 'Food', 'Travel', 'Everyday', 'Health', 'Social', 'Work'] as const;

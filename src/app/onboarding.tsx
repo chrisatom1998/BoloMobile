@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { playOfflineSpeech } from '@/lib/offline-voice-player';
+import { selectNextLesson } from '@/lib/lesson-path';
 import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
@@ -82,7 +83,7 @@ function ChoiceRow<T extends string>({ choices, label, onChange, testIDFor, valu
 export default function OnboardingScreen() {
   const router = useRouter();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
-  const { completeOnboarding, goal: savedGoal, learnerProfile } = useAppState();
+  const { completeOnboarding, goal: savedGoal, learnerProfile, sceneProgress } = useAppState();
   const insets = useSafeAreaInsets();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
@@ -140,7 +141,14 @@ export default function OnboardingScreen() {
       return;
     }
     observe('onboarding_completed');
-    router.replace('/');
+    if (recalibrating) {
+      router.replace('/');
+      return;
+    }
+    // A new learner goes straight into their first lesson. Closing it lands on Today, because
+    // replacing setup leaves nothing underneath to go back to.
+    const first = selectNextLesson(sceneProgress ?? {}, { level, primaryGoal });
+    router.replace({ pathname: '/scene/[id]', params: { id: first.lessonId } });
   }
 
   function continueForward() {
