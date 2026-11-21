@@ -17,6 +17,13 @@ appId: com.bolo.hindi
     timeout: 15000
 - tapOn:
     id: "onboarding-start"
+# Setup now opens the learner's first lesson. Close it so each flow still starts from Today.
+- extendedWaitUntil:
+    visible:
+      id: "scene-close"
+    timeout: 15000
+- tapOn:
+    id: "scene-close"
 - extendedWaitUntil:
     visible: "Namaste"
     timeout: 15000

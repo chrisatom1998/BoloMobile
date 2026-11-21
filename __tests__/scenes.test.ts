@@ -32,8 +32,9 @@ describe('Bolo scenario catalog', () => {
   it('keeps every turn playable and unambiguous', () => {
     const beats = scenes.flatMap((scene) => scene.beats);
 
-    expect(beats).toHaveLength(1087);
-    expect(scenes.filter((scene) => scene.id.startsWith('plan-')).every((scene) => scene.beats.length === 10)).toBe(true);
+    expect(beats).toHaveLength(1080);
+    // The opening lesson is a three-turn exchange; every other planned lesson keeps ten turns.
+    expect(scenes.filter((scene) => scene.id.startsWith('plan-')).every((scene) => scene.beats.length === (scene.id === 'plan-essentials-01' ? 3 : 10))).toBe(true);
     for (const beat of beats) {
       expect(beat.npc.trim()).not.toBe('');
       expect(beat.translation.trim()).not.toBe('');
@@ -63,6 +64,7 @@ describe('Bolo scenario catalog', () => {
       const prompts = scene.beats.map((beat) => beat.prompt);
       expect(new Set(prompts).size).toBe(scene.beats.length);
       for (const [turnIndex, beat] of scene.beats.entries()) {
+        if (scene.id === 'plan-essentials-01') continue;
         const activity = activities[(4 * lessonIndex + turnIndex) % activities.length]!;
         expect(beat.prompt).toContain(activity.marker);
         expect(beat.mode ?? 'choice').toBe(activity.mode);
@@ -101,6 +103,24 @@ describe('Bolo scenario catalog', () => {
       const firstLessonChoiceSets = new Set(planScenes[0]!.beats.map((beat) => beat.choices.map((choice) => choice.hi).sort().join('|')));
       expect(firstLessonChoiceSets.size).toBeGreaterThan(1);
     }
+  });
+
+  it('opens with a short hear it, say it back, use it exchange that needs no microphone', () => {
+    const opening = scenes.find((scene) => scene.id === 'plan-essentials-01')!;
+    expect(opening.beats.map((beat) => beat.mode)).toEqual(['choice', 'sayAloud', 'recallReveal']);
+    expect(opening.beats.map((beat) => beat.prompt.split(':')[0])).toEqual(['Hear it', 'Say it back', 'Use it']);
+    // Only one turn asks the learner to pick from a list, and it is answered by ear.
+    expect(opening.beats.filter((beat) => beat.mode === 'choice')).toHaveLength(1);
+    expect(opening.beats.map((beat) => beat.hearFirst === true)).toEqual([true, true, false]);
+    for (const beat of opening.beats) {
+      expect(beat.choices.find((choice) => choice.correct)!.hi).toBe('नमस्ते।');
+      expect(`${beat.prompt} ${beat.tip}`).not.toMatch(/microphone check|record yourself/iu);
+    }
+    // The last turn moves the greeting to a different moment from the first two.
+    expect(opening.beats[2]!.translation).not.toBe(opening.beats[0]!.translation);
+    // No other lesson autoplays Asha's line or uses the say-it-back turn yet.
+    const others = scenes.filter((scene) => scene.id !== opening.id).flatMap((scene) => scene.beats);
+    expect(others.some((beat) => beat.hearFirst || beat.mode === 'sayAloud')).toBe(false);
   });
 
   it('bundles offline audio for every playable Hindi line', () => {

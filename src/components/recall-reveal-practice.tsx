@@ -12,6 +12,8 @@ type PracticeResult = 'correct' | 'incorrect';
 
 type Props = {
   disabled?: boolean;
+  /** Asks for the phrase out loud instead of silently. Nothing is recorded either way. */
+  aloud?: boolean;
   scriptPreference?: ScriptPreference;
   targetHi: string;
   targetLatin: string;
@@ -31,7 +33,7 @@ type Props = {
  * There is no reset effect here: the scene runtime remounts this component with
  * a per-beat `key`, so a new or resumed beat always opens with the answer hidden.
  */
-export function RecallRevealPractice({ disabled = false, scriptPreference = 'both', targetHi, targetLatin, targetEn, onResolve }: Props) {
+export function RecallRevealPractice({ aloud = false, disabled = false, scriptPreference = 'both', targetHi, targetLatin, targetEn, onResolve }: Props) {
   const { colors } = useTheme();
   const styles = useStyles();
   const [revealed, setRevealed] = useState(false);
@@ -59,7 +61,7 @@ export function RecallRevealPractice({ disabled = false, scriptPreference = 'bot
   return (
     <View testID="scene-recall-reveal" style={styles.container}>
       <Text style={styles.instructions}>
-        Silently rebuild the Hindi from memory, then tap Reveal to check yourself.
+        {aloud ? 'Say the Hindi out loud from memory, then tap Reveal to check yourself.' : 'Silently rebuild the Hindi from memory, then tap Reveal to check yourself.'}
       </Text>
       <View style={styles.promptCard}>
         <Text style={styles.promptEyebrow}>English</Text>
@@ -78,7 +80,7 @@ export function RecallRevealPractice({ disabled = false, scriptPreference = 'bot
         </View>
       ) : (
         <View style={styles.hiddenCard} testID="scene-recall-reveal-hidden">
-          <Text style={styles.hiddenText}>Answer hidden — say it in your head first.</Text>
+          <Text style={styles.hiddenText}>{aloud ? 'Answer hidden — say it out loud first.' : 'Answer hidden — say it in your head first.'}</Text>
         </View>
       )}
       {!revealed ? (

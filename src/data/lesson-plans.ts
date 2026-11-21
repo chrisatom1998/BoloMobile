@@ -1,5 +1,5 @@
 import { creatorLessons } from './creator-lessons';
-import type { BeatMode, Choice, Scene, SceneCategory } from './scenes';
+import type { Beat, BeatMode, Choice, Scene, SceneCategory } from './scenes';
 import { buildLessonFeedback, englishMeaningsOverlap } from './lesson-feedback';
 import { trimTerminalPunctuation } from '../lib/text';
 
@@ -307,6 +307,56 @@ export const lessonPlans: LessonPlan[] = planSeeds.map((plan, planIndex) => ({
   lessonIds: plan.lessons.map((_, lessonIndex) => lessonId(plan.id, lessonIndex)),
 }));
 
+// Replies stay literal `reply:` property assignments so generate-offline-hindi-audio.mjs can find them.
+function practiceChoices(target: LessonSeed, distractors: readonly [LessonSeed, LessonSeed]): Choice[] {
+  return [
+    { ...phraseOf(target), correct: true, reply: 'बहुत अच्छा।' },
+    { ...phraseOf(distractors[0]), correct: false, reply: 'करीब है—फिर से कोशिश कीजिए।', feedback: buildLessonFeedback(target, distractors[0]) },
+    { ...phraseOf(distractors[1]), correct: false, reply: 'अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।', feedback: buildLessonFeedback(target, distractors[1]) },
+  ];
+}
+
+/**
+ * The very first lesson teaches one word, so ten turns on it were nine too many. It is a short
+ * exchange with Asha instead: hear the greeting, say it back, then use it in a new moment.
+ * None of the three turns needs the microphone, and every line reuses audio already bundled.
+ */
+function openingExchangeBeats(plan: LessonPlanSeed, lessonIndex: number): Beat[] | undefined {
+  if (plan.id !== 'essentials' || lessonIndex !== 0) return undefined;
+  const target = plan.lessons[0]!;
+  const said = trimTerminalPunctuation(target.latin);
+  const phrase = (index: number) => plan.lessons[index]!;
+  return [
+    {
+      npc: target.hi,
+      translation: 'Asha greets you with a smile.',
+      hearFirst: true,
+      mode: 'choice',
+      prompt: 'Hear it: tap the greeting Asha just said.',
+      tip: `Tap Listen to hear Asha again. She says “${said}.”`,
+      choices: practiceChoices(target, [phrase(8), phrase(9)]),
+    },
+    {
+      npc: target.hi,
+      translation: 'Asha is waiting for your hello.',
+      hearFirst: true,
+      mode: 'sayAloud',
+      prompt: 'Say it back: greet Asha out loud.',
+      tip: `Three beats: na-mas-te. Nothing is recorded on this turn, so say “${said}” as many times as you like.`,
+      choices: practiceChoices(target, [phrase(2), phrase(3)]),
+    },
+    {
+      npc: target.cueHi,
+      translation: target.cue,
+      mode: 'recallReveal',
+      recallAloud: true,
+      prompt: 'Use it: greet your neighbor out loud, then check yourself.',
+      tip: 'It is the same word you just said to Asha.',
+      choices: practiceChoices(target, [phrase(4), phrase(6)]),
+    },
+  ];
+}
+
 export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.map((lesson, lessonIndex) => ({
   id: lessonId(plan.id, lessonIndex),
   category: plan.category,
@@ -315,19 +365,14 @@ export const plannedLessons: Scene[] = planSeeds.flatMap((plan) => plan.lessons.
   title: lesson.title,
   subtitle: lesson.en,
   level: plan.level,
-  beats: guidedPracticeTurns(plan, lessonIndex).map((practice) => ({
+  beats: openingExchangeBeats(plan, lessonIndex) ?? guidedPracticeTurns(plan, lessonIndex).map((practice) => ({
     // Asha sets the scene aloud in Hindi; the English cue doubles as the translation.
     npc: practice.target.cueHi,
     translation: practice.target.cue,
     prompt: practice.prompt,
     tip: practice.tip,
     mode: practice.mode,
-    // Replies stay literal `reply:` property assignments so generate-offline-hindi-audio.mjs can find them.
-    choices: [
-      { ...phraseOf(practice.target), correct: true, reply: 'बहुत अच्छा।' },
-      { ...phraseOf(practice.distractors[0]), correct: false, reply: 'करीब है—फिर से कोशिश कीजिए।', feedback: buildLessonFeedback(practice.target, practice.distractors[0]) },
-      { ...phraseOf(practice.distractors[1]), correct: false, reply: 'अर्थ फिर से पढ़िए, फिर कोशिश कीजिए।', feedback: buildLessonFeedback(practice.target, practice.distractors[1]) },
-    ],
+    choices: practiceChoices(practice.target, practice.distractors),
   })),
 })));
 

@@ -12,6 +12,7 @@ import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
 import { isWordOrderPracticeable } from '@/components/practice-mode';
 import { RecallRevealPractice } from '@/components/recall-reveal-practice';
+import { SayAloudPractice } from '@/components/say-aloud-practice';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { WordOrderPractice } from '@/components/word-order-practice';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
@@ -186,8 +187,10 @@ function SceneScreen() {
 
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
   // English-first lessons skip it: their above-level Hindi narration plays only when the learner taps Listen.
+  // A hear-first turn is the exception: Asha's line there is the short phrase being taught.
+  const hearFirst = currentBeat?.hearFirst === true;
   useEffect(() => {
-    if (englishFirstSetup) return;
+    if (englishFirstSetup && !hearFirst) return;
     if (!autoPlayKey || npcLine === undefined || situationPromptSpeech === undefined) return;
     if (resolution !== null) return;
     if (pronunciationBusy) return;
@@ -196,8 +199,8 @@ function SceneScreen() {
     // Marked only once playback actually starts, so a beat skipped for missing
     // consent or pronunciation activity still speaks when the effect re-runs.
     autoPlayedBeatRef.current = autoPlayKey;
-    void speakText(situationPromptSpeech).catch(() => {});
-  }, [aiConsent, autoPlayKey, englishFirstSetup, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
+    void speakText(hearFirst ? npcLine : situationPromptSpeech).catch(() => {});
+  }, [aiConsent, autoPlayKey, englishFirstSetup, hearFirst, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
 
   if (!scene || !currentBeat || !currentTarget) {
     return (
@@ -323,7 +326,7 @@ function SceneScreen() {
   }
 
   function resultTitle(isCorrect: boolean) {
-    if (isCorrect) return 'Natural choice!';
+    if (isCorrect) return effectiveMode === 'sayAloud' ? 'Nicely said!' : 'Natural choice!';
     if (effectiveMode === 'wordOrder') return 'Check the word order.';
     if (effectiveMode === 'recallReveal') return 'Keep practicing this phrase.';
     return answerShown ? 'Here’s the natural answer.' : 'Not that one.';
@@ -791,9 +794,12 @@ function SceneScreen() {
             <>
               {/* Starter and Beginner lessons lead with the moment in English; the Hindi stays one tap of Listen away. */}
               <Text style={[styles.setupEnglish, largeTextLayout && styles.npcLarge]}>{beat.translation}</Text>
+              {/* A listening turn keeps the line off screen until it is answered, so the ear does the work. */}
+              {hearFirst && effectiveMode === 'choice' && !answerVisible ? null : (
               <Text accessibilityLanguage={scriptPreference === 'latin' ? undefined : 'hi-IN'} style={[styles.setupHindi, scriptPreference !== 'latin' && styles.setupHindiScript]}>{scriptPreference === 'both'
                 ? <>{beat.npc}{'\n'}<Text style={styles.setupHindi}>{romanizeDevanagari(beat.npc)}</Text></>
                 : lessonHindiLabel(beat.npc, scriptPreference)}</Text>
+              )}
             </>
           ) : (
             <>
@@ -887,8 +893,22 @@ function SceneScreen() {
             targetHi={target.hi}
             targetLatin={target.latin}
           />
+        ) : effectiveMode === 'sayAloud' ? (
+          <SayAloudPractice
+            audioDisabled={(!aiConsent && !hasOfflineSpeech(target.hi)) || pronunciationBusy}
+            disabled={pronunciationBusy || resolution !== null || needsName}
+            key={`say-aloud-${activeScene.id}-${turnKey}-${target.hi}`}
+            onPlay={(rate) => play(target.hi, rate)}
+            onResolve={handleAlternateResult}
+            scriptPreference={scriptPreference}
+            slowRate={slowRate}
+            targetEn={target.en}
+            targetHi={target.hi}
+            targetLatin={target.latin}
+          />
         ) : (
           <RecallRevealPractice
+            aloud={beat.recallAloud === true}
             scriptPreference={scriptPreference}
             disabled={pronunciationBusy || resolution !== null || needsName}
             key={`recall-reveal-${activeScene.id}-${turnKey}-${target.hi}`}
