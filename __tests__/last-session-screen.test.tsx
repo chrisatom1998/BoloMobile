@@ -11,6 +11,7 @@ let mockFloatingStatus: 'disconnected' | 'connecting' | 'ready' = 'disconnected'
 let mockFloatingAvailable = true;
 const mockClearChatHistory = jest.fn(async () => true);
 const mockClearSessionContent = jest.fn(async () => undefined);
+const mockDeleteAllChats = jest.fn(async () => undefined);
 const mockRetry = jest.fn(async (_id: string) => undefined);
 const mockDiscard = jest.fn(async (_id: string) => undefined);
 const mockShowAppAlert = jest.fn();
@@ -22,6 +23,7 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: (...args: unknown[]) => mockShowAppAlert(...args) }));
+jest.mock('@/lib/asha-chat-archive-store', () => ({ deleteAllAshaChats: () => mockDeleteAllChats() }));
 jest.mock('@/lib/asha-session-log-store', () => ({
   clearAshaSessionContent: () => mockClearSessionContent(),
   useAshaSessionLog: () => mockSessions,
@@ -223,6 +225,7 @@ describe('Last session screen', () => {
     });
     expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
     expect(mockClearSessionContent).toHaveBeenCalledTimes(1);
+    expect(mockDeleteAllChats).toHaveBeenCalledTimes(1);
     expect(view.queryByRole('alert')).toBeNull();
 
     mockClearSessionContent.mockRejectedValueOnce(new Error('disk full'));

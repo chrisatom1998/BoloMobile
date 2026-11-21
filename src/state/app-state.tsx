@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 
 import { showAppAlert } from '@/lib/app-alert';
 import { clearAiVoicePlaybackCache } from '@/lib/ai-voice-player';
+import { deleteAllAshaChats } from '@/lib/asha-chat-archive-store';
 import { deleteAllAshaSessions, endLiveCallForDataDeletion, startAshaSessionRetention } from '@/lib/asha-session-log-store';
 import { isSensitiveEnvelope, revealSensitiveValue, sealSensitiveValue } from '@/lib/sensitive-storage';
 import { duePhraseList, dueSavedPhrases, reviewIntervals } from '@/lib/learning';
@@ -597,7 +598,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     // any await or identifier rotation. Late rows, tool callbacks, and queued
     // writes from before this point are discarded; stale flush loops stop.
     endLiveCallForDataDeletion();
-    const sessionDeletion = deleteAllAshaSessions().then(() => true, (error: unknown) => {
+    // Chat history holds the same conversations, so it goes with the session log.
+    const sessionDeletion = Promise.all([deleteAllAshaSessions(), deleteAllAshaChats()]).then(() => true, (error: unknown) => {
       console.warn('Bolo could not clear the Asha session log.', error);
       return false;
     });

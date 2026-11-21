@@ -66,7 +66,7 @@ export type LiveScreenViewProps = {
   languageControlLocked: boolean;
   languageMenuOpen: boolean;
   largeTextLayout: boolean;
-  lastSessionButton: ReactNode;
+  chatHistoryButton: ReactNode;
   learnerProfile: LearnerProfile;
   listRef: RefObject<FlatList<ChatMessage> | null>;
   liveSession: LiveSession;
@@ -116,6 +116,7 @@ export type LiveScreenViewProps = {
   showRealtimeError: (message: string, details?: RealtimeErrorDetails) => void;
   speak: (text: string) => Promise<boolean>;
   speechCaption: { speaker: 'asha' | 'you'; text: string } | null;
+  startNewChat: () => Promise<void>;
   startNewConversation: (signal: AbortSignal) => Promise<void>;
   studioPhrase: SavedPhrase;
   studioPhraseMastery: number;

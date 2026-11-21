@@ -28,7 +28,8 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
-import { ashaSessionLogEnabled, type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
+import { archiveAshaChat, deleteAllAshaChats } from '@/lib/asha-chat-archive-store';
+import { type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
 import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
 import { hapticTap } from '@/lib/haptics';
@@ -66,6 +67,11 @@ export default function LiveScreen() {
   useEffect(() => {
     floatingAshaRef.current = floatingAsha;
   }, [floatingAsha]);
+  // The chat on screen right now, for callbacks that archive it before it is cleared.
+  const chatHistoryRef = useRef(chatHistory);
+  useEffect(() => {
+    chatHistoryRef.current = chatHistory;
+  }, [chatHistory]);
   const liveSession = useAshaLiveSession();
   const { audioError, clearAudioError, speak } = useSpeakText();
   const responseLanguage: AshaResponseLanguage = learnerProfile.responseLanguage;
@@ -521,9 +527,29 @@ export default function LiveScreen() {
     const activity = ++chatActivityRef.current;
     // Learner-initiated only: the automatic reset before a new session never touches
     // saved sessions, and this explicit delete keeps queued reports and their retries.
-    const cleared = await Promise.all([resetChat(), clearAshaSessionContent().then(() => true, () => false)]).then((results) => results.every(Boolean));
+    // Chat history goes too: the confirmation promises every saved transcript.
+    const cleared = await Promise.all([
+      resetChat(),
+      clearAshaSessionContent().then(() => true, () => false),
+      deleteAllAshaChats().then(() => true, () => false),
+    ]).then((results) => results.every(Boolean));
     if (mountedRef.current && chatActivityRef.current === activity && !cleared) {
       setError('The chat could not be cleared. Please try again.');
+    }
+  }, [resetChat]);
+
+  /** New chat: the chat on screen moves to Chat history and the screen starts empty. */
+  const startNewChat = useCallback(async () => {
+    if (!mountedRef.current || requestRef.current || chatResetRef.current || realtimeStatusRef.current !== 'disconnected') return;
+    const messages = chatHistoryRef.current;
+    if (messages.length === 0) return;
+    hapticTap();
+    const activity = ++chatActivityRef.current;
+    // Built from the messages now, so the reset below cannot empty the saved copy.
+    void archiveAshaChat(messages);
+    const cleared = await resetChat();
+    if (mountedRef.current && chatActivityRef.current === activity && !cleared) {
+      setError('A new chat could not be started. Please try again.');
     }
   }, [resetChat]);
 
@@ -649,6 +675,8 @@ export default function LiveScreen() {
     // connection may create a new record; the automatic reset keeps saved sessions.
     await ensureAshaSessionLogLoaded();
     if (!mountedRef.current || signal.aborted) return;
+    // The chat this call replaces moves to Chat history instead of being lost.
+    void archiveAshaChat(chatHistoryRef.current);
     const cleared = await resetChat();
     if (!mountedRef.current || signal.aborted) return;
     if (!cleared) throw new Error('The previous chat could not be cleared. Please try starting a new conversation again.');
@@ -765,23 +793,23 @@ export default function LiveScreen() {
   const discardReport = useCallback((entryId: string) => {
     void syncOutbox.discard(entryId);
   }, []);
-  const openLastSession = useCallback(() => {
-    router.push('/last-session' as Href);
+  const openChatHistory = useCallback(() => {
+    router.push('/chat-history' as Href);
   }, [router]);
-  // Saved transcripts stay available offline and after consent is withdrawn, so this
+  // Saved chats stay available offline and after consent is withdrawn, so this
   // entry point renders with or without AI consent.
-  const lastSessionButton = ashaSessionLogEnabled ? (
+  const chatHistoryButton = (
     <Pressable
-      accessibilityHint="Opens the transcript of your most recent live voice session, saved on this device."
-      accessibilityLabel="View last Asha session"
+      accessibilityHint="Opens your past chats and voice calls with Asha, saved on this device."
+      accessibilityLabel="Open Asha chat history"
       accessibilityRole="button"
-      onPress={openLastSession}
-      style={[styles.lastSessionButton, !aiConsent && styles.lastSessionButtonConsent]}
+      onPress={openChatHistory}
+      style={[styles.chatHistoryButton, !aiConsent && styles.chatHistoryButtonConsent]}
     >
       <History color={colors.gold} size={17} />
-      <Text style={styles.secondaryActionText}>Last session</Text>
+      <Text style={styles.secondaryActionText}>History</Text>
     </Pressable>
-  ) : null;
+  );
 
   const publishPhraseNotice = useCallback((session: number, title: string, message: string) => {
     if (phraseSheetSessionRef.current !== session || closingPhraseSessionRef.current !== session) return;
@@ -868,6 +896,7 @@ export default function LiveScreen() {
       composerMicLabel={composerMicLabel}
       composingAtLargeText={composingAtLargeText}
       confirmClearChat={confirmClearChat}
+      startNewChat={startNewChat}
       conversationStarted={conversationStarted}
       discardReport={discardReport}
       error={error}
@@ -886,7 +915,7 @@ export default function LiveScreen() {
       languageControlLocked={languageControlLocked}
       languageMenuOpen={languageMenuOpen}
       largeTextLayout={largeTextLayout}
-      lastSessionButton={lastSessionButton}
+      chatHistoryButton={chatHistoryButton}
       learnerProfile={learnerProfile}
       listRef={listRef}
       liveSession={liveSession}

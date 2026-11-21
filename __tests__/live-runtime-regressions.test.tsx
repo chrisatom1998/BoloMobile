@@ -64,6 +64,7 @@ jest.mock('lucide-react-native', () => ({
   Flag: () => null,
   History: () => null,
   Lock: () => null,
+  SquarePen: () => null,
   MessageCircle: () => null,
   ChevronRight: () => null,
   Languages: () => null,
@@ -477,6 +478,16 @@ jest.mock('@/lib/speech', () => ({
   stopSpeaking: jest.fn(async () => undefined),
 }));
 
+jest.mock('@/lib/asha-chat-archive-store', () => ({
+  archiveAshaChat: jest.fn(async () => true),
+  deleteAllAshaChats: jest.fn(async () => undefined),
+}));
+
+const chatArchive = jest.requireMock('@/lib/asha-chat-archive-store') as {
+  archiveAshaChat: jest.Mock;
+  deleteAllAshaChats: jest.Mock;
+};
+
 let mockRecoveryPending: Promise<void> | null = null;
 
 jest.mock('@/lib/asha-session-log-store', () => ({
@@ -716,10 +727,10 @@ describe('live consent layout', () => {
   it('keeps the Last session entry reachable while consent is off, outside the consent-only section', async () => {
     const view = await render(<LiveScreen />);
     expect(view.queryByTestId('ask-asha-sheet')).toBeNull();
-    const entry = view.getByLabelText('View last Asha session');
+    const entry = view.getByLabelText('Open Asha chat history');
     expect(entry.props.accessibilityRole).toBe('button');
     await fireEvent.press(entry);
-    expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
+    expect(mockRouterPush).toHaveBeenCalledWith('/chat-history');
     await view.unmount();
   });
 
@@ -886,10 +897,10 @@ describe('live theme styles', () => {
     expect(layout.chipPeek).toBe(spacing.xl);
     expect(styles.voiceHeroResting.paddingBottom).toBe(spacing.sm);
     expect(styles.headerSettings.minHeight).toBe(layout.touchTarget);
-    expect(styles.clearChatButton.borderWidth).toBe(styles.lastSessionButton.borderWidth);
+    expect(styles.clearChatButton.borderWidth).toBe(styles.chatHistoryButton.borderWidth);
     expect(styles.clearChatButton.backgroundColor).toBe('transparent');
-    expect(styles.lastSessionButton.backgroundColor).toBe('transparent');
-    expect(styles.clearChatButton.borderColor).toBe(styles.lastSessionButton.borderColor);
+    expect(styles.chatHistoryButton.backgroundColor).toBe('transparent');
+    expect(styles.clearChatButton.borderColor).toBe(styles.chatHistoryButton.borderColor);
     expect(layout.touchTarget).toBe(44);
     expect(styles.askHeading.flexDirection).toBe('column');
     expect(styles.askTitle.alignSelf).toBe('stretch');
@@ -912,11 +923,11 @@ describe('live theme styles', () => {
     expect(styles.askHeadingActions.flexDirection).toBe('row');
     expect(styles.askHeadingActions.flexWrap).toBe('wrap');
     expect(styles.askHeadingActions.justifyContent).toBe('space-between');
-    expect(styles.lastSessionSlot.marginLeft).toBe('auto');
+    expect(styles.chatHistorySlot.marginLeft).toBe('auto');
     expect(styles.clearChatButton.minHeight).toBe(layout.touchTarget);
     expect(styles.clearChatButton.flexShrink).toBe(0);
-    expect(styles.lastSessionButton.minHeight).toBe(layout.touchTarget);
-    expect(styles.lastSessionButton.flexShrink).toBe(0);
+    expect(styles.chatHistoryButton.minHeight).toBe(layout.touchTarget);
+    expect(styles.chatHistoryButton.flexShrink).toBe(0);
     expect(styles.example.minHeight).toBe(layout.touchTarget);
     expect(styles.example.flexShrink).toBe(0);
   });
@@ -943,10 +954,10 @@ describe('live theme styles', () => {
       } else {
         const heading = view.getByTestId('ask-asha-heading');
         expect(within(heading).getByText('How do I say…?')).toBeTruthy();
-        expect(within(heading).queryByText('Last session')).toBeNull();
+        expect(within(heading).queryByText('History')).toBeNull();
       }
       const chips = view.getByTestId('live-example-chips');
-      expect(within(actions).getByText('Last session')).toBeTruthy();
+      expect(within(actions).getByText('History')).toBeTruthy();
       expect(StyleSheet.flatten(actions.props.style)).toMatchObject({
         flexWrap: 'wrap',
         justifyContent: 'space-between',
@@ -1728,7 +1739,7 @@ describe('immersive live conversation design', () => {
       expect(view.getByLabelText('Asha: Hi! Tell me what you would like to practice. Choose English or Hindi for my replies above.')).toBeTruthy();
       expect(StyleSheet.flatten(view.getByTestId('asha-header-portrait').props.style).height).toBe(layout.touchTarget);
       expect(view.getByText('Clear chat')).toBeTruthy();
-      expect(view.getByText('Last session')).toBeTruthy();
+      expect(view.getByText('History')).toBeTruthy();
       expect(view.getByLabelText('Settings')).toBeTruthy();
       expect(view.getByLabelText('Open transcript')).toBeTruthy();
       await view.unmount();
@@ -1987,6 +1998,36 @@ describe('offline capture and queued reports', () => {
     await view.unmount();
   });
 
+  it('saves the chat on screen to Chat history before a new call clears it', async () => {
+    chatArchive.archiveAshaChat.mockClear();
+    const view = await render(<LiveScreen />);
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await act(async () => {
+      await mockVoiceButtonProps.onConnectionStart?.(new AbortController().signal);
+    });
+    expect(chatArchive.archiveAshaChat).toHaveBeenCalledTimes(1);
+    expect(chatArchive.archiveAshaChat.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([expect.objectContaining({ role: 'asha', text: 'Hello there.' })]));
+    expect(chatArchive.archiveAshaChat.mock.invocationCallOrder[0]).toBeLessThan(appState.__clearChatHistoryMock.mock.invocationCallOrder.at(-1) ?? 0);
+    await view.unmount();
+  });
+
+  it('New chat saves the chat to Chat history, empties the screen, and keeps saved chats', async () => {
+    chatArchive.archiveAshaChat.mockClear();
+    chatArchive.deleteAllAshaChats.mockClear();
+    appState.__clearChatHistoryMock.mockClear();
+    const view = await render(<LiveScreen />);
+    expect(view.queryByLabelText('Start a new chat with Asha')).toBeNull();
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    await fireEvent.press(view.getByLabelText('Start a new chat with Asha'));
+    await flushMicrotasks();
+    expect(chatArchive.archiveAshaChat).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ text: 'Hello there.' })]));
+    expect(appState.__clearChatHistoryMock).toHaveBeenCalledTimes(1);
+    expect(chatArchive.deleteAllAshaChats).not.toHaveBeenCalled();
+    expect(sessionLog.clearAshaSessionContent).not.toHaveBeenCalled();
+    expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
+    await view.unmount();
+  });
+
   it('waits for session log recovery before resetting chat for a new conversation', async () => {
     let finishRecovery!: () => void;
     mockRecoveryPending = new Promise<void>((resolve) => { finishRecovery = resolve; });
@@ -2177,11 +2218,11 @@ describe('offline capture and queued reports', () => {
 
   it('links to the last saved session from the Asha screen', async () => {
     const view = await render(<LiveScreen />);
-    const link = view.getByLabelText('View last Asha session');
+    const link = view.getByLabelText('Open Asha chat history');
     expect(link.props.accessibilityRole).toBe('button');
     expect(StyleSheet.flatten(link.props.style).minHeight).toBeGreaterThanOrEqual(44);
     await fireEvent.press(link);
-    expect(mockRouterPush).toHaveBeenCalledWith('/last-session');
+    expect(mockRouterPush).toHaveBeenCalledWith('/chat-history');
     await view.unmount();
   });
 });
@@ -2783,8 +2824,13 @@ describe('live coaching state', () => {
     const prompt = alert.mock.calls.findLast(([title]) => title === 'Clear Asha chat?');
     const clearAction = (prompt?.[2] as { text?: string; onPress?: () => void }[] | undefined)
       ?.find(({ text }) => text === 'Clear chat');
+    chatArchive.deleteAllAshaChats.mockClear();
+    chatArchive.archiveAshaChat.mockClear();
     await act(async () => { clearAction?.onPress?.(); });
     await flushMicrotasks();
+    // An explicit clear deletes Chat history too, and never saves the chat it is clearing.
+    expect(chatArchive.deleteAllAshaChats).toHaveBeenCalledTimes(1);
+    expect(chatArchive.archiveAshaChat).not.toHaveBeenCalled();
     await fireEvent.changeText(view.getByLabelText('Message Asha'), 'A new topic');
     await fireEvent.press(view.getByLabelText('Send message'));
     await flushMicrotasks();

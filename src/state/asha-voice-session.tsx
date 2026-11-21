@@ -7,6 +7,7 @@ import { FullWindowOverlay } from 'react-native-screens';
 import type { FloatingAshaBubble } from '@/components/floating-asha-bubble';
 import type { RealtimeErrorDetails } from '@/components/realtime-voice-button';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
+import { archiveAshaChat } from '@/lib/asha-chat-archive-store';
 import type { AshaSessionEndReason, AshaSessionEvent } from '@/lib/asha-session-log';
 import { ensureAshaSessionLogLoaded, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { floatingAshaEnabled } from '@/lib/floating-asha';
@@ -205,6 +206,8 @@ function AshaVoiceSessionHost({
     const ids = snapshotIdsRef.current;
     if (status === 'connecting' && previous === 'disconnected') {
       ids.current = [];
+      // The chat this call replaces moves to Chat history instead of being lost.
+      void archiveAshaChat(appRef.current.chatHistory);
       void appRef.current.clearChatHistory();
     }
     if (previous === 'connecting' && status !== 'connecting' && status !== 'disconnected') {
