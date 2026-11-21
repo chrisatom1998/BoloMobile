@@ -23,6 +23,7 @@ const mockGetNotificationPermissions = jest.fn();
 const mockRequestNotificationPermissions = jest.fn();
 const mockScheduleNotification = jest.fn();
 const mockTogglePhrase = jest.fn(async (..._args: unknown[]) => 'saved' as 'saved' | 'removed' | 'full' | 'failed');
+const mockScheduleLessonReview = jest.fn(async (..._args: unknown[]) => 'scheduled');
 const mockWordDefinitionSheet = jest.fn((_props: unknown) => null);
 const mockAppState = {
   aiConsent: true,
@@ -37,6 +38,7 @@ const mockAppState = {
   sceneProgress: {} as Record<string, { attempt?: SceneAttempt; completions?: number; lastBeatIndex: number }>,
   setReminder: mockSetReminder,
   togglePhrase: mockTogglePhrase,
+  scheduleLessonReview: mockScheduleLessonReview,
 };
 
 jest.mock('expo-notifications', () => ({
@@ -107,7 +109,7 @@ import SceneScreen from '../src/app/scene/[id]';
 import { wordOrderTokens } from '../src/components/practice-mode';
 import { getScene, scenes } from '../src/data/scenes';
 import * as shuffleChoiceModule from '../src/lib/shuffle-choices';
-import { speakText, stopSpeaking } from '../src/lib/speech';
+import { hasOfflineSpeech, speakText, stopSpeaking } from '../src/lib/speech';
 
 const speakTextMock = speakText as jest.MockedFunction<typeof speakText>;
 const stopSpeakingMock = stopSpeaking as jest.MockedFunction<typeof stopSpeaking>;
@@ -231,6 +233,11 @@ describe('SceneScreen primary journey', () => {
     expect(practiced.getByText('एक चाय दीजिए।')).toBeTruthy();
     expect(practiced.getByRole('button', { name: 'Show the other phrase' })).toBeTruthy();
     expect(practiced.getAllByText('Listen')).toHaveLength(1);
+    // Only the missed phrase offers a Review button; tapping it queues the phrase for tomorrow.
+    await fireEvent.press(practiced.getByRole('button', { name: 'Review this tomorrow' }));
+    expect(mockScheduleLessonReview).toHaveBeenLastCalledWith([expect.objectContaining({ hi: 'एक चाय दीजिए।' })]);
+    expect(await view.findByText('Saved for tomorrow’s Review')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Review this tomorrow' })).toBeNull();
     expect(view.getByText('Scene complete')).toBeTruthy();
     const completion = view.getByTestId('scene-completion-motion');
     expect(within(completion).getByTestId('scene-completion-headline').props.accessibilityLanguage).toBe('hi-IN');
@@ -837,7 +844,7 @@ describe('SceneScreen primary journey', () => {
     expect(completionTestIds.indexOf('scene-completion-primary')).toBeLessThan(completionTestIds.indexOf('scene-completion-secondary'));
     expect(completionTestIds.indexOf('scene-completion-secondary')).toBeLessThan(completionTestIds.indexOf('scene-completion-tertiary'));
     const backToToday = view.getByRole('button', { name: 'Back to Today' });
-    expect(backToToday.props.style).toEqual(expect.objectContaining({ minHeight: 44 }));
+    expect(StyleSheet.flatten(backToToday.props.style)).toMatchObject({ minHeight: 44 });
     await fireEvent.press(backToToday);
     expect(mockRouterReplace).toHaveBeenCalledWith('/');
     await fireEvent.press(view.getByRole('button', { name: 'Next lesson' }));
@@ -846,6 +853,72 @@ describe('SceneScreen primary journey', () => {
       pathname: '/scene/[id]',
       params: { id: 'plan-essentials-02' },
     });
+  });
+
+  it('keeps the short first lesson as is and offers the Asha roleplay and tomorrow\u2019s review on its recap, offline', async () => {
+    mockSceneId = 'plan-essentials-01';
+    mockAppState.aiConsent = false;
+    const intro = await render(<SceneScreen />);
+    // Lesson 1 has its own three-turn opening, so no extra goal panel sits on its first screen.
+    expect(intro.queryByTestId('lesson-pilot-model')).toBeNull();
+    expect(intro.getByTestId('scene-asha-row')).toBeTruthy();
+    await intro.unmount();
+
+    const lastBeat = getScene(mockSceneId)!.beats.length - 1;
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(lastBeat) };
+    const view = await render(<SceneScreen />);
+    expect(view.getByTestId('scene-asha-row')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Needs work'));
+    // The missed phrase comes back once through the normal re-ask, so the recap has no second retry button.
+    await fireEvent.press(view.getByRole('button', { name: 'Continue' }));
+    expect(view.getByText('Review 1 of 1')).toBeTruthy();
+    await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
+    await fireEvent.press(view.getByLabelText('Needs work'));
+    await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ weakPhrases: [expect.any(String)] }));
+    expect(view.queryByRole('button', { name: 'Retry missed phrases' })).toBeNull();
+    await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
+    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: expect.any(String) })]));
+    expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
+
+    await fireEvent.press(view.getByRole('button', { name: 'Roleplay with Asha' }));
+    expect(view.getByText('Asha · Turn 1 of 2')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show a reply' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Next turn' }));
+    expect(view.getByText('Asha · Turn 2 of 2')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Show a reply' }));
+    expect(view.getByText('I am well.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Finish roleplay' }));
+    expect(view.getByText('Conversation complete.')).toBeTruthy();
+    expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the learner\u2019s own name in the lesson 2 example', async () => {
+    mockSceneId = 'plan-essentials-02';
+    mockAppState.aiConsent = true;
+    mockAppState.learnerProfile = { scriptPreference: 'latin', displayName: 'Priya' };
+    const named = await render(<SceneScreen />);
+    expect(named.getByText('Mera naam Priya hai.')).toBeTruthy();
+    expect(named.queryByText(/Chris/)).toBeNull();
+    // No bundled recording exists for a typed name, so the example plays the bundled sample offline.
+    mockAppState.aiConsent = false;
+    (hasOfflineSpeech as jest.Mock).mockImplementation((text: string) => text === 'मेरा नाम क्रिस है।');
+    await named.rerender(<SceneScreen />);
+    await fireEvent.press(named.getByRole('button', { name: 'Hear the example' }));
+    expect(speakTextMock).toHaveBeenLastCalledWith('मेरा नाम क्रिस है।');
+    expect(named.getByText('The recording uses a sample name.')).toBeTruthy();
+    await named.unmount();
+
+    // The last turn asks for the phrase in a fresh situation, with Asha's portrait and Listen still there.
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
+    const recall = await render(<SceneScreen />);
+    expect(recall.getByText('You arrive at a class and the teacher asks your name.')).toBeTruthy();
+    expect(recall.getByTestId('scene-asha-row')).toBeTruthy();
+    expect(recall.getByLabelText('Hear Asha')).toBeTruthy();
+    (hasOfflineSpeech as jest.Mock).mockImplementation(() => true);
+    await named.unmount();
+
   });
 
   it('returns the final guided lesson to its completed plan', async () => {
@@ -1112,6 +1185,7 @@ describe('lesson audit regressions', () => {
     expect(mockAppState.updateLearnerProfile).toHaveBeenCalledWith({ displayName: 'Chris' });
     expect(view.queryByTestId('scene-name-step')).toBeNull();
     expect(view.getByText('Practicing as Chris')).toBeTruthy();
+    expect(view.getByText('Introduce yourself by name in Hindi.')).toBeTruthy();
     for (const index of [0, 1, 2, 3]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     await fireEvent.press(view.getByTestId('scene-word-order-check'));
     await fireEvent.press(view.getByLabelText('Save phrase'));

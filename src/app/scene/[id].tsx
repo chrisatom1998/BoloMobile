@@ -7,6 +7,7 @@ import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Platform, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
+import { LessonPilotModel, LessonPilotRecap } from '@/components/lesson-pilot-practice';
 import { LessonReminderOffer } from '@/components/lesson-reminder-offer';
 import { MotionReveal } from '@/components/motion';
 import { PronunciationRecorder } from '@/components/pronunciation-recorder';
@@ -17,6 +18,7 @@ import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { WordOrderPractice } from '@/components/word-order-practice';
 import { WordDefinitionSheet } from '@/components/word-definition-sheet';
 import { buildAlternateFeedback } from '@/data/lesson-feedback';
+import { getLessonPilot } from '@/data/lesson-pilot';
 import { lessonPlans } from '@/data/lesson-plans';
 import { getScene, type BeatMode } from '@/data/scenes';
 import { useForegroundTimer } from '@/hooks/use-foreground-timer';
@@ -56,7 +58,8 @@ function SceneScreen() {
   const largeTextLayout = useLargeTextLayout();
   const insets = useSafeAreaInsets();
   const sceneId = Array.isArray(id) ? id[0] : id;
-  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, reminder: storedReminder, sceneProgress, setReminder, togglePhrase } = useAppState();
+  const pilot = getLessonPilot(sceneId ?? '');
+  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, reminder: storedReminder, sceneProgress, scheduleLessonReview, setReminder, togglePhrase } = useAppState();
   const reminder = storedReminder ?? defaultReminderSettings();
   const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
   const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
@@ -68,7 +71,7 @@ function SceneScreen() {
   const scene = useMemo(() => {
     if (!sourceScene || !usesName || !practiceName.trim()) return sourceScene;
     // Proper names are kept exactly as entered, never guessed by transliteration.
-    const personalize = (text: string) => text.replace(/\.\.\.|…/gu, practiceName.trim());
+    const personalize = (text: string) => text.replace(/\.\.\.|…/gu, () => practiceName.trim());
     return { ...sourceScene, beats: sourceScene.beats.map((beat) => ({ ...beat,
       prompt: personalize(beat.prompt), tip: personalize(beat.tip),
       choices: beat.choices.map((choice) => /मेरा नाम (?:\.\.\.|…)/u.test(choice.hi)
@@ -76,6 +79,8 @@ function SceneScreen() {
     })) };
   }, [practiceName, sourceScene, usesName]);
   const [showAiDetails, setShowAiDetails] = useState(false);
+  // Missed phrases can be queued for tomorrow's Review straight from the finish screen.
+  const [tomorrowReview, setTomorrowReview] = useState<Record<string, 'saving' | 'scheduled' | 'full' | 'failed'>>({});
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
     const plan = lessonPlans.find((candidate) => candidate.lessonIds.includes(scene.id));
@@ -111,10 +116,9 @@ function SceneScreen() {
   const [resolution, setResolution] = useState<null | 'correct' | 'incorrect'>(null);
   const [choiceNonce, setChoiceNonce] = useState(0);
   const [wordOrderRetryNonce, setWordOrderRetryNonce] = useState(0);
-  const [finishedSeconds, setFinishedSeconds] = useState(0);
   const [correctCount, setCorrectCount] = useState(initialAttempt?.correct ?? 0);
   const [answerCount, setAnswerCount] = useState(initialAttempt?.total ?? 0);
-  const [done, setDone] = useState(false);
+  const [completion, setCompletion] = useState<{ seconds: number; weakPhrases: string[] } | null>(null);
   const [reminderOffer, setReminderOffer] = useState<'hidden' | 'open' | 'closed'>('hidden');
   const [showHint, setShowHint] = useState(false);
   const [alreadyResolvedIncorrect, setAlreadyResolvedIncorrect] = useState(false);
@@ -146,8 +150,9 @@ function SceneScreen() {
   const sceneExists = Boolean(sourceScene);
   useEffect(() => {
     if (sceneExists) observe('scene_started');
+    if (sceneExists && pilot) observe('pilot_lesson_started');
     return () => { void stopSpeaking(); };
-  }, [sceneExists]);
+  }, [pilot, sceneExists]);
 
   useEffect(() => {
     if (!sceneId || !sourceScene) return;
@@ -184,6 +189,10 @@ function SceneScreen() {
 
   // Guided Starter and Beginner lessons set the scene in long Hindi narration, well above the level they teach.
   const englishFirstSetup = Boolean(guidedLesson) && (scene?.level === 'Starter' || scene?.level === 'Beginner');
+  // Lesson 1 already opens with its own short exchange, so only lessons with a model phrase (lesson 2) get the goal panel and fresh-situation recall.
+  const pilotPanels = Boolean(pilot?.model);
+  const pilotIntro = Boolean(pilotPanels && beatIndex === 0);
+  const pilotRecall = Boolean(pilot && scene && beatIndex === scene.beats.length - 1);
 
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
   // English-first lessons skip it: their above-level Hindi narration plays only when the learner taps Listen.
@@ -311,6 +320,7 @@ function SceneScreen() {
       return;
     }
     if (attemptRef.current.answeredBeatIndex === beatIndex) return;
+    if (pilotRecall) observe(isCorrect ? 'pilot_recall_remembered' : 'pilot_recall_needs_work');
     touchTimer();
     if (currentUsesName) updateLearnerProfile?.({ displayName: practiceName.trim() });
     const previous = attemptRef.current;
@@ -405,16 +415,14 @@ function SceneScreen() {
       if (completions === 0 && reminder.enabled !== true && reminder.offerAnswered !== true) {
         setReminderOffer((current) => (current === 'closed' ? current : 'open'));
       }
-      markSceneComplete(activeScene.id, elapsedBeforeResumeRef.current + elapsedSeconds(), {
-        attemptId: attemptRef.current.id,
-        score: attemptRef.current.score,
-        correct: attemptRef.current.correct,
-        total: attemptRef.current.total,
-        weakPhrases: attemptRef.current.weakPhrases,
+      const { id: attemptId, score, correct, total, weakPhrases } = attemptRef.current;
+      const seconds = elapsedBeforeResumeRef.current + elapsedSeconds();
+      markSceneComplete(activeScene.id, seconds, {
+        attemptId, score, correct, total, weakPhrases,
       });
       observe('scene_completed');
-      setFinishedSeconds(elapsedBeforeResumeRef.current + elapsedSeconds());
-      setDone(true);
+      if (pilot) observe('pilot_lesson_completed');
+      setCompletion({ seconds, weakPhrases });
       return;
     }
     hapticSelect();
@@ -466,7 +474,7 @@ function SceneScreen() {
     checkpointScene?.(activeScene.id, 0, attemptRef.current);
     advancedTurnRef.current = null;
     pendingResolutionScrollRef.current = false;
-    setDone(false);
+    setCompletion(null);
     setChoiceNonce((value) => value + 1);
   }
 
@@ -491,14 +499,28 @@ function SceneScreen() {
     router.replace('/');
   }
 
+  async function reviewTomorrow(phrase: { hi: string; latin: string; en: string }) {
+    if (tomorrowReview[phrase.hi] === 'saving' || tomorrowReview[phrase.hi] === 'scheduled') return;
+    hapticSelect();
+    setTomorrowReview((current) => ({ ...current, [phrase.hi]: 'saving' }));
+    let result: 'scheduled' | 'full' | 'failed' = 'failed';
+    try {
+      result = (await scheduleLessonReview?.([phrase])) ?? 'failed';
+    } catch {
+      result = 'failed';
+    }
+    setTomorrowReview((current) => ({ ...current, [phrase.hi]: result }));
+  }
+
   const isGuided = Boolean(guidedLesson);
+  const pilotTarget = pilot ? activeScene.beats[0]?.choices.find((choice) => choice.correct) : undefined;
   const completionAction = guidedLesson?.nextLessonId
     ? 'Next lesson'
     : guidedLesson
       ? 'View completed plan'
       : 'Back to Today';
 
-  if (done) {
+  if (completion) {
     const practicedPhrases = activeScene.beats
       .flatMap((practiced) => practiced.choices.filter((choice) => choice.correct))
       .filter((phrase, index, all) => all.findIndex((other) => other.hi === phrase.hi) === index);
@@ -512,8 +534,22 @@ function SceneScreen() {
           <Text style={styles.learnedMeaning}>{phrase.en}</Text>
         </View>
         <PhraseAudioButtons disabled={!aiConsent && !hasOfflineSpeech(phrase.hi)} label={phrase.latin} onPlay={(rate) => play(phrase.hi, rate)} slowRate={slowRate} />
+        {missedPhrases.some((missed) => missed.hi === phrase.hi) ? (
+          tomorrowReview[phrase.hi] === 'scheduled' ? (
+            <Text accessibilityLiveRegion="polite" style={styles.reviewSaved} testID={`scene-review-saved-${phrase.hi}`}>Saved for tomorrow’s Review</Text>
+          ) : (
+            <>
+              <Pressable accessibilityRole="button" accessibilityState={{ disabled: tomorrowReview[phrase.hi] === 'saving' }} disabled={tomorrowReview[phrase.hi] === 'saving'} onPress={() => void reviewTomorrow(phrase)} style={buttons.quiet} testID={`scene-review-tomorrow-${phrase.hi}`}>
+                <Text style={buttons.quietText}>{tomorrowReview[phrase.hi] === 'saving' ? 'Saving…' : 'Review this tomorrow'}</Text>
+              </Pressable>
+              {tomorrowReview[phrase.hi] === 'full' ? <Text accessibilityRole="alert" style={styles.audioError}>Your phrasebook is full. Remove a phrase to make room, then try again.</Text> : null}
+              {tomorrowReview[phrase.hi] === 'failed' ? <Text accessibilityRole="alert" style={styles.audioError}>Couldn’t save this review. Try again.</Text> : null}
+            </>
+          )
+        ) : null}
       </View>
     );
+    const missedTargets = pilot ? missedPhrases.map(({ hi, latin, en }) => ({ hi, latin, en })) : [];
     return (
       <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
@@ -525,11 +561,11 @@ function SceneScreen() {
             <Text style={styles.finishGloss} testID="scene-completion-gloss">You did it!</Text>
           </View>
           <Text style={styles.finishTitle} testID="scene-completion-title">You finished “{activeScene.title}.”</Text>
-          <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>
+          {pilot ? null : <Text style={sharedStyles.body}>The goal is not perfect recall—it’s a faster, calmer response every time.</Text>}
         </MotionReveal>
         <View style={styles.finishStats}>
           <View style={styles.finishStat}><Text style={styles.finishValue}>{correctCount}/{answerCount}</Text><Text style={styles.finishLabel}>right first try</Text></View>
-          <View style={styles.finishStat}><Text style={styles.finishValue}>{Math.max(1, Math.round(finishedSeconds / 60))} min</Text><Text style={styles.finishLabel}>practiced</Text></View>
+          <View style={styles.finishStat}><Text style={styles.finishValue}>{Math.max(1, Math.round(completion.seconds / 60))} min</Text><Text style={styles.finishLabel}>practiced</Text></View>
         </View>
         {reminderOffer === 'open' ? (
           <LessonReminderOffer
@@ -545,7 +581,21 @@ function SceneScreen() {
             reminder={reminder}
           />
         ) : null}
-        <Pressable accessibilityRole="button" onPress={leaveCompletedScene} style={sharedStyles.primaryButton} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
+        {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: pronunciationBusy }} disabled={pronunciationBusy} onPress={leaveCompletedScene} style={[sharedStyles.primaryButton, pronunciationBusy && styles.disabled]} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
+        {pilot && pilotTarget ? (
+          <LessonPilotRecap
+            lessonTitle={activeScene.title}
+            missed={missedTargets}
+            onPlay={play}
+            onRecordingChange={setPronunciationBusy}
+            onStopAudio={() => { void stopSpeaking(); clearAudioError(); }}
+            pilot={pilot}
+            recording={pronunciationBusy}
+            script={scriptPreference}
+            target={{ hi: pilotTarget.hi, latin: pilotTarget.latin, en: pilotTarget.en }}
+          />
+        ) : null}
         <View style={styles.learned} testID="scene-completion-phrases">
           {missedPhrases.length ? <Text accessibilityRole="header" style={sharedStyles.eyebrow}>Worth another listen</Text> : null}
           {missedPhrases.map(phraseRow)}
@@ -559,9 +609,9 @@ function SceneScreen() {
           ) : null}
           {showAllPhrases ? otherPhrases.map(phraseRow) : null}
         </View>
-        <Pressable accessibilityRole="button" onPress={replay} style={styles.secondaryButton} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: pronunciationBusy }} disabled={pronunciationBusy} onPress={replay} style={[styles.secondaryButton, pronunciationBusy && styles.disabled]} testID="scene-completion-secondary"><RotateCcw color={colors.ink} size={18} /><Text style={styles.secondaryText}>Practice again</Text></Pressable>
         {guidedLesson ? (
-          <Pressable accessibilityRole="button" onPress={() => router.replace('/')} style={styles.tertiaryButton} testID="scene-completion-tertiary">
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: pronunciationBusy }} disabled={pronunciationBusy} onPress={() => router.replace('/')} style={[styles.tertiaryButton, pronunciationBusy && styles.disabled]} testID="scene-completion-tertiary">
             <Text style={styles.tertiaryText}>Back to Today</Text>
           </Pressable>
         ) : null}
@@ -750,6 +800,9 @@ function SceneScreen() {
       ) : null}
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
+      {pilot && pilotIntro && resolution === null ? (
+        <LessonPilotModel pilot={pilot} target={target} script={scriptPreference} onPlay={play} name={practiceName.trim()} />
+      ) : null}
       <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
         <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
         <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">
@@ -811,6 +864,7 @@ function SceneScreen() {
           )}
         </View>
       </View>
+      {pilot && pilotPanels && pilotRecall ? <Text style={styles.setupEnglish}>{pilot.recallSituation}</Text> : null}
 
       {picked !== null && beat.choices[picked] ? (
         <View style={styles.learnerRow}>
@@ -837,7 +891,7 @@ function SceneScreen() {
         ) : null}
         <View style={[styles.answerHeader, largeTextLayout && styles.answerHeaderLarge]}>
           <Text style={styles.answerTitle}>{effectivePrompt}</Text>
-          {resolution === null ? (
+          {resolution === null && !(pilotPanels && pilotRecall) ? (
             <Pressable
               accessibilityLabel={showHint ? 'Hide Asha’s hint' : 'Show Asha’s hint'}
               accessibilityRole="button"
@@ -1068,6 +1122,7 @@ const useStyles = makeStyles((c) => ({
   learnedLatin: { ...type.caption, color: c.brandText },
   learnedLatinOnly: { ...type.headline, color: c.ink, fontWeight: '600' },
   learnedMeaning: { ...type.body, color: c.muted },
+  reviewSaved: { ...type.label, color: c.brandText },
   learnedToggle: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
   learnedToggleText: { ...type.label, color: c.ink, flexShrink: 1 },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
