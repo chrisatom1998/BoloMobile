@@ -13,7 +13,7 @@ import { useLargeTextLayout } from '@/hooks/use-large-text-layout';
 import { showAppAlert } from '@/lib/app-alert';
 import { completedLessonCount, learningAccuracy, milestoneProgress, weeklyPractice } from '@/lib/learning';
 import { useAppStateValue } from '@/state/app-state';
-import { createButtonStyles, displayFont, hindiType, makeStyles, radius, spacing, type, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
+import { createButtonStyles, displayFont, hindiType, makeStyles, numeralVariant, radius, spacing, type, useSharedStyles, useTheme, type NamedStyles, type ThemeColors } from '@/theme';
 import { StatusBarScrim } from '@/components/status-bar-scrim';
 
 export default function ProgressScreen() {
@@ -236,13 +236,13 @@ export const createProgressStyles = (c: ThemeColors) => {
   weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },
   weekHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   weekHeadingCopy: { minWidth: 0, flexShrink: 1, gap: spacing.xs, paddingTop: spacing.sm },
-  weekEyebrow: { ...type.eyebrow, color: c.brandSoft },
-  weekMeta: { ...type.caption, color: c.brandSoft },
-  weekTotal: { ...type.display, color: c.white, fontVariant: ['lining-nums', 'tabular-nums'], textAlign: 'right' },
+  weekEyebrow: { ...type.eyebrow, color: c.brandSoft, fontVariant: numeralVariant },
+  weekMeta: { ...type.caption, color: c.brandSoft, fontVariant: numeralVariant },
+  weekTotal: { ...type.display, color: c.white, fontVariant: numeralVariant, textAlign: 'right' },
   weekTotalUnit: { ...type.label, color: c.brandSoft },
   chart: { minHeight: 132, flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
   barColumn: { flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
-  barValue: { ...type.caption, color: c.brandSoft, fontVariant: ['lining-nums', 'tabular-nums'] },
+  barValue: { ...type.caption, color: c.brandSoft, fontVariant: numeralVariant },
   barValueToday: { color: c.white, fontWeight: '700' },
   barTrack: { flex: 1, minHeight: 64, width: '100%', maxWidth: 32, justifyContent: 'flex-end' },
   bar: { width: '100%', minHeight: spacing.sm, borderRadius: radius.sm, borderCurve: 'continuous', backgroundColor: c.backgroundWarm },
@@ -251,19 +251,19 @@ export const createProgressStyles = (c: ThemeColors) => {
   barToday: { backgroundColor: c.gold },
   day: { ...type.caption, color: c.brandSoft, fontWeight: '600' },
   dayToday: { color: c.white },
-  weekSummary: { ...type.caption, color: c.onBrandText },
+  weekSummary: { ...type.caption, color: c.onBrandText, fontVariant: numeralVariant },
   stats: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   statsLarge: { flexDirection: 'column', flexWrap: 'nowrap' },
   stat: { minWidth: 0, flexBasis: '47%', flexGrow: 1, gap: spacing.xs, backgroundColor: c.paperRaised, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.lg },
   statLarge: { flexBasis: 'auto', flexGrow: 0, flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  statValue: { ...type.title, color: c.ink, fontVariant: ['lining-nums', 'tabular-nums'] },
+  statValue: { ...type.title, color: c.ink, fontVariant: numeralVariant },
   statLabel: { ...type.caption, color: c.muted },
   hero: { width: '100%', alignItems: 'flex-start', borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: c.paperRaised, padding: spacing.lg, gap: spacing.sm },
   heroEyebrow: { ...type.eyebrow, color: c.brandText },
   heroTitle: { ...type.headline, color: c.ink, textAlign: 'left' },
-  heroBody: { ...type.caption, color: c.muted, textAlign: 'left', fontVariant: ['lining-nums', 'tabular-nums'] },
+  heroBody: { ...type.caption, color: c.muted, textAlign: 'left', fontVariant: numeralVariant },
   heroFootnotes: { width: '100%', gap: spacing.xs, borderTopColor: c.line, borderTopWidth: 1, paddingTop: spacing.sm, marginTop: spacing.xs },
-  heroFootnoteText: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
+  heroFootnoteText: { ...type.caption, color: c.muted, fontVariant: numeralVariant },
   heroFootnoteForestText: { color: c.forestText, fontWeight: '600' },
   heroAction: { ...button.primary, alignSelf: 'stretch', marginTop: spacing.xs },
   heroActionText: button.primaryText,
@@ -275,7 +275,7 @@ export const createProgressStyles = (c: ThemeColors) => {
   planRow: { gap: spacing.sm },
   planCopy: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: spacing.sm },
   planTitle: { ...type.label, minWidth: 0, flexShrink: 1, color: c.ink },
-  planMeta: { ...type.caption, color: c.muted, fontVariant: ['lining-nums', 'tabular-nums'] },
+  planMeta: { ...type.caption, color: c.muted, fontVariant: numeralVariant },
   planTrack: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.track },
   planFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
   planFillComplete: { backgroundColor: c.forest },
