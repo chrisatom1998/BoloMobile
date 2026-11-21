@@ -233,6 +233,11 @@ describe('SceneScreen primary journey', () => {
     expect(practiced.getByText('एक चाय दीजिए।')).toBeTruthy();
     expect(practiced.getByRole('button', { name: 'Show the other phrase' })).toBeTruthy();
     expect(practiced.getAllByText('Listen')).toHaveLength(1);
+    // Only the missed phrase offers a Review button; tapping it queues the phrase for tomorrow.
+    await fireEvent.press(practiced.getByRole('button', { name: 'Review this tomorrow' }));
+    expect(mockScheduleLessonReview).toHaveBeenLastCalledWith([expect.objectContaining({ hi: 'एक चाय दीजिए।' })]);
+    expect(await view.findByText('Saved for tomorrow’s Review')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Review this tomorrow' })).toBeNull();
     expect(view.getByText('Scene complete')).toBeTruthy();
     const completion = view.getByTestId('scene-completion-motion');
     expect(within(completion).getByTestId('scene-completion-headline').props.accessibilityLanguage).toBe('hi-IN');

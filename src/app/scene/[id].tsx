@@ -58,7 +58,7 @@ function SceneScreen() {
   const insets = useSafeAreaInsets();
   const sceneId = Array.isArray(id) ? id[0] : id;
   const pilot = getLessonPilot(sceneId ?? '');
-  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, reminder: storedReminder, sceneProgress, setReminder, togglePhrase } = useAppState();
+  const { aiConsent, checkpointScene, clientId, learnerProfile, updateLearnerProfile, markSceneComplete, motionPreference = DEFAULT_MOTION_PREFERENCE, phrases, reminder: storedReminder, sceneProgress, scheduleLessonReview, setReminder, togglePhrase } = useAppState();
   const reminder = storedReminder ?? defaultReminderSettings();
   const scriptPreference = learnerProfile?.scriptPreference ?? 'both';
   const [practiceName, setPracticeName] = useState(learnerProfile?.displayName ?? '');
@@ -78,6 +78,8 @@ function SceneScreen() {
     })) };
   }, [practiceName, sourceScene, usesName]);
   const [showAiDetails, setShowAiDetails] = useState(false);
+  // Missed phrases can be queued for tomorrow's Review straight from the finish screen.
+  const [tomorrowReview, setTomorrowReview] = useState<Record<string, 'saving' | 'scheduled' | 'full' | 'failed'>>({});
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
     const plan = lessonPlans.find((candidate) => candidate.lessonIds.includes(scene.id));
@@ -492,6 +494,19 @@ function SceneScreen() {
     router.replace('/');
   }
 
+  async function reviewTomorrow(phrase: { hi: string; latin: string; en: string }) {
+    if (tomorrowReview[phrase.hi] === 'saving' || tomorrowReview[phrase.hi] === 'scheduled') return;
+    hapticSelect();
+    setTomorrowReview((current) => ({ ...current, [phrase.hi]: 'saving' }));
+    let result: 'scheduled' | 'full' | 'failed' = 'failed';
+    try {
+      result = (await scheduleLessonReview?.([phrase])) ?? 'failed';
+    } catch {
+      result = 'failed';
+    }
+    setTomorrowReview((current) => ({ ...current, [phrase.hi]: result }));
+  }
+
   const isGuided = Boolean(guidedLesson);
   const pilotTarget = pilot ? activeScene.beats[0]?.choices.find((choice) => choice.correct) : undefined;
   const completionAction = guidedLesson?.nextLessonId
@@ -514,6 +529,19 @@ function SceneScreen() {
           <Text style={styles.learnedMeaning}>{phrase.en}</Text>
         </View>
         <PhraseAudioButtons disabled={!aiConsent && !hasOfflineSpeech(phrase.hi)} label={phrase.latin} onPlay={(rate) => play(phrase.hi, rate)} slowRate={slowRate} />
+        {missedPhrases.some((missed) => missed.hi === phrase.hi) ? (
+          tomorrowReview[phrase.hi] === 'scheduled' ? (
+            <Text accessibilityLiveRegion="polite" style={styles.reviewSaved} testID={`scene-review-saved-${phrase.hi}`}>Saved for tomorrow’s Review</Text>
+          ) : (
+            <>
+              <Pressable accessibilityRole="button" accessibilityState={{ disabled: tomorrowReview[phrase.hi] === 'saving' }} disabled={tomorrowReview[phrase.hi] === 'saving'} onPress={() => void reviewTomorrow(phrase)} style={buttons.quiet} testID={`scene-review-tomorrow-${phrase.hi}`}>
+                <Text style={buttons.quietText}>{tomorrowReview[phrase.hi] === 'saving' ? 'Saving…' : 'Review this tomorrow'}</Text>
+              </Pressable>
+              {tomorrowReview[phrase.hi] === 'full' ? <Text accessibilityRole="alert" style={styles.audioError}>Your phrasebook is full. Remove a phrase to make room, then try again.</Text> : null}
+              {tomorrowReview[phrase.hi] === 'failed' ? <Text accessibilityRole="alert" style={styles.audioError}>Couldn’t save this review. Try again.</Text> : null}
+            </>
+          )
+        ) : null}
       </View>
     );
     const missedTargets = pilot ? missedPhrases.map(({ hi, latin, en }) => ({ hi, latin, en })) : [];
@@ -1072,6 +1100,7 @@ const useStyles = makeStyles((c) => ({
   learnedLatin: { ...type.caption, color: c.brandText },
   learnedLatinOnly: { ...type.headline, color: c.ink, fontWeight: '600' },
   learnedMeaning: { ...type.body, color: c.muted },
+  reviewSaved: { ...type.label, color: c.brandText },
   learnedToggle: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.line, paddingHorizontal: spacing.lg },
   learnedToggleText: { ...type.label, color: c.ink, flexShrink: 1 },
   speakerLarge: { alignSelf: 'flex-end', position: 'relative' },
