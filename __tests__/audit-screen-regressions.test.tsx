@@ -276,7 +276,19 @@ describe('previously uncovered audit screens', () => {
       responseLanguage: 'en',
       scriptPreference: 'latin',
     }, 10);
-    expect(mockRouter.replace).toHaveBeenCalledWith('/');
+    // Setup hands a new learner straight to the first lesson on their path, not to Today.
+    expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-getting-around-01' } });
+  });
+
+  it('opens A warm hello straight from setup for someone new to Hindi', async () => {
+    const view = await render(<OnboardingScreen />);
+    await fireEvent.press(view.getByTestId('onboarding-reply-namaste'));
+    await fireEvent.press(view.getByTestId('onboarding-continue'));
+    await fireEvent.press(view.getByTestId('onboarding-continue'));
+    await fireEvent.press(view.getByRole('button', { name: 'Start practicing' }));
+
+    await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: '/scene/[id]', params: { id: 'plan-essentials-01' } }));
+    expect(mockRouter.replace).not.toHaveBeenCalledWith('/');
   });
 
   it('seeds recalibration from saved preferences and keeps reply language, minutes, and the microphone flag', async () => {
@@ -330,7 +342,7 @@ describe('previously uncovered audit screens', () => {
 
     expect(view.getByText('Your first lesson')).toBeTruthy();
     expect(view.getByText('A warm hello')).toBeTruthy();
-    expect(view.getByText('Plan 01 · Lesson 1 of 10 · 10 turns')).toBeTruthy();
+    expect(view.getByText('Plan 01 · Lesson 1 of 10 · 3 turns')).toBeTruthy();
     expect(view.getByText('Your week, streak and saved phrases will show up here after your first lesson.')).toBeTruthy();
     // A brand-new learner sees one clear next step, not a wall of zeros.
     expect(view.queryByText('No practice streak yet')).toBeNull();
