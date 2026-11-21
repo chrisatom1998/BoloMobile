@@ -20,7 +20,7 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   voiceHeroHidden: { height: 0, minHeight: 0, paddingTop: 0, paddingBottom: 0, overflow: 'hidden' },
   liveConfigCard: { alignSelf: 'center', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 1, borderColor: c.brand, backgroundColor: c.paper, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
   liveConfigTitle: { ...type.title, color: c.ink },
-  liveConfigHindi: { ...hindiType(type.body.fontSize), color: c.brand },
+  liveConfigHindi: { ...hindiType(20), color: c.brand },
   liveConfigBody: { ...type.body, color: c.ink },
   voiceUnavailable: { opacity: layout.voiceUnavailableOpacity },
   voiceOffCaption: { ...type.caption, flexShrink: 0, color: c.heroSubtle, textAlign: 'center' },
@@ -142,8 +142,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   reportedText: { color: c.success },
   moreAction: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   reportStatus: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center', paddingHorizontal: spacing.sm },
-  // Inline Devanagari inside a chat line: Tiro at the body size; 16 * 1.45 rounds to the 23pt body leading.
-  messageHindi: { ...hindiType(16), color: c.ink },
+  // Inline Devanagari inside a chat line: the 17pt inline Hindi size.
+  messageHindi: { ...hindiType(17), color: c.ink },
   structuredBody: { alignSelf: 'stretch', gap: spacing.sm },
   phraseCard: { alignSelf: 'stretch' },
   correction: { alignSelf: 'stretch', borderRadius: radius.md, borderCurve: 'continuous', borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, overflow: 'hidden' },

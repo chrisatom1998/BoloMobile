@@ -232,6 +232,7 @@ export const createProgressStyles = (c: ThemeColors) => {
   pageSubtitleLarge: { maxWidth: '100%' },
   shareButton: { width: 44, height: 44, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   weekCard: { width: '100%', overflow: 'hidden', borderRadius: radius.xxl, borderCurve: 'continuous', backgroundColor: c.brand, padding: spacing.gutter, gap: spacing.lg },
+  // Exception to the type scale: decorative 64pt watermark glyph.
   // Tucked into the top-right corner, small and faint, so it never sits behind the bars.
   weekWatermark: { ...hindiType(64), position: 'absolute', top: -14, right: -6, color: c.onBrandWatermark },
   weekHeading: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
