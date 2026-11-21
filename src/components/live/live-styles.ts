@@ -102,6 +102,8 @@ export const createLiveStyles = (c: ReturnType<typeof useTheme>['colors']) => ({
   askHeadingCopyCompact: { gap: 0 },
   askHeadingActions: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', columnGap: spacing.md, rowGap: spacing.sm },
   chatHistorySlot: { marginLeft: 'auto', maxWidth: '100%', flexShrink: 0 },
+  // With Clear chat and New chat beside it, the row's space-between spreads all three evenly.
+  chatHistorySlotInRow: { marginLeft: 0 },
   askEyebrow: { ...type.eyebrow, alignSelf: 'stretch', color: c.gold, textAlign: 'left' },
   askTitle: { ...type.caption, alignSelf: 'stretch', color: c.white, flexShrink: 0, textAlign: 'left', fontWeight: '600' },
   clearChatButton: { minHeight: layout.touchTarget, maxWidth: '100%', flexShrink: 0, flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, borderCurve: 'continuous', backgroundColor: 'transparent', borderColor: c.nightLine, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },

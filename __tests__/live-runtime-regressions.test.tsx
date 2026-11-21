@@ -2028,6 +2028,17 @@ describe('offline capture and queued reports', () => {
     await view.unmount();
   });
 
+  it('spaces Clear chat, New chat and History evenly, and keeps History on the right when it is alone', async () => {
+    const view = await render(<LiveScreen />);
+    // Empty chat: History is the only button and stays at the right edge.
+    expect(StyleSheet.flatten(view.getByTestId('ask-asha-history-slot').props.style).marginLeft).toBe('auto');
+    await fireEvent.press(view.getByLabelText('Create Asha reply'));
+    // Three buttons: no auto margin, so the row's space-between gives equal gaps.
+    expect(StyleSheet.flatten(view.getByTestId('ask-asha-actions').props.style).justifyContent).toBe('space-between');
+    expect(StyleSheet.flatten(view.getByTestId('ask-asha-history-slot').props.style).marginLeft).toBe(0);
+    await view.unmount();
+  });
+
   it('waits for session log recovery before resetting chat for a new conversation', async () => {
     let finishRecovery!: () => void;
     mockRecoveryPending = new Promise<void>((resolve) => { finishRecovery = resolve; });

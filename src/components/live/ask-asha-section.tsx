@@ -60,7 +60,7 @@ export function AskAshaSection({
                         <Text style={styles.secondaryActionText}>New chat</Text>
                       </Pressable>
                     ) : null}
-                    <View style={styles.chatHistorySlot}>{chatHistoryButton}</View>
+                    <View style={[styles.chatHistorySlot, chatHistory.length > 0 && styles.chatHistorySlotInRow]} testID="ask-asha-history-slot">{chatHistoryButton}</View>
                   </View>
                 </View>
                 {unassociatedReports.length ? (
