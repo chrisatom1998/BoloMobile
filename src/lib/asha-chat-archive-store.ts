@@ -168,6 +168,24 @@ export async function archiveAshaChat(messages: readonly ChatMessage[]): Promise
   }
 }
 
+const switchListeners = new Set<() => void>();
+
+/**
+ * The Asha screen listens for another screen replacing the current chat, so a
+ * typed reply still on its way cannot land in the chat that took its place.
+ */
+export function subscribeAshaChatSwitch(listener: () => void): () => void {
+  switchListeners.add(listener);
+  return () => {
+    switchListeners.delete(listener);
+  };
+}
+
+/** Call just before the current chat is replaced by a past one. */
+export function announceAshaChatSwitch() {
+  switchListeners.forEach((listener) => listener());
+}
+
 /** Removes one past chat: the learner deleted it, or reopened it as the current chat. */
 export async function removeAshaChat(id: string): Promise<void> {
   await ensureAshaChatsLoaded();

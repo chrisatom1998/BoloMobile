@@ -28,7 +28,7 @@ import { useMotionPreference } from '@/hooks/use-motion-preference';
 import type { LiveTranscriptRow, RealtimeTranscriptUpdate, RealtimeVoiceStatus } from '@/hooks/use-realtime-conversation';
 import { useSpeakText } from '@/hooks/use-speak-text';
 import { showAppAlert } from '@/lib/app-alert';
-import { archiveAshaChat, deleteAllAshaChats } from '@/lib/asha-chat-archive-store';
+import { archiveAshaChat, deleteAllAshaChats, subscribeAshaChatSwitch } from '@/lib/asha-chat-archive-store';
 import { type AshaSessionEndReason, type AshaSessionEvent } from '@/lib/asha-session-log';
 import { clearAshaSessionContent, ensureAshaSessionLogLoaded, findAshaSessionIdForRow, logAshaSessionEvent, logAshaSessionSnapshot, registerLiveCallEnder } from '@/lib/asha-session-log-store';
 import { romanizeDevanagari } from '@/lib/devanagari-romanization';
@@ -418,7 +418,7 @@ export default function LiveScreen() {
       language: result.language,
       ...(result.structured ? { structured: result.structured } : {}),
     });
-    appendChatMessages(additions);
+    void appendChatMessages(additions);
     touchPracticeTimer();
     if (!practiced.current) {
       practiced.current = true;
@@ -537,6 +537,17 @@ export default function LiveScreen() {
       setError('The chat could not be cleared. Please try again.');
     }
   }, [resetChat]);
+
+  // Chat history is about to replace the chat on screen with a past one. Drop a typed
+  // request still in flight, or its reply would be appended to the reopened chat.
+  useEffect(() => subscribeAshaChatSwitch(() => {
+    chatActivityRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    if (!mountedRef.current) return;
+    setBusy(false);
+    setPendingUserMessage(null);
+  }), []);
 
   /** New chat: the chat on screen moves to Chat history and the screen starts empty. */
   const startNewChat = useCallback(async () => {

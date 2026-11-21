@@ -59,14 +59,14 @@ function HistoryHarness() {
       <Text testID="history">{chatHistory.map(({ id, text }) => `${id}:${text}`).join('|') || 'empty'}</Text>
       <Pressable
         accessibilityLabel="Append completed voice turn"
-        onPress={() => appendChatMessages([
+        onPress={() => void appendChatMessages([
           { id: 'you-new', role: 'you', text: 'My completed turn.' },
           { id: 'asha-new', role: 'asha', text: 'A completed reply.', language: 'en' },
         ])}
       />
       <Pressable
         accessibilityLabel="Append later voice turn"
-        onPress={() => appendChatMessages([
+        onPress={() => void appendChatMessages([
           { id: 'you-later', role: 'you', text: 'A stale turn.' },
           { id: 'asha-later', role: 'asha', text: 'A stale reply.', language: 'en' },
         ])}
@@ -265,7 +265,7 @@ describe('chat history provider persistence', () => {
     let second!: Promise<boolean>;
     await act(async () => { first = result.current.clearChatHistory(); });
     await act(async () => {
-      result.current.appendChatMessages([
+      void result.current.appendChatMessages([
         { id: 'new-you', role: 'you', text: 'New typed question' },
         { id: 'new-asha', role: 'asha', text: 'New typed answer' },
       ]);

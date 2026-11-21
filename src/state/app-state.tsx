@@ -81,7 +81,8 @@ type AppActions = {
   reviewPhrase: (hi: string, remembered: boolean) => void;
   markLiveTurn: (seconds?: number) => void;
   addPracticeSeconds: (seconds: number) => void;
-  appendChatMessages: (messages: ChatMessage[]) => void;
+  /** Resolves true only once the added messages are stored on this device. */
+  appendChatMessages: (messages: ChatMessage[]) => Promise<boolean>;
   replaceLiveChatSnapshot: (previousIds: string[], messages: ChatMessage[]) => void;
   /** Resolves true only once the cleared history is stored on this device. */
   clearChatHistory: () => Promise<boolean>;
@@ -506,11 +507,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [commit]);
 
   const appendChatMessages = useCallback((messages: ChatMessage[]) => {
-    if (messages.length === 0) return;
-    commit((current) => {
+    if (messages.length === 0) return Promise.resolve(false);
+    let added = false;
+    return commit((current) => {
       const chatHistory = appendChatHistory(current.chatHistory, messages);
-      return chatHistory === current.chatHistory ? current : { ...current, chatHistory };
-    }, ['chatHistory']);
+      added = chatHistory !== current.chatHistory;
+      return added ? { ...current, chatHistory } : current;
+    }, ['chatHistory']).then((stored) => stored && added);
   }, [commit]);
 
   const replaceLiveChatSnapshot = useCallback((previousIds: string[], messages: ChatMessage[]) => {

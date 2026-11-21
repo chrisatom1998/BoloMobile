@@ -7,8 +7,9 @@ import { SavedTranscriptRows } from '@/components/saved-transcript-rows';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { MAX_ASHA_CHATS, ashaChatHasVoice, ashaChatPreview, ashaChatTitle, type AshaChatRecord } from '@/lib/asha-chat-archive';
-import { archiveAshaChat, removeAshaChat, useAshaChats } from '@/lib/asha-chat-archive-store';
+import { announceAshaChatSwitch, archiveAshaChat, removeAshaChat, useAshaChats } from '@/lib/asha-chat-archive-store';
 import { ashaSessionLogEnabled } from '@/lib/asha-session-log';
+import { clearAshaSessionContentForRows } from '@/lib/asha-session-log-store';
 import { useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
 import { buttons, layout, makeStyles, radius, spacing, useSharedStyles, useTheme, type } from '@/theme';
@@ -147,9 +148,12 @@ function PastChat({ chatId }: { chatId: string }) {
     const alreadyOpen = chatHistory[0]?.id === chat.id;
     let reopened = alreadyOpen;
     if (!alreadyOpen) {
+      // A typed reply still on its way belongs to the chat being put away, not this one.
+      announceAshaChatSwitch();
       if (chatHistory.length > 0) void archiveAshaChat(chatHistory);
-      reopened = await clearChatHistory();
-      if (reopened) appendChatMessages(chat.messages);
+      // The copy in history is removed only once the reopened chat is stored as the
+      // current chat. If that write fails, the chat is still in history to try again.
+      reopened = await clearChatHistory() && await appendChatMessages(chat.messages);
     }
     if (!reopened) {
       if (!mountedRef.current) return;
@@ -169,9 +173,19 @@ function PastChat({ chatId }: { chatId: string }) {
     setWorking(true);
     setError('');
     setLeaving(true);
-    // A failed removal leaves the chat out of the list until the app restarts, so go back either way.
-    await removeAshaChat(chat.id).catch(() => undefined);
-    if (mountedRef.current) router.back();
+    // A voice call's lines are also kept for Last session; "removed from this device" covers that copy.
+    const removed = await Promise.all([
+      removeAshaChat(chat.id),
+      clearAshaSessionContentForRows(chat.messages.map((message) => message.id)),
+    ]).then(() => true, () => false);
+    if (!mountedRef.current) return;
+    if (removed) {
+      router.back();
+      return;
+    }
+    setLeaving(false);
+    setWorking(false);
+    setError('This chat could not be fully deleted. Please try again.');
   }, [chat, router]);
 
   const confirmDelete = useCallback(() => {
@@ -190,6 +204,7 @@ function PastChat({ chatId }: { chatId: string }) {
         <View style={[sharedStyles.card, styles.empty]} testID="chat-history-missing">
           <Text accessibilityRole="header" style={styles.emptyTitle}>This chat is no longer saved</Text>
           <Text style={sharedStyles.body}>It was deleted, or it is the chat open with Asha now.</Text>
+          {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
           <Pressable accessibilityRole="button" onPress={() => router.back()} style={sharedStyles.primaryButton}>
             <Text style={sharedStyles.primaryButtonText}>Back</Text>
           </Pressable>

@@ -478,9 +478,15 @@ jest.mock('@/lib/speech', () => ({
   stopSpeaking: jest.fn(async () => undefined),
 }));
 
+const mockChatSwitchListeners = new Set<() => void>();
+
 jest.mock('@/lib/asha-chat-archive-store', () => ({
   archiveAshaChat: jest.fn(async () => true),
   deleteAllAshaChats: jest.fn(async () => undefined),
+  subscribeAshaChatSwitch: jest.fn((listener: () => void) => {
+    mockChatSwitchListeners.add(listener);
+    return () => mockChatSwitchListeners.delete(listener);
+  }),
 }));
 
 const chatArchive = jest.requireMock('@/lib/asha-chat-archive-store') as {
@@ -2026,6 +2032,26 @@ describe('offline capture and queued reports', () => {
     expect(sessionLog.clearAshaSessionContent).not.toHaveBeenCalled();
     expect(view.queryByLabelText('Asha: Hello there.')).toBeNull();
     await view.unmount();
+  });
+
+  it('drops a typed reply still on its way when Chat history swaps in a past chat', async () => {
+    let finish!: (value: { reply: string; language: 'en' }) => void;
+    boloApi.sendMobileChat.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const view = await render(<LiveScreen />);
+    await fireEvent.changeText(view.getByLabelText('Message Asha'), 'An old question');
+    await fireEvent.press(view.getByLabelText('Send message'));
+    await flushMicrotasks();
+    const signal = boloApi.sendMobileChat.mock.calls.at(-1)?.[1] as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    await act(async () => { mockChatSwitchListeners.forEach((listener) => listener()); });
+    expect(signal.aborted).toBe(true);
+    await act(async () => { finish({ reply: 'A late answer', language: 'en' }); });
+    await flushMicrotasks();
+    expect(view.queryByLabelText('Asha: A late answer')).toBeNull();
+    expect(view.queryByLabelText(/An old question/u)).toBeNull();
+    expect(view.getByLabelText('Message Asha').props.editable).toBe(true);
+    await view.unmount();
+    expect(mockChatSwitchListeners.size).toBe(0);
   });
 
   it('spaces Clear chat, New chat and History evenly, and keeps History on the right when it is alone', async () => {

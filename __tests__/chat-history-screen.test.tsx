@@ -10,7 +10,9 @@ let mockChatHistory: ChatMessage[] = [];
 let mockAiConsent = true;
 let mockFloatingStatus: 'disconnected' | 'ready' = 'disconnected';
 const mockClearChatHistory = jest.fn(async () => true);
-const mockAppendChatMessages = jest.fn();
+const mockAppendChatMessages = jest.fn(async (_messages: unknown) => true);
+const mockAnnounceSwitch = jest.fn();
+const mockClearSessionRows = jest.fn(async (_ids: readonly string[]) => undefined);
 const mockArchive = jest.fn(async (_messages: unknown) => true);
 const mockRemove = jest.fn(async (_id: string) => undefined);
 const mockShowAppAlert = jest.fn();
@@ -22,7 +24,11 @@ jest.mock('expo-router', () => ({
 }));
 jest.mock('lucide-react-native', () => new Proxy({}, { get: () => () => null }));
 jest.mock('@/lib/app-alert', () => ({ showAppAlert: (...args: unknown[]) => mockShowAppAlert(...args) }));
+jest.mock('@/lib/asha-session-log-store', () => ({
+  clearAshaSessionContentForRows: (ids: readonly string[]) => mockClearSessionRows(ids),
+}));
 jest.mock('@/lib/asha-chat-archive-store', () => ({
+  announceAshaChatSwitch: () => mockAnnounceSwitch(),
   archiveAshaChat: (messages: unknown) => mockArchive(messages),
   removeAshaChat: (id: string) => mockRemove(id),
   useAshaChats: () => mockChats,
@@ -30,7 +36,7 @@ jest.mock('@/lib/asha-chat-archive-store', () => ({
 jest.mock('@/state/app-state', () => ({
   useAppState: () => ({
     aiConsent: mockAiConsent,
-    appendChatMessages: mockAppendChatMessages,
+    appendChatMessages: (messages: unknown) => mockAppendChatMessages(messages),
     chatHistory: mockChatHistory,
     clearChatHistory: mockClearChatHistory,
   }),
@@ -123,6 +129,10 @@ describe('Chat history screen', () => {
       for (let index = 0; index < 10; index += 1) await Promise.resolve();
     });
     expect(mockArchive).toHaveBeenCalledWith(currentChat);
+    // A typed reply still in flight is dropped before the chats are swapped.
+    expect(mockAnnounceSwitch).toHaveBeenCalledTimes(1);
+    expect(mockAnnounceSwitch.mock.invocationCallOrder[0]).toBeLessThan(mockClearChatHistory.mock.invocationCallOrder[0] ?? 0);
+    expect(mockAppendChatMessages.mock.invocationCallOrder[0]).toBeLessThan(mockRemove.mock.invocationCallOrder[0] ?? 0);
     expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
     expect(mockAppendChatMessages).toHaveBeenCalledWith(typedChat.messages);
     expect(mockRemove).toHaveBeenCalledWith(typedChat.id);
@@ -141,6 +151,20 @@ describe('Chat history screen', () => {
       for (let index = 0; index < 10; index += 1) await Promise.resolve();
     });
     expect(mockAppendChatMessages).not.toHaveBeenCalled();
+    expect(mockRemove).not.toHaveBeenCalled();
+    expect(mockRouter.dismissTo).not.toHaveBeenCalled();
+    expect(view.getByRole('alert').props.children).toBe('This chat could not be opened. Please try again.');
+  });
+
+  it('keeps the past chat in history when the reopened chat cannot be stored', async () => {
+    mockParams = { chatId: typedChat.id };
+    mockAppendChatMessages.mockResolvedValueOnce(false);
+    const view = await render(<ChatHistoryScreen />);
+    await act(async () => {
+      fireEvent.press(view.getByTestId('chat-history-continue'));
+      for (let index = 0; index < 10; index += 1) await Promise.resolve();
+    });
+    expect(mockAppendChatMessages).toHaveBeenCalledWith(typedChat.messages);
     expect(mockRemove).not.toHaveBeenCalled();
     expect(mockRouter.dismissTo).not.toHaveBeenCalled();
     expect(view.getByRole('alert').props.children).toBe('This chat could not be opened. Please try again.');
@@ -190,6 +214,32 @@ describe('Chat history screen', () => {
     expect(mockRemove).toHaveBeenCalledWith(typedChat.id);
     expect(mockRouter.back).toHaveBeenCalledTimes(1);
     expect(mockClearChatHistory).not.toHaveBeenCalled();
+  });
+
+  it('deleting a voice chat also clears its lines from the saved voice session', async () => {
+    mockParams = { chatId: voiceChat.id };
+    const view = await render(<ChatHistoryScreen />);
+    await fireEvent.press(view.getByLabelText('Delete this chat'));
+    await act(async () => {
+      alertAction('Delete chat')?.onPress?.();
+      for (let index = 0; index < 10; index += 1) await Promise.resolve();
+    });
+    expect(mockRemove).toHaveBeenCalledWith(voiceChat.id);
+    expect(mockClearSessionRows).toHaveBeenCalledWith(voiceChat.messages.map((message) => message.id));
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays put and says so when a delete cannot finish', async () => {
+    mockParams = { chatId: voiceChat.id };
+    mockClearSessionRows.mockRejectedValueOnce(new Error('disk full'));
+    const view = await render(<ChatHistoryScreen />);
+    await fireEvent.press(view.getByLabelText('Delete this chat'));
+    await act(async () => {
+      alertAction('Delete chat')?.onPress?.();
+      for (let index = 0; index < 10; index += 1) await Promise.resolve();
+    });
+    expect(mockRouter.back).not.toHaveBeenCalled();
+    expect(view.getByRole('alert').props.children).toBe('This chat could not be fully deleted. Please try again.');
   });
 
   it('says so when the chat is gone', async () => {
