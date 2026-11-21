@@ -189,7 +189,9 @@ function SceneScreen() {
 
   // Guided Starter and Beginner lessons set the scene in long Hindi narration, well above the level they teach.
   const englishFirstSetup = Boolean(guidedLesson) && (scene?.level === 'Starter' || scene?.level === 'Beginner');
-  const pilotIntro = Boolean(pilot && beatIndex === 0);
+  // Lesson 1 already opens with its own short exchange, so only lessons with a model phrase (lesson 2) get the goal panel and fresh-situation recall.
+  const pilotPanels = Boolean(pilot?.model);
+  const pilotIntro = Boolean(pilotPanels && beatIndex === 0);
   const pilotRecall = Boolean(pilot && scene && beatIndex === scene.beats.length - 1);
 
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
@@ -862,7 +864,7 @@ function SceneScreen() {
           )}
         </View>
       </View>
-      {pilot && pilotRecall ? <Text style={styles.setupEnglish}>{pilot.recallSituation}</Text> : null}
+      {pilot && pilotPanels && pilotRecall ? <Text style={styles.setupEnglish}>{pilot.recallSituation}</Text> : null}
 
       {picked !== null && beat.choices[picked] ? (
         <View style={styles.learnerRow}>
@@ -889,7 +891,7 @@ function SceneScreen() {
         ) : null}
         <View style={[styles.answerHeader, largeTextLayout && styles.answerHeaderLarge]}>
           <Text style={styles.answerTitle}>{effectivePrompt}</Text>
-          {resolution === null && !pilotRecall ? (
+          {resolution === null && !(pilotPanels && pilotRecall) ? (
             <Pressable
               accessibilityLabel={showHint ? 'Hide Asha’s hint' : 'Show Asha’s hint'}
               accessibilityRole="button"

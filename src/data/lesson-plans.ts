@@ -134,13 +134,11 @@ function guidedPracticeTurns(plan: LessonPlanSeed, lessonIndex: number): GuidedP
       .find((pair) => distinctMeanings([target, ...pair]))
       ?? [plan.lessons[(targetIndex + 3) % phraseCount]!, plan.lessons[(targetIndex + 7) % phraseCount]!] as const;
     const distractors = [first, second] as const;
-    if (pilot && turnIndex === phraseCount - 1) {
+    // Lesson 1 has its own hand-written opening exchange; only lessons with a model phrase end on the fresh-situation recall.
+    if (pilot?.model && turnIndex === phraseCount - 1) {
       return { target, distractors, mode: 'recallReveal', prompt: pilot.recallPrompt, tip: '' };
     }
     const instructions = activity.build({ plan, target });
-    if (pilot && turnIndex === 0 && activity.mode === 'choice') {
-      instructions.prompt = 'Choose the greeting you just practiced.';
-    }
     return { target, distractors, mode: activity.mode, ...instructions };
   });
 }

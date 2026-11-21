@@ -855,25 +855,19 @@ describe('SceneScreen primary journey', () => {
     });
   });
 
-  it('models the pilot phrase and handles unaided recall, missed reviews and roleplay offline', async () => {
+  it('keeps the short first lesson as is and offers the Asha roleplay and tomorrow\u2019s review on its recap, offline', async () => {
     mockSceneId = 'plan-essentials-01';
     mockAppState.aiConsent = false;
     const intro = await render(<SceneScreen />);
-    expect(intro.getByText('Greet someone politely in Hindi.')).toBeTruthy();
+    // Lesson 1 has its own three-turn opening, so no extra goal panel sits on its first screen.
+    expect(intro.queryByTestId('lesson-pilot-model')).toBeNull();
     expect(intro.getByTestId('scene-asha-row')).toBeTruthy();
-    expect(intro.getByLabelText('Hear Asha')).toBeTruthy();
-    await fireEvent.press(intro.getByRole('button', { name: 'Hear the example' }));
-    expect(speakTextMock).toHaveBeenCalledWith('नमस्ते।');
     await intro.unmount();
 
-    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
+    const lastBeat = getScene(mockSceneId)!.beats.length - 1;
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(lastBeat) };
     const view = await render(<SceneScreen />);
-    expect(view.getByText('Your friend introduces you to their grandmother.')).toBeTruthy();
-    // Asha's portrait and Listen button stay on the last beat.
     expect(view.getByTestId('scene-asha-row')).toBeTruthy();
-    expect(view.getByLabelText('Hear Asha')).toBeTruthy();
-    expect(view.queryByTestId('scene-choices')).toBeNull();
-    expect(view.queryByText('नमस्ते।')).toBeNull();
     await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
     await fireEvent.press(view.getByLabelText('Needs work'));
     // The missed phrase comes back once through the normal re-ask, so the recap has no second retry button.
@@ -882,10 +876,10 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByLabelText('Reveal the Hindi answer'));
     await fireEvent.press(view.getByLabelText('Needs work'));
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
-    expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ weakPhrases: ['नमस्ते।'] }));
+    expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ weakPhrases: [expect.any(String)] }));
     expect(view.queryByRole('button', { name: 'Retry missed phrases' })).toBeNull();
     await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
-    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: 'नमस्ते।' })]));
+    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: expect.any(String) })]));
     expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
 
     await fireEvent.press(view.getByRole('button', { name: 'Roleplay with Asha' }));
@@ -914,6 +908,14 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(named.getByRole('button', { name: 'Hear the example' }));
     expect(speakTextMock).toHaveBeenLastCalledWith('मेरा नाम क्रिस है।');
     expect(named.getByText('The recording uses a sample name.')).toBeTruthy();
+    await named.unmount();
+
+    // The last turn asks for the phrase in a fresh situation, with Asha's portrait and Listen still there.
+    mockAppState.sceneProgress = { [mockSceneId]: resumeAt(9) };
+    const recall = await render(<SceneScreen />);
+    expect(recall.getByText('You arrive at a class and the teacher asks your name.')).toBeTruthy();
+    expect(recall.getByTestId('scene-asha-row')).toBeTruthy();
+    expect(recall.getByLabelText('Hear Asha')).toBeTruthy();
     (hasOfflineSpeech as jest.Mock).mockImplementation(() => true);
     await named.unmount();
 
