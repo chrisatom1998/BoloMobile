@@ -211,11 +211,12 @@ const useStyles = makeStyles((c) => ({
   label: { ...type.caption, color: c.ink, fontWeight: '700' },
   input: { ...type.body, minHeight: 52, borderRadius: radius.md, borderCurve: 'continuous', borderColor: c.inputBorder, borderWidth: 1, backgroundColor: c.paperRaised, color: c.ink, paddingHorizontal: spacing.md, paddingVertical: spacing.md },
   sourceInput: { minHeight: 112, textAlignVertical: 'top' },
-  prepareButton: buttons.primary,
-  prepareButtonText: buttons.primaryText,
+  // Secondary so the footer's Save phrase stays the sheet's one filled button.
+  prepareButton: buttons.secondary,
+  prepareButtonText: buttons.secondaryText,
   hint: { ...type.caption, color: c.muted },
   error: { ...type.caption, color: c.danger },
-  saveButton: { minHeight: 54, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  saveButtonText: { ...type.label, color: c.white, fontWeight: '700' },
+  saveButton: buttons.primary,
+  saveButtonText: buttons.primaryText,
   disabled: { opacity: 0.45 },
 }));
