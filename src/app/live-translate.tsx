@@ -295,7 +295,7 @@ export default function LiveTranslateScreen() {
 
       {showIntro ? (
         <ScrollView contentContainerStyle={styles.intro} style={styles.fill}>
-          <Text style={styles.introLead}>Hear Hindi around you, read it in English.</Text>
+          <Text style={styles.introLead}>Hear Hindi and Hinglish around you, read it in English.</Text>
           {aiConsent ? (
             <View style={styles.introCard}>
               <Text style={styles.introEyebrow}>Before you start</Text>
