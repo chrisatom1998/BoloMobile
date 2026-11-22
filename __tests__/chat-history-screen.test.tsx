@@ -1,4 +1,5 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 
 import { createAshaChatRecord, type AshaChatRecord } from '../src/lib/asha-chat-archive';
 import type { ChatMessage } from '../src/state/app-state-types';
@@ -125,6 +126,24 @@ describe('Chat history screen', () => {
     expect(view.queryByText(/[ऀ-ॿ]/u)).toBeNull();
     expect(view.getAllByTestId('saved-transcript-romanized')[0]).toHaveStyle({ fontStyle: 'italic' });
     expect(view.getByLabelText('You: Main theek hoon')).toBeTruthy();
+  });
+
+  it('uses the chat rule in the list too: romanized Hindi is italic', async () => {
+    const view = await render(<ChatHistoryScreen />);
+    const romanized = view.getAllByTestId('saved-transcript-romanized');
+    expect(romanized.length).toBeGreaterThan(0);
+    romanized.forEach((span) => expect(span).toHaveStyle({ fontStyle: 'italic' }));
+  });
+
+  it('gives lines with Hindi script extra height so marks are not clipped', async () => {
+    mockParams = { chatId: voiceChat.id };
+    mockScript = 'devanagari';
+    const view = await render(<ChatHistoryScreen />);
+    const span = view.getAllByTestId('saved-transcript-devanagari')[0]!;
+    expect(span).toHaveStyle({ fontFamily: 'Tiro Devanagari Hindi', fontSize: 16 });
+    const lines = view.getAllByTestId('saved-transcript-line');
+    expect(lines.filter((line) => (StyleSheet.flatten(line.props.style) as { lineHeight?: number }).lineHeight === 23)).toHaveLength(1);
+    expect(lines.filter((line) => (StyleSheet.flatten(line.props.style) as { lineHeight?: number }).lineHeight === Math.ceil(16 * 1.6))).toHaveLength(1);
   });
 
   it('follows the Hindi-script setting like the live chat', async () => {

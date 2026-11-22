@@ -9,6 +9,7 @@ let mockSessions: AshaSessionRecord[] = [];
 let mockOutboxEntries: OutboxEntry[] = [];
 let mockFloatingStatus: 'disconnected' | 'connecting' | 'ready' = 'disconnected';
 let mockFloatingAvailable = true;
+let mockScript: 'both' | 'devanagari' | 'latin' = 'latin';
 const mockClearChatHistory = jest.fn(async () => true);
 const mockClearSessionContent = jest.fn(async () => undefined);
 const mockDeleteAllChats = jest.fn(async () => undefined);
@@ -39,7 +40,7 @@ jest.mock('@/lib/sync-outbox', () => ({
   },
   useSyncOutbox: () => mockOutboxEntries,
 }));
-jest.mock('@/state/app-state', () => ({ useAppState: () => ({ clearChatHistory: mockClearChatHistory, learnerProfile: { scriptPreference: 'latin' } }) }));
+jest.mock('@/state/app-state', () => ({ useAppState: () => ({ clearChatHistory: mockClearChatHistory, learnerProfile: { scriptPreference: mockScript } }) }));
 jest.mock('@/state/asha-voice-session', () => ({
   useAshaVoiceSession: () => ({ available: mockFloatingAvailable, status: mockFloatingStatus }),
 }));
@@ -85,6 +86,7 @@ function alertAction(title: string, label: string) {
 
 describe('Last session screen', () => {
   beforeEach(() => {
+    mockScript = 'latin';
     jest.clearAllMocks();
     mockSessions = [];
     mockOutboxEntries = [];
@@ -130,6 +132,16 @@ describe('Last session screen', () => {
     expect(view.queryByLabelText('You: Yesterday')).toBeNull();
     expect(view.queryByTestId('last-session-empty')).toBeNull();
     expect(view.getByText(/Saved on this device only/u)).toBeTruthy();
+  });
+
+  it('keeps the "Saved phrases:" label in the regular font and sets only the Hindi in the Hindi face', async () => {
+    mockScript = 'devanagari';
+    mockSessions = [session];
+    const view = await render(<LastSessionScreen />);
+    const line = view.getByTestId('last-session-saved-phrases');
+    expect(line).not.toHaveStyle({ fontFamily: 'Tiro Devanagari Hindi' });
+    expect(line).toHaveTextContent('Saved phrases: नमस्ते');
+    expect(view.getAllByTestId('saved-transcript-devanagari').some((span) => span.props.children === 'नमस्ते')).toBe(true);
   });
 
   it('labels an interrupted session with why it stopped, and an active one as in progress', async () => {
