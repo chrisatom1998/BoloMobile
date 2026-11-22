@@ -1,6 +1,7 @@
 import { creatorLessons } from './creator-lessons';
 import type { Beat, BeatMode, Choice, Scene, SceneCategory } from './scenes';
 import { buildLessonFeedback, englishMeaningsOverlap } from './lesson-feedback';
+import { getLessonPilot } from './lesson-pilot';
 import { trimTerminalPunctuation } from '../lib/text';
 
 type LessonSeed = {
@@ -118,6 +119,7 @@ function distinctMeanings(phrases: readonly LessonSeed[]) {
 function guidedPracticeTurns(plan: LessonPlanSeed, lessonIndex: number): GuidedPracticeBeat[] {
   const phraseCount = plan.lessons.length;
   const taughtCount = lessonIndex + 1;
+  const pilot = getLessonPilot(lessonId(plan.id, lessonIndex));
   return plan.lessons.map((_, turnIndex) => {
     const activity = practiceActivities[(4 * lessonIndex + turnIndex) % practiceActivities.length]!;
     const targetsTitledPhrase = turnIndex === 0
@@ -131,12 +133,13 @@ function guidedPracticeTurns(plan: LessonPlanSeed, lessonIndex: number): GuidedP
       .map(([a, b]) => [plan.lessons[(targetIndex + a) % phraseCount]!, plan.lessons[(targetIndex + b) % phraseCount]!] as const)
       .find((pair) => distinctMeanings([target, ...pair]))
       ?? [plan.lessons[(targetIndex + 3) % phraseCount]!, plan.lessons[(targetIndex + 7) % phraseCount]!] as const;
-    return {
-      target,
-      distractors: [first, second] as const,
-      mode: activity.mode,
-      ...activity.build({ plan, target }),
-    };
+    const distractors = [first, second] as const;
+    // Lesson 1 has its own hand-written opening exchange; only lessons with a model phrase end on the fresh-situation recall.
+    if (pilot?.model && turnIndex === phraseCount - 1) {
+      return { target, distractors, mode: 'recallReveal', prompt: pilot.recallPrompt, tip: '' };
+    }
+    const instructions = activity.build({ plan, target });
+    return { target, distractors, mode: activity.mode, ...instructions };
   });
 }
 

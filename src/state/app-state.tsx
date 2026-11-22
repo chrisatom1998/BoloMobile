@@ -75,6 +75,7 @@ type AppActions = {
    * changes), or 'failed' if the write failed and was rolled back.
    */
   togglePhrase: (phrase: SavedPhrase) => Promise<TogglePhraseResult>;
+  scheduleLessonReview: (phrases: readonly SavedPhrase[]) => Promise<'scheduled' | 'full' | 'failed'>;
   removePhrase: (hi: string) => void;
   checkpointScene: (sceneId: string, nextBeatIndex: number, attempt?: SceneAttempt) => void;
   markSceneComplete: (sceneId: string, seconds: number, result?: SceneCompletion) => void;
@@ -399,6 +400,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return exists ? 'removed' : 'saved';
   }, [commit]);
 
+  const scheduleLessonReview = useCallback(async (targets: readonly SavedPhrase[]) => {
+    const uniqueTargets = [...new Map(targets.map((phrase) => [phrase.hi, phrase])).values()];
+    const current = stateRef.current;
+    const additions = uniqueTargets.filter((phrase) => !current.phrases.some((saved) => saved.hi === phrase.hi));
+    if (current.phrases.length + additions.length > MAX_SAVED_PHRASES) return 'full';
+    const tomorrow = nextDate(dateKey());
+    const stored = await commit((previous) => {
+      const phraseReviews = { ...previous.phraseReviews };
+      for (const { hi } of uniqueTargets) {
+        const review = phraseReviews[hi] ?? defaultPhraseReview(tomorrow);
+        phraseReviews[hi] = review.dueAt > tomorrow ? { ...review, dueAt: tomorrow } : review;
+      }
+      return { ...previous, phrases: [...previous.phrases, ...additions], phraseReviews };
+    }, ['phrases', 'phraseReviews']);
+    return stored ? 'scheduled' : 'failed';
+  }, [commit]);
+
   const removePhrase = useCallback((hi: string) => {
     commit((current) => {
       const phraseReviews = { ...current.phraseReviews };
@@ -663,6 +681,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     completeOnboarding,
     updateLearnerProfile,
     togglePhrase,
+    scheduleLessonReview,
     removePhrase,
     checkpointScene,
     markSceneComplete,
@@ -677,7 +696,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setMotionPreference,
     restoreProgress,
     clearAllData,
-  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, restoreProgress, clearAllData]);
+  }), [setGoal, completeOnboarding, updateLearnerProfile, togglePhrase, scheduleLessonReview, removePhrase, checkpointScene, markSceneComplete, reviewPhrase, markLiveTurn, addPracticeSeconds, appendChatMessages, replaceLiveChatSnapshot, clearChatHistory, setAiConsent, setReminder, setMotionPreference, restoreProgress, clearAllData]);
 
   const value = useMemo<AppStateSlices>(() => ({
     ...state,

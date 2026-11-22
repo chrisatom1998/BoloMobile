@@ -4,6 +4,7 @@ jest.mock('../src/data/creator-lessons', () => ({ creatorLessons: [] }));
 import { sceneCategories, scenes } from '../src/data/scenes';
 import { offlineHindiAudio } from '../src/data/offline-hindi-audio';
 import { lessonPlans } from '../src/data/lesson-plans';
+import { getLessonPilot } from '../src/data/lesson-pilot';
 
 describe('Bolo scenario catalog', () => {
   it('contains the complete, categorized lesson catalog', () => {
@@ -66,8 +67,15 @@ describe('Bolo scenario catalog', () => {
       for (const [turnIndex, beat] of scene.beats.entries()) {
         if (scene.id === 'plan-essentials-01') continue;
         const activity = activities[(4 * lessonIndex + turnIndex) % activities.length]!;
-        expect(beat.prompt).toContain(activity.marker);
-        expect(beat.mode ?? 'choice').toBe(activity.mode);
+        const pilot = getLessonPilot(scene.id);
+        if (pilot && turnIndex === scene.beats.length - 1) {
+          expect(beat.prompt).toBe(pilot.recallPrompt);
+          expect(beat.mode).toBe('recallReveal');
+        } else {
+          const marker = scene.id === 'plan-essentials-01' && turnIndex === 0 ? 'Choose the greeting' : activity.marker;
+          expect(beat.prompt).toContain(marker);
+          expect(beat.mode ?? 'choice').toBe(activity.mode);
+        }
         // Prompts never promise a microphone check or spell out the romanized answer.
         expect(beat.prompt).not.toMatch(/Whisper it|Set the tone/u);
       }
@@ -136,5 +144,14 @@ describe('Bolo scenario catalog', () => {
       expect(offlineHindiAudio[line]).toBeDefined();
     }
     expect(Object.keys(offlineHindiAudio).sort()).toEqual([...new Set(spokenLines)].sort());
+    for (const scene of scenes) {
+      const pilot = getLessonPilot(scene.id);
+      if (!pilot) continue;
+      const model = pilot.model ?? scene.beats[0]?.choices.find((choice) => choice.correct);
+      expect(offlineHindiAudio[model!.hi]).toBeDefined();
+      for (const turn of pilot.roleplay.turns) {
+        expect(offlineHindiAudio[turn.hi]).toBeDefined();
+      }
+    }
   });
 });
