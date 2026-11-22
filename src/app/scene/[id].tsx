@@ -82,6 +82,7 @@ function SceneScreen() {
   // Missed phrases can be queued for tomorrow's Review straight from the finish screen.
   const [tomorrowReview, setTomorrowReview] = useState<Record<string, 'saving' | 'scheduled' | 'full' | 'failed'>>({});
   const [roleplayOpen, setRoleplayOpen] = useState(false);
+  const [goalSeen, setGoalSeen] = useState(false);
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
     const plan = lessonPlans.find((candidate) => candidate.lessonIds.includes(scene.id));
@@ -194,12 +195,15 @@ function SceneScreen() {
   const pilotPanels = Boolean(pilot?.model);
   const pilotIntro = Boolean(pilotPanels && beatIndex === 0);
   const pilotRecall = Boolean(pilot && scene && beatIndex === scene.beats.length - 1);
+  // The goal and its example get a screen of their own, so the example is off screen when the first question asks for it.
+  const goalOpen = pilotIntro && !goalSeen && resolution === null && !review;
 
   // Auto-play is ambient audio, so failures stay silent: the learner can retry with the Hear Asha button.
   // English-first lessons skip it: their above-level Hindi narration plays only when the learner taps Listen.
   // A hear-first turn is the exception: Asha's line there is the short phrase being taught.
   const hearFirst = currentBeat?.hearFirst === true;
   useEffect(() => {
+    if (goalOpen) return;
     if (englishFirstSetup && !hearFirst) return;
     if (!autoPlayKey || npcLine === undefined || situationPromptSpeech === undefined) return;
     if (resolution !== null) return;
@@ -210,7 +214,7 @@ function SceneScreen() {
     // consent or pronunciation activity still speaks when the effect re-runs.
     autoPlayedBeatRef.current = autoPlayKey;
     void speakText(hearFirst ? npcLine : situationPromptSpeech).catch(() => {});
-  }, [aiConsent, autoPlayKey, englishFirstSetup, hearFirst, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
+  }, [aiConsent, autoPlayKey, englishFirstSetup, goalOpen, hearFirst, npcLine, pronunciationBusy, resolution, situationPromptSpeech]);
 
   if (!scene || !currentBeat || !currentTarget) {
     return (
@@ -550,7 +554,6 @@ function SceneScreen() {
         ) : null}
       </View>
     );
-    const missedTargets = pilot ? missedPhrases.map(({ hi, latin, en }) => ({ hi, latin, en })) : [];
     return (
       <ScrollView key="scene-completion" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, Platform.OS === 'android' && { paddingBottom: spacing.xxl + insets.bottom }]} style={sharedStyles.screen} testID="scene-completion-scroll">
         <Stack.Screen options={{ headerShown: true, title: activeScene.title }} />
@@ -593,7 +596,6 @@ function SceneScreen() {
               <ScrollView contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-roleplay-sheet">
                 <LessonPilotRecap
                   lessonTitle={activeScene.title}
-                  missed={missedTargets}
                   onPlay={play}
                   onRecordingChange={setPronunciationBusy}
                   onStopAudio={() => { void stopSpeaking(); clearAudioError(); }}
@@ -701,6 +703,24 @@ function SceneScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+    );
+  }
+
+  if (goalOpen && pilot && target) {
+    return (
+      <ScrollView key="scene-goal" contentInsetAdjustmentBehavior="automatic" contentContainerStyle={[styles.finish, { paddingTop: insets.top + spacing.xl }]} style={sharedStyles.screen} testID="scene-goal">
+        <Stack.Screen options={{ headerShown: false, title: activeScene.title }} />
+        <Text accessibilityRole="header" style={styles.sceneTitle}>{activeScene.title}</Text>
+        {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
+        <LessonPilotModel pilot={pilot} target={target} script={scriptPreference} onPlay={play} name={practiceName.trim()} />
+        <Pressable accessibilityRole="button" onPress={() => { hapticSelect(); void stopSpeaking(); setGoalSeen(true); }} style={sharedStyles.primaryButton} testID="scene-goal-start">
+          <Text style={sharedStyles.primaryButtonText}>Start</Text>
+          <ChevronRight color={colors.white} size={18} />
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={closeLesson} style={styles.tertiaryButton} testID="scene-goal-close">
+          <Text style={styles.tertiaryText}>Not now</Text>
+        </Pressable>
+      </ScrollView>
     );
   }
 
@@ -814,9 +834,6 @@ function SceneScreen() {
       ) : null}
       {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
 
-      {pilot && pilotIntro && resolution === null ? (
-        <LessonPilotModel pilot={pilot} target={target} script={scriptPreference} onPlay={play} name={practiceName.trim()} />
-      ) : null}
       <View style={[styles.ashaRow, largeTextLayout && styles.ashaRowLarge]} testID="scene-asha-row">
         <Image accessible={false} cachePolicy="memory-disk" contentFit="cover" source={ashaPortrait} style={styles.asha} transition={0} />
         <View style={[styles.bubble, largeTextLayout && styles.bubbleLarge]} testID="scene-asha-bubble">

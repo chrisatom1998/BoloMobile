@@ -47,7 +47,6 @@ export function LessonPilotModel({ pilot, target, script, onPlay, name }: Practi
   // A typed name has no bundled recording. Keep the name on screen and play the bundled example instead.
   const playable = aiConsent || hasOfflineSpeech(model.hi);
   const audio = playable ? model.hi : pilot.modelAudioFallback ?? model.hi;
-  const usesSampleAudio = !playable && audio !== model.hi;
   const noAudio = !aiConsent && !hasOfflineSpeech(audio);
   return (
     <View style={styles.panel} testID="lesson-pilot-model">
@@ -55,27 +54,24 @@ export function LessonPilotModel({ pilot, target, script, onPlay, name }: Practi
       <PhraseText phrase={model} script={script} />
       {pilot.model && !name ? <Text style={styles.body}>Use your own name when you practice.</Text> : null}
       <Listen label="Hear the example" phrase={audio} onPlay={onPlay} disabled={noAudio} />
-      {usesSampleAudio ? <Text style={styles.body}>The recording uses a sample name.</Text> : null}
     </View>
   );
 }
 
 export function LessonPilotRecap({
-  pilot, target, script, onPlay, onStopAudio, onRecordingChange, recording, lessonTitle, missed, startInRoleplay = false,
+  pilot, target, script, onPlay, onStopAudio, onRecordingChange, recording, lessonTitle, startInRoleplay = false,
 }: PracticeProps & {
   startInRoleplay?: boolean;
   onStopAudio: () => void;
   onRecordingChange: (active: boolean) => void;
   recording: boolean;
   lessonTitle: string;
-  missed: SavedPhrase[];
 }) {
   const styles = useStyles();
-  const { aiConsent, scheduleLessonReview } = useAppState();
+  const { aiConsent } = useAppState();
   const [practice, setPractice] = useState<'roleplay' | null>(startInRoleplay ? 'roleplay' : null);
   const [turnIndex, setTurnIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
-  const [schedule, setSchedule] = useState<'idle' | 'saving' | 'scheduled' | 'full' | 'failed'>('idle');
   const turn = pilot.roleplay.turns[turnIndex];
   const answer = turn?.answer === 'lesson' ? target : turn?.answer;
 
@@ -97,16 +93,6 @@ export function LessonPilotRecap({
     if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(lessonHindiLabel(phrase.hi, script, phrase.latin));
   }
 
-  async function scheduleReview() {
-    if (schedule === 'saving' || schedule === 'scheduled') return;
-    setSchedule('saving');
-    try {
-      setSchedule(await scheduleLessonReview([target, ...missed]));
-    } catch {
-      setSchedule('failed');
-    }
-  }
-
   return (
     <View style={styles.panel} testID="lesson-pilot-recap">
       <Text accessibilityRole="header" style={styles.title}>{pilot.takeaway}</Text>
@@ -115,15 +101,6 @@ export function LessonPilotRecap({
           <Pressable accessibilityRole="button" onPress={() => start('roleplay')} style={buttons.secondary}>
             <Text style={buttons.secondaryText}>Roleplay with Asha</Text>
           </Pressable>
-          {schedule === 'scheduled' ? (
-            <Text accessibilityLiveRegion="polite" style={styles.body}>Saved in Review for tomorrow or sooner.</Text>
-          ) : (
-            <Pressable accessibilityRole="button" accessibilityState={{ disabled: schedule === 'saving' }} disabled={schedule === 'saving'} onPress={scheduleReview} style={buttons.quiet}>
-              <Text style={buttons.quietText}>{schedule === 'saving' ? 'Saving…' : 'Add to tomorrow’s review'}</Text>
-            </Pressable>
-          )}
-          {schedule === 'full' ? <Text accessibilityRole="alert" style={styles.body}>Your phrasebook is full. Remove a phrase to make room, then try again.</Text> : null}
-          {schedule === 'failed' ? <Text accessibilityRole="alert" style={styles.body}>Couldn’t save this review. Try again.</Text> : null}
         </>
       ) : null}
       {practice === 'roleplay' ? (

@@ -891,9 +891,8 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Finish roleplay' }));
     expect(view.getByText('Conversation complete.')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Back to lesson summary' }));
-    await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
-    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: expect.any(String) })]));
-    expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
+    // The per-phrase Review this tomorrow button is the only review action, so the sheet has no second one.
+    expect(view.queryByRole('button', { name: 'Add to tomorrow’s review' })).toBeNull();
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -910,7 +909,11 @@ describe('SceneScreen primary journey', () => {
     await named.rerender(<SceneScreen />);
     await fireEvent.press(named.getByRole('button', { name: 'Hear the example' }));
     expect(speakTextMock).toHaveBeenLastCalledWith('मेरा नाम क्रिस है।');
-    expect(named.getByText('The recording uses a sample name.')).toBeTruthy();
+    // The goal has a screen of its own: Asha and the answers wait behind Start, so the example cannot be copied.
+    expect(named.queryByTestId('scene-asha-row')).toBeNull();
+    await fireEvent.press(named.getByTestId('scene-goal-start'));
+    expect(named.getByTestId('scene-asha-row')).toBeTruthy();
+    expect(named.queryByTestId('lesson-pilot-model')).toBeNull();
     await named.unmount();
 
     // The last turn asks for the phrase in a fresh situation, with Asha's portrait and Listen still there.
@@ -1187,8 +1190,12 @@ describe('lesson audit regressions', () => {
     await fireEvent.press(view.getByTestId('scene-name-continue'));
     expect(mockAppState.updateLearnerProfile).toHaveBeenCalledWith({ displayName: 'Chris' });
     expect(view.queryByTestId('scene-name-step')).toBeNull();
-    expect(view.getByText('Practicing as Chris')).toBeTruthy();
+    // The goal screen comes next, on its own, and Start brings in the first turn.
     expect(view.getByText('Introduce yourself by name in Hindi.')).toBeTruthy();
+    expect(view.queryByTestId('scene-word-order')).toBeNull();
+    await fireEvent.press(view.getByTestId('scene-goal-start'));
+    expect(view.getByText('Practicing as Chris')).toBeTruthy();
+    expect(view.queryByText('Introduce yourself by name in Hindi.')).toBeNull();
     for (const index of [0, 1, 2, 3]) await fireEvent.press(view.getByTestId(`scene-word-order-tile-${index}`));
     await fireEvent.press(view.getByTestId('scene-word-order-check'));
     await fireEvent.press(view.getByLabelText('Save phrase'));
@@ -1200,6 +1207,7 @@ describe('lesson audit regressions', () => {
     mockAppState.learnerProfile = { ...mockAppState.learnerProfile, displayName: 'Asha' };
     const view = await render(<SceneScreen />);
     expect(view.queryByTestId('scene-name-step')).toBeNull();
+    await fireEvent.press(view.getByTestId('scene-goal-start'));
     expect(view.getByTestId('scene-word-order-tile-0').props.accessibilityState.disabled).toBe(false);
     await fireEvent.press(view.getByTestId('scene-change-name'));
     expect(view.getByTestId('scene-practice-name').props.value).toBe('Asha');
@@ -1235,6 +1243,7 @@ describe('lesson audit regressions', () => {
     mockSceneId = 'plan-essentials-02';
     mockAppState.learnerProfile = { ...mockAppState.learnerProfile, displayName: 'Asha' };
     const view = await render(<SceneScreen />);
+    await fireEvent.press(view.getByTestId('scene-goal-start'));
     const change = view.getByTestId('scene-change-name');
     expect(tapTargetHeight(change, view.getByText('Change'))).toBeGreaterThanOrEqual(44);
     expect(StyleSheet.flatten(change.props.style)?.minHeight).toBeUndefined();
