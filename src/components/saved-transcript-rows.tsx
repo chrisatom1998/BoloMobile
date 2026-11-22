@@ -1,27 +1,28 @@
 import { Text, View } from 'react-native';
 
-import { hindiType, makeStyles, radius, spacing, type } from '@/theme';
+import { displayHindiTranscript } from '@/lib/learner-phrase-display';
+import { makeStyles, radius, spacing, type } from '@/theme';
 
 export type SavedTranscriptRow = { id: string; speaker: 'you' | 'asha'; text: string };
 
-const hasDevanagari = (text: string) => /[ऀ-ॿ]/u.test(text);
+/** Romanized Hindi for saved chats; English and Latin spellings pass through unchanged. */
+export const savedTranscriptText = (text: string) => displayHindiTranscript(text, false);
 
-/** Read-only chat bubbles for a saved conversation: Last session and Chat history. */
+/** Read-only chat bubbles for a saved conversation: Last session and Chat history. Hindi is always romanized. */
 export function SavedTranscriptRows({ rows }: { rows: readonly SavedTranscriptRow[] }) {
   const styles = useStyles();
   return rows.map((row) => {
     const isYou = row.speaker === 'you';
-    const hindi = hasDevanagari(row.text);
+    const text = savedTranscriptText(row.text);
     return (
       <View
-        accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${row.text}`}
-        accessibilityLanguage={hindi ? 'hi-IN' : undefined}
+        accessibilityLabel={`${isYou ? 'You' : 'Asha'}: ${text}`}
         accessible
         key={row.id}
         style={[styles.row, isYou ? styles.rowYou : styles.rowAsha]}
       >
         <Text style={[styles.speaker, isYou && styles.speakerYou]}>{isYou ? 'You' : 'Asha'}</Text>
-        <Text style={[styles.rowText, isYou && styles.rowTextYou, hindi && styles.rowTextHindi]}>{row.text}</Text>
+        <Text style={[styles.rowText, isYou && styles.rowTextYou]}>{text}</Text>
       </View>
     );
   });
@@ -35,5 +36,4 @@ const useStyles = makeStyles((c) => ({
   speakerYou: { color: c.gold },
   rowText: { ...type.body, color: c.ink },
   rowTextYou: { color: c.white },
-  rowTextHindi: { ...hindiType(17) },
 }));

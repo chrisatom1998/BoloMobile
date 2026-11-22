@@ -124,9 +124,9 @@ describe('Last session screen', () => {
     const transcript = view.getByTestId('last-session-transcript');
     expect(transcript.props.accessibilityLabel).toBe('Transcript, 2 lines, read only');
     expect(view.getByLabelText('You: Namaste')).toBeTruthy();
-    const reply = view.getByLabelText('Asha: नमस्ते! आप कैसे हैं?');
-    expect(reply.props.accessibilityLanguage).toBe('hi-IN');
-    expect(view.getByText('Saved phrases: नमस्ते')).toBeTruthy();
+    expect(view.getByLabelText(/^Asha: Namaste! /u)).toBeTruthy();
+    expect(view.queryByText(/[ऀ-ॿ]/u)).toBeNull();
+    expect(view.getByText(/^Saved phrases: Namaste$/iu)).toBeTruthy();
     expect(view.queryByLabelText('You: Yesterday')).toBeNull();
     expect(view.queryByTestId('last-session-empty')).toBeNull();
     expect(view.getByText(/Saved on this device only/u)).toBeTruthy();

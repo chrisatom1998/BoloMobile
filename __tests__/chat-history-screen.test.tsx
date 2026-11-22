@@ -88,6 +88,7 @@ describe('Chat history screen', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]?.props.accessibilityLabel).toMatch(/^Voice call: Main theek hoon\. .+ · 2 messages$/u);
     expect(rows[1]?.props.accessibilityLabel).toMatch(/^Typed chat: How do I say thank you\?\. .+ · 2 messages$/u);
+    expect(view.queryByText(/[ऀ-ॿ]/u)).toBeNull();
     expect(view.getByText('Say dhanyavaad.')).toBeTruthy();
     expect(view.queryByTestId('chat-history-current')).toBeNull();
 
@@ -111,12 +112,13 @@ describe('Chat history screen', () => {
     expect(mockRouter.push).toHaveBeenCalledWith('/last-session');
   });
 
-  it('shows a past chat read-only, with Hindi lines marked as Hindi', async () => {
+  it('shows a past chat read-only, with Hindi romanized', async () => {
     mockParams = { chatId: voiceChat.id };
     const view = await render(<ChatHistoryScreen />);
     expect(view.getByTestId('chat-history-summary').props.accessibilityLabel).toMatch(/^Voice call, .+, 2 messages$/u);
     expect(view.getByTestId('chat-history-transcript').props.accessibilityLabel).toBe('Transcript, 2 lines, read only');
-    expect(view.getByLabelText('Asha: नमस्ते! आप कैसे हैं?').props.accessibilityLanguage).toBe('hi-IN');
+    expect(view.getByLabelText(/^Asha: Namaste! /u)).toBeTruthy();
+    expect(view.queryByText(/[ऀ-ॿ]/u)).toBeNull();
     expect(view.getByLabelText('You: Main theek hoon')).toBeTruthy();
   });
 

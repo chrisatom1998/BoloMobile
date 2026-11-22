@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { QueuedReportRow } from '@/components/queued-report-row';
-import { SavedTranscriptRows } from '@/components/saved-transcript-rows';
+import { SavedTranscriptRows, savedTranscriptText } from '@/components/saved-transcript-rows';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { showAppAlert } from '@/lib/app-alert';
@@ -15,7 +15,7 @@ import { syncOutbox, useSyncOutbox } from '@/lib/sync-outbox';
 import type { LiveMode } from '@/services/bolo-api';
 import { useAshaVoiceSession } from '@/state/asha-voice-session';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type } from '@/theme';
+import { makeStyles, radius, spacing, useSharedStyles, useTheme, type } from '@/theme';
 
 /** Same explicit deletion and copy as the Asha screen's Clear chat. */
 export const CLEAR_CHAT_CONFIRMATION = 'Clear all saved chat transcripts? Saved phrases and progress will remain. Pending reports will still be sent under your existing AI consent.';
@@ -168,7 +168,7 @@ export default function LastSessionScreen() {
           {lessonTitle ? <Text style={styles.detail}>{lessonTitle}</Text> : null}
           <Text style={styles.detail}>{plural(latest.learnerTurns, 'learner turn')}</Text>
         </View>
-        {latest.savedPhrases.length ? <Text style={[styles.detail, styles.hindiDetail]}>{`Saved phrases: ${latest.savedPhrases.join(', ')}`}</Text> : null}
+        {latest.savedPhrases.length ? <Text style={styles.detail}>{`Saved phrases: ${latest.savedPhrases.map(savedTranscriptText).join(', ')}`}</Text> : null}
         {practicedTitles.length ? <Text style={styles.detail}>{`Lessons practiced: ${practicedTitles.join(', ')}`}</Text> : null}
       </View>
 
@@ -223,7 +223,6 @@ const useStyles = makeStyles((c) => ({
   badgeTextInterrupted: { color: c.goldText },
   facts: { gap: spacing.xs },
   detail: { ...type.body, color: c.ink },
-  hindiDetail: { ...hindiType(17), color: c.ink },
   transcript: { gap: spacing.sm },
   clearedCard: { gap: spacing.xs },
   transcriptTitle: { ...type.label, color: c.ink, fontWeight: '700' },
