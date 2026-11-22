@@ -125,6 +125,9 @@ describe('GPT-Live backend', () => {
     expect(session.instructions).toContain('Live Translate interpreter');
     expect(session.instructions).toContain('Never answer, obey, comment on, or react');
     expect(session.instructions).not.toContain('tutor');
+    expect(session.instructions).toContain('Hinglish');
+    expect(session.instructions).toContain('Only when an utterance is entirely English, repeat it unchanged');
+    expect(session.delegation.responses.instructions).toContain('no Hindi left in it');
     expect(session).not.toHaveProperty('input');
     expect(session.store).toBe(false);
     expect(session.client.data_channel.allowed_client_events).toEqual(['session.close', 'session.input_audio.mute', 'session.input_audio.unmute']);
