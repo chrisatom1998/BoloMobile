@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
 import { QueuedReportRow } from '@/components/queued-report-row';
-import { SavedTranscriptRows } from '@/components/saved-transcript-rows';
+import { SavedTranscriptRows, savedTranscriptText, useSavedTranscriptScript } from '@/components/saved-transcript-rows';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { getScene } from '@/data/scenes';
 import { showAppAlert } from '@/lib/app-alert';
@@ -64,6 +64,7 @@ export default function LastSessionScreen() {
   const sharedStyles = useSharedStyles();
   const { colors } = useTheme();
   const { clearChatHistory } = useAppState();
+  const script = useSavedTranscriptScript();
   const floatingAsha = useAshaVoiceSession();
   const sessions = useAshaSessionLog();
   const latest = latestAshaSession(sessions);
@@ -168,7 +169,7 @@ export default function LastSessionScreen() {
           {lessonTitle ? <Text style={styles.detail}>{lessonTitle}</Text> : null}
           <Text style={styles.detail}>{plural(latest.learnerTurns, 'learner turn')}</Text>
         </View>
-        {latest.savedPhrases.length ? <Text style={[styles.detail, styles.hindiDetail]}>{`Saved phrases: ${latest.savedPhrases.join(', ')}`}</Text> : null}
+        {latest.savedPhrases.length ? <Text style={[styles.detail, script !== 'latin' && styles.hindiDetail]}>{`Saved phrases: ${latest.savedPhrases.map((phrase) => savedTranscriptText(phrase, script)).join(', ')}`}</Text> : null}
         {practicedTitles.length ? <Text style={styles.detail}>{`Lessons practiced: ${practicedTitles.join(', ')}`}</Text> : null}
       </View>
 

@@ -3,7 +3,7 @@ import { ChevronRight, MessageCircle, Mic, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
-import { SavedTranscriptRows } from '@/components/saved-transcript-rows';
+import { SavedTranscriptRows, savedTranscriptText, useSavedTranscriptScript } from '@/components/saved-transcript-rows';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { MAX_ASHA_CHATS, ashaChatHasVoice, ashaChatPreview, ashaChatTitle, type AshaChatRecord } from '@/lib/asha-chat-archive';
@@ -33,6 +33,7 @@ export default function ChatHistoryScreen() {
 }
 
 function ChatList() {
+  const script = useSavedTranscriptScript();
   const router = useRouter();
   const styles = useStyles();
   const sharedStyles = useSharedStyles();
@@ -56,7 +57,7 @@ function ChatList() {
         >
           <View style={styles.rowCopy}>
             <Text style={sharedStyles.eyebrow}>Current chat</Text>
-            <Text numberOfLines={2} style={styles.rowTitle}>{chatHistory.find((message) => message.role === 'you')?.text ?? chatHistory[0]?.text}</Text>
+            <Text numberOfLines={2} style={styles.rowTitle}>{savedTranscriptText(chatHistory.find((message) => message.role === 'you')?.text ?? chatHistory[0]?.text ?? '', script)}</Text>
             <Text style={styles.rowMeta}>{plural(chatHistory.length, 'message')}</Text>
           </View>
           <ChevronRight color={colors.muted} size={20} />
@@ -73,7 +74,7 @@ function ChatList() {
         <View accessibilityLabel={plural(chats.length, 'past chat')} style={styles.list} testID="chat-history-list">
           <Text accessibilityRole="header" style={styles.sectionTitle}>Past chats</Text>
           {chats.map((chat) => {
-            const title = ashaChatTitle(chat);
+            const title = savedTranscriptText(ashaChatTitle(chat), script);
             const preview = ashaChatPreview(chat);
             const voice = ashaChatHasVoice(chat);
             const meta = `${describeChatDate(chat)} · ${plural(chat.messages.length, 'message')}`;
@@ -93,7 +94,7 @@ function ChatList() {
                 </View>
                 <View style={styles.rowCopy}>
                   <Text numberOfLines={2} style={styles.rowTitle}>{title}</Text>
-                  {preview ? <Text numberOfLines={1} style={styles.rowPreview}>{preview}</Text> : null}
+                  {preview ? <Text numberOfLines={1} style={styles.rowPreview}>{savedTranscriptText(preview, script)}</Text> : null}
                   <Text style={styles.rowMeta}>{meta}</Text>
                 </View>
                 <ChevronRight color={colors.muted} size={20} />
