@@ -8,6 +8,7 @@ let mockParams: { chatId?: string } = {};
 let mockChats: AshaChatRecord[] = [];
 let mockChatHistory: ChatMessage[] = [];
 let mockAiConsent = true;
+let mockScript: 'both' | 'devanagari' | 'latin' = 'latin';
 let mockFloatingStatus: 'disconnected' | 'ready' = 'disconnected';
 const mockClearChatHistory = jest.fn(async () => true);
 const mockAppendChatMessages = jest.fn(async (_messages: unknown) => true);
@@ -39,6 +40,7 @@ jest.mock('@/state/app-state', () => ({
     appendChatMessages: (messages: unknown) => mockAppendChatMessages(messages),
     chatHistory: mockChatHistory,
     clearChatHistory: mockClearChatHistory,
+    learnerProfile: { scriptPreference: mockScript },
   }),
 }));
 jest.mock('@/state/asha-voice-session', () => ({
@@ -65,6 +67,7 @@ function alertAction(text: string) {
 
 describe('Chat history screen', () => {
   beforeEach(() => {
+    mockScript = 'latin';
     jest.clearAllMocks();
     mockParams = {};
     mockChats = [voiceChat, typedChat];
@@ -112,14 +115,32 @@ describe('Chat history screen', () => {
     expect(mockRouter.push).toHaveBeenCalledWith('/last-session');
   });
 
-  it('shows a past chat read-only, with Hindi romanized', async () => {
+  it('shows a past chat read-only; with the Latin setting, Hindi is romanized, set apart, and tagged as Hindi', async () => {
     mockParams = { chatId: voiceChat.id };
     const view = await render(<ChatHistoryScreen />);
     expect(view.getByTestId('chat-history-summary').props.accessibilityLabel).toMatch(/^Voice call, .+, 2 messages$/u);
     expect(view.getByTestId('chat-history-transcript').props.accessibilityLabel).toBe('Transcript, 2 lines, read only');
-    expect(view.getByLabelText(/^Asha: Namaste! /u)).toBeTruthy();
+    const reply = view.getByLabelText(/^Asha: Namaste! /u);
+    expect(reply.props.accessibilityLanguage).toBe('hi-IN');
     expect(view.queryByText(/[ऀ-ॿ]/u)).toBeNull();
+    expect(view.getAllByTestId('saved-transcript-romanized')[0]).toHaveStyle({ fontStyle: 'italic' });
     expect(view.getByLabelText('You: Main theek hoon')).toBeTruthy();
+  });
+
+  it('follows the Hindi-script setting like the live chat', async () => {
+    mockParams = { chatId: voiceChat.id };
+    mockScript = 'devanagari';
+    const view = await render(<ChatHistoryScreen />);
+    expect(view.getAllByTestId('saved-transcript-devanagari')[0]).toHaveTextContent(/नमस्ते/u);
+    expect(view.queryByTestId('saved-transcript-romanized')).toBeNull();
+  });
+
+  it('follows the both-scripts setting like the live chat', async () => {
+    mockParams = { chatId: voiceChat.id };
+    mockScript = 'both';
+    const view = await render(<ChatHistoryScreen />);
+    expect(view.getAllByTestId('saved-transcript-devanagari').length).toBeGreaterThan(0);
+    expect(view.getAllByTestId('saved-transcript-romanized').length).toBeGreaterThan(0);
   });
 
   it('continues a past chat: saves the open chat, swaps in the old one, and returns to Asha', async () => {

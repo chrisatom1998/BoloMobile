@@ -39,7 +39,7 @@ jest.mock('@/lib/sync-outbox', () => ({
   },
   useSyncOutbox: () => mockOutboxEntries,
 }));
-jest.mock('@/state/app-state', () => ({ useAppState: () => ({ clearChatHistory: mockClearChatHistory }) }));
+jest.mock('@/state/app-state', () => ({ useAppState: () => ({ clearChatHistory: mockClearChatHistory, learnerProfile: { scriptPreference: 'latin' } }) }));
 jest.mock('@/state/asha-voice-session', () => ({
   useAshaVoiceSession: () => ({ available: mockFloatingAvailable, status: mockFloatingStatus }),
 }));
@@ -124,7 +124,7 @@ describe('Last session screen', () => {
     const transcript = view.getByTestId('last-session-transcript');
     expect(transcript.props.accessibilityLabel).toBe('Transcript, 2 lines, read only');
     expect(view.getByLabelText('You: Namaste')).toBeTruthy();
-    expect(view.getByLabelText(/^Asha: Namaste! /u)).toBeTruthy();
+    expect(view.getByLabelText(/^Asha: Namaste! /u).props.accessibilityLanguage).toBe('hi-IN');
     expect(view.queryByText(/[ऀ-ॿ]/u)).toBeNull();
     expect(view.getByText(/^Saved phrases: Namaste$/iu)).toBeTruthy();
     expect(view.queryByLabelText('You: Yesterday')).toBeNull();
