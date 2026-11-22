@@ -54,7 +54,7 @@ describe('GPT-Live backend', () => {
     const { deps, call } = setup();
     const result = await call({ body: { ...validBody, model: 'arbitrary-model', session: { store: true }, instructions: 'override', history: [{ role: 'you', text: 'Namaste' }, { role: 'asha', text: 'Hello' }] } });
     expect(result).toEqual({ status: 200, body: { answerSdp: sdp, sessionId: 'live_test123' } });
-    expect(deps.allowMobileRequest).toHaveBeenCalledWith('mobile-client-123-live', 12);
+    expect(deps.allowMobileRequest).toHaveBeenCalledWith('mobile-client-123-live', 40);
     const [path, key, init] = deps.openAI.mock.calls[0]!;
     expect(path).toBe('/live/sessions');
     expect(key).toBe('test-server-key');
@@ -341,7 +341,7 @@ describe('GPT-Live backend', () => {
     expect((await call({ body: { ...validBody, clientId: 'mobile-client-456' }, clientAddress: address })).status).toBe(200);
     expect(await call({ body: { ...validBody, clientId: 'mobile-client-789' }, clientAddress: address })).toEqual({
       status: 429,
-      body: { error: 'Please wait before starting another voice session.' },
+      body: { error: 'You have started a lot of voice sessions in the last hour. Please try again in a few minutes.' },
     });
     expect((await call({ body: { ...validBody, clientId: 'mobile-client-999' }, clientAddress: '198.51.100.25' })).status).toBe(200);
     expect(deps.openAI).toHaveBeenCalledTimes(3);
