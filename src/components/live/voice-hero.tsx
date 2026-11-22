@@ -122,7 +122,7 @@ export function VoiceHero({
                     <Languages color={colors.gold} size={20} />
                     <View style={styles.translateEntryCopy}>
                       <Text style={styles.translateEntryTitle}>Live Translate</Text>
-                      <Text style={styles.translateEntryBody}>Hear Hindi around you, read it in English</Text>
+                      <Text style={styles.translateEntryBody}>Hear Hindi and Hinglish around you, read it in English</Text>
                     </View>
                     <ChevronRight color={colors.heroSubtle} size={18} />
                   </Pressable>
