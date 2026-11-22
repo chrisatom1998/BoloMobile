@@ -104,6 +104,12 @@ export function romanizeDevanagari(text: string) {
     const character = characters[index];
     if (character === undefined) continue;
 
+    // ए after a vowel inside a word glides with a y: लिए liye, चाहिए chaahiye, गए gaye.
+    if (character === 'ए' && index > 0 && !isWordBoundary(characters[index - 1])) {
+      result += 'ye';
+      continue;
+    }
+
     const independentVowel = INDEPENDENT_VOWELS[character];
     if (independentVowel !== undefined) {
       result += independentVowel;

@@ -34,9 +34,9 @@ describe('legacyTranscriptDisplay', () => {
 
   it('derives exactly one romanization when the model gave none, including loanword vowels such as ऑ', () => {
     const text = 'Try मुझे ऑटो चाहिए at the stand.';
-    expect(legacyTranscriptDisplay(text, { scriptPreference: 'both' }).displayText).toBe('Try मुझे ऑटो चाहिए (mujhe oto chaahie) at the stand.');
+    expect(legacyTranscriptDisplay(text, { scriptPreference: 'both' }).displayText).toBe('Try मुझे ऑटो चाहिए (mujhe oto chaahiye) at the stand.');
     const latin = legacyTranscriptDisplay(text, { scriptPreference: 'latin' }).displayText;
-    expect(latin).toBe('Try mujhe oto chaahie at the stand.');
+    expect(latin).toBe('Try mujhe oto chaahiye at the stand.');
     expect(latin).not.toMatch(DEVANAGARI);
     expect(legacyTranscriptDisplay('ऑटो वाले से पूछो।', { scriptPreference: 'latin' }).displayText).toBe('Oto vaale se poochho.');
     expect(legacyTranscriptDisplay('ऑटो वाले से पूछो।', { scriptPreference: 'devanagari' }).displayText).toBe('ऑटो वाले से पूछो।');

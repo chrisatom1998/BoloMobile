@@ -7,6 +7,13 @@ describe('Devanagari transcript romanization', () => {
     expect(romanizeDevanagari('ज़रूर।')).toBe('Zaroor.');
   });
 
+  it('glides ए after a vowel into "ye", but keeps a word-initial ए as "e"', () => {
+    expect(romanizeDevanagari('चाय के लिए धन्यवाद')).toBe('Chaay ke liye dhanyavaad');
+    expect(romanizeDevanagari('मुझे चाहिए')).toBe('Mujhe chaahiye');
+    expect(romanizeDevanagari('वे गए')).toBe('Ve gaye');
+    expect(romanizeDevanagari('एक')).toBe('Ek');
+  });
+
   it('preserves English and converts Devanagari inside a mixed reply', () => {
     expect(romanizeDevanagari('Say नमस्ते, then smile.')).toBe('Say namaste, then smile.');
   });

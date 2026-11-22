@@ -139,9 +139,9 @@ describe('ChatMessageRow legacy messages', () => {
   it('derives a romanization once, covering ऑ, and keeps the learner bubble in step', async () => {
     const you: ChatMessage = { id: 'you-1', role: 'you', text: 'मुझे ऑटो चाहिए' };
     const both = await renderRow(you, 'both');
-    expect(lineText(both.view.getByLabelText('You: Mujhe oto chaahie'))).toBe('मुझे ऑटो चाहिए (Mujhe oto chaahie)');
+    expect(lineText(both.view.getByLabelText('You: Mujhe oto chaahiye'))).toBe('मुझे ऑटो चाहिए (Mujhe oto chaahiye)');
     const latin = await renderRow(you, 'latin');
-    expect(lineText(latin.view.getByLabelText('You: Mujhe oto chaahie'))).toBe('Mujhe oto chaahie');
+    expect(lineText(latin.view.getByLabelText('You: Mujhe oto chaahiye'))).toBe('Mujhe oto chaahiye');
     expect(rendered(latin.view)).not.toMatch(DEVANAGARI);
   });
 
