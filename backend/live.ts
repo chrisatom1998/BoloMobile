@@ -9,13 +9,16 @@ const MAX_HISTORY_BYTES = 6_000;
 const MAX_CONTEXT_BYTES = 24_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 96 * 1024;
 const MAX_MODEL_RESPONSE_BYTES = 16 * 1024;
-const CLIENT_SESSION_LIMIT = 12;
+// Starts per device per rolling hour, shared by Asha calls and Live Translate. Stopping and
+// starting Live Translate (or locking the phone) opens a new session each time, so 12 ran
+// out during normal use. The daily and per-address caps below still bound cost.
+const CLIENT_SESSION_LIMIT = 40;
 const DEFAULT_LIVE_DAILY_SESSION_CAP = 2_000;
 const DEFAULT_LIVE_IP_SESSION_LIMIT = 480;
 const MAX_LIVE_ADDRESS_BUCKETS = 10_000;
 /** Listens to Hindi spoken nearby and writes English. Not a tutoring call. */
 export const LIVE_TRANSLATE_MODE = 'live-translate';
-const SESSION_LIMIT_MESSAGE = 'Please wait before starting another voice session.';
+const SESSION_LIMIT_MESSAGE = 'You have started a lot of voice sessions in the last hour. Please try again in a few minutes.';
 const CLIENT_ADDRESS_MESSAGE = 'Voice session client address must be one IP address.';
 const ALLOWED_MODES = new Set([
   'hindi-immersion',
