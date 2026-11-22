@@ -3,7 +3,7 @@ import { ChevronRight, MessageCircle, Mic, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 
-import { SavedTranscriptRows, savedTranscriptText, useSavedTranscriptScript } from '@/components/saved-transcript-rows';
+import { SavedHindiText, SavedTranscriptRows, savedAccessibleText, useSavedTranscriptScript } from '@/components/saved-transcript-rows';
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import { showAppAlert } from '@/lib/app-alert';
 import { MAX_ASHA_CHATS, ashaChatHasVoice, ashaChatPreview, ashaChatTitle, type AshaChatRecord } from '@/lib/asha-chat-archive';
@@ -57,7 +57,7 @@ function ChatList() {
         >
           <View style={styles.rowCopy}>
             <Text style={sharedStyles.eyebrow}>Current chat</Text>
-            <Text numberOfLines={2} style={styles.rowTitle}>{savedTranscriptText(chatHistory.find((message) => message.role === 'you')?.text ?? chatHistory[0]?.text ?? '', script)}</Text>
+            <SavedHindiText numberOfLines={2} script={script} style={styles.rowTitle} text={chatHistory.find((message) => message.role === 'you')?.text ?? chatHistory[0]?.text ?? ''} />
             <Text style={styles.rowMeta}>{plural(chatHistory.length, 'message')}</Text>
           </View>
           <ChevronRight color={colors.muted} size={20} />
@@ -74,7 +74,7 @@ function ChatList() {
         <View accessibilityLabel={plural(chats.length, 'past chat')} style={styles.list} testID="chat-history-list">
           <Text accessibilityRole="header" style={styles.sectionTitle}>Past chats</Text>
           {chats.map((chat) => {
-            const title = savedTranscriptText(ashaChatTitle(chat), script);
+            const title = ashaChatTitle(chat);
             const preview = ashaChatPreview(chat);
             const voice = ashaChatHasVoice(chat);
             const meta = `${describeChatDate(chat)} · ${plural(chat.messages.length, 'message')}`;
@@ -82,7 +82,7 @@ function ChatList() {
             return (
               <Pressable
                 accessibilityHint="Opens this chat."
-                accessibilityLabel={`${chatKind(chat)}: ${title}. ${meta}`}
+                accessibilityLabel={`${chatKind(chat)}: ${savedAccessibleText(title)}. ${meta}`}
                 accessibilityRole="button"
                 key={chat.id}
                 onPress={() => router.push({ pathname: '/chat-history', params: { chatId: chat.id } } as Href)}
@@ -93,8 +93,8 @@ function ChatList() {
                   <Icon color={colors.brandText} size={18} />
                 </View>
                 <View style={styles.rowCopy}>
-                  <Text numberOfLines={2} style={styles.rowTitle}>{title}</Text>
-                  {preview ? <Text numberOfLines={1} style={styles.rowPreview}>{savedTranscriptText(preview, script)}</Text> : null}
+                  <SavedHindiText numberOfLines={2} script={script} style={styles.rowTitle} text={title} />
+                  {preview ? <SavedHindiText numberOfLines={1} script={script} style={styles.rowPreview} text={preview} /> : null}
                   <Text style={styles.rowMeta}>{meta}</Text>
                 </View>
                 <ChevronRight color={colors.muted} size={20} />
