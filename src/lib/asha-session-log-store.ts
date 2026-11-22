@@ -430,6 +430,31 @@ export async function clearAshaSessionContent(): Promise<void> {
 }
 
 /**
+ * Deleting one past chat: clears the transcript and tool content of each saved
+ * session that holds any of these transcript rows, so a deleted voice chat does
+ * not stay readable on Last session. Other sessions are untouched, and a call
+ * in progress is never cleared this way. Rejects when a cleared record could
+ * not be written.
+ */
+export async function clearAshaSessionContentForRows(rowIds: readonly string[]): Promise<void> {
+  if (!ashaSessionLogEnabled || rowIds.length === 0) return;
+  await ensureAshaSessionLogLoaded();
+  const ids = new Set(rowIds);
+  const clearedAt = new Date().toISOString();
+  const matching = sessions.filter((session) => session.id !== activeId && session.rows.some((row) => ids.has(row.id)));
+  if (!matching.length) return;
+  const cleared = new Map(matching.map((session) => [session.id, clearRecordContent(session, clearedAt)]));
+  replaceSessions(sessions.map((session) => cleared.get(session.id) ?? session));
+  await enqueueWrite(async () => {
+    for (const record of cleared.values()) {
+      // Deleted or cleared again since this was queued: that write decides what stays.
+      if (!sessions.some((session) => session === record)) continue;
+      await storage().setItem(ashaSessionKey(record.id), JSON.stringify(record));
+    }
+  });
+}
+
+/**
  * Delete Bolo data: forgets every session now, before any await, and then
  * removes the index and every per-session key (including orphans) behind the
  * pending writes. The session in progress is never written again.

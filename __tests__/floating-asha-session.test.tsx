@@ -11,6 +11,8 @@ const mockStartTurn = jest.fn();
 const mockReplaceLiveChatSnapshot = jest.fn();
 const mockMarkLiveTurn = jest.fn();
 const mockClearChatHistory = jest.fn();
+const mockArchiveAshaChat = jest.fn(async (_messages: unknown) => true);
+const mockPreviousChat = [{ id: 'you-1763000000000', role: 'you', text: 'Earlier chat' }];
 let mockStatus: 'disconnected' | 'connecting' | 'ready' | 'recording' | 'responding' = 'disconnected';
 let mockTranscriptSnapshot: ((rows: { id: string; speaker: 'you' | 'asha'; text: string }[]) => void) | undefined;
 let mockConnectionStart: ((signal: AbortSignal) => void | Promise<void>) | undefined;
@@ -19,6 +21,8 @@ let mockSessionEvent: ((event: { type: 'starting' | 'ready' | 'ended'; reason?: 
 let mockRecovery: Promise<void> = Promise.resolve();
 let mockErrorListener: ((message: string, details?: { kind?: string }) => void) | undefined;
 const mockUnregisterEnder = jest.fn();
+
+jest.mock('@/lib/asha-chat-archive-store', () => ({ archiveAshaChat: (messages: unknown) => mockArchiveAshaChat(messages) }));
 
 jest.mock('@/lib/asha-session-log-store', () => ({
   ensureAshaSessionLogLoaded: jest.fn(() => mockRecovery),
@@ -85,6 +89,7 @@ jest.mock('@/state/app-state', () => ({
     replaceLiveChatSnapshot: mockReplaceLiveChatSnapshot,
     markLiveTurn: mockMarkLiveTurn,
     clearChatHistory: mockClearChatHistory,
+    chatHistory: mockPreviousChat,
   }),
 }));
 
@@ -113,6 +118,7 @@ describe('Asha voice session above the navigator', () => {
     mockReplaceLiveChatSnapshot.mockClear();
     mockMarkLiveTurn.mockClear();
     mockClearChatHistory.mockClear();
+    mockArchiveAshaChat.mockClear();
     mockConnectionStart = undefined;
     mockSessionEvent = undefined;
     mockTranscriptSnapshot = undefined;
@@ -257,6 +263,9 @@ describe('Asha voice session above the navigator', () => {
       view.rerender(<AshaVoiceSessionProvider><Probe /></AshaVoiceSessionProvider>);
     });
     expect(mockClearChatHistory).toHaveBeenCalledTimes(1);
+    // The chat the call replaces is saved to Chat history first.
+    expect(mockArchiveAshaChat).toHaveBeenCalledWith(mockPreviousChat);
+    expect(mockArchiveAshaChat.mock.invocationCallOrder[0]).toBeLessThan(mockClearChatHistory.mock.invocationCallOrder[0] ?? 0);
 
     mockTranscriptSnapshot?.([{ id: 'asha-1', speaker: 'asha', text: 'Hello' }]);
     expect(mockReplaceLiveChatSnapshot).toHaveBeenCalledWith([], [
