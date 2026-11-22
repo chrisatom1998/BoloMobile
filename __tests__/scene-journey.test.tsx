@@ -472,6 +472,7 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByTestId('scene-say-aloud')).toBeTruthy();
     expect(view.queryByTestId('scene-choices')).toBeNull();
     await fireEvent.press(view.getByLabelText('Hear the phrase slowly'));
+    expect(view.getByLabelText('Not yet')).toBeTruthy();
     await fireEvent.press(view.getByLabelText('I said it'));
     expect(view.getByText('Nicely said!')).toBeTruthy();
     expect(view.queryByTestId('scene-pronunciation')).toBeNull();
@@ -878,11 +879,9 @@ describe('SceneScreen primary journey', () => {
     await fireEvent.press(view.getByRole('button', { name: 'Finish' }));
     expect(mockMarkSceneComplete).toHaveBeenCalledWith(mockSceneId, 42, expect.objectContaining({ weakPhrases: [expect.any(String)] }));
     expect(view.queryByRole('button', { name: 'Retry missed phrases' })).toBeNull();
-    await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
-    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: expect.any(String) })]));
-    expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
-
-    await fireEvent.press(view.getByRole('button', { name: 'Roleplay with Asha' }));
+    // The finish screen keeps one quiet roleplay entry; the practice itself opens in its own sheet.
+    expect(view.queryByText('Asha · Turn 1 of 2')).toBeNull();
+    await fireEvent.press(view.getByTestId('scene-roleplay-open'));
     expect(view.getByText('Asha · Turn 1 of 2')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Show a reply' }));
     await fireEvent.press(view.getByRole('button', { name: 'Next turn' }));
@@ -891,6 +890,10 @@ describe('SceneScreen primary journey', () => {
     expect(view.getByText('I am well.')).toBeTruthy();
     await fireEvent.press(view.getByRole('button', { name: 'Finish roleplay' }));
     expect(view.getByText('Conversation complete.')).toBeTruthy();
+    await fireEvent.press(view.getByRole('button', { name: 'Back to lesson summary' }));
+    await fireEvent.press(view.getByRole('button', { name: 'Add to tomorrow’s review' }));
+    expect(mockScheduleLessonReview).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ hi: expect.any(String) })]));
+    expect(view.getByText('Saved in Review for tomorrow or sooner.')).toBeTruthy();
     expect(mockMarkSceneComplete).toHaveBeenCalledTimes(1);
   });
 

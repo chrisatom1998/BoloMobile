@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Bookmark, Check, ChevronDown, ChevronRight, ChevronUp, RotateCcw, Star, Volume1, Volume2, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, TextInput, View, type StyleProp, type TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiConsentGate } from '@/components/ai-consent-gate';
@@ -81,6 +81,7 @@ function SceneScreen() {
   const [showAiDetails, setShowAiDetails] = useState(false);
   // Missed phrases can be queued for tomorrow's Review straight from the finish screen.
   const [tomorrowReview, setTomorrowReview] = useState<Record<string, 'saving' | 'scheduled' | 'full' | 'failed'>>({});
+  const [roleplayOpen, setRoleplayOpen] = useState(false);
   const guidedLesson = useMemo(() => {
     if (!scene) return null;
     const plan = lessonPlans.find((candidate) => candidate.lessonIds.includes(scene.id));
@@ -584,17 +585,30 @@ function SceneScreen() {
         {audioError ? <Text accessibilityRole="alert" style={styles.audioError}>{audioError}</Text> : null}
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: pronunciationBusy }} disabled={pronunciationBusy} onPress={leaveCompletedScene} style={[sharedStyles.primaryButton, pronunciationBusy && styles.disabled]} testID="scene-completion-primary"><Text style={sharedStyles.primaryButtonText}>{completionAction}</Text><ChevronRight color={colors.white} size={18} /></Pressable>
         {pilot && pilotTarget ? (
-          <LessonPilotRecap
-            lessonTitle={activeScene.title}
-            missed={missedTargets}
-            onPlay={play}
-            onRecordingChange={setPronunciationBusy}
-            onStopAudio={() => { void stopSpeaking(); clearAudioError(); }}
-            pilot={pilot}
-            recording={pronunciationBusy}
-            script={scriptPreference}
-            target={{ hi: pilotTarget.hi, latin: pilotTarget.latin, en: pilotTarget.en }}
-          />
+          <>
+            <Pressable accessibilityRole="button" disabled={pronunciationBusy} onPress={() => setRoleplayOpen(true)} style={[styles.secondaryButton, pronunciationBusy && styles.disabled]} testID="scene-roleplay-open">
+              <Text style={styles.secondaryText}>Roleplay with Asha</Text>
+            </Pressable>
+            <Modal animationType="slide" onRequestClose={() => { void stopSpeaking(); setRoleplayOpen(false); }} presentationStyle="pageSheet" visible={roleplayOpen}>
+              <ScrollView contentContainerStyle={styles.finish} style={sharedStyles.screen} testID="scene-roleplay-sheet">
+                <LessonPilotRecap
+                  lessonTitle={activeScene.title}
+                  missed={missedTargets}
+                  onPlay={play}
+                  onRecordingChange={setPronunciationBusy}
+                  onStopAudio={() => { void stopSpeaking(); clearAudioError(); }}
+                  pilot={pilot}
+                  recording={pronunciationBusy}
+                  script={scriptPreference}
+                  startInRoleplay
+                  target={{ hi: pilotTarget.hi, latin: pilotTarget.latin, en: pilotTarget.en }}
+                />
+                <Pressable accessibilityRole="button" disabled={pronunciationBusy} onPress={() => { void stopSpeaking(); setRoleplayOpen(false); }} style={[sharedStyles.primaryButton, pronunciationBusy && styles.disabled]} testID="scene-roleplay-close">
+                  <Text style={sharedStyles.primaryButtonText}>Done</Text>
+                </Pressable>
+              </ScrollView>
+            </Modal>
+          </>
         ) : null}
         <View style={styles.learned} testID="scene-completion-phrases">
           {missedPhrases.length ? <Text accessibilityRole="header" style={sharedStyles.eyebrow}>Worth another listen</Text> : null}

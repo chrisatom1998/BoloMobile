@@ -61,8 +61,9 @@ export function LessonPilotModel({ pilot, target, script, onPlay, name }: Practi
 }
 
 export function LessonPilotRecap({
-  pilot, target, script, onPlay, onStopAudio, onRecordingChange, recording, lessonTitle, missed,
+  pilot, target, script, onPlay, onStopAudio, onRecordingChange, recording, lessonTitle, missed, startInRoleplay = false,
 }: PracticeProps & {
+  startInRoleplay?: boolean;
   onStopAudio: () => void;
   onRecordingChange: (active: boolean) => void;
   recording: boolean;
@@ -71,7 +72,7 @@ export function LessonPilotRecap({
 }) {
   const styles = useStyles();
   const { aiConsent, scheduleLessonReview } = useAppState();
-  const [practice, setPractice] = useState<'roleplay' | null>(null);
+  const [practice, setPractice] = useState<'roleplay' | null>(startInRoleplay ? 'roleplay' : null);
   const [turnIndex, setTurnIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [schedule, setSchedule] = useState<'idle' | 'saving' | 'scheduled' | 'full' | 'failed'>('idle');

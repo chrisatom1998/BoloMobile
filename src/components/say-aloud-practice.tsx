@@ -1,10 +1,10 @@
-import { Check, Volume1, Volume2 } from 'lucide-react-native';
+import { Check, Volume1, Volume2, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { TapPressable as Pressable } from '@/components/tap-pressable';
 import type { ScriptPreference } from '@/state/app-state-types';
-import { hapticSuccess } from '@/lib/haptics';
+import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hindiType, makeStyles, radius, spacing, useTheme, type } from '@/theme';
 
 type Props = {
@@ -16,7 +16,7 @@ type Props = {
   targetLatin: string;
   targetEn: string;
   onPlay: (playbackRate: number) => void;
-  onResolve: (result: 'correct') => void;
+  onResolve: (result: 'correct' | 'incorrect') => void;
 };
 
 /**
@@ -32,11 +32,12 @@ export function SayAloudPractice({ audioDisabled = false, disabled = false, scri
   const [said, setSaid] = useState(false);
   const locked = disabled || said;
 
-  function confirm() {
+  function confirm(result: 'correct' | 'incorrect') {
     if (locked) return;
-    hapticSuccess();
+    if (result === 'correct') hapticSuccess();
+    else hapticWarning();
     setSaid(true);
-    onResolve('correct');
+    onResolve(result);
   }
 
   return (
@@ -56,20 +57,35 @@ export function SayAloudPractice({ audioDisabled = false, disabled = false, scri
           </Pressable>
         </View>
       </View>
-      <Pressable
-        accessibilityHint="Confirms you said the phrase out loud. Nothing is recorded."
-        accessibilityLabel="I said it"
-        accessibilityRole="button"
-        accessibilityState={{ disabled: locked }}
-        disabled={locked}
-        onPress={confirm}
-        style={[styles.primary, locked && styles.disabled]}
-        testID="scene-say-aloud-done"
-      >
-        <Check color={colors.white} size={16} />
-        <Text style={styles.primaryText}>I said it</Text>
-      </Pressable>
-      <Text style={styles.footer}>No microphone on this turn. Say it out loud as many times as you like.</Text>
+      <View style={styles.gradeRow}>
+        <Pressable
+          accessibilityHint="Marks this phrase for extra practice and moves on."
+          accessibilityLabel="Not yet"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: locked }}
+          disabled={locked}
+          onPress={() => confirm('incorrect')}
+          style={[styles.notYet, locked && styles.disabled]}
+          testID="scene-say-aloud-not-yet"
+        >
+          <X color={colors.danger} size={16} />
+          <Text style={styles.notYetText}>Not yet</Text>
+        </Pressable>
+        <Pressable
+          accessibilityHint="Confirms you said the phrase out loud. Nothing is recorded."
+          accessibilityLabel="I said it"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: locked }}
+          disabled={locked}
+          onPress={() => confirm('correct')}
+          style={[styles.primary, styles.gradeButton, locked && styles.disabled]}
+          testID="scene-say-aloud-done"
+        >
+          <Check color={colors.white} size={16} />
+          <Text style={styles.primaryText}>I said it</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.footer}>No microphone on this turn. Say it out loud as many times as you like. Not yet marks it for extra practice.</Text>
     </View>
   );
 }
@@ -87,6 +103,10 @@ const useStyles = makeStyles((c) => ({
   speakerText: { ...type.caption, color: c.brandText, fontWeight: '600' },
   primary: { minHeight: 48, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.brand, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
   primaryText: { ...type.label, color: c.white, fontWeight: '700' },
+  gradeRow: { flexDirection: 'row', gap: spacing.sm },
+  gradeButton: { flex: 1 },
+  notYet: { minHeight: 48, flex: 1, borderRadius: radius.md, borderCurve: 'continuous', backgroundColor: c.dangerSoft, borderWidth: 1, borderColor: c.danger, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  notYetText: { ...type.label, color: c.danger, fontWeight: '700' },
   disabled: { opacity: 0.4 },
   footer: { ...type.caption, color: c.muted },
 }));
