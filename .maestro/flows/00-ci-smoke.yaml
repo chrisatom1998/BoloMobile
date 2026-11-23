@@ -15,6 +15,8 @@ tags:
       microphone: deny
 - runFlow: ../subflows/enter-development-build.yaml
 - assertVisible: "Hear this"
+# PR screenshots only: optional steps on the first onboarding step.
+- runFlow: ../subflows/design-onboarding-screenshots.yaml
 - runFlow: ../subflows/complete-onboarding.yaml
 # PR screenshots only: optional steps, then back to the collapsed card.
 - runFlow: ../subflows/today-screenshots.yaml
@@ -80,5 +82,11 @@ tags:
 - tapOn: "Cancel"
 - assertNotVisible: "Delete your Bolo data?"
 - assertVisible: "Delete my Bolo data"
+# PR screenshots only, after every smoke assertion: design-system screens at the
+# default size and one step larger, then Today at the largest text size.
+- runFlow: ../subflows/design-screenshots.yaml
+- runFlow: ../subflows/design-larger-text-screenshots.yaml
 # PR screenshots only, after every smoke assertion: Today at the largest text size.
 - runFlow: ../subflows/today-largest-text-screenshots.yaml
+# PR screenshots only: the Asha tab at the same largest text size.
+- runFlow: ../subflows/design-asha-largest-text-screenshots.yaml

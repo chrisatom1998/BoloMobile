@@ -1,0 +1,43 @@
+appId: com.bolo.hindi
+---
+# PR screenshots of the Asha tab at the largest accessibility text size. Runs
+# right after today-largest-text-screenshots.yaml, so the app is already at
+# that size. Every step is optional or a screenshot, so the smoke flow passes
+# either way.
+# The tab bar is minimized after the Today scroll at this size, so open the
+# Asha tab by its route instead of tapping the tab.
+- openLink: bolo://live
+- tapOn:
+    text: "Open"
+    optional: true
+- tapOn:
+    text: "Asha"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*Voice isn.t set up.*"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design-xxxl/asha-top
+- scrollUntilVisible:
+    element:
+      text: ".*Voice isn.t set up.*"
+    direction: DOWN
+    speed: 40
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design-xxxl/asha-voice-card
+- scrollUntilVisible:
+    element:
+      text: "Type to Asha"
+    direction: DOWN
+    speed: 40
+    visibilityPercentage: 100
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design-xxxl/asha-type-to-asha

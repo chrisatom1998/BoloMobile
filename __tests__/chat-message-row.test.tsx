@@ -110,7 +110,7 @@ describe('ChatMessageRow legacy messages', () => {
     expect(lineText(line)).not.toContain('daalie');
     const hindi = view.getByText('चाय में चीनी कम डालिए');
     expect(hindi.props.accessibilityLanguage).toBe('hi-IN');
-    expect(StyleSheet.flatten(hindi.props.style)).toMatchObject({ fontFamily: hindiFont, fontWeight: '400', fontSize: 16, lineHeight: 23 });
+    expect(StyleSheet.flatten(hindi.props.style)).toMatchObject({ fontFamily: hindiFont, fontWeight: '400', fontSize: 17, lineHeight: 25 });
     expect(line.props.accessibilityHint).toBe('Read-only message. Highlight words, then use Save phrase below.');
   });
 

@@ -121,6 +121,7 @@ const useStyles = makeStyles((c) => ({
     gap: spacing.lg,
     backgroundColor: c.background,
   },
+  // Exception to the type scale: decorative 48pt Devanagari mark on the loading screen.
   loadingMark: {
     ...hindiType(48),
     color: c.brand,

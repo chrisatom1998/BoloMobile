@@ -1,0 +1,137 @@
+appId: com.bolo.hindi
+---
+# PR screenshots of the screens the design-system tasks touch, taken at the
+# end of the smoke flow while Settings is open. Every step is optional or a
+# screenshot, so the smoke flow passes either way.
+- scrollUntilVisible:
+    element:
+      text: "Learning preferences"
+    direction: UP
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/settings-top
+- scrollUntilVisible:
+    element:
+      text: "Animation style"
+    direction: DOWN
+    speed: 40
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design/settings-animation
+- scrollUntilVisible:
+    element:
+      id: "settings-progress-backup"
+    direction: DOWN
+    speed: 40
+    centerElement: true
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design/settings-backup
+- openLink: bolo://privacy
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: ".*[Pp]rivacy.*"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/privacy
+- openLink: bolo://lesson-plans
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "lesson-plans-heading"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/lesson-plans
+- openLink: bolo://lesson-plans?planId=essentials
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "lesson-plan-detail-heading"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/plan-detail
+- openLink: bolo://review
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "review-scroll"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/review
+- openLink: bolo://scene/chai
+- tapOn:
+    text: "Open"
+    optional: true
+- scrollUntilVisible:
+    element:
+      id: "scene-choice-0"
+    direction: DOWN
+    timeout: 15000
+    optional: true
+- takeScreenshot:
+    path: design/scene-turn
+- tapOn:
+    id: "scene-choice-0"
+    optional: true
+- takeScreenshot:
+    path: design/scene-answered
+- openLink: bolo://
+- tapOn:
+    text: "Open"
+    optional: true
+- tapOn:
+    text: "Phrases"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "phrases-header-hero"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/phrases
+- tapOn:
+    text: "Progress"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "progress-page-heading"
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/progress
+- scrollUntilVisible:
+    element:
+      id: "progress-stats"
+    direction: DOWN
+    speed: 40
+    centerElement: true
+    timeout: 10000
+    optional: true
+- takeScreenshot:
+    path: design/progress-stats
+- tapOn:
+    text: "Asha"
+    optional: true
+- takeScreenshot:
+    path: design/asha
+- tapOn:
+    text: "Today"
+    optional: true
+- takeScreenshot:
+    path: design/today
