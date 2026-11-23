@@ -51,3 +51,7 @@ example
 builds/
 artifacts/
 coverage/
+
+# QA Swarm (Expo Simulators session file and agent output)
+.env.eas-simulator
+agent-output/
