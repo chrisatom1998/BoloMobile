@@ -1,0 +1,17 @@
+appId: com.bolo.hindi
+---
+# PR screenshots of the first onboarding step, before and after a reply is
+# selected (the choice-card selected state). Every step is optional or a
+# screenshot, so the smoke flow passes either way. complete-onboarding.yaml
+# taps the same reply again, which keeps it selected.
+- extendedWaitUntil:
+    visible: "Hear this"
+    timeout: 20000
+    optional: true
+- takeScreenshot:
+    path: design/onboarding-welcome
+- tapOn:
+    id: "onboarding-reply-namaste"
+    optional: true
+- takeScreenshot:
+    path: design/onboarding-reply-selected

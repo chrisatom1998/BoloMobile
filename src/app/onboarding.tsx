@@ -11,7 +11,7 @@ import { selectNextLesson } from '@/lib/lesson-path';
 import { observe } from '@/lib/observability';
 import { useAppState } from '@/state/app-state';
 import type { LearnerLevel, LearnerProfile, LearningGoal, ScriptPreference } from '@/state/app-state-types';
-import { hindiType, makeStyles, maxContentWidth, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
+import { hindiType, makeStyles, maxContentWidth, numeralVariant, radius, spacing, useSharedStyles, type, buttons } from '@/theme';
 
 const ashaPortrait = require('../../assets/images/asha-portrait.png');
 const NAMASTE_CLIP = 'नमस्ते।';
@@ -254,7 +254,7 @@ const useStyles = makeStyles((c) => ({
   },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 44 },
   brandMark: { ...hindiType(28), color: c.brand },
-  stepLabel: { ...type.eyebrow, color: c.brandText },
+  stepLabel: { ...type.eyebrow, color: c.brandText, fontVariant: numeralVariant },
   cancelButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.sm },
   cancelText: { ...type.label, color: c.ink },
   cancelSpacer: { width: 64 },

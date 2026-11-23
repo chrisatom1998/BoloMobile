@@ -12,7 +12,7 @@ import { observe } from '@/lib/observability';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { hasOfflineSpeech, stopSpeaking } from '@/lib/speech';
 import { useAppState } from '@/state/app-state';
-import { hindiType, makeStyles, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
+import { hindiType, makeStyles, numeralVariant, radius, spacing, useSharedStyles, useTheme, type, buttons } from '@/theme';
 
 export default function ReviewScreen() {
   const router = useRouter();
@@ -200,8 +200,8 @@ const useStyles = makeStyles((c) => ({
   screen: { flexGrow: 1, backgroundColor: c.background, padding: spacing.xl, paddingBottom: spacing.xxl, gap: spacing.lg },
   center: { flexGrow: 1, backgroundColor: c.background, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
   header: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: spacing.sm },
-  progress: { ...type.label, color: c.ink, fontWeight: '700' },
-  mastery: { ...type.label, color: c.muted, fontWeight: '700' },
+  progress: { ...type.label, color: c.ink, fontVariant: numeralVariant, fontWeight: '700' },
+  mastery: { ...type.label, color: c.muted, fontVariant: numeralVariant, fontWeight: '700' },
   track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
   trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
   card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 240, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
@@ -224,6 +224,6 @@ const useStyles = makeStyles((c) => ({
   againText: buttons.secondaryText,
   gotItText: { ...type.label, color: c.white, fontWeight: '700' },
   doneMark: { width: 72, height: 72, borderRadius: radius.xl, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
-  title: { ...type.title, color: c.ink, textAlign: 'center' },
+  title: { ...type.title, color: c.ink, fontVariant: numeralVariant, textAlign: 'center' },
   body: { ...type.body, color: c.muted, textAlign: 'center' },
 }));
