@@ -76,6 +76,37 @@ export const lightColors = {
   orbHighlight: 'rgba(255, 255, 255, 0.17)',
   /** Brighter gold for the recording state of the gold orb. */
   goldBright: '#F2BE57',
+  /** Dimmed backdrop behind bottom sheets and menus: `night` at 55%. */
+  scrim: 'rgba(16, 32, 30, 0.55)',
+} as const;
+
+/**
+ * Per-plan accent tints for lesson-plan art and markers. These are the plans' existing
+ * identity colours, not UI roles: never use them for actions, text or selected states.
+ */
+export const planAccents = {
+  essentials: '#a85a43',
+  connection: '#7b5fa7',
+  food: '#c86d32',
+  gettingAround: '#287d78',
+  directions: '#4e7792',
+  shopping: '#b27931',
+  dailyLife: '#63754c',
+  health: '#a04c55',
+  socialLife: '#6d5ca3',
+  work: '#586b91',
+  /** Dev-only "My created lessons" plan from Bolo Lesson Creator. */
+  creator: '#285b47',
+} as const;
+
+/** Soft drop shadows (`boxShadow` values) for raised surfaces. */
+export const shadows = {
+  /** Resting segmented-control track. */
+  control: '0 3px 10px rgba(0, 0, 0, 0.04)',
+  /** The selected segment's ink indicator. */
+  indicator: '0 2px 5px rgba(0, 0, 0, 0.15)',
+  /** Bottom sheet lifted above the screen: an upward ink shadow at 6%. */
+  sheet: '0 -8px 24px rgba(23, 37, 35, 0.06)',
 } as const;
 
 export type ThemeColors = { [Key in keyof typeof lightColors]: typeof lightColors[Key] extends string ? string : number };

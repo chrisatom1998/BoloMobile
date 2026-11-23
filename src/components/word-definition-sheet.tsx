@@ -221,7 +221,7 @@ const useStyles = makeStyles((c) => ({
   trayLabel: { ...type.label, color: c.ink, fontWeight: '700' },
   tokenWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   token: { minHeight: 48, borderRadius: radius.pill, borderCurve: 'continuous', borderColor: c.brand, borderWidth: 1, backgroundColor: c.paperRaised, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  tokenSelected: { backgroundColor: c.brand },
+  tokenSelected: { backgroundColor: c.ink, borderColor: c.ink },
   tokenText: { ...type.label, color: c.brandText, fontWeight: '700' },
   tokenHindi: hindiType(20),
   tokenTextSelected: { color: c.white },
