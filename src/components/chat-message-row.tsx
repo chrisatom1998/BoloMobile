@@ -395,7 +395,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({
               style={styles.smallAction}
               testID={`chat-save-${message.id}`}
             >
-              <BookmarkPlus color={isYou ? colors.white : colors.forest} size={16} />
+              <BookmarkPlus color={isYou ? colors.white : colors.muted} size={16} />
               <Text style={[styles.smallActionText, isYou && styles.userText]}>Save phrase</Text>
             </Pressable>
             {actionItems.length ? (

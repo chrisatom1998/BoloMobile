@@ -85,7 +85,8 @@ export function PronunciationRecorder({ compact = false, lessonTitle, onActivity
       <AiConsentGate compact={{ body: 'Recording uses Asha coaching, which sends your clip to Bolo and OpenAI.' }}>
         <VoiceTurnButton
           idleLabel="Record pronunciation"
-          variant={compact ? 'secondary' : 'primary'}
+          // Secondary everywhere: on a lesson beat the rust fill belongs to Continue.
+          variant="secondary"
           onActivityChange={onActivityChange}
           onRecordingReady={async ({ audioBase64, mimeType }) => {
             const controller = new AbortController();

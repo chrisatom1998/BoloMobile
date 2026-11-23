@@ -162,7 +162,7 @@ export default function ReviewScreen() {
         {!listenFirst || revealed ? <Text style={styles.prompt}>{phrase.en}</Text> : null}
         {!revealed ? (
           <View style={styles.audioRow}>
-            <Pressable accessibilityHint={listenFirst ? undefined : 'Hearing a hint counts as Again for scheduling, even if you tap Got it.'} accessibilityLabel={listenFirst ? 'Replay phrase' : 'Hear a hint'} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>{listenFirst ? 'Replay' : 'Hear a hint'}</Text></Pressable>
+            <Pressable accessibilityHint={listenFirst ? undefined : 'Hearing a hint counts as Again for scheduling, even if you tap Got it.'} accessibilityLabel={listenFirst ? 'Replay phrase' : 'Hear a hint'} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.brandText} size={18} /><Text style={styles.audioText}>{listenFirst ? 'Replay' : 'Hear a hint'}</Text></Pressable>
           </View>
         ) : null}
         {revealed ? (
@@ -170,8 +170,8 @@ export default function ReviewScreen() {
             {showHindi ? <Text accessibilityLanguage="hi-IN" style={styles.hindi}>{phrase.hi}</Text> : null}
             {showLatin ? <Text style={styles.latin}>{learnerPhraseLatin(phrase.hi, phrase.latin)}</Text> : null}
             <View style={styles.audioRow}>
-              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
-              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.forest} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi}`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase()} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.brandText} size={18} /><Text style={styles.audioText}>Listen</Text></Pressable>
+              <Pressable accessibilityHint={canListen ? undefined : 'Agree to connected AI processing to enable Listen.'} accessibilityLabel={`Hear ${phrase.hi} slowly`} accessibilityRole="button" accessibilityState={{ disabled: !listenEnabled }} disabled={!listenEnabled} onPress={() => playPhrase(0.72)} style={[styles.audioButton, !listenEnabled && styles.disabled]}><Volume2 color={colors.brandText} size={18} /><Text style={styles.audioText}>Slow</Text></Pressable>
             </View>
           </View>
         ) : (
@@ -183,8 +183,8 @@ export default function ReviewScreen() {
       {/* Grading sits right under the answer so it is never pushed below optional pronunciation practice. */}
       {revealed ? (
         <View style={styles.grades}>
-          <Pressable accessibilityRole="button" onPress={() => grade(false)} style={[styles.gradeButton, styles.againButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
-          <Pressable accessibilityRole="button" onPress={() => grade(true)} style={[styles.gradeButton, styles.gotItButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => grade(false)} style={[styles.againButton, styles.gradeButton]}><RotateCcw color={colors.danger} size={19} /><Text style={styles.againText}>Again</Text></Pressable>
+          <Pressable accessibilityRole="button" onPress={() => grade(true)} style={[styles.gotItButton, styles.gradeButton]}><Check color={colors.white} size={19} /><Text style={styles.gotItText}>Got it</Text></Pressable>
         </View>
       ) : null}
       {revealed ? (
@@ -203,7 +203,8 @@ const useStyles = makeStyles((c) => ({
   progress: { ...type.label, color: c.ink, fontWeight: '700' },
   mastery: { ...type.label, color: c.muted, fontWeight: '700' },
   track: { height: 8, borderRadius: radius.pill, overflow: 'hidden', backgroundColor: c.line },
-  trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.forest },
+  // Rust like Progress plan bars: position in the session, not a graded result.
+  trackFill: { height: '100%', borderRadius: radius.pill, backgroundColor: c.brand },
   card: { backgroundColor: c.paperRaised, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', minHeight: 240, justifyContent: 'center', gap: spacing.xl, padding: spacing.xl },
   prompt: { ...type.display, color: c.ink, textAlign: 'center' },
   answer: { alignItems: 'center', gap: spacing.sm },
@@ -218,11 +219,11 @@ const useStyles = makeStyles((c) => ({
   revealButton: buttons.primary,
   revealText: buttons.primaryText,
   grades: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  gradeButton: { minWidth: 140, flexGrow: 1, minHeight: 54, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  againButton: { backgroundColor: c.paper, borderWidth: 1, borderColor: c.lineStrong },
-  gotItButton: { backgroundColor: c.forest },
+  gradeButton: { minWidth: 140, flexGrow: 1 },
+  againButton: buttons.secondary,
+  gotItButton: buttons.positive,
   againText: buttons.secondaryText,
-  gotItText: { ...type.label, color: c.white, fontWeight: '700' },
+  gotItText: buttons.positiveText,
   doneMark: { width: 72, height: 72, borderRadius: radius.xl, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
   title: { ...type.title, color: c.ink, textAlign: 'center' },
   body: { ...type.body, color: c.muted, textAlign: 'center' },

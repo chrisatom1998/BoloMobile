@@ -98,7 +98,7 @@ export function AiConsentGate({
   const notice = (
     <View style={styles.card}>
       <View style={styles.titleRow}>
-        <ShieldCheck color={colors.forest} size={20} strokeWidth={2} />
+        <ShieldCheck color={colors.brand} size={20} strokeWidth={2} />
         <Text accessibilityRole="header" style={styles.title}>{title}</Text>
       </View>
       <View style={styles.summary}>
@@ -197,8 +197,9 @@ const useStyles = makeStyles((c) => ({
   disabled: { opacity: 0.5 },
   compactCard: { backgroundColor: c.paper, borderColor: c.line, borderWidth: 1, borderRadius: radius.lg, borderCurve: 'continuous', padding: spacing.md, gap: spacing.sm },
   compactBody: { ...type.caption, color: c.muted },
-  compactButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  compactButtonText: { ...type.label, color: c.brandText, fontWeight: '700' },
+  // No side padding, so the link's text lines up with compactBody above it, as before the quiet variant.
+  compactButton: { ...buttons.quiet, alignSelf: 'flex-start', paddingHorizontal: 0 },
+  compactButtonText: buttons.quietText,
   sheetScreen: { flex: 1, backgroundColor: c.background },
   sheetHeader: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: spacing.lg },
   sheetClose: { minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.xs },

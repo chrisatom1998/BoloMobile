@@ -64,7 +64,7 @@ function PolicyLink({ label, onPress }: { label: string; onPress: () => void }) 
   const styles = useStyles();
   return (
     <Pressable accessibilityRole="link" onPress={onPress} style={styles.link}>
-      <Text style={styles.linkText}>{label}</Text><ExternalLink color={colors.forest} size={17} />
+      <Text style={styles.linkText}>{label}</Text><ExternalLink color={colors.brandText} size={17} />
     </Pressable>
   );
 }
